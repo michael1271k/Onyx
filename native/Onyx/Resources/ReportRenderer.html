@@ -9,7 +9,7 @@
      arbitrary pasted text, so a remote image in one must not become a request. -->
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;">
-<title>ONYX report</title>
+<title>Onyx report</title>
 <style>
 :root {
   color-scheme: dark;
@@ -109,7 +109,7 @@ th { color: var(--muted); font-weight: 600; white-space: nowrap; }
 tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
 tbody tr:last-child td { border-bottom: none; }
 /* Numerals hold their column as values change length. */
-.helix-num, td { font-variant-numeric: tabular-nums; }
+.num, td { font-variant-numeric: tabular-nums; }
 
 /* The banner box at the head of a report. */
 .hero {
@@ -11224,7 +11224,7 @@ p.lead { margin: 10px 0; }
 		]);
 	}
 	//#endregion
-	//#region src/lib/reports/fmtV2.ts
+	//#region scripts/src/report/fmtV2.ts
 	/** Box-drawing and rule characters that carry no content of their own. */
 	var BOX = /^[\s╔╗╚╝║═╠╣╦╩╬┌┐└┘│─├┤┬┴┼▁▔_=~-]+$/;
 	/**
@@ -11565,10 +11565,7 @@ p.lead { margin: 10px 0; }
 			rangeLabel: fields.find((f) => /\d{4}-\d{2}-\d{2}/.test(f)) ?? null,
 			phase: fields.find((f) => /^[A-Z][A-Z\s/&-]+$/.test(f) && !/FMT|SENTINEL/i.test(f)) ?? null,
 			version,
-			// Both brands, on purpose: every report archived before the rename
-			// carries a HELIX headline and must still parse. Matching only the
-			// new name would title those `null`.
-			title: preamble.find((l) => /HELIX|ONYX/i.test(l) && !BOX.test(l))?.trim() ?? null
+			title: preamble.find((l) => /HELIX/i.test(l) && !BOX.test(l))?.trim() ?? null
 		};
 	}
 	/**
@@ -11678,7 +11675,7 @@ p.lead { margin: 10px 0; }
 		};
 	}
 	//#endregion
-	//#region src/lib/reports/smartBlocks.ts
+	//#region scripts/src/report/smartBlocks.ts
 	/** Shading glyphs a text progress bar is drawn from. */
 	var BAR_RUN = /[█▓▒░]{3,}/;
 	/** Box-drawing that means "this line is a picture, not a sentence". */
@@ -11982,7 +11979,7 @@ p.lead { margin: 10px 0; }
 		return out;
 	}
 	//#endregion
-	//#region src/lib/reports/webview/renderer.ts
+	//#region scripts/src/report/renderer.ts
 	/**
 	* The report renderer, as it runs inside the native app's `WKWebView`.
 	*
@@ -12130,7 +12127,7 @@ p.lead { margin: 10px 0; }
 		const tbody = el("tbody");
 		for (const row of rows) {
 			const tr = el("tr");
-			for (const cell of row) tr.appendChild(el("td", "helix-num", cell));
+			for (const cell of row) tr.appendChild(el("td", "num", cell));
 			tbody.appendChild(tr);
 		}
 		table.appendChild(tbody);
@@ -12153,7 +12150,7 @@ p.lead { margin: 10px 0; }
 			track.appendChild(fill);
 			row.appendChild(track);
 			const value = el("span", "ladder-value");
-			value.appendChild(el("span", "bar-value helix-num", anchor.value.toLocaleString()));
+			value.appendChild(el("span", "bar-value num", anchor.value.toLocaleString()));
 			if (anchor.adopted) value.appendChild(el("span", "chip", "adopted"));
 			row.appendChild(value);
 			host.appendChild(row);

@@ -1,5 +1,5 @@
 /**
- * Render every icon HELIX ships from one source image.
+ * Render every icon Onyx ships from one source image.
  *
  *   npm run icons                 # uses resources/icon.png
  *   node scripts/generate-icons.mjs path/to/other.png
@@ -10,13 +10,6 @@
  * in a shell script, and the icon it drew was still on the neon palette
  * (#16F5C3 / #5BFF9D) the app abandoned. Dropping a new artwork into
  * resources/ did nothing, and running the script would quietly overwrite it.
- *
- * WHAT `npx cap sync ios` DOES NOT DO
- * It does not manage app icons. Capacitor copies `webDir` into the native web
- * bundle; it never reads apple-touch-icon.png and never writes into
- * Assets.xcassets. The icon on the Home Screen comes from AppIcon-512@2x.png
- * inside the appiconset, so this script writes that file directly. Run cap sync
- * AFTER this, not instead of it.
  */
 import sharp from 'sharp'
 import { mkdirSync, existsSync } from 'node:fs'
@@ -33,22 +26,11 @@ const SOURCE = resolve(process.argv[2] ?? 'resources/icon.png')
 const MATTE = '#000309'
 
 const TARGETS = [
-  // ── Web / PWA ──────────────────────────────────────────────────────────────
-  // A 32px favicon from a full-bleed 1024 is a smudge: the ribbon is a thin
-  // diagonal and almost all of it falls between pixels. Crop in first so the
-  // mark fills the tile, then resize, then re-sharpen what the downsample ate.
-  { file: 'public/favicon-32.png', size: 32, crop: 1.3, sharpen: 0.6 },
-  { file: 'public/apple-touch-icon.png', size: 180 },
-  { file: 'public/icon-192.png', size: 192 },
-  { file: 'public/icon-512.png', size: 512 },
-
-  // ── Native ─────────────────────────────────────────────────────────────────
-  // The app and watch appiconsets already declare exactly one universal 1024
-  // entry with these filenames, so their Contents.json needs no edit — only the
+  // The app and watch appiconsets each declare exactly one universal 1024
+  // entry with this filename, so their Contents.json needs no edit — only the
   // bytes change.
-  { file: 'ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png', size: 1024 },
-  { file: 'ios/App/HelixWatch Watch App/Assets.xcassets/AppIcon.appiconset/AppIcon-watch-1024.png', size: 1024 },
-
+  { file: 'native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png', size: 1024 },
+  { file: 'native/OnyxWatch/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png', size: 1024 },
 ]
 
 /**
