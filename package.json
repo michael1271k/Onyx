@@ -4,7 +4,7 @@
   "private": true,
   "description": "Onyx \u2014 native iOS/watchOS app. This package holds the generators, the version SSoT and the service-role maintenance scripts; the app itself is under native/.",
   "scripts": {
-    "check": "npm run version:check && npm run check:atlas && npm run check:mirror && npm run check:doms",
+    "check": "npm run version:check && npm run check:types && npm run check:atlas && npm run check:mirror && npm run check:doms",
     "check:swift": "bash scripts/check-swift.sh",
     "atlas": "node scripts/gen-atlas-swift.mjs",
     "check:atlas": "node scripts/gen-atlas-swift.mjs --check",
@@ -18,13 +18,15 @@
     "version:sync": "node scripts/sync-version.mjs",
     "version:check": "node scripts/sync-version.mjs --check",
     "native:gen": "npm run version:sync && cd native && xcodegen generate",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "check:types": "tsc --noEmit -p scripts"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.110.0",
     "micromark": "^4.0.2",
     "micromark-extension-gfm": "^3.0.0",
     "sharp": "^0.34.5",
+    "typescript": "^5.9.3",
     "vite": "^8.1.3"
   }
 }

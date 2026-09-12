@@ -36,7 +36,7 @@
 
   <section aria-labelledby="health">
     <h2 id="health">Apple Health</h2>
-    <p>On iPhone and Apple Watch, Onyx asks for <strong>read</strong> access to the Health categories above, and for <strong>write</strong> access to workouts so the strength sessions you log here appear alongside the rest of your activity rings. You can decline either, and every screen still works — the figures that depend on a reading you have not shared simply say so rather than guessing.</p>
+    <p>On iPhone, Onyx asks for <strong>read</strong> access to the Health categories above. On Apple Watch it also asks to <strong>write</strong> workouts, so a session run on the watch appears alongside the rest of your activity rings. You can decline either, and every screen still works — the figures that depend on a reading you have not shared simply say so rather than guessing.</p>
     <p>Health data obtained through HealthKit is used only to provide the features described here. It is never used for advertising or marketing, never sold, never shared with a data broker, and never disclosed to a third party. Onyx does not write your Health data to iCloud.</p>
     <p>You can withdraw Health access at any time in <strong>Settings → Privacy &amp; Security → Health → Onyx</strong> on your device. Doing so stops new readings arriving; readings already stored are removed when you delete your account.</p>
   </section>
@@ -55,7 +55,7 @@
       <li><strong>User defaults</strong> — your display preferences and the values the Home Screen widgets read. Shared between the app, its widgets and the watch app; never sent anywhere.</li>
       <li><strong>File timestamps</strong> and <strong>available disk space</strong> — read by the local database when it opens a file and before it writes. Never sent anywhere.</li>
     </ul>
-    <p>The widgets and the watch app read that same local database and make no network requests of their own.</p>
+    <p>The widgets read that same local database. The watch app keeps its own copy and hands it to the phone; neither makes network requests of its own.</p>
   </section>
 
   <section aria-labelledby="tracking">
@@ -65,7 +65,7 @@
 
   <section aria-labelledby="third-parties">
     <h2 id="third-parties">Third-party code</h2>
-    <p>Onyx bundles three open-source libraries: GRDB (the local database), supabase-swift (the client for your own database) and swift-crypto. None of them collects data, and each ships its own privacy manifest. There is no advertising SDK, no analytics SDK and no attribution SDK in the app.</p>
+    <p>Onyx bundles two open-source libraries, GRDB (the local database) and supabase-swift (the client for your own database), and what they depend on. None of them collects data, and each ships its own privacy manifest. There is no advertising SDK, no analytics SDK and no attribution SDK in the app.</p>
   </section>
 
   <section aria-labelledby="retention">

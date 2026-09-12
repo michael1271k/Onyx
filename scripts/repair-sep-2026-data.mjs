@@ -20,7 +20,7 @@
  * The Single Arm Lateral Raise rows are NOT flattened. Hevy lists four sets;
  * this database holds seven rows — one unsided and three L/R pairs — and those
  * are the same four sets under `SessionVolume`'s weaker-side rule, which is
- * exactly why that rule exists (see `src/lib/sessions/volume.ts`). Collapsing
+ * exactly why that rule exists (see `SessionVolume` in OnyxCore). Collapsing
  * them to four rows would destroy the per-side asymmetry (L 15 / R 16) without
  * changing a single number.
  *
@@ -128,12 +128,13 @@ if (!url || !key) {
 const db = createClient(url, key, { auth: { persistSession: false } })
 
 /**
- * `sessionVolumeKg` from `src/lib/sessions/volume.ts`, over DB rows.
+ * `SessionVolume.tonnage` from OnyxCore, over DB rows.
  *
- * Ported rather than imported: this script is plain ESM run by node and the
- * rule lives in TypeScript behind the Next build. It is eight lines and it is
- * pinned by `src/tests/` on the other side — but if the two ever disagree, the
- * TypeScript is the rule and this is the copy that is wrong.
+ * A COPY, not an import: the rule lives in Swift and this script is plain ESM.
+ * It is eight lines and it is pinned by the golden fixtures on the Swift side —
+ * re-check it against `OnyxCore/Sessions/Volume.swift` before any
+ * re-run; if the two ever disagree, the Swift is the rule and this is the copy
+ * that is wrong.
  */
 function sessionVolumeKg(rows) {
   const pairs = new Map()

@@ -69,10 +69,18 @@ is in the same Supabase the phone reads.
 - **The completed migration plans** (`NATIVE_MIGRATION_PLAN`,
   `NATIVE_PHASE_2_PLAN`, `PHASE_2_POLISH_PLAN`, `PHASE_3_PLAN`) — done, and
   written in the vocabulary of the app they retired.
-- `package.json` shrinks from 25 dependencies + 23 dev to five dev
+- `package.json` shrinks from 25 dependencies + 23 dev to six dev
   dependencies: `vite`, `micromark` and `micromark-extension-gfm` (the report
-  renderer bundle), `sharp` (icons) and `@supabase/supabase-js` (the
+  renderer bundle), `typescript` (the generator sources are still typechecked,
+  `npm run check:types`), `sharp` (icons) and `@supabase/supabase-js` (the
   service-role scripts). The package is named `onyx`.
+- **The Supabase keep-alive is gone with the Netlify function that ran it.**
+  Daily use of the phone makes the same calls; a week without opening the app
+  can let the free-tier project pause, after which the next sign-in fails until
+  it is resumed in the Supabase dashboard. If that bites, a Supabase cron or a
+  scheduled GitHub Action is the ten-line replacement.
+- `scripts/recompute-scores.mjs` — it POSTed to the web app's compute-score
+  route. The phone's rescore cascade owns re-scoring now.
 
 ### Changed
 
@@ -87,8 +95,9 @@ is in the same Supabase the phone reads.
   `scripts/src/report/*`; `npm run atlas`, `doms` and `report:bundle` produce
   byte-identical Swift and a re-bundled `ReportRenderer.html` from there.
   `sync-version.mjs` writes only `native/project.yml` now.
-- **`npm run check`** is the four generator/version checks. There is no lint or
-  typecheck step because there is no TypeScript app to check; the Swift gates
+- **`npm run check`** is the version check, a `tsc` pass over `scripts/src/`,
+  and the three generator checks. There is no lint step because there is no
+  TypeScript app to lint; the Swift gates
   (`check:swift`, `swift:core`, `swift:data`, the `xcodebuild` line) are
   unchanged.
 - **Native comments no longer point at `src/`.** Every "a port of

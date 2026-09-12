@@ -467,7 +467,8 @@ function parseHeader(preamble: string[], md: string): FmtV2Header {
   const rangeLabel = fields.find((f) => /\d{4}-\d{2}-\d{2}/.test(f)) ?? null
   const phase = fields.find((f) => /^[A-Z][A-Z\s/&-]+$/.test(f) && !/FMT|SENTINEL/i.test(f)) ?? null
 
-  const title = preamble.find((l) => /HELIX/i.test(l) && !BOX.test(l))?.trim() ?? null
+  // Both brands, on purpose: reports pasted before the rename open with HELIX.
+  const title = preamble.find((l) => /HELIX|ONYX/i.test(l) && !BOX.test(l))?.trim() ?? null
 
   return { weekLabel, rangeLabel, phase, version, title }
 }

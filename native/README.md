@@ -17,7 +17,7 @@ native/
 │   ├── OnyxCore/               pure domain. Foundation only. No SwiftUI, no GRDB.
 │   │   └── Tests/.../Fixtures/  golden vectors — frozen, hand-maintained
 │   ├── OnyxData/               GRDB store + outbox + Keychain + Supabase session
-│   └── OnyxUI/                 design system, the generated atlas, the widget tiles
+│   └── OnyxUI/                 design system, the generated atlas (source: scripts/src/atlas.ts), the widget tiles
 ├── Onyx/                 the SwiftUI app target (views + entry point)
 ├── OnyxWidgets/          widget extension: five families + Lock + Live Activity
 └── Shared/                      OnyxWorkoutAttributes — in both native targets

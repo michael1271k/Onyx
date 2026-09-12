@@ -5,7 +5,7 @@
  * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────
  * `DomsMap.swift` was a hand-typed `[String]` with no generator and no parity
  * test, and `AtlasHitTests` only ever asserted that its landmarks were a SUBSET
- * of the sixteen. So a DOMS muscle could be added on the web, be invisible on
+ * of the sixteen. So a DOMS muscle could be added to the vocabulary, be invisible on
  * iOS, and leave `npm run check` and `swift test` both green — which is exactly
  * how `Inner thighs` shipped in September 2026 with the tracker's own docstring
  * still saying nine.
@@ -121,7 +121,7 @@ export function generate({ recovery, atlas, sub }) {
   const core = `${banner}
 import Foundation
 
-/// The soreness vocabulary, mirrored from the web.
+/// The soreness vocabulary, generated from \`scripts/src/soreness.ts\`.
 ///
 /// Lives in OnyxCore because the SCORER needs it: \`ScoringInputsBuilder\` folds a
 /// day's rows down to one severity per recognised muscle, and a row whose
@@ -129,7 +129,7 @@ import Foundation
 /// counting it would let unreadable data move the battery, which it did.
 public enum DomsMuscles {
 
-    /// Display order: upper, trunk, lower — as the web lists them.
+    /// Display order: upper, trunk, lower — as the source lists them.
     public static let all = ${list(muscles)}
 
     /// Membership test for the fold. A Set because it is asked per row.
@@ -171,7 +171,7 @@ ${subRows}
 
 import OnyxCore
 
-/// The soreness vocabularies, mirrored from the web.
+/// The soreness vocabularies, generated from \`scripts/src/*.ts\`.
 ///
 /// The GROUP is what a user rates (a sore arm is a sore arm); the landmarks are
 /// what the figure draws; the sub-region is optional detail the scoring engine

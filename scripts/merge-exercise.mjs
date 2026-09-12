@@ -16,8 +16,9 @@
  *
  * Re-points every workout_set off the absorbed row onto the survivor, then
  * deletes the absorbed row. Both names are matched exactly against
- * `exercises.name`. ALWAYS add the absorbed name to EXERCISE_ALIASES in the
- * same commit — otherwise the next draft recreates the row it just deleted.
+ * `exercises.name`. ALWAYS add the absorbed name as an alias on the survivor
+ * row (`exercises.aliases`) — otherwise the next phone-logged set under the
+ * old name recreates the row this just deleted.
  *
  * Requires NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in .env.local.
  * Service-role: bypasses RLS, so it must never run in the browser bundle.
@@ -87,4 +88,4 @@ if (e2) { console.error('delete failed (sets were moved):', e2.message); process
 
 const { data: after } = await db.from('workout_sets').select('id').eq('exercise_id', to.id)
 console.log(`\nMerged. "${TO_NAME}" now holds ${after?.length ?? 0} sets; "${FROM_NAME}" is gone.`)
-console.log('Add the absorbed name to EXERCISE_ALIASES so it cannot respawn.')
+console.log('Add the absorbed name to the survivor row\'s aliases so it cannot respawn.')

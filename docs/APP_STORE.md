@@ -28,9 +28,9 @@ reviewer hits before they ever open the app.
 
 | # | What | Guideline | Where |
 |---|---|---|---|
-| 1 | ~~**The privacy-policy URL 404s.**~~ **CLOSED at U7 (2026-09-10).** `site/privacy/index.html` is static HTML (W6; U7 had it as a prerendered web route), public (see `PUBLIC_ROUTES`), and its collected-data table is written in `PrivacyInfo.xcprivacy`'s own vocabulary so the policy, the manifest and §3 below cannot disagree. Verified 200 against `next start`. | 5.1.1(i) | `src/app/(legal)/privacy/page.tsx` · `OnyxLinks.privacyPolicy` |
-| 2 | ~~**The support URL 404s.**~~ **CLOSED at U7.** `site/support/index.html`, same terms, plus a **Settings → About → Support** row that opens it. Verified 200. | 1.5 | `src/app/(legal)/support/page.tsx` · `OnyxLinks.support` |
-| 3 | ~~**No demo account.**~~ **CLOSED.** E6 opened in-app sign-up (`SignUpView`, and `/auth` on the web) and shipped `scripts/seed-demo-account.mjs`; U7 gave the sign-up sheet a real dismiss affordance. The account is `appreview@onyx.fitness` — see §"App Review Information" for how to seed it and where the password lives. | 2.1 | §"App Review Information" |
+| 1 | ~~**The privacy-policy URL 404s.**~~ **CLOSED at U7 (2026-09-10).** `site/privacy/index.html` is static HTML (W6; U7 had it as a prerendered web route), served with no login in front of it, and its collected-data table is written in `PrivacyInfo.xcprivacy`'s own vocabulary so the policy, the manifest and §3 below cannot disagree. Re-verify with `curl -I` once Netlify publishes `site/`. | 5.1.1(i) | `site/privacy/index.html` · `OnyxLinks.privacyPolicy` |
+| 2 | ~~**The support URL 404s.**~~ **CLOSED at U7.** `site/support/index.html`, same terms, plus a **Settings → About → Support** row that opens it. Re-verify with `curl -I` once Netlify publishes `site/`. | 1.5 | `site/support/index.html` · `OnyxLinks.support` |
+| 3 | ~~**No demo account.**~~ **CLOSED.** E6 opened in-app sign-up (`SignUpView`) and seeded the account; U7 gave the sign-up sheet a real dismiss affordance. The account is `appreview@onyx.fitness` and it exists in Supabase — see §"App Review Information" for where the password lives and what to do if it ever has to be recreated. | 2.1 | §"App Review Information" |
 | 4 | ~~**The metadata is still `⟨…⟩` placeholders.**~~ **CLOSED at U7** — §2 is written copy. | 2.1 | §2 |
 | 5 | **Apple Developer Program membership.** A free personal team cannot sign the App Group entitlement or upload. **Still open — it is a purchase, not a commit.** | — | §"Gate 0" |
 
@@ -61,7 +61,7 @@ Two findings the W-GATE preflight added:
 | # | What | Guideline | Where |
 |---|---|---|---|
 | 6 | **The watch app shipped with no privacy manifest.** The required-reason API check runs per Mach-O binary, and `OnyxWatch.app` uses `UserDefaults` and its own GRDB store. The app and the widget each carry one; the watch did not. **Fixed at W-GATE** — `native/OnyxWatch/Support/PrivacyInfo.xcprivacy`. | 5.1.1 / Privacy Manifest | fixed |
-| 7 | ~~**`associated-domains` is not in the entitlements.**~~ **CLOSED at U7.** `native/project.yml` now claims `webcredentials:helix-health-fitness.netlify.app` on the app target, and `xcodegen generate` writes it into `Onyx/Support/Onyx.entitlements`. `applinks` is deliberately absent — the app claims no URLs. **The portal half is a founder step:** enable Associated Domains on the App ID before archiving, or signing fails on the entitlement rather than at compile. | — | closed |
+| 7 | **`associated-domains` is PARKED until Gate 0.** A free personal team cannot sign the `webcredentials` entitlement, so it is commented out in `native/project.yml` (see the block above `info:`); `site/.well-known/apple-app-site-association` already names the native App ID, so restoring that one key — and enabling Associated Domains on the App ID in the portal — is the whole change once the paid program is in place. Until then Password AutoFill treats app and site as unrelated, which is not a review blocker. `applinks` stays absent — the app claims no URLs. | — | parked |
 
 Also unresolved and not a code change: `npm audit` reports 11 high and 1 critical,
 all transitive through build tooling (`tar` via `@capacitor/cli`, `sharp`, `postcss`,
@@ -238,18 +238,16 @@ Paste into **App Review Information → Notes**:
 > ship in the web bundle, and the demo account is a real account on the
 > production auth endpoint — so a literal here completes a working credential
 > pair for anyone who reads the repo. `docs/SECURITY_SWEEP_2026-09.md` row 1 is
-> the same finding against `seed-demo-account.mjs`, which is why that script now
-> refuses to invent a default.
+> the same finding against the seeder that created this account.
 >
-> Seed the account, and set the password, in one step:
+> The account already exists; set or reset its password in the Supabase
+> dashboard (Authentication → Users → `appreview@onyx.fitness`). If it ever has
+> to be recreated: sign up in the app with that address and log a week of
+> sessions and meals on the phone. The web-era seeder (`scripts/seed-demo-account.mjs`)
+> was removed in 3.0.0 because it imported the deleted web catalogue; it is in
+> git history before the sunset commit if a scripted reseed is ever wanted.
 >
-> ```bash
-> ONYX_DEMO_PASSWORD='<choose one>' \
-> SUPABASE_SERVICE_ROLE_KEY='<service key>' \
->   node scripts/seed-demo-account.mjs
-> ```
->
-> Then paste that same value straight into **App Review Information → Password**
+> Paste the password straight into **App Review Information → Password**
 > in App Store Connect. That field is not public and is the correct place for it.
 > Rotate it after the review is approved.
 

@@ -10,7 +10,7 @@
 
 import Foundation
 
-/// The soreness vocabulary, mirrored from the web.
+/// The soreness vocabulary, generated from `scripts/src/soreness.ts`.
 ///
 /// Lives in OnyxCore because the SCORER needs it: `ScoringInputsBuilder` folds a
 /// day's rows down to one severity per recognised muscle, and a row whose
@@ -18,7 +18,7 @@ import Foundation
 /// counting it would let unreadable data move the battery, which it did.
 public enum DomsMuscles {
 
-    /// Display order: upper, trunk, lower — as the web lists them.
+    /// Display order: upper, trunk, lower — as the source lists them.
     public static let all = ["Chest", "Back", "Arms", "Shoulders", "Abs", "Glutes", "Quads", "Hamstrings", "Inner thighs", "Calves"]
 
     /// Membership test for the fold. A Set because it is asked per row.

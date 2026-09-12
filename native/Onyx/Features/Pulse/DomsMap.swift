@@ -10,7 +10,7 @@
 
 import OnyxCore
 
-/// The soreness vocabularies, mirrored from the web.
+/// The soreness vocabularies, generated from `scripts/src/*.ts`.
 ///
 /// The GROUP is what a user rates (a sore arm is a sore arm); the landmarks are
 /// what the figure draws; the sub-region is optional detail the scoring engine

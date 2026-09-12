@@ -32,12 +32,11 @@
  *
  * IDEMPOTENT. Re-running moves nothing once every set is on a variant.
  *
- * ALWAYS, in the same commit: rename the exercise in `programs.ts`, repoint its
- * `EXERCISE_ALIASES` entries at the variants (otherwise the next draft
- * canonicalises straight back onto the parent), update any `prSeed.ts`
- * assertion that names it — the match is strict — and then re-run
- * `scripts/backfill-prs.mjs` so the ledger is rebuilt against the split
- * baselines.
+ * ALWAYS, in the same change: give each variant its own `exercises.slug` and
+ * alias (the native catalogue is `exercises` + `ExerciseIndex`; a routine
+ * template naming the parent slug must be repointed), then re-run
+ * `scripts/reconcile-pr-counts.mjs` — the PR ledger is rebuilt on the phone
+ * by the rescore cascade the next time each affected session is opened.
  *
  * Requires NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in .env.local.
  * Service-role: bypasses RLS, so it must never run in the browser bundle.

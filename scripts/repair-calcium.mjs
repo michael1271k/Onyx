@@ -8,7 +8,7 @@
  * potassium are entirely normal on the high days, so it is not a duplicated day
  * — it is one contributor worth roughly 3,100 mg of calcium appearing and
  * disappearing. Both populations are written by the same path (the HealthKit
- * daily ingest: `hk_uuid` null, `logged_at` 00:00), and `src/lib/ingest/dailyLog.ts`
+ * daily ingest: `hk_uuid` null, `logged_at` 00:00), and the ingest
  * stores calcium raw with no conversion, so nothing in this codebase is doing
  * arithmetic to it. The duplicate is upstream, in the Health source.
  *

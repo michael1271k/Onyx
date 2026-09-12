@@ -3,9 +3,9 @@
  * native/schema/supabase.json  →  the GRDB mirror, in Swift.
  *
  * ── WHY THIS IS GENERATED ────────────────────────────────────────────────────
- * `src/lib/supabase/types.ts` declares 17 tables; the app queries 29, and
- * fourteen of those call sites are silently `any`. The file drifted because
- * nothing made it fail when it did. Twenty-nine hand-written Swift structs
+ * The retired web app's generated Supabase types declared 17 tables while it
+ * queried 29, and fourteen of those call sites were silently `any`. The file
+ * drifted because nothing made it fail when it did. Twenty-nine hand-written Swift structs
  * would drift the same way, for the same reason, and the symptom would be a
  * column that silently stops syncing.
  *

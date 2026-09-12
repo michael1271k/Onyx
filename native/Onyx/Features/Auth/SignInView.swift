@@ -19,7 +19,7 @@ import OnyxUI
 /// to fill one already associated with this app. Filling the credential saved
 /// against the WEBSITE — the one the browser holds — needs two more things, and
 /// only ONE of them is in the repo right now: the `apple-app-site-association`
-/// file at `public/.well-known/`, which names this App ID under
+/// file at `site/.well-known/`, which names this App ID under
 /// `webcredentials`. The other half — the `Associated Domains` entitlement —
 /// is PARKED in `native/project.yml` (see the comment where it used to be),
 /// because a free Personal Development Team cannot sign it and Xcode refuses
