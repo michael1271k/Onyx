@@ -19,8 +19,18 @@ import OnyxUI
 /// match every other app. Dropping on a tile moves the dragged slot to its
 /// position; HOLDING over a same-size tile for a beat offers to stack instead,
 /// and the tile says so by brightening. Both rules are `Dashboard.canStack`'s.
+///
+/// ── AND DRAG IS NO LONGER THE ONLY WAY IN (W2, D1) ───────────────────────────
+/// That hold is 600 ms long, unannounced, and 500 ms of it silently gets you a
+/// move instead. `TileMenu` says the same verbs in words on a long press, so
+/// stacking is something you can READ rather than something you have to already
+/// know. Both routes call `Dashboard.canStack`, so they cannot disagree.
 struct DashboardGrid: View {
     @Bindable var model: TodayModel
+    /// Raised by whichever stack currently owns a drag; `TodayTabView` reads it
+    /// as `.scrollDisabled`. See `SmartStackView`'s header for why the scroll
+    /// has to be switched off rather than merely out-prioritised.
+    @Binding var paging: String?
     let onOpen: (WidgetId) -> Void
 
     @State private var mergeTarget: String?
@@ -80,19 +90,44 @@ struct DashboardGrid: View {
         return rows
     }
 
+    /// The face that is UP in a slot — what a tap opens, and what the merge
+    /// highlight wears. It used to be spelled out at the tap site and `items[0]`
+    /// at the highlight, which is how a Sleep/Vitals stack could be showing
+    /// Vitals and brighten in Sleep's green while a tile hovered over it.
+    ///
+    /// `min` because a face removed from a stack while it was the visible one
+    /// leaves the index past the end until the next redraw.
+    private func upIndex(_ slot: StackSlot) -> Int {
+        min(faces[slot.id] ?? 0, max(0, slot.items.count - 1))
+    }
+
+    private func upFace(_ slot: StackSlot) -> WidgetId {
+        slot.items[upIndex(slot)]
+    }
+
+    /// The menu's submenu: every tile this one can absorb, named by the face
+    /// each is SHOWING. A stacked target says how deep it is, because "Sleep"
+    /// and "Sleep + 2" are different things to drop a tile onto.
+    private func candidates(_ slot: StackSlot) -> [StackCandidate] {
+        model.stackTargets(slot.id).map { target in
+            let up = upFace(target)
+            return StackCandidate(
+                id: target.id,
+                title: target.items.count > 1 ? "\(up.title) + \(target.items.count - 1)" : up.title,
+                symbol: up.symbol
+            )
+        }
+    }
+
     @ViewBuilder
     private func tile(_ slot: StackSlot) -> some View {
         let tier = Dashboard.heightTier(slot.size)
         TileFrame(
-            slot: slot, editing: model.editing,
+            slot: slot, up: upFace(slot), editing: model.editing,
             onTap: {
                 if model.editing { if slot.items.count > 1 { model.sheet = .stack(slot.id) } }
-                // The face that is UP, not the first one in the slot. `min` because
-                // a face removed from a stack while it was the visible one leaves
-                // the index past the end until the next redraw.
-                else { onOpen(slot.items[min(faces[slot.id] ?? 0, slot.items.count - 1)]) }
+                else { onOpen(upFace(slot)) }
             },
-            onEdit: { withAnimation(OnyxMotion.flick) { model.editing = true } },
             onRemove: { model.remove(slot.id) },
             onResize: { model.resize(slot.id) }
         ) {
@@ -103,23 +138,50 @@ struct DashboardGrid: View {
                     face: Binding(
                         get: { min(faces[slot.id] ?? 0, max(0, slot.items.count - 1)) },
                         set: { faces[slot.id] = $0 }
-                    )
+                    ),
+                    paging: $paging
                 )
             } else {
                 OnyxTile.face(slot.items[0], entry: model.entry)
             }
         }
+        // A slot that stops being a stack forgets which face was up. Otherwise:
+        // swipe a Sleep/Water stack to Water, unstack Water, then stack Vitals
+        // onto the same tile — and it opens on Vitals, because the remembered 1
+        // is still there and `SmartStackView` is gone, so its own re-point never
+        // ran. It also keeps this dictionary from growing a row per deleted slot.
+        .onChange(of: slot.items.count, initial: true) { _, n in
+            if n < 2, faces[slot.id] != nil { faces[slot.id] = nil }
+        }
         .aspectRatio(tier == .s ? 1 : tier == .m ? 338 / 158 : 338 / 354, contentMode: .fit)
         .overlay {
             if mergeTarget == slot.id {
                 RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous)
-                    .strokeBorder(slot.items[0].domain.accent, lineWidth: 2)
+                    .strokeBorder(upFace(slot).domain.accent, lineWidth: 2)
             }
         }
         .modifier(Arrangeable(
             enabled: model.editing, slotId: slot.id,
             onDrop: { dragged in drop(dragged, on: slot.id) },
             onTargeted: { targeted in hovered(slot.id, targeted) }
+        ))
+        .modifier(TileMenu(
+            // Never in edit mode: `Arrangeable`'s `.draggable` needs the long
+            // press to lift a tile, and a context menu there eats the drag —
+            // which would trade D1 for a worse defect.
+            enabled: !model.editing,
+            up: upFace(slot),
+            isStack: slot.items.count > 1,
+            candidates: candidates(slot),
+            onStack: { model.stack($0, onto: slot.id) },
+            onUnstack: { model.unstackVisible(slot.id, visibleIndex: upIndex(slot)) },
+            onNextFace: {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : OnyxMotion.flick) {
+                    faces[slot.id] = (upIndex(slot) + 1) % slot.items.count
+                }
+            },
+            onEditStack: { model.sheet = .stack(slot.id) },
+            onEdit: { withAnimation(OnyxMotion.flick) { model.editing = true } }
         ))
     }
 
@@ -141,6 +203,125 @@ struct DashboardGrid: View {
             model.stack(dragged, onto: target)
         } else {
             model.move(dragged, to: target)
+        }
+    }
+}
+
+/// One row of the long-press menu's stack submenu: a tile this one can absorb,
+/// named by the face it is currently showing.
+struct StackCandidate: Identifiable {
+    /// The slot id, which is what `Dashboard.stackSlots` is addressed by.
+    let id: String
+    let title: String
+    let symbol: String
+}
+
+/// The long press, outside edit mode — the fix for D1.
+///
+/// ── WHAT A PRESS USED TO MEAN, AND WHAT IT MEANS NOW ─────────────────────────
+/// It meant "start jiggling", and that was the only thing it could mean. So the
+/// only route to a stack ran through a mode the user had to already be in, by a
+/// drag-and-hold nothing on screen mentions. Now the press says the verbs.
+///
+/// ── THE DIRECTION, WHICH DECIDES EVERY STRING BELOW ──────────────────────────
+/// The tile you pressed is the one that STAYS: `stackSlots` puts the dragged
+/// slot's faces UNDER the target's, so picking Sleep from Vitals' menu leaves
+/// Vitals where it is, showing Vitals, with Sleep behind it. "Stack With ▸
+/// Sleep" reads correctly only that way round — the other direction would need
+/// "Move Into", and a menu whose tile disappears when you use it is a menu
+/// people stop using.
+///
+/// Order is the Home Screen's: the widget's own verbs, then the row that leaves
+/// the tile alone and edits the container. `Edit Dashboard` is deliberately not
+/// at the top, where a mis-tap would start the jiggle the user came here to
+/// avoid.
+private struct TileMenu: ViewModifier {
+    let enabled: Bool
+    let up: WidgetId
+    let isStack: Bool
+    let candidates: [StackCandidate]
+    let onStack: (String) -> Void
+    let onUnstack: () -> Void
+    /// Turning the stack over by hand, for VoiceOver. It lives here rather than
+    /// on `SmartStackView` because `TileFrame` is an
+    /// `.accessibilityElement(children: .contain)`: an action added INSIDE that
+    /// container is not reachable from the element the rotor lands on, so the
+    /// action the carousel added to itself could not be performed.
+    let onNextFace: () -> Void
+    let onEditStack: () -> Void
+    let onEdit: () -> Void
+
+    /// VoiceOver's rotor cannot open a submenu, so the eligible targets are
+    /// flattened into actions of their own — capped, because a grid of twelve
+    /// smalls would otherwise read eleven near-identical rows before reaching
+    /// anything else.
+    static let spokenTargets = 6
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .contextMenu { menu }
+                .accessibilityActions {
+                    ForEach(candidates.prefix(Self.spokenTargets)) { target in
+                        Button("Stack with \(target.title)") { onStack(target.id) }
+                    }
+                    if isStack {
+                        // The swipe has no VoiceOver equivalent of its own — the
+                        // rotated `TabView` inherited one from UIKit's page
+                        // controller and a `ZStack` inherits nothing.
+                        Button("Next widget in stack") { onNextFace() }
+                        Button("Unstack \(up.title)") { onUnstack() }
+                        Button("Edit Stack") { onEditStack() }
+                    }
+                    Button("Edit Dashboard") { onEdit() }
+                }
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var menu: some View {
+        Section {
+            if candidates.isEmpty {
+                // Shown, not hidden. A feature that vanishes when it is
+                // unavailable is a feature nobody learns exists — which is the
+                // defect this menu is here to fix. The row states the rule.
+                Button {} label: {
+                    Label("No Same-Size Widget to Stack With", systemImage: "rectangle.stack.badge.plus")
+                }
+                .disabled(true)
+            } else {
+                Menu {
+                    ForEach(candidates) { target in
+                        Button { onStack(target.id) } label: {
+                            Label(target.title, systemImage: target.symbol)
+                        }
+                    }
+                } label: {
+                    Label(
+                        isStack ? "Add to Stack" : "Stack With",
+                        systemImage: isStack ? "rectangle.stack.badge.plus" : "rectangle.stack"
+                    )
+                }
+            }
+            if isStack {
+                Button { onUnstack() } label: {
+                    // The face that is UP, named. "Unstack this face" asks the
+                    // user to know a word the app never taught them.
+                    Label("Unstack \(up.title)", systemImage: "rectangle.stack.badge.minus")
+                }
+                Button { onEditStack() } label: {
+                    // That sheet was reachable only by tapping a stack while
+                    // already jiggling — a sibling of D1, fixed by one row.
+                    Label("Edit Stack", systemImage: "pencil")
+                }
+            }
+        }
+        Section {
+            Button { onEdit() } label: {
+                Label("Edit Dashboard", systemImage: "square.grid.2x2")
+            }
         }
     }
 }

@@ -638,7 +638,7 @@ struct StackEditSheet: View {
                             .foregroundStyle(Color.onyx.textPrimary)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) { model.removeFace(slotId, index: index) } label: { Label("Remove", systemImage: "minus.circle") }
-                                Button { model.unstack(slotId, index: index) } label: { Label("Unstack", systemImage: "square.on.square") }
+                                Button { model.unstack(slotId, index: index) } label: { Label("Unstack", systemImage: "rectangle.stack.badge.minus") }
                                     .tint(id.domain.accent)
                             }
                     }
