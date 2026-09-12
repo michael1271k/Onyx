@@ -441,8 +441,8 @@ introspection. Five of its numbers moved, and one of them moves a tier.
 
 | F7 said | Measured | Consequence |
 |---|---|---|
-| "Twelve read sites hardcode `.eq('meal_type','daily')`" | **20 filtered read sites** — 14 in TS/JS, 6 in Swift — plus **2 unfiltered reads**, 7 write/conflict sites and 3 test assertions | Tier 1 is roughly **twice** the size F7 priced |
-| "all 24 `HKQuantityTypeIdentifierDietary*` types" | **25 distinct dietary identifiers**: 15 ingested (`HealthMetrics.swift:116-130`), 10 authorised-but-unread (`:169-179`) | The authorisation sheet is wider than the ingest; per-meal grain buys nothing for the 10 |
+| "Twelve read sites hardcode `.eq('meal_type','daily')`" | **20 filtered read sites** — 14 in TS/JS, 6 in Swift — plus **3 unfiltered reads** (one of them raw SQL that no `meal_type` grep can find), 7 write/conflict sites and 3 test assertions | Tier 1 is roughly **twice** the size F7 priced, and **all twenty fail silently** |
+| "all 24 `HKQuantityTypeIdentifierDietary*` types" | **26 distinct dietary identifiers**: 15 ingested (`HealthMetrics.swift:116-130`), 11 authorised-but-unread (`:169-179`) | The authorisation sheet is wider than the ingest; per-meal grain buys nothing for the 11 |
 | `API@myfitnesspal.com`, "by application" | `api-group@myfitnesspal.com`, **closed to new partners** | There is no application to make. Tier 0 does not exist |
 | Onyx "collapses everything into one row per day" | True on the **write** path only. `NutritionModel.eaten` (`:237-245`) and `PulseModel.fuelLine` (`:586-592`) already **sum** every row of the date | Two native surfaces are already Tier-1-shaped; the same change **double-counts** them if the daily aggregate survives beside the meals |
 | (not noted) | `scripts/seed-demo-account.mjs:324` writes **`meal_type: 'day'`**, not `'daily'` | A live defect, below |
@@ -471,7 +471,10 @@ target_kcal:int4?, micros:jsonb?
 ```
 
 Upsert conflict target `user_id,date,meal_type`; PK `id`; mirror strategy
-`window` on `date` (90 days — `MirrorPuller.swift:161`).
+`window` on `date` — but **not a 90-day window in practice**: `MirrorPuller.swift:161`
+defaults to `windowDays: 90` and `:154-158` says *"`nil` removes the cap: a
+`.window` table is pulled WHOLE, every time. That is what the app runs with since
+Phase 2."* Production passes `nil` (`SyncCoordinator.swift:227`).
 
 Three of those columns are **day-level facts wearing a row-level column**, and
 this is what makes Tier 1 more than a filter change:
@@ -492,47 +495,68 @@ under. No DDL. That is the whole of the cheap part.
 
 ##### The complete read-site inventory
 
-This is the true cost of Tier 1. Twenty sites filter on the literal; two more
-read the table with no filter at all and are changed in meaning by the same
-edit. **Failure mode** is the column that matters: `LOUD` breaks visibly on the
-first multi-row day; `SILENT` keeps returning a number, and the number is wrong.
+This is the true cost of Tier 1. Twenty sites filter on the literal; **three**
+more read the table with no filter at all and are changed in meaning by the same
+edit.
+
+**Every one of the twenty fails silently, and that is the finding.** An earlier
+draft of this table split them into "loud" and "silent" on the theory that
+`.maybeSingle()` raises PostgREST's `PGRST116` when a day has more than one row.
+It does — and **not one call site looks at it**. `supabase-js` returns
+`{ data, error }` rather than throwing, there is **no `throwOnError()` anywhere
+in `src/`**, and all five `.maybeSingle()` sites destructure the error away:
+`computeForDate.ts:168` is `const nutrition = nutritionRes.data as … | null`,
+`today/route.ts:47` and `useDayVault.ts:128` are `(…Res.data ?? null)`. The error
+object is discarded and the row reads as **absent**.
+
+So there is no day on which Tier 1 announces itself. The column below says what
+each site *does* with the wrong answer.
 
 **TypeScript / JavaScript — 14 filtered sites**
 
 | # | File : line | Shape | On a multi-meal day |
 |---|---|---|---|
-| 1 | `src/lib/scoring/computeForDate.ts:152` | `.maybeSingle()` | **LOUD** — PGRST116, and it takes **the day's score** with it |
-| 2 | `src/app/api/today/route.ts:33` | `.maybeSingle()` in a `Promise.all` | **LOUD** — the whole Today route fails, not just nutrition |
-| 3 | `src/lib/hooks/useDayVault.ts:83` | `.maybeSingle()` | **LOUD** |
-| 4 | `src/lib/hooks/useNutritionException.ts:56` | `.maybeSingle()` (read-before-restamp) | **LOUD** |
-| 5 | `src/lib/ingest/dailyLog.ts:368` | `.maybeSingle()` on `hk_uuid` | **LOUD** — and it is the **manual-override guard**; when it fails, a HealthKit re-sync overwrites a hand-corrected day |
-| 6 | `src/lib/hooks/useNutritionException.ts:76` | `.update()` through the filter | **SILENT** — stamps the day's `phase` onto every meal row |
-| 7 | `src/lib/hooks/useNutrition.ts:51` | range → `new Map(rows.map(r => [r.date, r]))` at `:105` | **SILENT** — last meal of the day is reported as the whole day |
-| 8 | `src/lib/hooks/useCharts.ts:210` | range → macro history chart | **SILENT** — undercount |
-| 9 | `src/lib/hooks/useContinuum.ts:51` | range | **SILENT** |
-| 10 | `src/lib/hooks/useEnergyBalance.ts:48` | range → deficit ledger | **SILENT** — a wrong energy balance is a wrong weight projection |
-| 11 | `src/lib/hooks/useInsights.ts:47` | range | **SILENT** |
-| 12 | `src/lib/hooks/useWeeklyLoop.ts:125` | range, incl. `micros` | **SILENT** — and the micros fold is per-row |
-| 13 | `src/lib/hooks/useWeeklyLoop.ts:386` | range (multi-week) | **SILENT** |
-| 14 | `scripts/repair-calcium.mjs:74` | range, operator script | **SILENT** — a repair script that reads a subset |
+| 1 | `src/lib/scoring/computeForDate.ts:152` | `.maybeSingle()`, error dropped at `:168` | the day is **scored as if nothing was eaten** — not a failed score, a wrong one |
+| 2 | `src/app/api/today/route.ts:33` | `.maybeSingle()`, `?? null` at `:47` | the route returns **200 with `nutrition: null`**. The dashboard shows an unlogged day |
+| 3 | `src/lib/hooks/useDayVault.ts:83` | `.maybeSingle()`, `?? null` at `:128` | the day vault shows no macros |
+| 4 | `src/lib/hooks/useNutritionException.ts:56` | `.maybeSingle()`, `if (!entry) return` at `:59` | the phase re-stamp silently no-ops |
+| 5 | `src/lib/ingest/dailyLog.ts:368` | `.maybeSingle()` on `hk_uuid`, error destructured away | **the worst row here.** `isManualHkUuid(null)` is false, so the manual-override guard **fails open** and a HealthKit re-sync overwrites a hand-corrected day |
+| 6 | `src/lib/hooks/useNutritionException.ts:76` | `.update()` through the filter | stamps the day's `phase` onto every meal row |
+| 7 | `src/lib/hooks/useNutrition.ts:51` | range → `new Map(rows.map(r => [r.date, r]))` at `:105` | last meal of the day is reported as the whole day |
+| 8 | `src/lib/hooks/useCharts.ts:210` | range → macro history chart | undercount |
+| 9 | `src/lib/hooks/useContinuum.ts:51` | range | undercount |
+| 10 | `src/lib/hooks/useEnergyBalance.ts:48` | range → deficit ledger | a wrong energy balance is a wrong weight projection |
+| 11 | `src/lib/hooks/useInsights.ts:47` | range | undercount |
+| 12 | `src/lib/hooks/useWeeklyLoop.ts:125` | range, incl. `micros` | and the micros fold is per-row |
+| 13 | `src/lib/hooks/useWeeklyLoop.ts:386` | range (multi-week) | undercount |
+| 14 | `scripts/repair-calcium.mjs:74` | range, operator script | a repair script that reads a subset |
 
 **Swift / GRDB — 6 filtered sites** (`Column("meal_type") == "daily"`)
 
 | # | File : line | Shape | On a multi-meal day |
 |---|---|---|---|
-| 15 | `OnyxData/Scoring/ScoringInputsBuilder.swift:110` | `.fetchOne()` | **SILENT** — arbitrary row wins; **this is the native scorer** |
-| 16 | `OnyxData/Health/DailyLogIngest.swift:284` | `.fetchOne()` | **SILENT** — the native manual-override guard, same role as #5 |
-| 17 | `OnyxData/Day/DayEditing.swift:597` | `.fetchOne()` in `setManualMacros` | **SILENT** — the override writes one row and the reader sums all of them |
-| 18 | `OnyxData/History/WeeklyExportBuilder.swift:260` | `.fetchAll()` → `nutri[r.date] = r` at `:343` | **SILENT** — `:339` says it outright: *"a later duplicate wins"* |
-| 19 | `OnyxData/Widget/WidgetSnapshotBuilder.swift:471` | `.fetchAll()` → trend window | **SILENT** |
-| 20 | `OnyxData/Widget/WidgetSnapshotBuilder.swift:502` | `.fetchAll()` → ledger window | **SILENT** |
+| 15 | `OnyxData/Scoring/ScoringInputsBuilder.swift:110` | `.fetchOne()` | arbitrary row wins; **this is the native scorer** |
+| 16 | `OnyxData/Health/DailyLogIngest.swift:284` | `.fetchOne()` | the native manual-override guard, same role as #5 |
+| 17 | `OnyxData/Day/DayEditing.swift:597` | `.fetchOne()` in `setManualMacros` | the override writes one row and the reader sums all of them |
+| 18 | `OnyxData/History/WeeklyExportBuilder.swift:260` | `.fetchAll()` → `nutri[r.date] = r` at `:343` | `:339` says it outright: *"a later duplicate wins"* |
+| 19 | `OnyxData/Widget/WidgetSnapshotBuilder.swift:471` | `.fetchAll()` → trend window | undercount |
+| 20 | `OnyxData/Widget/WidgetSnapshotBuilder.swift:502` | `.fetchAll()` → ledger window | undercount |
 
-**Unfiltered reads — 2 sites, changed in meaning by the same edit**
+**Unfiltered reads — 3 sites, changed in meaning by the same edit**
 
 | # | File : line | Today | Under Tier 1 |
 |---|---|---|---|
 | 21 | `OnyxData/Day/DayEditing.swift:580` — `nutritionEntriesStream` | all rows for the date, no `meal_type`; consumers **already sum** (`NutritionModel.swift:239`, `:276`; `PulseModel.swift:587`) | **Already correct** — and **double-counts** the moment a `'daily'` aggregate coexists with meal rows |
 | 22 | `OnyxData/Onboarding/AccountSeed.swift:153` | `fetchCount(db) > 0` as an is-this-account-empty gate | unaffected by grain |
+| 23 | `OnyxData/Day/NutritionWeek.swift:53-79` — `nutritionWeekStream` | **raw SQL**: `SELECT date, SUM(calories), SUM(protein_g), SUM(carbs_g), SUM(fat_g) FROM nutrition_entries WHERE user_id = ? AND date >= ? AND date <= ? GROUP BY date`, no `meal_type`. Feeds the Nutrition tab's seven-day strip (`NutritionModel.swift:128`) | **already correct** under Tier 1 — and **double-counts** the moment a `'daily'` aggregate coexists with meal rows |
+
+**The census has a blind spot, and row 23 is it.** `NutritionWeek.swift` contains
+no occurrence of the string `meal_type`; it sums the table in raw SQL. A grep for
+the literal — the method F7 used and the method that produced rows 1-22 — can
+never find a site like this. **Before Tier 1 is scheduled, re-run the census
+against the table name, not the column**: `grep -rn "nutrition_entries\|NutritionEntryRow"`
+across `src/`, `native/` and `scripts/`, and read every hit. There may be more raw
+SQL; this one was found by a reviewer, not by the grep.
 
 **Writes, conflict targets and fixtures — 10 more edits**
 
@@ -558,8 +582,13 @@ A dietary sample is a quantity with a start date and optional **metadata**.
 Onyx reads every dietary type through **`HKStatisticsQuery`**
 (`HealthKitReader.swift:58`, `:99`), which returns a *reduced scalar* — a sum, an
 average, a most-recent — and **discards per-sample metadata entirely**. There is
-no `HKSampleQuery` anywhere in the ingest path. Whatever meal label MFP may or
-may not attach, the current reader is structurally incapable of seeing it.
+no `HKSampleQuery` **on the dietary path**. Whatever meal label MFP may or may
+not attach, the dietary reader is structurally incapable of seeing it.
+
+The reader is not, however, starting from nothing: `HealthKitReader.swift:134`
+(`sleepSamples`) and `:158` (`workouts`) are already `HKSampleQuery` +
+continuation, so the shape to copy exists in the same file. What has to be
+written from scratch is the dedup the statistics query was doing for free.
 
 Getting the grain therefore means moving the dietary reads from
 `HKStatisticsQuery` to `HKSampleQuery` — and that is not a neutral swap. The
@@ -570,11 +599,15 @@ Capacitor plugin's own header records why the statistics query was chosen
 > sources** (iPhone + Apple Watch) exactly like the Health app. Using a raw
 > `HKSampleQuery` + manual JS sum double-counted steps/energy"*
 
-So Tier 1's enabling change **reintroduces a double-counting bug this repo has
-already fixed once**, on the four numbers the nutrition score is computed from.
-Dedup would have to be reimplemented by hand against `HKSource` priority, which
-is the work `SleepNight.swift:44` already describes as having gone wrong in both
-directions on sleep.
+That quote is about **steps and energy** — iPhone-versus-Watch overlap — and no
+such overlap exists for dietary samples, so it is not proof of the same bug
+recurring. What it does prove is that **this codebase has shipped the manual-sum
+regression once already**, and that the dedup the statistics query performs is
+load-bearing rather than incidental. The dietary equivalent is two food apps
+writing the same meal, which is a different mechanism with the same arithmetic.
+Either way the dedup has to be rebuilt by hand against `HKSource` priority —
+the work `SleepNight.swift:44` describes as having gone wrong in both directions
+on sleep.
 
 **And whether the label exists at all is unverified.** Apple certainly defines
 `HKMetadataKeyFoodType` (a string, the food's name or category, **optional**).
@@ -616,9 +649,10 @@ Xcode settle it, and no code should be written before they are spent.
   unfiltered reads to protect from double-counting, 10 write/fixture edits, one
   DB trigger to rewrite, one unique-index scheme to re-derive — **and the
   dietary reader rewritten from `HKStatisticsQuery` to `HKSampleQuery` with
-  hand-rolled multi-source dedup**. Five of the reads fail loud (they are the
-  cheap ones); **fifteen fail silent**, and four of those are on the scoring or
-  export path. No DDL, no new dependency, no new UI.
+  hand-rolled multi-source dedup**. **All twenty fail silently** — there is no day
+  on which this announces itself — and five of them sit on the scoring, export or
+  manual-override path. No DDL, no new dependency, no new UI, and no alarm if it
+  is done wrong.
 - **Ceiling — and it is low.** Tier 1 can only redistribute *what MFP already
   wrote*: calories and nutrients per meal summary, with **no food names** and
   **no timestamps**. `logged_at` would remain synthetic. It buys a
@@ -765,7 +799,7 @@ is now no shared row for one user's bad edit to reach another user through.
 -- ─────────────────────────────────────────────────────────────────────────────
 begin;
 
-create extension if not exists pg_trgm;
+create extension if not exists pg_trgm with schema extensions;  -- uuid-ossp lives there too
 
 -- ── 1 · foods — this user's catalogue ───────────────────────────────────────
 -- user_id is NOT NULL, and that is a SYNC constraint, not a privacy one:
@@ -782,6 +816,10 @@ create table if not exists public.foods (
   source             text        not null check (source in ('off', 'usda', 'manual')),
   source_id          text,       -- OFF normalised barcode / USDA fdcId; null for 'manual'
   barcode            text,       -- STORED NORMALISED (OFF rule: <=7 -> 8, 9-12 -> 13)
+  -- OPEN: USDA's gtinUpc is 14-digit zero-padded, so the SAME physical product
+  -- arrives under two spellings and the unique index below cannot collapse them.
+  -- Either normalise both to one canonical form on write, or add a
+  -- `barcode_raw` beside this and make THIS column the canonical one.
 
   name               text        not null,
   brand              text,
@@ -809,6 +847,7 @@ comment on column public.foods.micros_100g is
   'units as declared there (mg/mcg/IU/g). A MISSING key means the source did not '
   'report it. Never 0 — the supabase.json nil-is-not-zero rule applies here too.';
 
+drop trigger if exists foods_set_updated_at on public.foods;
 create trigger foods_set_updated_at
   before update on public.foods
   for each row execute function public.set_updated_at();
@@ -950,13 +989,54 @@ the other three are recorded with the reason they lose.
 | **(a) trigger on `food_entries` upserts the `'daily'` row** | **Recommended.** Same table, same PK, same `on conflict (user_id,date,meal_type)` the client already speaks. Nothing about the mirror contract changes. And the pattern is not new here — a trigger already fans `nutrition_entries` macros out to `daily_logs` |
 | (b) replace the table with a VIEW | A view has no unique index, so the mirror's `upsert(onConflict:)` push has nothing to conflict against. `INSTEAD OF` triggers would reimplement (a) underneath a view for no gain |
 | (b′) MATERIALIZED VIEW | Cannot be upserted at all; `REFRESH … CONCURRENTLY` needs its own unique index and runs on a schedule, so a windowed pull can read a snapshot that predates a food logged seconds ago |
-| (c) application-level recompute | The mirror is **bidirectional with two client languages**, both able to be offline. Two clients editing one day would race and silently drop one side — the exact "racy delete-then-insert" `dailyLog.ts:405` says it moved *away* from. A trigger row-locks and serialises for free |
+| (c) application-level recompute | The mirror is **bidirectional with two client languages**, both able to be offline. Two clients editing one day would race and silently drop one side — the exact "racy delete-then-insert" `dailyLog.ts:405` says it moved *away* from. A trigger narrows that window to one statement, **but does not close it for free** — see open item 6 |
 | (d) generated/denormalised hybrid | This *is* (a), stated precisely: one physical table, two write authorities over **disjoint slices of `meal_type`** |
 
-**The sharp question: can Tier 1's per-meal rows and Tier 3's derived daily row
-coexist?** Yes, and by construction rather than convention — Tier 1 writes only
+##### The seam's precondition, and the defect that proves it
+
+**Tier 3 is NOT independent of Tier 1.** This was asserted in an earlier draft and
+it is wrong. The disjoint-slice argument — Tier 1 writes only
 `meal_type IN ('breakfast','lunch','dinner','snack')`, the trigger writes only
-`meal_type = 'daily'`. No two writers ever target the same row.
+`meal_type = 'daily'`, so no two writers touch one row — **holds only after Tier 1's
+write-side rename has landed**. W3.7 recommends skipping Tier 1. On that path the
+existing writers still target `'daily'` (`dailyLog.ts:400`,
+`DailyLogIngest.swift:312`) and the seam breaks, concretely:
+
+1. HealthKit sync writes `nutrition_entries(D, 'daily', calories = 2400, source = 'healthkit')`.
+2. The user logs a 300 kcal apple. The trigger fires.
+3. Branch 1 of the union = `{snack: 300}`. Branch 2 filters `meal_type <> 'daily'`,
+   so **it cannot see the 2400 row** — it is empty.
+4. The upsert targets `(user, D, 'daily')` and sets `calories = 300`.
+5. **The day drops from 2,400 kcal to 300.** One apple destroys the day.
+6. The next sync reads `hk_uuid` (still NULL — the `do update set` never touched
+   it), `isManualHkUuid(null)` is false, so it writes 2,400 back and the apple
+   vanishes. **Ping-pong, every sync, forever.**
+
+Two more writers of the same row make it worse: `useMacroOverride.ts:93` and
+`DayEditing.swift:601` (`setManualMacros`). Under the trigger as first sketched,
+the hand-corrected macro override stops working the day `food_entries` exists.
+
+**The fix reuses a mechanism this repo already has.** A day cannot be owned by an
+item-grain log and a day-grain aggregate at once; one must own it. The manual
+override already solves exactly this, with the `manual-<date>` sentinel in
+`hk_uuid` that makes the ingest skip the day (`manualEntry.ts:24`,
+`dailyLog.ts:369`, `DailyLogIngest.swift:289`). So:
+
+- the trigger stamps **`hk_uuid = 'onyx-' || v_date`** on the derived row;
+- `isManualHkUuid` gains a sibling (or widens) so both ingest guards skip a day
+  Onyx owns, exactly as they already skip a hand-corrected one;
+- the trigger **refuses to overwrite a row it does not own** — if the existing
+  `'daily'` row is `source = 'healthkit'` or carries a `manual-` sentinel and
+  there are no `food_entries` for the date, it does nothing.
+
+That is three small edits on the write side, and they are a **subset of Tier 1's
+twenty**. The honest statement for W3.7's ranking: skipping Tier 1 saves the
+read-side conversions, not the write-side rename.
+
+**With that precondition met, the question below is answerable.**
+
+**Can Tier 1's per-meal rows and Tier 3's derived daily row coexist?** Yes, by
+construction — the two writers target disjoint `meal_type` slices.
 
 The real risk is the opposite of the obvious one. On a day with *both* a
 HealthKit breakfast row and a natively logged lunch, a naive
@@ -984,12 +1064,20 @@ declare
   v_date date := coalesce(new.date,    old.date);
 begin
   -- `target_kcal` and `phase` are DAY-level facts written by the goal ladder,
-  -- not by food. They are read and written back unchanged so a food edit never
-  -- clobbers them — see W3.1 on why those two columns are the awkward ones.
+  -- not by food. They appear in NEITHER the insert list NOR the `do update set`,
+  -- so an existing row keeps them. NOTE: on a FIRST insert they are therefore
+  -- NULL, and `phase` NULL is a real behaviour change — resolve before building.
+  --
+  -- MISSING HERE, and required (see "the seam's precondition"): a guard that
+  -- refuses to touch a `'daily'` row this trigger does not own, i.e. one whose
+  -- `source = 'healthkit'` or whose `hk_uuid` carries a `manual-` sentinel.
+  -- Without it, logging one food destroys a HealthKit day.
   insert into public.nutrition_entries
-    (user_id, date, meal_type, logged_at, source,
+    (user_id, date, meal_type, logged_at, source, hk_uuid,
      calories, protein_g, carbs_g, fat_g, fiber_g)
-  select v_user, v_date, 'daily', now(), 'onyx',
+  -- 'onyx-<date>' is the ownership sentinel, the shape manualEntry.ts already
+  -- uses. Both HealthKit ingests must learn to skip a day carrying it.
+  select v_user, v_date, 'daily', now(), 'onyx', 'onyx-' || v_date,
          sum(calories), sum(protein_g), sum(carbs_g), sum(fat_g), sum(fiber_g)
   from (
     -- slots Onyx has native rows for
@@ -1027,7 +1115,8 @@ create trigger food_entries_recompute_daily
 commit;
 ```
 
-**Five things this sketch deliberately leaves open rather than faking:**
+**Eleven things this sketch leaves open. Every one must be closed before a
+line of it is pasted.** Items 1, 5, 6 and 7 are defects, not gaps.
 
 1. **Deleting the last food of a day leaves a stale `'daily'` row.** When
    `slots` comes back empty — the user deletes their only logged item and
@@ -1054,12 +1143,46 @@ commit;
    Postgres declares it `NOT NULL DEFAULT` — that is the `sleep_inaccurate` rule
    the fixture's own header states, and it exists so a pull that ran before the
    DDL paste can still decode a row.
-5. **`nutrition_entries` must be on the realtime channel.** A `.window` pull with
-   `windowDays: nil` reads whole history today, so a backdated edit does land —
-   but the strategy's own doc string warns it "misses an edit to a row older than
-   the window" if a window is ever reintroduced. Confirm the table is in
-   `MirrorRealtime`'s list before relying on trigger-side writes reaching a
-   second device.
+5. **The trigger never fires on `nutrition_entries` writes, so the per-slot
+   precedence rule is not actually implemented.** It is bound to `food_entries`
+   only. A HealthKit sync writing or updating a per-meal row — Tier 1's whole
+   point — recomputes nothing, and the `'daily'` row keeps whatever the last
+   *food* write computed. Precedence is described as a property of the design and
+   built as a property of one trigger on one table. It needs a second trigger on
+   `nutrition_entries`, guarded against its own recursion.
+6. **Concurrent writers can still lose an update.** "A trigger row-locks and
+   serialises for free" was asserted and is false: under READ COMMITTED the
+   aggregate over `food_entries` is evaluated *before* the `ON CONFLICT` row lock
+   is taken, so two transactions (web and phone, or two outbox drains) each
+   compute a total excluding the other's uncommitted row and the second commit
+   wins. It needs `SELECT … FOR UPDATE` on the daily row before aggregating, an
+   advisory lock, or SERIALIZABLE. This removes the headline reason option (c)
+   lost — the trigger is still better, but by a narrower margin.
+7. **An `UPDATE` that moves a row to another date never fixes the old date.**
+   `v_date := coalesce(new.date, old.date)` takes `NEW` on update, so correcting a
+   mis-dated entry recomputes the new day and leaves the old day's `'daily'` row
+   inflated permanently. Moving between *meals* on the same day is safe — the
+   whole day is re-summed. It needs both dates recomputed on update.
+8. **Legacy rows with `meal_type IS NULL` are silently dropped** from the union:
+   `meal_type <> 'daily'` is NULL for them, so they never contribute. `meal_type`
+   is nullable in the fixture (`supabase.json:91`) and W3.6 could not confirm a
+   CHECK constraint. Probably desirable — state it, do not leave it to the
+   three-valued logic.
+9. **`logged_at = excluded.logged_at` restamps the daily row with `now()`** on
+   every food edit, changing that column's meaning mid-table: the HealthKit
+   writer sets it to midnight (`dailyLog.ts:400`). `WeeklyExportBuilder.swift:260`
+   orders by `(date, logged_at)`.
+10. **The unique index the whole `on conflict` rests on has never been observed.**
+   W3.6's "could not settle" list names the `hk_uuid` index, the CHECK, the RLS
+   bodies and `pg_trgm` — but not `(user_id, date, meal_type)`, which is inferred
+   from the client's `onConflict` string, not from the catalogue. W3.6's query 2
+   answers it; run it first.
+11. **`nutrition_entries` is on the realtime channel** — confirmed,
+   `OnyxCore/Sync/RealtimeKeys.swift:20`. What remains unverified is the
+   server-side publication membership, which needs the SQL editor. A `.window`
+   pull with `windowDays: nil` reads whole history today, so a backdated edit
+   lands anyway; the strategy's doc string warns it "misses an edit to a row older
+   than the window" only if a window is ever reintroduced.
 
 ##### 4 · `recipes` / `recipe_items` — deferred, deliberately
 
@@ -1344,7 +1467,7 @@ extension list.
 | `id` default | `extensions.uuid_generate_v4()` → **uuid-ossp is installed** |
 | `hk_uuid` | text, nullable; 107 of 162 populated, all distinct |
 | `foods`, `food_entries`, `recipes`, `recipe_items`, `food_log`, `meals`, `nutrition_targets`, `nutrient_targets` | **none exist** |
-| Live table count | **34** — two more than the 32 in `native/schema/supabase.json`: `set_events` (433 rows) and `joint_flags` (0 rows) are live and unmirrored |
+| Live table count | **34** — two more than the 32 in `native/schema/supabase.json`: `set_events` (433 rows) and `joint_flags` (0 rows) are live and unmirrored. *(Four table counts circulate in this repo and all four are correct about different things: `PostgRESTRemote.swift:90` says "twenty-six tables" — the generated catalogue; `supabase.json`'s header says "the 29 the app actually reads"; the fixture declares **32** table keys; live is **34**.)* |
 | Anon key, no session, on `nutrition_entries` | `200` with `[]` and `content-range: */0` — behaviourally consistent with RLS on and user-scoped, which is **not** the policy text |
 
 **What it could not settle — and all of it is load-bearing for Tier 1:**
@@ -1396,7 +1519,7 @@ holds one meal's macros as the day's.
 |---|---|---|---|
 | **New tables** | none | none of its own — lands in Tier 3's | `foods`, `food_entries` (+`recipes`/`recipe_items`, deferred) |
 | **DDL** | none — but one trigger to rewrite | none | a paste-into-the-SQL-editor file, the `w2-generic-model.sql` shape |
-| **Call sites touched** | **20 filtered reads + 2 unfiltered + 10 writes/fixtures** | ~0 existing; all new code | the roll-up seam only, if the seam holds |
+| **Call sites touched** | **20 filtered reads + 3 unfiltered + 10 writes/fixtures** | ~0 existing; all new code | the roll-up seam **plus Tier 1's write-side rename** — the seam does not hold without it |
 | **HealthKit reader** | **rewritten** — `HKStatisticsQuery` → `HKSampleQuery`, with multi-source dedup rebuilt by hand | untouched | untouched |
 | **Feasibility** | **UNPROVEN.** Depends on a meal label that may not exist and that the current reader cannot see (W3.2) | proven — it is a file | proven |
 | **New dependency** | none | none (CSV parse is stdlib-shaped) | none — VisionKit and URLSession are native |
@@ -1406,13 +1529,18 @@ holds one meal's macros as the day's.
 | **Buys Onyx independence from MFP?** | **No** | **Partly** — history only | **Yes** |
 
 **The honest ranking.** Tier 1 is the cheapest to *describe* and the most
-expensive to *verify*: it costs twenty read-site conversions and a trigger
-rewrite to buy a breakfast/lunch/dinner split of numbers that carry no food
-names, and it leaves Onyx exactly as dependent on MyFitnessPal as it is today.
-Tier 3 is the only tier that changes the answer to the founder's question, and
-Tier 2 is the only tier that rescues the history. **If the goal is to replace
-MFP, Tier 1 is the tier to skip** — its twenty edits are better spent once, on
-the roll-up seam Tier 3 needs, than twice.
+expensive to *verify*: twenty read-site conversions, a trigger rewrite and a
+HealthKit reader rewrite, to buy a breakfast/lunch/dinner split of numbers that
+carry no food names — and it leaves Onyx exactly as dependent on MyFitnessPal as
+it is today. Tier 3 is the only tier that changes the answer to the founder's
+question; Tier 2 is the only one that rescues the history.
+
+**If the goal is to replace MFP, skip Tier 1's read side — but not its write
+side.** Tier 3's roll-up cannot coexist with writers that still target
+`meal_type = 'daily'`; one logged apple destroys a HealthKit day. Three write-side
+edits (`dailyLog.ts:400`, `DailyLogIngest.swift:312`, and the ownership sentinel
+in both ingest guards) are a **precondition of Tier 3**, not a Tier 1 luxury. The
+twenty read conversions are what skipping buys back.
 
 The one piece of Tier 1 worth doing on its own merits is the `'day'` vs
 `'daily'` seed defect in W3.0, which is a one-character fix and not a tier.
@@ -1426,8 +1554,11 @@ Ten decisions. Decision 0 gates the others; 1-4 gate the tiers; 5-9 gate Tier 3 
    populate it on the samples it writes? If the answer to either is no, **Tier 1
    is not merely expensive, it is impossible**, and decision 1 answers itself.
    Nothing should be scheduled before this is known (W3.2).
-1. **Which tier is the goal?** If the answer is "replace MFP", Tier 1 is a
-   detour — say so now and spend its twenty edits on Tier 3's seam instead.
+1. **Which tier is the goal?** If the answer is "replace MFP", Tier 1's *read*
+   side is a detour. Its **write** side is not: three edits that stop HealthKit
+   owning the `'daily'` row are a precondition of Tier 3's roll-up, and without
+   them one logged food destroys a synced day. Decide the goal, then take the
+   write-side rename either way.
 2. **Does Onyx write dietary samples to Health?** W3.5, stated not resolved.
    Positions 1, 2 and 3 have materially different sizes and the answer changes
    Tier 3's scope. This is the single biggest open question in the document.
@@ -1448,10 +1579,13 @@ Ten decisions. Decision 0 gates the others; 1-4 gate the tiers; 5-9 gate Tier 3 
    already jsonb and the mirror generator maps `jsonb` to `JSONText`. Consistency
    argues jsonb; queryability argues columns.
 7. **Which nutrients does a food carry?** `NUTRIENT_TARGETS`
-   (`src/lib/nutrition/nutrientTargets.ts:50-113`) names 21, but six of them —
-   creatine, citrulline, caffeine, theanine, glycine, and partly EPA/DHA — come
-   from `supplementNutrients.ts` and the stack, not from food. A `foods` table
-   carrying all 21 would have six columns nothing can ever fill.
+   (`src/lib/nutrition/nutrientTargets.ts:50-115`) holds **20** entries, of which
+   **9 are marked `fromStack: true`** — supplement-sourced. But the split is not
+   clean in either direction: `caffeine` is stack-flagged and Open Food Facts
+   reports it on coffee; `vitaminB12` and `folate` are stack-flagged and are
+   ordinary fortified-food nutrients. Meanwhile only **9** keys ever reach
+   `nutrition_entries.micros` today (`dailyLog.ts:355`). Decide the `foods` key
+   set from what the sources actually report, not from either existing list.
 8. **Do recipes exist in v1?** The plan says skip until asked. Confirm the skip.
 9. **Who runs the DDL?** It cannot run from this machine — no `psql`, no
    Supabase CLI, no exec RPC (`docs/sql/w2-generic-model.sql:6-10`). Every table
