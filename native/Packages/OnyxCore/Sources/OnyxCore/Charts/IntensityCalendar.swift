@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Intensity Calendar model — a port of `src/lib/charts/intensityCalendar.ts`.
+/// The Intensity Calendar model — a port of the web app's `lib/charts/intensityCalendar.ts`.
 /// Days after today are ABSENT, not rest; `avgLoad` divides by elapsed days.
 public struct CalendarCell: Codable, Sendable, Equatable {
     public var date: String

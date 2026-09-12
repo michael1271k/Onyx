@@ -1,6 +1,6 @@
 import Foundation
 
-/// Day-swap planning — a port of `src/lib/schedule/swap.ts`.
+/// Day-swap planning — a port of the web app's `lib/schedule/swap.ts`.
 ///
 /// ── THE BUG THIS EXISTS TO FIX ───────────────────────────────────────────────
 /// "Rest Day" used to write ONE row: `{today: rest}`. That is not a swap, it is

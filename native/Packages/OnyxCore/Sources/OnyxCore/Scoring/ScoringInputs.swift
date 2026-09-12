@@ -1,6 +1,6 @@
 import Foundation
 
-/// A day's raw signals, exactly as `ScoringInputs` in `src/lib/scoring/types.ts`.
+/// A day's raw signals, exactly as `ScoringInputs` in the web app's `lib/scoring/types.ts`.
 ///
 /// ── EVERY OPTIONAL IS OPTIONAL FOR A REASON ─────────────────────────────────
 /// The TypeScript original distinguishes "absent" from "zero" in several places
@@ -199,7 +199,7 @@ public struct ScoringInputs: Codable, Sendable, Equatable {
     }
 }
 
-/// `ReadinessResult` from `src/lib/scoring/types.ts`.
+/// `ReadinessResult` from the web app's `lib/scoring/types.ts`.
 public struct ReadinessResult: Codable, Sendable, Equatable {
     public enum Level: String, Codable, Sendable {
         case trainHard = "train_hard"

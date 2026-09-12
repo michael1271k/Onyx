@@ -31,8 +31,8 @@ assigned W1a 2.4.0. The concurrent export-v4.1 audit merged first and took
 10. Nutrition: specify all three tiers, **no code**.
 11. Wave 1 splits into **1a** (wrap) and **1b** (history), sequential — 1b's wrap
     chip depends on 1a's view.
-12. **Native only.** The Helix web app is untouched; it has no wrap surface at
-    all (`WeeklyWrap` is Swift-only, zero TS port) and is scheduled for sunset.
+12. **Native only.** The web app was untouched (no wrap surface; `WeeklyWrap`
+    is Swift-only) and was retired in W6 of the epic sprint.
 13. Each wave on its own feature branch.
 
 ## Context
@@ -179,8 +179,7 @@ states it outright: *"`nutrition_entries` stores a `meal_type = 'daily'`
 AGGREGATE with no item"*.
 
 HealthKit is **read-only everywhere** — `requestAuthorization(toShare: [], …)`
-(`OnyxData/Health/HealthKitReader.swift:28-32`) and `toShare: nil` in the
-Capacitor plugin (`ios/App/App/HelixHealth.swift:35`). There is no
+(`OnyxData/Health/HealthKitReader.swift:28-32`). There is no
 `HKHealthStore.save` call in the repo.
 
 **Barcode capability is zero.** No `NSCameraUsageDescription`, no

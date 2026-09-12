@@ -1,6 +1,6 @@
 import Foundation
 
-/// Why a day carries no weigh-in — a port of `src/lib/body/weighIn.ts`.
+/// Why a day carries no weigh-in — a port of the web app's `lib/body/weighIn.ts`.
 ///
 /// THE DEFAULT IS "As Planned", NOT "no reason recorded". The protocol is to skip
 /// the scale on any morning the bathroom has not happened yet, so skipping is the

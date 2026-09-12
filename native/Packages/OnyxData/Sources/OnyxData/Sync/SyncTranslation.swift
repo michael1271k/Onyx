@@ -8,7 +8,7 @@ import OnyxCore
 /// match Supabase and that a translation layer had to exist before anything
 /// could be uploaded. This is that layer. Every difference it bridges was
 /// introspected from the LIVE database on 2026-09-03 — never from
-/// `src/lib/supabase/types.ts`, which is known to have drifted:
+/// the web app's `lib/supabase/types.ts`, which is known to have drifted:
 ///
 ///   · `workout_sets.set_index` → **`set_number`**. There is no `set_index`
 ///     column server-side at all.

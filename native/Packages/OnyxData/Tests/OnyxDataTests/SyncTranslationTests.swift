@@ -6,7 +6,7 @@ import OnyxCore
 /// The local↔Postgres translation, case by case.
 ///
 /// Every expectation here was read off the LIVE database on 2026-09-03, not off
-/// `src/lib/supabase/types.ts`. Where a test asserts a string — `upper`, `L` —
+/// the web app's `lib/supabase/types.ts`. Where a test asserts a string — `upper`, `L` —
 /// that string is one Postgres already holds.
 @Suite("Sync translation")
 struct SyncTranslationTests {

@@ -18,7 +18,7 @@ public enum NutritionPhase: String, Codable, Sendable, CaseIterable {
     /// The chip label. `Cut` / `Maint` / `Bulk`.
     ///
     /// The TypeScript reaches this through `phaseDisplay(phase, dateISO)`, which
-    /// special-cases a cut on or after `HELIX_CUT_START` to label it "Cut" — the
+    /// special-cases a cut on or after the founder's cut-start constant to label it "Cut" — the
     /// same string `PHASE_META.cut` already carries. The branch has been a no-op
     /// since the era rename, so it is not ported; the date parameter went with
     /// it. If the two labels ever need to differ again, that is a real change

@@ -3,7 +3,7 @@ import Testing
 @testable import OnyxCore
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dashboard layout — `src/lib/dashboard/layout.ts`, replayed from `npm run golden`
+// Dashboard layout — the web app's `lib/dashboard/layout.ts`, replayed from `npm run golden`
 //
 // Two things are non-deterministic on both sides and are normalised the same
 // way before comparing: a freshly minted slot id becomes `new-1`, `new-2`… in

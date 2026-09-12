@@ -1,7 +1,7 @@
 import Foundation
 
 /// Which query keys a Supabase table change invalidates — a port of
-/// `src/lib/query/realtimeKeys.ts` and `query/workoutKeys.ts`. OnyxData owns
+/// the web app's `lib/query/realtimeKeys.ts` and `query/workoutKeys.ts`. OnyxData owns
 /// the invalidation; this pins the fan-out so the two sides cannot drift.
 public enum RealtimeKeys {
     public static let workoutQueryKeys: [[String]] = [
@@ -31,7 +31,7 @@ public enum RealtimeKeys {
         // ── W4: the sixteen tables the socket was blind to ─────────────────
         // Each list is the one the table's OWN mutation cascades, copied rather
         // than invented, so the socket and the local write refresh the same
-        // surfaces. `src/tests/query-key-coverage.test.ts` fails on any prefix
+        // surfaces. the web app's `tests/query-key-coverage.test.ts` fails on any prefix
         // here with no registered `useQuery`.
         ("cardio_logs", [["cardio_logs"]]),
         ("fatigue_logs", [["fatigue_logs"]]),

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Where the session you are logging is actually going — a port of
-/// `src/lib/sessions/muscleDistribution.ts`. WARM-UPS COUNT here and only here;
+/// the web app's `lib/sessions/muscleDistribution.ts`. WARM-UPS COUNT here and only here;
 /// a ghost is the one exclusion; a unilateral pair is ONE set.
 public enum MuscleDistribution {
     /// Weighted set counts per landmark muscle: primary 1.0, secondary 0.5, an
@@ -54,7 +54,7 @@ public enum MuscleDistribution {
 }
 
 /// Narrow a plan-wide progression queue to one training day — a port of
-/// `src/lib/training/scopeToDay.ts`. A falsy key keeps EVERYTHING (the PPL era).
+/// the web app's `lib/training/scopeToDay.ts`. A falsy key keeps EVERYTHING (the PPL era).
 public enum ProgressionScope {
     public static func toDay<T>(_ alerts: [T], dayKey: String?, key: (T) -> String?) -> [T] {
         guard let k = dayKey, !k.isEmpty else { return alerts }

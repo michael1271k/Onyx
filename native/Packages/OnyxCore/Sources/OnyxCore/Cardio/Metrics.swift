@@ -1,6 +1,6 @@
 import Foundation
 
-/// Derived cardio metrics — a port of `src/lib/cardio/metrics.ts`. Pace is
+/// Derived cardio metrics — a port of the web app's `lib/cardio/metrics.ts`. Pace is
 /// DERIVED, never stored: distance and duration are the facts, pace is a view.
 public enum CardioMetrics {
     /// Minutes per kilometre, or nil when either input cannot support the ratio.

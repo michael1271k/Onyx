@@ -3,7 +3,7 @@ import Foundation
 /// Reads a day out of HealthKit and writes it into the store.
 ///
 /// ── THE HOP THAT DISAPPEARED ────────────────────────────────────────────────
-/// The web path was: plugin → JSON over the Capacitor bridge → `syncDay` in the
+/// The web path was: plugin → JSON over the web-shell bridge → `syncDay` in the
 /// browser → `POST /api/ingest` with a bearer token → `ingestDailyLog` on a
 /// Netlify function in UTC → six Supabase round trips → the phone refetches what
 /// it just sent. The function ran in UTC and could not know the user's day, so

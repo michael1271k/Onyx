@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // READINESS v9 — the signals behind the battery, and the coach that reads it.
-// A port of `src/lib/scoring/readiness.ts`; `docs/READINESS_MODEL.md` states
+// A port of the web app's `lib/scoring/readiness.ts`; `docs/READINESS_MODEL.md` states
 // the model with its citations. The `readiness-*` golden vectors replay every
 // function below case for case.
 //

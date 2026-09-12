@@ -12,7 +12,7 @@ import Foundation
 ///
 /// ── AND WHY THE MOVERS ARE NO LONGER SPELLED OUT HERE ───────────────────────
 /// Every lift used to carry its own resolved `primary:` / `secondary:` answer,
-/// hand-copied out of `src/lib/exercises/muscleMap.ts` because that dictionary
+/// hand-copied out of the web app's `lib/exercises/muscleMap.ts` because that dictionary
 /// had not been ported yet. Two hand-maintained copies of the same anatomy both
 /// look right, so the copies are gone: `ProgramExercise.init` now asks
 /// `MuscleMap` for the movers, keyed on the lift's own name, and there is one
@@ -151,7 +151,7 @@ public struct ProgramDay: Identifiable, Sendable, Equatable, Codable {
     /// The split sub-type shown under the name, e.g. "Quad Focus".
     public var sub: String?
     /// The day's own colour as `0xRRGGBB` — `DAY_COLOR[key]` in
-    /// `src/lib/theme/palette.ts`. Carried as a number rather than as a
+    /// the web app's `lib/theme/palette.ts`. Carried as a number rather than as a
     /// `Color` because `OnyxCore` imports Foundation and nothing else; the
     /// view turns it into a colour, and there is still only one source for what
     /// "Upper B" looks like.

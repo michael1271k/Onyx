@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Borg CR10 — the session-level effort scale, the per-set RPE ladder, and the
-// session effort WORDS. A port of `src/lib/training/effort.ts` minus colours.
+// session effort WORDS. A port of the web app's `lib/training/effort.ts` minus colours.
 //
 // CR10 is a RATIO scale: 10 is maximal, half-steps are real, and the column is
 // numeric(3,1). Per-set RPE is reps-in-reserve and clusters at 8–9.5 on a

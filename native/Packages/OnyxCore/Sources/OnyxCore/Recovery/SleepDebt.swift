@@ -1,6 +1,6 @@
 import Foundation
 
-/// The sleep-debt bank — `computeSleepDebt` from `src/lib/hooks/useSleepDebt.ts`.
+/// The sleep-debt bank — `computeSleepDebt` from the web app's `lib/hooks/useSleepDebt.ts`.
 ///
 /// A decayed cumulative shortfall against the goal over a 14-night window.
 /// Surplus nights repay debt but never bank "credit" below zero; the older week
@@ -49,7 +49,7 @@ public extension SleepDebt {
 }
 
 public extension SleepDebt {
-    /// The gauge's hue band — `debtBand` in `src/lib/sleep/debt.ts`.
+    /// The gauge's hue band — `debtBand` in the web app's `lib/sleep/debt.ts`.
     static func band(_ debtHours: Double) -> String {
         if debtHours <= 2 { return "ember" }
         if debtHours <= 5 { return "gold" }

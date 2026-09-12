@@ -10,7 +10,7 @@ import PackageDescription
 ///    no Supabase. That is enforced by being a separate module: an accidental
 ///    `import SwiftUI` in a scoring file fails the build instead of quietly
 ///    tying the formulas to a view layer. The web codebase earned this rule the
-///    hard way (`src/lib/scoring/computeForDate.ts` carries a "SERVER-SAFE by
+///    hard way (the web app's `lib/scoring/computeForDate.ts` carries a "SERVER-SAFE by
 ///    construction: no React" header for the same reason), and the Swift port
 ///    keeps it.
 ///

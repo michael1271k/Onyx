@@ -1,7 +1,7 @@
 {
   "module": "reports/weeklyExport + derived + weekJson",
   "fn": "buildWeeklyExport / weeklySummary / trendTotals / energyBalance / derivedWeek",
-  "note": "The whole document, byte for byte, plus the aggregates it renders from. Regenerate with ONYX_WRITE_FIXTURE=1 npx vitest run src/tests/export-golden.test.ts; the Swift port must then be matched by hand.",
+  "note": "The whole document, byte for byte, plus the aggregates it renders from. Hand-maintained since the web generator was retired; the Swift port is the only implementation.",
   "cases": [
     {
       "name": "the empty week",

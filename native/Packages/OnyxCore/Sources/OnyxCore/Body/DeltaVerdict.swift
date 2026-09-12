@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Is a body-composition change good, bad, or neither — given the phase you are
-// in? A port of `src/lib/body/deltaVerdict.ts` (colours are OnyxUI's).
+// in? A port of the web app's `lib/body/deltaVerdict.ts` (colours are OnyxUI's).
 //
 // THREE DELIBERATE ASYMMETRIES: muscle is good up and bad down in every phase;
 // fat gain in a bulk is neutral, not good; maintenance has a dead band, and

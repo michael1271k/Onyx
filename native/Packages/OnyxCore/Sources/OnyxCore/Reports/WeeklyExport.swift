@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // "Export Week" — a dense, DRY-DATA payload of one training week. A port of
-// `src/lib/reports/weeklyExport.ts`, byte for byte.
+// the web app's `lib/reports/weeklyExport.ts`, byte for byte.
 //
 // EXPORT v4, THE DOCUMENT. The week is written DAY BY DAY: everything the app
 // knows about Monday sits under `## DAY 2 · Mon · 2026-08-31`, in the order the
@@ -831,7 +831,7 @@ public enum WeeklyExport {
     /// cell. v4 has no cells, and stripping them was the document editing the
     /// wearer's words: "barely slept; deadline" came out "barely slept deadline".
     ///
-    /// A 1:1 port of `phrase` in `src/lib/reports/weeklyExport.ts`.
+    /// A 1:1 port of `phrase` in the web app's `lib/reports/weeklyExport.ts`.
     static func phrase(_ text: String?, max: Int = 60) -> String {
         guard let text, !text.isEmpty else { return "" }
         let flat = text

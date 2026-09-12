@@ -3,7 +3,7 @@
   "why": [
     "The GRDB mirror is generated from THIS file, and this file is written from a live",
     "introspection of Supabase (information_schema + pg_catalog) — never from",
-    "src/lib/supabase/types.ts, which declares 17 tables while the app queries 29 and",
+    "the web app's generated Supabase types, which declared 17 tables while the app queried 29 and",
     "has fourteen call sites silently typed `any`.",
     "",
     "Column syntax is `name:pgtype`, with a trailing `?` meaning NULLABLE IN POSTGRES.",
@@ -12,7 +12,7 @@
     "that gets to erase the distinction.",
     "",
     "FOUR live tables are deliberately absent:",
-    "  · body_measurements — the tape table. HELIX does not do manual waist/limb",
+    "  · body_measurements — the tape table. Onyx does not do manual waist/limb",
     "    measuring; it has been removed from the product twice. Mirroring it would",
     "    put the fields back within reach of the next screen that goes looking.",
     "  · notion_credentials, notion_exports — the Notion integration was deleted on",

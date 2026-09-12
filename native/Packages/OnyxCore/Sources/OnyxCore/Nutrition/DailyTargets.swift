@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-day target overrides — the layer above every rung. A port of
-// `src/lib/nutrition/dailyTargets.ts`.
+// the web app's `lib/nutrition/dailyTargets.ts`.
 //
 // It overrides FIELD BY FIELD: every column is nullable and nil means "no
 // opinion, ask the layer below". And it reaches backwards, which nothing else

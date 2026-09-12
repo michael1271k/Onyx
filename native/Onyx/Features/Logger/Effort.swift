@@ -4,8 +4,8 @@ import OnyxCore
 /// Effort, in words — the vocabulary the logger and the finish sheet share.
 ///
 /// ── PORTED, NOT INVENTED ────────────────────────────────────────────────────
-/// Every value here comes from `src/lib/training/effort.ts` and
-/// `src/lib/training/setTags.ts` in the web app, unchanged. That matters more
+/// Every value here comes from the web app's `lib/training/effort.ts` and
+/// the web app's `lib/training/setTags.ts` in the web app, unchanged. That matters more
 /// than it looks: `workout_sets.rpe` is `numeric(3,1)` and holds 2,190 rows
 /// rated on THAT ladder, `workout_sessions.session_rpe` holds the CR-10 the
 /// battery reads, and `workout_sets.quality` has a CHECK constraint listing
@@ -221,7 +221,7 @@ enum SetQuality: String, CaseIterable, Identifiable, Sendable {
 //
 // `EffortWord` and `EffortWords.all` used to be declared here as well, byte for
 // byte the same five rungs as `Effort.words` in OnyxCore — which is the copy
-// the WEB is vector-equal with (`src/lib/training/effort.ts`, `EFFORT_WORDS`)
+// the WEB is vector-equal with (the web app's `lib/training/effort.ts`, `EFFORT_WORDS`)
 // and the one `Effort.suggestEffortWord` and `Effort.effortCr10` are written
 // against. Nothing in the app target ever read the local pair, so it was five
 // hard-coded CR-10 values waiting to disagree with the ones that are actually

@@ -3,7 +3,7 @@ import Foundation
 // ─────────────────────────────────────────────────────────────────────────────
 // The Intellectual Insight Coach — deterministic, zero-model analytics that
 // mine real correlations from the recent metrics. A port of
-// `src/lib/coach/insights.ts`: same data → same insights, strict English, no
+// the web app's `lib/coach/insights.ts`: same data → same insights, strict English, no
 // network, no randomness, and every builder stays silent rather than invent a
 // pattern from too little data.
 // ─────────────────────────────────────────────────────────────────────────────

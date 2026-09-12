@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // "The scale synced a weight, but nobody entered the composition." A port of
-// `src/lib/body/compGap.ts`.
+// the web app's `lib/body/compGap.ts`.
 //
 // HealthKit delivers bodyweight alone; body fat, lean soft tissue and skeletal
 // muscle are typed in from the scale's display. A weigh-in with an empty

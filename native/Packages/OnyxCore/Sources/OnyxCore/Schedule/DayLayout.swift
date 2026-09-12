@@ -1,6 +1,6 @@
 import Foundation
 
-/// The permanent weekday layout of a plan — a port of `src/lib/schedule/layout.ts`.
+/// The permanent weekday layout of a plan — a port of the web app's `lib/schedule/layout.ts`.
 ///
 /// ── WHY THIS EXISTS ──────────────────────────────────────────────────────────
 /// `ProgramDay.weekday` is a constant, and `schedule_overrides` is strictly

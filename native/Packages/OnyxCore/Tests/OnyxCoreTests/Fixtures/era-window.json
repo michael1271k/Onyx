@@ -1,7 +1,7 @@
 {
   "module": "era/eraWindow",
   "fn": "resolveEraWindow",
-  "note": "Six trailing windows ending on `today`. currentPhase takes the phase table's start and eraTag (plan label when no phase covers the day); currentLever walks back while leverForDate agrees, floored at the schedule's first row; sinceCutStart is HELIX_CUT_START; days clamps its length to at least 1; all is firstDataISO. A start after today clamps to today. `era` is eraForWindow of the same result. W3 adds thisWeek (Week.start of today for the athlete's week_end_day, labelled \"This week\") and currentProgram (the sinceCutStart range under the plans row's own label, because \"Since cut\" is wrong on a bulk).",
+  "note": "Six trailing windows ending on `today`. currentPhase takes the phase table's start and eraTag (plan label when no phase covers the day); currentLever walks back while leverForDate agrees, floored at the schedule's first row; sinceCutStart is the founder's cut start; days clamps its length to at least 1; all is firstDataISO. A start after today clamps to today. `era` is eraForWindow of the same result. W3 adds thisWeek (Week.start of today for the athlete's week_end_day, labelled \"This week\") and currentProgram (the sinceCutStart range under the plans row's own label, because \"Since cut\" is wrong on a bulk).",
   "cases": [
     {
       "name": "today \u00b7 currentPhase",

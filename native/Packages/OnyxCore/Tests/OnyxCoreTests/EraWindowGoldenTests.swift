@@ -6,7 +6,7 @@ import Testing
 // The six chart windows — replayed from `npm run golden` (W11).
 //
 // The phase labels go through `rebranded` for the reason `NutritionGoldenTests`
-// states: the fixtures come from `src/lib/phases.ts`, which keeps the web's own
+// states: the fixtures come from the web app's `lib/phases.ts`, which keeps the web's own
 // era tags on purpose (decision 2). Every other character is compared as-is.
 // ─────────────────────────────────────────────────────────────────────────────
 

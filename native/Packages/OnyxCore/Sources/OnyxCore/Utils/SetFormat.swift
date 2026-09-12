@@ -1,6 +1,6 @@
 import Foundation
 
-/// How one logged set reads, everywhere — a port of `src/lib/utils/setFormat.ts`.
+/// How one logged set reads, everywhere — a port of the web app's `lib/utils/setFormat.ts`.
 ///
 /// An unloaded set's record IS its rep count or its duration, so that is what
 /// gets rendered: `60kg × 12` · `17 reps` · `58 sec`. Never "0kg × 17".

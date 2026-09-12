@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // What the energy ledger predicted against what the scale actually did — a port
-// of `src/lib/charts/deficitLedger.ts` (§W12).
+// of the web app's `lib/charts/deficitLedger.ts` (§W12).
 //
 // ── TWO NUMBERS THAT DISAGREE ON PURPOSE ─────────────────────────────────────
 // The ledger sums `intake − TDEE` and divides by 7,700 kcal/kg. The scale

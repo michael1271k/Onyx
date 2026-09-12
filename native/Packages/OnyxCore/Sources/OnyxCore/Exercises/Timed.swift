@@ -1,7 +1,7 @@
 import Foundation
 
 /// Time-based movements record a HOLD in seconds, not reps. Matched by name —
-/// a port of `src/lib/exercises/timed.ts`, regex for regex.
+/// a port of the web app's `lib/exercises/timed.ts`, regex for regex.
 public enum TimedExercise {
     private static let pattern = try! NSRegularExpression(
         pattern: #"\b(plank|hollow\s*hold|hold|dead\s*hang|wall\s*sit|l-?sit|carry)\b"#,

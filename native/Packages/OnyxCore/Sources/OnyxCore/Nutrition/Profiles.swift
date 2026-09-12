@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Target profiles — a named day, reusable, applied with one tap. A port of
-// `src/lib/nutrition/profiles.ts`.
+// the web app's `lib/nutrition/profiles.ts`.
 //
 // A LEVER is a rung of a phase, in force from a date. A PROFILE is a shape a
 // single day can take — "Home", "Restaurant" — unordered, and deliberately not

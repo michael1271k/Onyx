@@ -3,7 +3,7 @@ import Foundation
 /// The eight muscle families — the grain every CHART groups by.
 ///
 /// ── WHY EIGHT AND NOT THE SIX THIS USED TO BE ───────────────────────────────
-/// The six were a port of `src/lib/theme/muscleHue.ts` (`familyOf`), which
+/// The six were a port of the web app's `lib/theme/muscleHue.ts` (`familyOf`), which
 /// folded biceps, triceps and forearms into one "Arms". That fold is fine for a
 /// web app whose chart had six bars to colour; it is wrong for ONYX, because the
 /// programme prescribes biceps and triceps SEPARATELY — they have their own

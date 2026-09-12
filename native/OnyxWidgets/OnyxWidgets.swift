@@ -10,12 +10,12 @@ import OnyxUI
 /// Wave 5: the five Home Screen families, the Lock Screen accessory and the
 /// running-workout Live Activity. Every tile is a `OnyxUI` view drawing a
 /// `OnyxSnapshot` that `OnyxProvider` builds from the App Group database —
-/// no network, no snapshot route, no token. The Capacitor extension that did
+/// no network, no snapshot route, no token. The web-shell extension that did
 /// all of this over HTTP is gone.
 ///
 /// ⚠️ `kind:` strings are load-bearing: a kind that disappears takes every
 /// placed instance of it off the Home Screen. They are the same five strings
-/// the Capacitor extension used, so a re-install keeps what the user placed.
+/// the web-shell extension used, so a re-install keeps what the user placed.
 @main
 struct OnyxWidgets: WidgetBundle {
     var body: some Widget {
@@ -120,7 +120,7 @@ struct OnyxLockWidget: Widget {
 // MARK: - The running workout
 
 /// ── ONE STRUCT, BECAUSE THE FLOOR IS iOS 18 ─────────────────────────────────
-/// The Capacitor app needs TWO widget structs for this — `supplementalActivity-
+/// An iOS 17 floor needs TWO widget structs for this — `supplementalActivity-
 /// Families` is `@available(iOS 18.0, *)` and returns a different opaque type,
 /// so it cannot be applied conditionally inside one `body`, and WidgetKit ships
 /// no `AnyWidgetConfiguration` to erase it with. The native app's deployment

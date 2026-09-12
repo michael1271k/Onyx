@@ -1,7 +1,7 @@
 import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The 4-axis personal-record engine — a port of `src/lib/training/prEngine.ts`.
+// The 4-axis personal-record engine — a port of the web app's `lib/training/prEngine.ts`.
 // PURE: no database, no clock, no UI.
 //
 // One implementation, every caller. PR detection used to live inline in the

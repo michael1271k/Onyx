@@ -3,7 +3,7 @@ import Foundation
 /// The logical day, and the ISO strings every table in this app is keyed by.
 ///
 /// ── THE BOUNDARY IS MIDNIGHT, DEVICE-LOCAL ──────────────────────────────────
-/// A port of `src/lib/utils/day.ts`, including its history: there used to be a
+/// A port of the web app's `lib/utils/day.ts`, including its history: there used to be a
 /// configurable end-of-day cutoff, and it caused native-versus-web drift — the
 /// native side leaked the previous day — so it was removed. Apple Health resets
 /// at 00:00, which settles the argument. `user_goals.day_cutoff_hour` still

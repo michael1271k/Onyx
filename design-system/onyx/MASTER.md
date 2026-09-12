@@ -7,8 +7,8 @@ Swift call sites, so a screen wave does not have to re-read the plan to know wha
 a token is called.
 
 **Platform:** iOS 18+, dark only, iPhone only. Every value below is points.
-**Owner in code:** `native/Packages/HelixUI/Sources/HelixUI/DesignSystem/`.
-**Enforced by:** `src/tests/native-token-discipline.test.ts` (`npm test`).
+**Owner in code:** `native/Packages/OnyxUI/Sources/OnyxUI/DesignSystem/`.
+**Enforced by:** review — a raw hex outside the token file is a defect.
 
 ---
 

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The waypoints on the steps tile's track — `stepMarks` from
-/// `src/components/dashboard/widgets/DailyWidgets.tsx`.
+/// the web app's `components/dashboard/widgets/DailyWidgets.tsx`.
 ///
 /// Derived from the goal rather than hardcoded at 2/4/6/8/10k: the goal is a
 /// user setting, and a fixed ladder would put five marks under a 6,000-step

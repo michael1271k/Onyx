@@ -213,7 +213,7 @@ struct ScoringHolesTests {
     ///
     /// These three vectors are the whole difference between "mean over rows" and
     /// "mean over distinct recognised muscles, max within each". The web runs
-    /// the identical cases in `src/tests/doms.test.ts`.
+    /// the identical cases in the web app's `tests/doms.test.ts`.
     @Test("soreness folds to one number per recognised muscle, max within")
     func domsFold() {
         func row(_ id: String, _ muscle: String, _ severity: Int) -> DomsLogRow {

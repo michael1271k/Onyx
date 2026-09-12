@@ -1,7 +1,7 @@
 {
   "module": "widget/derive + training/streak",
   "fn": "calendarDays / streakFrom / programDayCount / weeklyVolume",
-  "note": "`schedule` is the injected scheduledFor as a map (a missing date is {dayKey: null, scheduled: false}). streakFrom skips unscheduled days, does not count an unlogged today or any future day against you. programDayCount counts from HELIX_CUT_START (2026-07-15 = day 1), 0 before it. weeklyVolume buckets by weekStartOf(date, weekStartDay).",
+  "note": "`schedule` is the injected scheduledFor as a map (a missing date is {dayKey: null, scheduled: false}). streakFrom skips unscheduled days, does not count an unlogged today or any future day against you. programDayCount counts from the founder's cut start (2026-07-15 = day 1), 0 before it. weeklyVolume buckets by weekStartOf(date, weekStartDay).",
   "cases": [
     {
       "name": "a clean fortnight",

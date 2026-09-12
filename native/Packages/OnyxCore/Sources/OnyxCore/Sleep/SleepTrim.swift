@@ -1,7 +1,7 @@
 import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sleep trim — strategy B, a port of `src/lib/sleep/trim.ts` (Phase 3 E2).
+// Sleep trim — strategy B, a port of the web app's `lib/sleep/trim.ts` (Phase 3 E2).
 //
 // What a night's stage minutes become when its window is edited and there are
 // NO HealthKit samples to re-aggregate (strategy A lives in OnyxData, next to

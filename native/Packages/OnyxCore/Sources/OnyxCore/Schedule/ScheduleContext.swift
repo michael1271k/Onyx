@@ -1,7 +1,7 @@
 import Foundation
 
 /// The pure schedule core — `scheduleDayIn` / `isTrainingDayIn` /
-/// `sessionTargetIn` from `src/lib/programs.ts`.
+/// `sessionTargetIn` from the web app's `lib/programs.ts`.
 ///
 /// ── WHY A CONTEXT VALUE AND NOT MORE ARGUMENTS ───────────────────────────────
 /// The web resolves four things — the plan, the phase, the per-date swaps and

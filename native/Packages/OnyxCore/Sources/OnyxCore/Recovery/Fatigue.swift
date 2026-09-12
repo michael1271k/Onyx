@@ -1,6 +1,6 @@
 import Foundation
 
-/// The fatigue scale — the pure half of `src/lib/hooks/useFatigue.ts`.
+/// The fatigue scale — the pure half of the web app's `lib/hooks/useFatigue.ts`.
 ///
 /// ── THREE READINGS A DAY, AND THE MIDDLE TWO MOVE WITH THE DAY ───────────────
 /// The old vocabulary was four clock anchors (`morning · noon · evening · eod`)

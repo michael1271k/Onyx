@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DERIVED METRICS — the arithmetic, kept behind a wall. A port of
-// `src/lib/reports/derived.ts`.
+// the web app's `lib/reports/derived.ts`.
 //
 // Every input is a figure already printed in the raw body; nothing is invented
 // to fill a gap (a metric with no evidence is nil); it is pure and
@@ -272,7 +272,7 @@ public enum Derived {
 
     /// Mean severity over DISTINCT RECOGNISED muscles, max within each.
     ///
-    /// The same fold `ScoringInputsBuilder` and `src/lib/recovery/soreness.ts`
+    /// The same fold `ScoringInputsBuilder` and the web app's `lib/recovery/soreness.ts`
     /// apply. Max rather than mean within a muscle: "left quad severe, right
     /// quad fine" is a severe quad, and averaging it reports a day nobody had.
     static func foldDomsSeverity(_ rows: [ExportDoms]) -> Double? {

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Exercise alias map — a port of `src/lib/exercises/aliases.ts`.
+/// Exercise alias map — a port of the web app's `lib/exercises/aliases.ts`.
 ///
 /// Historical and variant names → canonical catalogue names. Keys are
 /// lower-case + trimmed. Every entry is a rename or a merge that was performed

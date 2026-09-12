@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Where the scale is going, and when it arrives — a port of
-// `src/lib/charts/trajectory.ts` (§W12).
+// the web app's `lib/charts/trajectory.ts` (§W12).
 //
 // ── WHY AN EWMA AND A REGRESSION, BOTH ───────────────────────────────────────
 // They answer different questions and the tile draws both.

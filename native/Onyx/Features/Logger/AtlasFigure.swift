@@ -4,7 +4,7 @@ import OnyxCore
 
 /// The body, tinted by where the session landed.
 ///
-/// `OnyxAtlas.swift` beside this file is GENERATED from `src/lib/body/atlas.ts`
+/// `OnyxAtlas.swift` beside this file is GENERATED from the web app's `lib/body/atlas.ts`
 /// and holds only geometry; `atlas-parity.test.ts` re-runs the generator and
 /// fails when either Swift copy differs, so the web app, the widget and this
 /// screen can never disagree about where a muscle is.

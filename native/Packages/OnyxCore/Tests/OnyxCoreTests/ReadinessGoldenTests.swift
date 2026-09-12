@@ -3,7 +3,7 @@ import Testing
 @testable import OnyxCore
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Readiness v9 — `src/lib/scoring/readiness.ts`, replayed from `npm run golden`.
+// Readiness v9 — the web app's `lib/scoring/readiness.ts`, replayed from `npm run golden`.
 //
 // The z-signal, the sRPE load, the EWMA ratio, Foster's monotony and strain,
 // and the composite. Every nil is compared as a nil: a number where the

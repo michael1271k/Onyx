@@ -32,7 +32,7 @@ import OnyxCore
 // to avoid. `upIsGood` is set per metric and never inferred from the sign, which
 // is the rule `deltaVerdict` enforces on the web side.
 //
-// The muscle ATLAS figure is deliberately absent: `src/lib/body/atlas.ts` does
+// The muscle ATLAS figure is deliberately absent: the web app's `lib/body/atlas.ts` does
 // not exist yet (it is Wave C), and the Swift generator reads from it. This face
 // ships the numbers; the figure lands when the atlas does.
 //

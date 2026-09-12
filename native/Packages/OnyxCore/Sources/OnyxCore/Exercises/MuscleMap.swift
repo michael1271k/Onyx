@@ -1,7 +1,7 @@
 import Foundation
 
 /// The authoritative primary + secondary muscle tags per exercise — a port of
-/// `src/lib/exercises/muscleMap.ts`.
+/// the web app's `lib/exercises/muscleMap.ts`.
 ///
 /// This is the source of truth for the Freshness Map, Muscle Analytics, the
 /// weekly MEV/MAV accumulator, the per-muscle tonnage breakdown and the

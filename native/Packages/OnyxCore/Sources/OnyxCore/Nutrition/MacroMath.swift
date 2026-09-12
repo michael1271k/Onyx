@@ -2,7 +2,7 @@ import Foundation
 
 /// The arithmetic behind a macro edit: change one figure, and the other three
 /// stay a set of numbers that can be true at the same time. A port of
-/// `src/lib/nutrition/macroMath.ts`, which is the golden source.
+/// the web app's `lib/nutrition/macroMath.ts`, which is the golden source.
 ///
 /// ── THE ONE RULE ────────────────────────────────────────────────────────────
 /// Calories are ALWAYS the Atwater sum of the macros on screen — 4 · protein +

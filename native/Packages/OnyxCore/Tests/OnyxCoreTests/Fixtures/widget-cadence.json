@@ -1,7 +1,7 @@
 {
   "module": "widget/cadence",
   "fn": "REFRESH_SCHEDULE / refreshMinutesForHour / refreshesPerDay / FAILURE_MINUTES",
-  "note": "The web mirror of HelixRefresh.schedule. `perHour` is refreshMinutesForHour for 0…23.",
+  "note": "The web mirror of the widget refresh schedule. `perHour` is refreshMinutesForHour for 0…23.",
   "cases": [
     {
       "name": "the table",

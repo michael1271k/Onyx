@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // How long the workout has been running — PURE, no clock of its own. A port of
-// `src/lib/sessions/sessionElapsed.ts`.
+// the web app's `lib/sessions/sessionElapsed.ts`.
 //
 // Total elapsed is `now − startedAt`, derived, never stored: a timestamp
 // survives the jetsam-and-reload iOS performs on a backgrounded app, a counter

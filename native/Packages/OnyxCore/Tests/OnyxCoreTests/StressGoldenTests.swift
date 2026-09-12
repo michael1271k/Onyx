@@ -3,7 +3,7 @@ import Testing
 @testable import OnyxCore
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Stress index v1 — `src/lib/scoring/stress.ts`, replayed from `npm run golden`.
+// Stress index v1 — the web app's `lib/scoring/stress.ts`, replayed from `npm run golden`.
 // Every nil is compared as a nil: a number where the TypeScript answered "no
 // reading" is the exact bug this suite exists to catch.
 // ─────────────────────────────────────────────────────────────────────────────

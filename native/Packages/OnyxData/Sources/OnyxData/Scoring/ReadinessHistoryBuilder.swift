@@ -3,7 +3,7 @@ import GRDB
 import OnyxCore
 
 /// The data layer's half of readiness v9 — rows in, a `ReadinessHistory` out.
-/// A port of `src/lib/scoring/readinessHistory.ts`, and the ONE place on the
+/// A port of the web app's `lib/scoring/readinessHistory.ts`, and the ONE place on the
 /// phone that decides how rows become the 49-day series: which resting-HR
 /// column wins, whether a missing day is a nil or a zero. `readiness-history
 /// .test.ts` pins those rules for the web; `ReadinessHistoryTests` pins them

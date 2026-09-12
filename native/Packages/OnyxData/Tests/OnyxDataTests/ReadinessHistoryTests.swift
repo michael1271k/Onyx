@@ -5,7 +5,7 @@ import Testing
 @testable import OnyxData
 
 /// The row → series rules of readiness v9, on the phone — the same cases
-/// `src/tests/readiness-history.test.ts` pins on the web, so the two builders
+/// the web app's `tests/readiness-history.test.ts` pins on the web, so the two builders
 /// have one written contract. The formulas downstream are vector-proven; this
 /// is the half a vector cannot see.
 @Suite("Readiness history — rows onto the 49-day calendar")

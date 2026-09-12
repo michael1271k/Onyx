@@ -1,7 +1,7 @@
 import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The battery, taken apart — a port of `src/lib/charts/batteryStack.ts` (§W12).
+// The battery, taken apart — a port of the web app's `lib/charts/batteryStack.ts` (§W12).
 //
 // ── WHY A STACK AND NOT A LINE ───────────────────────────────────────────────
 // A battery percentage is one number and it is the answer to the wrong

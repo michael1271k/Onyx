@@ -1,6 +1,6 @@
 import Foundation
 
-/// `ScoreComponents` from `src/lib/scoring/types.ts`.
+/// `ScoreComponents` from the web app's `lib/scoring/types.ts`.
 ///
 /// Every sub-score is 0–100 **or nil**. nil means "no data / not applicable"
 /// and is excluded from the composite — never a fake 0 or 100. That rule is the
@@ -38,7 +38,7 @@ public struct ScoreComponents: Codable, Sendable, Equatable {
     }
 }
 
-/// `ScoringAlert` from `src/lib/scoring/types.ts`.
+/// `ScoringAlert` from the web app's `lib/scoring/types.ts`.
 public struct ScoringAlert: Codable, Sendable, Equatable {
     public enum Severity: String, Codable, Sendable {
         case warn, danger, info
@@ -53,7 +53,7 @@ public struct ScoringAlert: Codable, Sendable, Equatable {
     }
 }
 
-/// The daily score — a direct port of `src/lib/scoring/score.ts`.
+/// The daily score — a direct port of the web app's `lib/scoring/score.ts`.
 ///
 /// The reasoning behind each formula lives in the TypeScript and is not
 /// duplicated here. What IS repeated is the one rule a port loses most easily:

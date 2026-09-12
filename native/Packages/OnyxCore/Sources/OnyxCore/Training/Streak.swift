@@ -1,6 +1,6 @@
 import Foundation
 
-/// THE STREAK and the PROGRAM DAY — a port of `src/lib/training/streak.ts`.
+/// THE STREAK and the PROGRAM DAY — a port of the web app's `lib/training/streak.ts`.
 public struct StreakDay: Sendable, Equatable {
     public var d: String
     public var scheduled: Bool

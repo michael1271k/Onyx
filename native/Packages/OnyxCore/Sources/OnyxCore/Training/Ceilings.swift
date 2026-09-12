@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rep windows read from the PROGRAM, and the double-progression verdicts built
-// on them. A port of `src/lib/training/ceilings.ts`.
+// on them. A port of the web app's `lib/training/ceilings.ts`.
 //
 // The badge used to run on a single global ceiling of 12, so Calf Press at
 // 15/14/13 "cleared" and prompted +2.5 kg against a programmed 10–15 window.

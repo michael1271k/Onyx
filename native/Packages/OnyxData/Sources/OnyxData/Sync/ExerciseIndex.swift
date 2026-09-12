@@ -217,7 +217,7 @@ public enum ExerciseSlug {
     /// first return to an old load reads as a new record.
     ///
     /// Wave 4 turns this into a real catalogue lookup and the prefix stops
-    /// existing. Until then it stays, and `rg -i helix native --type swift`
+    /// existing. Until then it stays, and a search for the old prefix
     /// finding it here is the expected answer, not an oversight.
     ///
     /// Must stay byte-identical to `LoggerModel.exerciseId`.

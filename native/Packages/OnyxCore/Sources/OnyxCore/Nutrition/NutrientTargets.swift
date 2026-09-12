@@ -1,7 +1,7 @@
 import Foundation
 
 /// Daily micronutrient targets for THIS athlete — the data half of
-/// `src/lib/nutrition/nutrientTargets.ts`. `floor` = aim to reach; `ceiling` =
+/// the web app's `lib/nutrition/nutrientTargets.ts`. `floor` = aim to reach; `ceiling` =
 /// stay at or under. The rationale strings and HealthKit identifiers are
 /// documentation and stay on the web side.
 public struct NutrientTarget: Codable, Equatable, Sendable {

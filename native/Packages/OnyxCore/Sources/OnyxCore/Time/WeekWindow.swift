@@ -2,7 +2,7 @@ import Foundation
 
 /// One week as the athlete's settings cut it — the seven days, their number,
 /// and whether today is inside them. A port of `weekWindowOf` in
-/// `src/lib/reports/weekNumber.ts`.
+/// the web app's `lib/reports/weekNumber.ts`.
 ///
 /// ── WHY A VALUE AND NOT A DATE SUM AT EVERY CALL SITE ───────────────────────
 /// "This week" was computed by hand in six places (`Week.start` + six

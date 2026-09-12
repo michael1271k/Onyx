@@ -132,7 +132,7 @@ public extension AppDatabase {
     ///
     /// ── EVERY HALF OF THE APP COUNTS, NOT ONLY THE TRAINING HALF ────────────
     /// The first version asked about plans, routines, the catalogue and
-    /// sessions — and a person who had used Helix only for food, water and
+    /// sessions — and a person who had used the app only for food, water and
     /// weigh-ins tripped none of them. The sign-up trigger's `plans` row has no
     /// `program_id`, so they read as brand new and would have had a seed
     /// written over their `user_goals`. The rule the header states is "any

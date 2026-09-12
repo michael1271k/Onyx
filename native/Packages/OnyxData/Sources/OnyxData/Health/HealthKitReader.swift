@@ -5,8 +5,8 @@ import OnyxCore
 
 /// `HealthReading` over a real `HKHealthStore`.
 ///
-/// ── WHAT THE CAPACITOR PLUGIN DID THAT THIS DOES NOT ────────────────────────
-/// The bridge marshalled every query through JSON, so `lib/native/healthkit.ts`
+/// ── WHAT THE WEB-SHELL PLUGIN DID THAT THIS DOES NOT ────────────────────────
+/// The bridge marshalled every query through JSON, so the old plugin
 /// carried an `inBatches(…, 6, …)` throttle — firing twenty-eight queries at
 /// once the instant authorization resolved hammered the store during app launch
 /// and stalled the WebView. There is no bridge here and no main thread involved:

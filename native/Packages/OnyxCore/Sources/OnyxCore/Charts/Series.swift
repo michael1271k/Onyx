@@ -1,7 +1,7 @@
 import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The chart series builders — a port of `src/lib/charts/series.ts` (§6.5).
+// The chart series builders — a port of the web app's `lib/charts/series.ts` (§6.5).
 //
 // Four questions the screens ask of the ledger, answered once each and
 // replayed against the TypeScript in `SeriesGoldenTests`. Nothing here reads

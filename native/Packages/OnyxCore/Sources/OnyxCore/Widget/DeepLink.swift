@@ -2,7 +2,7 @@ import Foundation
 
 /// `onyx://open?path=/nutrition` → a tab.
 ///
-/// Port of `src/lib/native/deepLink.ts`. A custom URL scheme is callable by
+/// Port of the web app's `lib/native/deepLink.ts`. A custom URL scheme is callable by
 /// anything on the device that can open a URL — another app, a web page, a QR
 /// code — so the string arriving here is untrusted input. `safePath` is an
 /// ALLOW-LIST, not a sanitiser: it names the routes that exist rather than

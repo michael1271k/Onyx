@@ -8,7 +8,7 @@ import OnyxUI
 /// `SessionVolume`, `PrEngine`, `SessionDetail`, `Ceilings`, `MuscleCredit` or
 /// `Epley`, each of which is held to the TypeScript by golden vectors. What
 /// this file decides is which rows go in and in what order, which is the part
-/// `src/lib/sessions/save.ts` and `useSessionDetail.ts` get right and a
+/// the web app's `lib/sessions/save.ts` and `useSessionDetail.ts` get right and a
 /// re-implementation would get wrong.
 ///
 /// ── HOW PR DETECTION SELECTS ROWS (mirrors `save.ts`) ───────────────────────

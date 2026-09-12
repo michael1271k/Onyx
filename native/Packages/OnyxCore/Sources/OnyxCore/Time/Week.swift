@@ -1,7 +1,7 @@
 import Foundation
 
 /// Week boundaries and the ONE programme week counter — ports of
-/// `weekStartOf` (`src/lib/utils/week.ts`) and `src/lib/reports/weekNumber.ts`.
+/// `weekStartOf` (the web app's `lib/utils/week.ts`) and the web app's `lib/reports/weekNumber.ts`.
 ///
 /// ── WEEK 0 IS THE PLAN'S, NOT THE PACKAGE'S (W2) ─────────────────────────────
 /// `week0Start = "2026-07-12"` was the Sunday of the week the founder's cut

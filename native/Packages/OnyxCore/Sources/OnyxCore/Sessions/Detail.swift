@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Session Report's arithmetic — a port of `src/lib/sessions/detail.ts`
+/// The Session Report's arithmetic — a port of the web app's `lib/sessions/detail.ts`
 /// (extracted from ExerciseBreakdown, SessionHighlights and MetricGrid).
 
 public struct DetailSet: Codable, Sendable, Equatable {

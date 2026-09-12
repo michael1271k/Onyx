@@ -5,8 +5,8 @@ import Supabase
 /// Supabase session storage backed by the iOS Keychain.
 ///
 /// ── WHY THE KEYCHAIN, AND NOT WHAT THE WEB APP DOES ─────────────────────────
-/// The web app persists its session in `localStorage` with a
-/// `@capacitor/preferences` (UserDefaults) mirror, and `SecureStore.swift` — the
+/// The web app persisted its session in `localStorage` with a
+/// preferences-plugin (UserDefaults) mirror, and `SecureStore.swift` — the
 /// Keychain plugin that would have fixed it — was written and then left
 /// unregistered, on the reasoning that a single-user app can afford one extra
 /// tap. That reasoning stops applying here: `UserDefaults` is not encrypted at

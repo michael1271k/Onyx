@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase levers — the rungs of the cut, as ROWS, with one selection in the
-// database. A port of `src/lib/nutrition/levers.ts`, generic since W2.
+// database. A port of the web app's `lib/nutrition/levers.ts`, generic since W2.
 //
 // A deficit has two dials: eat less, or move more. A lever is one named
 // combination of both. EVERY MACRO TRIPLE SHOULD BE ATWATER-EXACT (4/4/9): the

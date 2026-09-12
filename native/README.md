@@ -1,10 +1,12 @@
-# ONYX Native — Wave 1 foundation
+# ONYX Native
 
-A second, parallel iOS app. It installs **alongside** the Capacitor app rather
-than over it (`app.onyx.health.michael.native` vs `app.onyx.health.michael`),
-reads the same Supabase, and is built screen by screen while the web app stays
-your daily driver. Nothing about this migration requires a day where neither app
-works.
+The app. iPhone, Apple Watch, Home Screen widgets and a Live Activity, all
+SwiftUI, all reading one GRDB store that syncs to Supabase through an outbox.
+
+It began as a second app installed beside a web-shell predecessor (hence the
+`.native` suffix on the bundle id). That predecessor was retired on 2026-09-12;
+comments that say "a port of the web app's `lib/…`" name files that now exist
+only in git history (last at commit `db9892b4`, under `src/`).
 
 ## Layout
 
@@ -111,7 +113,7 @@ gain the paid features by adding an entitlement rather than by being restructure
 
 | Missing | Consequence today | What changes at $99/yr |
 |---|---|---|
-| App Groups | The widget and Watch cannot read this app's data | The snapshot moves to a shared container; `/api/widget/snapshot` (832 loc) is deleted |
+| App Groups | The widget and Watch cannot read this app's data | The extension reads the shared container it is already written for |
 | Keychain sharing group | `KeychainAuthStorage` is private to this target | The extensions can share the session |
 | TestFlight | Provisioning expires every 7 days; re-sign from Xcode | Installs stay valid; updates arrive as a notification |
 | APNs `content-available` | No server-pushed background refresh | Background sync becomes possible |

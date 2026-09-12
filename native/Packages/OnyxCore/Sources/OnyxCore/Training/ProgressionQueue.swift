@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Smart-Coach queue, pure — a port of `src/lib/training/progressionQueue.ts`
+/// The Smart-Coach queue, pure — a port of the web app's `lib/training/progressionQueue.ts`
 /// (§6.5). `OnyxData`'s `AppDatabase.progressionQueue` feeds it today's day
 /// key and the ledger; the Workout tab's "Ready to progress" box draws it.
 ///

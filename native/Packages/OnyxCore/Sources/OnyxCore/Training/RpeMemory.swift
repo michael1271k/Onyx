@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-set RPE memory, and the session value derived from it. A port of
-// `src/lib/training/rpeMemory.ts`.
+// the web app's `lib/training/rpeMemory.ts`.
 //
 // Last session's rating seeds this session's set, so you only tap where the
 // effort actually changed. But a seeded rating on a HEAVIER set is a number you

@@ -2,7 +2,7 @@ import Foundation
 
 /// The widget payload — every tile draws from this and nothing else.
 ///
-/// Lifted verbatim from `ios/App/Shared/OnyxSnapshot.swift` (Wave 5), minus
+/// Lifted verbatim from the web-shell app's `OnyxSnapshot.swift` (Wave 5), minus
 /// the HTTP client: the extension now reads the App Group GRDB file through
 /// `WidgetSnapshotBuilder` in OnyxData and builds one of these locally. The
 /// shape is unchanged so the tile drawing code is unchanged. Every field is
@@ -26,7 +26,7 @@ public enum OnyxScope: String, Codable, Sendable {
   case full
 }
 
-/// Mirrors `WidgetSnapshot` in src/lib/widget/snapshot.ts. Every field is
+/// Mirrors the web app's `WidgetSnapshot`. Every field is
 /// optional on purpose: rendering "—" is correct, rendering a stale or invented
 /// number is not.
 public struct OnyxSnapshot: Codable, Sendable, Equatable {

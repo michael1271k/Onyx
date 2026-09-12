@@ -10,7 +10,7 @@ Release build, not asserted.
 the rename all the way down, ahead of Gate 0 rather than after it — which was
 free precisely because the App Group had never been provisioned, so there was
 nothing to re-provision. Register `app.onyx.health.michael` in the developer
-portal, not `app.helix.*`; the values in §1 are read from `native/project.yml`,
+portal; the values in §1 are read from `native/project.yml`,
 which is the source of truth (`native/Onyx.xcodeproj` is generated from it and
 must never be hand-edited).
 
@@ -28,15 +28,15 @@ reviewer hits before they ever open the app.
 
 | # | What | Guideline | Where |
 |---|---|---|---|
-| 1 | ~~**The privacy-policy URL 404s.**~~ **CLOSED at U7 (2026-09-10).** `src/app/(legal)/privacy` is a prerendered static route, public (see `PUBLIC_ROUTES`), and its collected-data table is written in `PrivacyInfo.xcprivacy`'s own vocabulary so the policy, the manifest and §3 below cannot disagree. Verified 200 against `next start`. | 5.1.1(i) | `src/app/(legal)/privacy/page.tsx` · `OnyxLinks.privacyPolicy` |
-| 2 | ~~**The support URL 404s.**~~ **CLOSED at U7.** `src/app/(legal)/support`, same terms, plus a **Settings → About → Support** row that opens it. Verified 200. | 1.5 | `src/app/(legal)/support/page.tsx` · `OnyxLinks.support` |
+| 1 | ~~**The privacy-policy URL 404s.**~~ **CLOSED at U7 (2026-09-10).** `site/privacy/index.html` is static HTML (W6; U7 had it as a prerendered web route), public (see `PUBLIC_ROUTES`), and its collected-data table is written in `PrivacyInfo.xcprivacy`'s own vocabulary so the policy, the manifest and §3 below cannot disagree. Verified 200 against `next start`. | 5.1.1(i) | `src/app/(legal)/privacy/page.tsx` · `OnyxLinks.privacyPolicy` |
+| 2 | ~~**The support URL 404s.**~~ **CLOSED at U7.** `site/support/index.html`, same terms, plus a **Settings → About → Support** row that opens it. Verified 200. | 1.5 | `src/app/(legal)/support/page.tsx` · `OnyxLinks.support` |
 | 3 | ~~**No demo account.**~~ **CLOSED.** E6 opened in-app sign-up (`SignUpView`, and `/auth` on the web) and shipped `scripts/seed-demo-account.mjs`; U7 gave the sign-up sheet a real dismiss affordance. The account is `appreview@onyx.fitness` — see §"App Review Information" for how to seed it and where the password lives. | 2.1 | §"App Review Information" |
 | 4 | ~~**The metadata is still `⟨…⟩` placeholders.**~~ **CLOSED at U7** — §2 is written copy. | 2.1 | §2 |
 | 5 | **Apple Developer Program membership.** A free personal team cannot sign the App Group entitlement or upload. **Still open — it is a purchase, not a commit.** | — | §"Gate 0" |
 
 One more that is a decision rather than a defect:
 
-- **The pages live on a differently-branded domain.** `helix-health-fitness.netlify.app` still serves a product called HELIX, and `/auth` still draws the HELIX wordmark. The two pages U7 added do NOT — they head themselves **ONYX** and are deliberately outside `LaunchSurface` for that reason — so a reviewer who only opens the two URLs sees one product. A reviewer who then opens the web app does not. Standing up an Onyx domain is one edit to `OnyxLinks.host` plus both ASC fields; renaming the web app's own lockup is a separate job and U7 did not do it.
+- **The pages live on a domain still named after the retired web app.** `helix-health-fitness.netlify.app` now serves only `site/` — the privacy policy, the support page and the AASA file, all branded Onyx. Moving to an Onyx domain is a change to `OnyxLinks.host` alone.
 - **"Onyx is a single-user personal training log"** must never appear in the metadata or the review notes — Apple rejects apps positioned for one person (4.2/4.3). The copy in §2 and §4 is written accordingly, and the old single-user framing has been removed from both.
 
 Verified clean at the same pass, with values: bundle ids and the extension's
@@ -91,8 +91,8 @@ they are set from one pair of values in `native/project.yml`.
 
 **The Home Screen name is `Onyx`** (`CFBundleDisplayName`, set in
 `native/project.yml` for both the app and its widget extension, which reads
-`Onyx Activity`). It is already distinct from the Capacitor app's `HELIX`, so
-the two icons still tell themselves apart while both are installed.
+`Onyx Activity`). The web-shell app it replaced is gone (W6), so there is
+no second icon to tell it apart from.
 
 ---
 
@@ -171,25 +171,11 @@ the two icons still tell themselves apart while both are installed.
 they are already in the app's name, subtitle and category, and App Store search
 indexes those fields; spending keyword characters on them buys nothing.)*
 
-**Support URL** — `https://helix-health-fitness.netlify.app/support`
+**Support URL** — `https://helix-health-fitness.netlify.app/support/`
 **Marketing URL** — *(optional; leave empty)*
-**Privacy Policy URL** — `https://helix-health-fitness.netlify.app/privacy`
+**Privacy Policy URL** — `https://helix-health-fitness.netlify.app/privacy/`
 
-> **Both pages exist and return 200 as of U7** — `src/app/(legal)/privacy` and
-> `src/app/(legal)/support`, prerendered to static HTML and reachable with no
-> session (`PUBLIC_ROUTES`). App Review opens the privacy URL for every app
-> carrying the HealthKit entitlement, and a 404 there is an instant rejection
-> under 5.1.1.
->
-> Both URLs are stated once in the app, in `OnyxLinks` — one `host` constant,
-> two derived URLs — and linked from **Settings → About**. Moving to an Onyx
-> domain is that one line plus these two fields.
->
-> The policy says, in plain language: what is collected (Health, Fitness, email
-> address — the same three the privacy manifest declares, in the same words),
-> why (to compute the figures the app displays), where it goes (your devices and
-> one Supabase project), that it is never sold, shared or used for advertising,
-> and how to delete all of it.
+> **Both pages are static HTML under `site/`** (W6), published by Netlify with no build step. `curl -I` each URL before submitting.
 
 ---
 
@@ -378,7 +364,7 @@ the required-reason check runs per Mach-O, not per app).
 3. **The demo account.** Create it, seed it, put the credentials in §4.
 4. **Rotate the credentials that no commit can touch** — the Supabase
    `service_role` key and account password, the dead Anthropic and Notion
-   tokens, and the `widget_tokens` row behind `HELIX_SNAPSHOT_TOKEN`. None is in
+   tokens. (`widget_tokens` was dropped in W1.) None is in
    git; all are live at the provider. Tracked in the `auth-credentials-rotation`
    memory.
 5. §2 filled in, §6 run, §3 typed into the questionnaire, archive, upload.

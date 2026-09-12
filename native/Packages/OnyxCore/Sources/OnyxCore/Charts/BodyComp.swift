@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The four composition numbers, each with the month behind it — a port of
-// `src/lib/charts/bodyComp.ts` (§W12).
+// the web app's `lib/charts/bodyComp.ts` (§W12).
 //
 // ── WHY FOUR AND WHY THESE FOUR ──────────────────────────────────────────────
 // Weight is not a body composition. On a cut the useful question is which of

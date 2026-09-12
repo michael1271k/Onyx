@@ -1,7 +1,7 @@
 import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The stress index over a fortnight — a port of `src/lib/charts/stressSeries.ts`
+// The stress index over a fortnight — a port of the web app's `lib/charts/stressSeries.ts`
 // (Phase 3 E3). `BatteryStackSeries`' shape: exactly `limit` consecutive days
 // ending on `endingOn`, oldest first; a day with no reading is present and
 // EMPTY, never absent. Computed on read — v1 stores no column.

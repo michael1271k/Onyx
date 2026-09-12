@@ -1,7 +1,7 @@
 import Foundation
 
 /// Where a week's set count sits relative to a muscle's target — the
-/// `volumeZone` half of `src/lib/training/landmarks.ts`.
+/// `volumeZone` half of the web app's `lib/training/landmarks.ts`.
 public enum VolumeZone: String, Codable, Sendable { case under, building, optimal, over, na }
 
 public extension VolumeZone {

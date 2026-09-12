@@ -1,6 +1,6 @@
 import Foundation
 
-/// The arithmetic behind the widget payload — a port of `src/lib/widget/derive.ts`.
+/// The arithmetic behind the widget payload — a port of the web app's `lib/widget/derive.ts`.
 /// NULL, NEVER ZERO: every function omits what it cannot compute.
 
 public struct TrendPoint: Codable, Sendable, Equatable {
@@ -325,7 +325,7 @@ public enum WidgetDerive {
     }
 }
 
-/// The widget's refresh cadence — a port of `src/lib/widget/cadence.ts`, the
+/// The widget's refresh cadence — a port of the web app's `lib/widget/cadence.ts`, the
 /// web mirror of `OnyxRefresh.schedule`.
 public enum WidgetCadence {
     /// `(startHour, minutesBetweenRefreshes)`, ordered, starting at hour 0.

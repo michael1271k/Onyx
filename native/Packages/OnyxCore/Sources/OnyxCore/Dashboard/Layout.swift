@@ -1,6 +1,6 @@
 import Foundation
 
-// The dashboard's arrangement — the slot algebra of `src/lib/dashboard/layout.ts`.
+// The dashboard's arrangement — the slot algebra of the web app's `lib/dashboard/layout.ts`.
 //
 // ── WHAT IS HERE AND WHAT IS NOT ────────────────────────────────────────────
 // The pure part: the catalogue, the sizes each widget has a body for, the

@@ -175,7 +175,7 @@ public extension AppDatabase {
             // is not one of the ten — the demo seed writes 'Quadriceps' and
             // 'Lats' — were being counted despite never being readable as a
             // rating. The web applies the identical fold in
-            // `src/lib/recovery/soreness.ts`; a golden vector pins the two.
+            // the web app's `lib/recovery/soreness.ts`; a golden vector pins the two.
             //
             // ponytail: the LOCAL store still has no side/sub_region columns, so
             // a phone can only write whole-muscle bilateral rows. The fold is
@@ -414,7 +414,7 @@ extension AppDatabase {
 
     /// Mean severity over DISTINCT RECOGNISED muscles, max within each.
     ///
-    /// A 1:1 port of `foldDomsSeverity` in `src/lib/recovery/soreness.ts`.
+    /// A 1:1 port of `foldDomsSeverity` in the web app's `lib/recovery/soreness.ts`.
     /// Max rather than mean within a muscle, deliberately: "left quad severe,
     /// right quad fine" is a severe quad, and averaging it to moderate reports
     /// a day nobody had.
