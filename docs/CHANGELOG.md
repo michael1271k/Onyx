@@ -1,7 +1,6 @@
 # Changelog
 
-All notable changes to **Onyx** — the native iOS/watchOS app and the Helix web
-app it shares a database with.
+All notable changes to **Onyx** — the native iOS/watchOS app.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -13,15 +12,13 @@ hand-edited:
 
 | Surface | Where the number comes from |
 |---|---|
-| Web app (`/settings` → About, `/api/version`) | `NEXT_PUBLIC_APP_VERSION`, inlined at build time from `package.json` by `next.config.ts` |
 | Native app, widget extension, watch app | `MARKETING_VERSION` in `native/project.yml`, written by `scripts/sync-version.mjs` and read through `$(MARKETING_VERSION)` in each `Info.plist` |
-| Capacitor shell (`ios/App`) | `MARKETING_VERSION` in `App.xcodeproj/project.pbxproj`, written by the same script |
 | Settings → Version (native) | `Bundle.main.infoDictionary` at runtime — `OnyxLinks.versionString` |
 
 ```bash
 # bump the SSoT, then push it everywhere
 npm version 1.4.0 --no-git-tag-version   # or edit package.json by hand
-npm run version:sync                     # writes both Xcode projects
+npm run version:sync                     # writes native/project.yml
 cd native && xcodegen generate           # regenerate, never hand-edit the .xcodeproj
 ```
 
@@ -44,6 +41,66 @@ out of step with the first.
 ## [Unreleased]
 
 _Nothing yet._
+
+---
+
+## [3.0.0] — 2026-09-12 · The Web App Is Gone
+
+Onyx is one app now. The Helix web app — the Next.js dashboard, logger and
+PWA that Onyx grew up beside and shared a database with — is retired, along
+with the Capacitor shell that wrapped it, the old watch app inside that shell,
+the Playwright and Vitest suites that tested it, and every web build config.
+Nothing the phone does changed; what changed is that nothing else is running.
+
+MAJOR because a surface was removed: anyone still opening the web dashboard
+gets a two-page static site instead. Its data is untouched — every row it wrote
+is in the same Supabase the phone reads.
+
+### Removed
+
+- **The web app** (`src/`, 600 files), the Capacitor iOS shell (`ios/`), the
+  PWA assets (`public/`), the end-to-end suite (`e2e/`), the Netlify keep-alive
+  function, and ten web build configs. The web-only maintenance scripts that
+  imported from `src/` (`backfill-prs`, `backfill-notion-sets`,
+  `backfill-supplement-log`, `rebuild-routine-templates`, `seed-demo-account`,
+  `sync-pr-truth`, `reseed-muscle-groups`) went with it — they cannot run
+  without the modules they imported. All of it is in git history before this
+  commit.
+- **The completed migration plans** (`NATIVE_MIGRATION_PLAN`,
+  `NATIVE_PHASE_2_PLAN`, `PHASE_2_POLISH_PLAN`, `PHASE_3_PLAN`) — done, and
+  written in the vocabulary of the app they retired.
+- `package.json` shrinks from 25 dependencies + 23 dev to five dev
+  dependencies: `vite`, `micromark` and `micromark-extension-gfm` (the report
+  renderer bundle), `sharp` (icons) and `@supabase/supabase-js` (the
+  service-role scripts). The package is named `onyx`.
+
+### Changed
+
+- **The Netlify site is static.** `site/` holds the privacy policy, the
+  support page and the Apple App Site Association file; `netlify.toml`
+  publishes it with no build command. The AASA file now names only the native
+  App ID. Settings → About links the same two pages at the same domain, with a
+  trailing slash.
+- **The generators read `scripts/src/`.** The body atlas, the soreness
+  vocabularies and the report renderer's TypeScript moved out of the web tree
+  into `scripts/src/{atlas,soreness,subRegions}.ts` and
+  `scripts/src/report/*`; `npm run atlas`, `doms` and `report:bundle` produce
+  byte-identical Swift and a re-bundled `ReportRenderer.html` from there.
+  `sync-version.mjs` writes only `native/project.yml` now.
+- **`npm run check`** is the four generator/version checks. There is no lint or
+  typecheck step because there is no TypeScript app to check; the Swift gates
+  (`check:swift`, `swift:core`, `swift:data`, the `xcodebuild` line) are
+  unchanged.
+- **Native comments no longer point at `src/`.** Every "a port of
+  `src/lib/…`" note now reads "a port of the web app's `lib/…`", and
+  `native/README.md` says where those files went. The load-bearing `helix`
+  strings stay, on purpose: the `helix5-` exercise-id prefix, the `"helix"`
+  era wire value, the `helix.week/1` schema tag, the legacy App Group and
+  sqlite names the one-time store move reads, the `helix_*` preference
+  fallbacks, the founder's plan and era labels in the golden fixtures, and the
+  Netlify host name.
+- `README.md` describes the native-only repo; the `native` and `ship` skills
+  say the same.
 
 ---
 
