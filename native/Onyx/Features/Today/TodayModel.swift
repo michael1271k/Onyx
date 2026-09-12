@@ -143,6 +143,21 @@ final class TodayModel {
         Dashboard.canStack(Dashboard.slot(layout, at: fromId), Dashboard.slot(layout, at: toId))
     }
 
+    /// Every tile this one could be dropped onto, for the long-press menu.
+    ///
+    /// ── ONE RULE, TWO ROUTES ────────────────────────────────────────────────
+    /// The menu and the drag-and-hold both ask `Dashboard.canStack`, so the two
+    /// ways into a stack can never disagree about which pairs are legal — a menu
+    /// with its own size test is a second rule that drifts the first time
+    /// `canStack` changes. It reads `visibleSlots`, not `layout.slots`: a slot
+    /// whose every face is web-only is not on this screen, and a menu row that
+    /// stacks onto a tile the user cannot see is a tile that vanishes.
+    func stackTargets(_ slotId: String) -> [StackSlot] {
+        let shown = visibleSlots
+        guard let from = shown.first(where: { $0.id == slotId }) else { return [] }
+        return shown.filter { Dashboard.canStack(from, $0) }
+    }
+
     func resize(_ slotId: String) {
         apply(Dashboard.resizeSlot(layout, slotId: slotId))
     }
@@ -161,6 +176,28 @@ final class TodayModel {
 
     func unstack(_ slotId: String, index: Int) {
         apply(Dashboard.unstackFace(layout, slotId: slotId, index: index))
+    }
+
+    /// Unstack the face at a position on the GRID, which is not its position in
+    /// the stored slot.
+    ///
+    /// ── TWO INDEX SPACES, AND THE MENU SPEAKS THE WRONG ONE ─────────────────
+    /// The grid draws `visibleSlots`, whose items have been through
+    /// `projectNative` — a slot the web stored as `[micros, water, sleep]`
+    /// reaches the screen as `[water, sleep]`, because the phone has no face for
+    /// `micros`. `Dashboard.unstackFace` indexes the STORED items. So the menu
+    /// offering "Unstack Sleep" for visible index 1 would lift stored index 1,
+    /// which is Water — the wrong face — and "Unstack Water" at visible 0 would
+    /// lift `micros`, splitting off a slot the phone cannot draw and moving
+    /// nothing the user can see.
+    ///
+    /// The web stacks without an `isNative` filter and `micros`, `bar` and
+    /// `stack` are all small, so a mixed stack is a thing any web user can make.
+    func unstackVisible(_ slotId: String, visibleIndex: Int) {
+        guard let stored = Dashboard.slot(layout, at: slotId) else { return }
+        let native = stored.items.indices.filter { stored.items[$0].isNative }
+        guard native.indices.contains(visibleIndex) else { return }
+        unstack(slotId, index: native[visibleIndex])
     }
 
     func reorderFace(_ slotId: String, from: Int, to: Int) {

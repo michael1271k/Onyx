@@ -47,6 +47,82 @@ _Nothing yet._
 
 ---
 
+## [2.7.0] — 2026-09-12 · Stacking, Said Out Loud
+
+Tiles on the Today grid have always been stackable — two same-size widgets
+sharing one square, turning over every nine seconds like a Smart Stack. Almost
+nobody found out, because the only way in was to long-press into edit mode, drag
+a tile onto a same-size neighbour, hold there for six hundred milliseconds and
+let go. Five hundred milliseconds got you a move instead, silently, and the only
+thing on screen that ever mentioned any of it was a two-point border.
+
+A long press now opens a menu that uses the words. And the carousel behind it
+was rebuilt: it owns its gesture instead of borrowing a `TabView` turned on its
+side, so swiping a stack no longer fights the dashboard it sits on.
+
+### Added
+
+- **A long-press menu on every tile** (Today). *Stack With* — or *Add to Stack*
+  once there is one — lists the tiles this one can absorb, each named by the
+  face it is currently showing. *Unstack Sleep* names the face that is up rather
+  than asking you to know the word "face". *Edit Stack* reaches the reordering
+  sheet, which until now could only be opened from inside the jiggle. *Edit
+  Dashboard* is the old long-press, now a row with a name on it.
+  The drag-and-hold still works; it is no longer the only door.
+- **A row that says why, when there is no partner.** A tile with nothing its own
+  size shows *No Same-Size Widget to Stack With*, greyed. A feature that vanishes
+  when it is unavailable is one nobody learns exists.
+- **VoiceOver can work a stack.** The tile announces the face that is up and then
+  its depth — "Vitals. Stack of 2." — instead of reading every face with nothing
+  to say which is on screen. *Next widget in stack*, *Unstack*, *Edit Stack* and
+  each stacking target are rotor actions.
+
+### Changed
+
+- **The stack is a carousel now, not a rotated `TabView`.** It tracks the finger
+  one-to-one, resists past the first and last face, and lands where the throw
+  was going rather than where the finger stopped.
+- **The page dots are on the tile.** Under the rotated `TabView` the rail was
+  aligned in the rotated view's coordinate space and did not appear on a large
+  tile at all. It rides in the tile's own padding gutter, clear of the numbers.
+
+### Fixed
+
+- **Swiping a stack no longer scrolls the dashboard with it** (Today). Both page
+  vertically, and the nested `TabView` gave no way to tell them apart. The
+  carousel takes the drag only past sixteen points of vertical travel — short
+  drags still scroll the screen — and holds the screen still for the rest of it.
+- **A stack coming back from the background rotates within nine seconds**, not
+  nine plus up to seven more. The clock was a countdown that restarted whenever
+  the stack paused — every trip to the background, every visit to edit mode. The
+  beats are now read off the wall clock, so a stack rejoins the rhythm it would
+  have been on had it never stopped, and the grid stays spread out instead of
+  every stack re-phasing onto the moment you unlocked the phone.
+- **Reordering a stack no longer changes what it is showing.** Faces were
+  identified by position while a stack may legitimately hold the same widget
+  twice; sorting them in the Edit Stack sheet left the tile pointing at a
+  position that now held something else.
+- **Unstacking lifts the face it named.** On a stack the web made from a mix of
+  widgets the phone can and cannot draw, the menu's index and the stored index
+  were two different things — so it removed the wrong face, or appeared to do
+  nothing at all.
+- **A tile being dragged onto a stack brightens in the colour of the face that
+  is up**, not the colour of the first face in the slot.
+- **A tile that stops being a stack forgets which face was up**, so stacking
+  something onto it later opens on the top face rather than on whatever index
+  the old stack left behind.
+
+### Notes
+
+- `today.png` and the `today-sheet-*` screenshots photograph a stack that is
+  genuinely rotating, so the stacked tile may show either of its faces from run
+  to run. That is the subject moving, not the layout changing.
+- The four behaviours this wave is judged on — a stack made from a long press, a
+  swipe that pages without scrolling, a resume that rotates on time, and a
+  reorder that holds its face — are covered by unit tests and a build, but were
+  not driven by hand on a device: this machine has no way to send touches to the
+  Simulator. They need one pass on hardware before the wave is called done.
+
 ## [2.6.0] — 2026-09-12 · The Week, In Colour
 
 The week detail was black on black. Eight small numbers, seven grey rows, and
