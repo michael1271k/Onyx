@@ -79,8 +79,16 @@ public struct WeeklyExportBuilder: Sendable {
         var seenBouts = Set<String>()
         var dedupedCardio: [CardioLogRow] = []
         for c in rows.cardio {
+            /* A row with NO start is never deduped. `cardio_logs.created_at` is
+               nullable with no default, and a key built from three absences is
+               the same key for every such row — a Monday cycle and a Friday
+               swim would collapse into one, and the document would report the
+               collapse as a duplicate removed. */
+            guard let started = c.createdAt else { dedupedCardio.append(c); continue }
+            // Date and kind ride in the key too: a bout is identified by what
+            // it was and when, not by three numbers that can coincide.
             let key: String = [
-                c.createdAt.map { String($0.timeIntervalSince1970) } ?? "",
+                c.date, c.kind, String(started.timeIntervalSince1970),
                 c.durationMin.map { String($0) } ?? "",
                 c.distanceM.map { String($0) } ?? "",
             ].joined(separator: "|")
@@ -93,7 +101,12 @@ public struct WeeklyExportBuilder: Sendable {
         // A night whose `daily_logs.sleep_minutes` was absent and whose
         // duration this builder rebuilt from `sleep_sessions`. Stated, because
         // a figure the document assembled is not a figure the watch reported.
-        let loggedSleep = Dictionary(rows.logs.map { ($0.date, $0.sleepMinutes) }, uniquingKeysWith: { _, b in b })
+        // A stored ZERO is what `sleepMinutesOf` treats as absent, so the
+        // counter has to read it the same way or a rebuilt duration goes
+        // unreported on exactly the nights the column was written badly.
+        let loggedSleep = Dictionary(
+            rows.logs.map { ($0.date, $0.sleepMinutes.flatMap { $0 > 0 ? $0 : nil }) },
+            uniquingKeysWith: { _, b in b })
         let filledSleep = days.filter { d in
             d.sleepMin != nil && (loggedSleep[d.date] ?? nil) == nil
         }.count
@@ -345,6 +358,15 @@ public struct WeeklyExportBuilder: Sendable {
             // plan, from the exported week alone.
             let ledgerFrom = min(ctx.weekZeroStart ?? weekStart, weekStart)
             let inLedger = user && Column("date") >= ledgerFrom && Column("date") <= weekEnd
+            /* "The last time this movement was performed" is a question about
+               HISTORY and the ledger's window is the wrong one to borrow: with
+               no dated plan `weekZeroStart` is nil, `ledgerFrom` collapses to
+               the exported week, and every movement in it prints `first time
+               logged` over years of training.
+               ponytail: a flat 180 days, not an unbounded scan. A movement not
+               touched in six months prints `first time logged`, which is close
+               enough to true to be worth one bounded query. */
+            let historyFrom = min(ledgerFrom, ISODate.addDays(weekStart, -180) ?? weekStart)
 
             let ledgerLogs = try DailyLogRow.filter(inLedger).order(Column("date")).fetchAll(db)
             let ledgerNutrition = try NutritionEntryRow.filter(inLedger && Column("meal_type") == "daily").order(Column("date"), Column("logged_at")).fetchAll(db)
@@ -353,7 +375,10 @@ public struct WeeklyExportBuilder: Sendable {
             let ledgerSessions = try WorkoutSession.filter(inLedger).order(Column("date"), Column("started_at")).fetchAll(db)
 
             let sessions = ledgerSessions.filter { $0.date >= weekStart }
-            let ids = ledgerSessions.map(\.id)
+            let historySessions = try WorkoutSession
+                .filter(user && Column("date") >= historyFrom && Column("date") <= weekEnd)
+                .order(Column("date"), Column("started_at")).fetchAll(db)
+            let ids = historySessions.map(\.id)
             let marks = Array(repeating: "?", count: ids.count).joined(separator: ",")
             let allSets: [HistorySetRow] = ids.isEmpty ? [] : try HistorySetRow.fetchAll(db, sql: """
                 SELECT s.id, s.session_id, s.exercise_id,
@@ -382,9 +407,26 @@ public struct WeeklyExportBuilder: Sendable {
             /* ── WHEN THE SESSION RAN, AND IN WHAT ORDER ────────────────────
                One pass over `set_events` answers both. `kind` is read as a
                string rather than decoding `SetEvent` because the body is a blob
-               this query has no use for, and an `append`/`amend` is the only
-               kind that marks work being done — a `pause`, a `resume` and a
-               `void` are not sets. */
+               this query has no use for.
+
+               APPENDS ONLY, AND ONLY AFTER THE SESSION OPENED. Two event rows
+               are not a set being performed:
+
+               · `SessionEditing.seedEventLog` back-fills a log for a session
+                 that has rows and none, stamping EVERY row with
+                 `loggedAt[id] ?? session.startedAt` — one identical instant for
+                 the whole session. Left in, `firstAt` holds the same `Date` for
+                 every movement, the sort falls through to its NAME tiebreak,
+                 and the document prints a session in alphabetical order under
+                 the word `performed`. That is the Face-Pull-first defect this
+                 change exists to kill, with a stronger claim attached.
+                 `AppDatabase.closeSession` already guards exactly this way
+                 (`$0.createdAt > opened`); the guard is carried over here.
+
+               · An `amend` is an EDIT. A set corrected from History the next
+                 morning carries `Date()`, so a session that ran 19:00–20:30
+                 would export `19:00–08:15` — and §7 cannot catch it, because an
+                 end after a start is not an inconsistency. */
             struct EventRow: FetchableRecord, Decodable {
                 var sessionId: String
                 var setId: String
@@ -395,19 +437,20 @@ public struct WeeklyExportBuilder: Sendable {
             }
             var spans: [String: SessionSpan] = [:]
             if !weekIds.isEmpty {
-                let ids = Array(weekIds)
-                let marks = Array(repeating: "?", count: ids.count).joined(separator: ",")
+                let eventIds = Array(weekIds)
+                let eventMarks = Array(repeating: "?", count: eventIds.count).joined(separator: ",")
                 let events = try EventRow.fetchAll(db, sql: """
                     SELECT session_id, set_id, created_at FROM set_events
-                    WHERE session_id IN (\(marks)) AND kind IN ('append', 'amend')
+                    WHERE session_id IN (\(eventMarks)) AND kind = 'append'
                     ORDER BY created_at
-                    """, arguments: StatementArguments(ids))
+                    """, arguments: StatementArguments(eventIds))
+                let openedAt = Dictionary(
+                    sessions.map { ($0.id, $0.startedAt ?? .distantPast) }, uniquingKeysWith: { a, _ in a })
                 for e in events {
+                    guard let opened = openedAt[e.sessionId], e.createdAt > opened else { continue }
                     if var span = spans[e.sessionId] {
                         span.start = Swift.min(span.start, e.createdAt)
                         span.end = Swift.max(span.end, e.createdAt)
-                        // FIRST commit wins: an amend hours later is an edit and
-                        // not the moment the movement was reached.
                         if span.firstBySet[e.setId] == nil { span.firstBySet[e.setId] = e.createdAt }
                         spans[e.sessionId] = span
                     } else {
@@ -440,7 +483,7 @@ public struct WeeklyExportBuilder: Sendable {
                 logs: ledgerLogs.filter { $0.date >= weekStart },
                 nutrition: ledgerNutrition.filter { $0.date >= weekStart },
                 sessions: sessions, sets: sets, allSets: allSets,
-                sessionDates: Dictionary(ledgerSessions.map { ($0.id, $0.date) }, uniquingKeysWith: { _, b in b }),
+                sessionDates: Dictionary(historySessions.map { ($0.id, $0.date) }, uniquingKeysWith: { _, b in b }),
                 spans: spans,
                 exercises: Dictionary(exercises.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }),
                 water: ledgerWater.filter { $0.date >= weekStart },
@@ -788,18 +831,30 @@ public struct WeeklyExportBuilder: Sendable {
                 firstAt[r.exerciseName] = at
             }
             var indexByName: [String: Int] = [:]
+            var loggedRank: [String: Int] = [:]
             var order: [String] = []
             var everyMovementIndexed = true
-            for r in mine where indexByName[r.exerciseName] == nil {
-                if r.exerciseOrder == nil { everyMovementIndexed = false }
-                indexByName[r.exerciseName] = r.exerciseOrder ?? indexByName.count
+            for r in mine where loggedRank[r.exerciseName] == nil {
+                if let n = r.exerciseOrder { indexByName[r.exerciseName] = n } else { everyMovementIndexed = false }
+                loggedRank[r.exerciseName] = loggedRank.count
                 order.append(r.exerciseName)
             }
-            let everyMovementTimed = !order.isEmpty && order.allSatisfy { firstAt[$0] != nil }
+            /* Every movement timed, and timed DISTINCTLY. Two movements sharing
+               a first-commit instant cannot be ordered by it, and the sort's
+               name tiebreak would present alphabetical order as a record. */
+            let stamps = order.compactMap { firstAt[$0] }
+            let everyMovementTimed = !order.isEmpty && stamps.count == order.count
+                && Set(stamps).count == order.count
             if everyMovementTimed {
-                order.sort { (firstAt[$0]!, $0) < (firstAt[$1]!, $1) }
+                order.sort { firstAt[$0]! < firstAt[$1]! }
+            } else if everyMovementIndexed {
+                order.sort { (indexByName[$0]!, loggedRank[$0]!) < (indexByName[$1]!, loggedRank[$1]!) }
             } else {
-                order.sort { (indexByName[$0] ?? 0, $0) < (indexByName[$1] ?? 0, $1) }
+                /* PARTIALLY indexed is not indexed. `exercise_order ?? count`
+                   mixed a deck position with a logged ordinal — `[A:3, B:nil,
+                   C:1]` came out `B, C, A`, which is neither the deck's order
+                   nor the log's, under a label claiming the log's. */
+                order.sort { loggedRank[$0]! < loggedRank[$1]! }
             }
             let orderSource = everyMovementTimed ? "performed" : (everyMovementIndexed ? "index" : "logged")
 
@@ -1122,22 +1177,36 @@ public struct WeeklyExportBuilder: Sendable {
         /// `date`, the scan itself included — a window of one is its own median
         /// and therefore never anomalous, which is the right answer for a first
         /// scan and the reason the flag needs history to fire.
+        /* LEAVE ONE OUT, and never over fewer than two others.
+           A scan compared against a median it is IN is compared against itself:
+           with two scans in the fortnight the median is their midpoint, each
+           sits half the gap from it, and one bad reading flagged BOTH — which
+           emptied `valid` and took `T4WM` and `clean_scan_means` with it. The
+           scan is judged against its neighbours, and under two of them there is
+           no neighbourhood to judge it by. */
         func trailingMedian(_ date: String, _ field: String) -> Double? {
             guard let from = ISODate.addDays(date, -13) else { return nil }
-            return Self.median(scanned.filter { $0 >= from && $0 <= date }.compactMap { merged[$0]?[field] })
+            let others = scanned
+                .filter { $0 >= from && $0 <= date && $0 != date }
+                .compactMap { merged[$0]?[field] }
+            return others.count >= 2 ? Self.median(others) : nil
         }
 
         return scanned.filter { $0 >= weekStart }.map { date in
             var out: [String: Any] = merged[date]!
             out["date"] = date
             var why: [String] = []
+            // Both figures rounded on the way into the string. Every other
+            // number in this document goes through `jsRound`; a raw `Double`
+            // interpolation prints `3.0500000000000003`.
+            func round2(_ v: Double) -> String { jsIntegerString(jsRound(v * 100) / 100) }
             if let v = merged[date]?["boneMineralKg"], let m = trailingMedian(date, "boneMineralKg"),
                abs(v - m) > Self.boneAnomalyKg {
-                why.append("bone \(jsRound(abs(v - m) * 100) / 100) kg from the 14-day median \(m)")
+                why.append("bone \(round2(abs(v - m))) kg from the 14-day median \(round2(m))")
             }
             if let v = merged[date]?["waterMassKg"], let m = trailingMedian(date, "waterMassKg"),
                abs(v - m) > Self.waterAnomalyKg {
-                why.append("water \(jsRound(abs(v - m) * 100) / 100) kg from the 14-day median \(m)")
+                why.append("water \(round2(abs(v - m))) kg from the 14-day median \(round2(m))")
             }
             out["anomaly"] = why.isEmpty ? NSNull() : why.joined(separator: ", ")
             return out

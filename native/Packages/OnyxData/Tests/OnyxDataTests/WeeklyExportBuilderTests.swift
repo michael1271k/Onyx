@@ -501,6 +501,28 @@ struct WeeklyExportBuilderV5Tests {
             try CardioLogRow(id: "c4", userId: user, date: "2026-08-24", kind: "walk",
                              distanceM: 4200, durationMin: 51, kcal: 200, fromHealthkit: true,
                              createdAt: iso("2026-08-24T17:40:00Z")).insert(conn)
+            // A bout with no start at all: never deduped, and never a duplicate
+            // of the clockless bout beside it.
+            try CardioLogRow(id: "c5", userId: user, date: "2026-08-26", kind: "cycle",
+                             durationMin: 30, fromHealthkit: false).insert(conn)
+            try CardioLogRow(id: "c6", userId: user, date: "2026-08-28", kind: "swim",
+                             durationMin: 45, fromHealthkit: false).insert(conn)
+
+            /* A SECOND session whose event log was BACK-FILLED, not logged:
+               `SessionEditing.seedEventLog` stamps every row with the session's
+               own `started_at`, so all three instants are identical. */
+            try WorkoutSession(id: "s2", userId: user, dayKey: "arms", date: "2026-08-26",
+                               startedAt: iso("2026-08-26T18:00:00Z"), endedAt: iso("2026-08-26T19:05:00Z"),
+                               durationMin: 65).insert(conn)
+            for (i, (id, ex, order)) in [("z1", "ex-lp", 0), ("z2", "ex-hs", 1), ("z3", "ex-tm", 2)].enumerated() {
+                try WorkoutSet(id: id, sessionId: "s2", exerciseId: ex, setIndex: i, weightKg: 20, reps: 10,
+                               exerciseOrder: order).insert(conn)
+                try event(conn, id: "se\(i)", session: "s2", set: id, seq: 10 + i, at: "2026-08-26T18:00:00Z")
+            }
+
+            // A reading taken before training on a day the calendar calls rest.
+            try FatigueLogRow(id: "f1", userId: user, date: "2026-08-24", slot: "pre", level: 3,
+                              createdAt: iso("2026-08-24T18:55:00Z")).insert(conn)
         }
         return db
     }
@@ -524,10 +546,12 @@ struct WeeklyExportBuilderV5Tests {
     @Test("a bout is imported many times and exported once")
     func duplicateCardioIsRemoved() throws {
         let got = try built("UTC")
-        #expect((got.cardio ?? []).count == 2)
+        // Three imports of one walk become one; the second walk, the cycle and
+        // the swim are four distinct bouts.
+        #expect((got.cardio ?? []).count == 4)
         #expect(got.anomalies?.contains("duplicate cardio removed 2") == true)
         // And the bout that only shares its distance survives.
-        #expect((got.cardio ?? []).map(\.durationMin) == [48, 51])
+        #expect((got.cardio ?? []).filter { $0.date == "2026-08-24" }.map(\.durationMin) == [48, 51])
         // Its own start, in the same clock as everything else.
         #expect((got.cardio ?? []).first?.startedAt == "2026-08-24T07:32:00Z")
     }
@@ -553,6 +577,45 @@ struct WeeklyExportBuilderV5Tests {
         let md = WeeklyExport.build(got)
         #expect(md.contains("warm-ups Treadmill 5:00 4.4 km/h 0.37 km 2%"))
         #expect(!md.contains("0 reps"))
+    }
+
+    @Test("a back-filled event log is not a record of what was performed")
+    func seededEventsDoNotClaimPerformedOrder() throws {
+        let got = try built("UTC")
+        let s = try #require(got.sessions.first { $0.label != got.sessions.first?.label || $0.date == "2026-08-26" }
+            ?? got.sessions.first { $0.date == "2026-08-26" })
+        /* Every seeded event carries the session's own `started_at`, so there
+           is no order in them. Without the guard the sort falls through to the
+           NAME tiebreak and prints Hack Squat, Leg Press, Treadmill under the
+           word `performed`; the span collapses onto 18:00–18:00. */
+        #expect(s.orderSource == "index")
+        #expect(s.exercises.map(\.name) == ["Leg Press", "Hack Squat", "Treadmill"])
+        #expect(s.startedAt == "2026-08-26T18:00:00Z")
+        #expect(s.endedAt == "2026-08-26T19:05:00Z")
+        // Deck order is a guess too, and §7 says so.
+        #expect(WeeklyExport.build(got).contains("no performed-order index 2026-08-26"))
+    }
+
+    @Test("a clockless bout is never a duplicate of another clockless bout")
+    func clocklessCardioIsNotDeduped() throws {
+        let got = try built("UTC")
+        let kinds = (got.cardio ?? []).map(\.kind).sorted()
+        #expect(kinds == ["cycle", "swim", "walk", "walk"])
+    }
+
+    @Test("the fatigue slots follow the day that was trained, not the calendar")
+    func fatigueSlotsFollowTheSession() throws {
+        let got = try built("UTC")
+        // The builder normalised `pre` against a day with a session on it.
+        #expect(got.fatigue?.first { $0.date == "2026-08-24" }?.slot == "Before training")
+        // And the renderer asks for the same three slots, so the reading lands.
+        let day = try #require(got.days.first { $0.date == "2026-08-24" })
+        let trace = WeeklyExport.fatigueLabels(isTrainingDay: true)
+        #expect(trace.contains("Before training"))
+        #expect(WeeklyExport.build(got).contains("2026-08-24 · TRAIN"))
+        #expect(!WeeklyExport.build(got).split(separator: "\n")
+            .first { $0.hasPrefix("2026-08-24 · TRAIN") }!.contains("fatigue -/-/-"))
+        _ = day
     }
 
     @Test("a set rated 10 is a set to failure, whatever the tick says")

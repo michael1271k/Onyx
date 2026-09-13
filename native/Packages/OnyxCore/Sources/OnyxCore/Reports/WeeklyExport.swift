@@ -701,9 +701,18 @@ public enum WeeklyExport {
     ///
     /// A cardio warm-up prints its own axes. SPEED IS DERIVED from the pair —
     /// distance over duration — because nothing stores one.
+    /// True when the set carries a cardio measurement, which a NON-NIL ZERO is
+    /// not. Both logger steppers write an explicit `0` when tapped down from
+    /// empty, and a branch keyed on `!= nil` then produced an empty value — a
+    /// line that was an ordinal and nothing else.
+    static func isCardio(_ s: ExportSet) -> Bool {
+        let axes = [s.durationSec, s.distanceKm, s.inclinePct]
+        return axes.contains { $0.map { $0.isFinite && $0 != 0 } ?? false }
+    }
+
     static func compactSide(_ s: ExportSet, _ timed: Bool) -> String {
         var value: String
-        if s.durationSec != nil || s.distanceKm != nil {
+        if isCardio(s) {
             var bits: [String] = []
             if let d = s.durationSec, d.isFinite, d > 0 {
                 let total = Int(jsRound(d))
@@ -966,12 +975,19 @@ public enum WeeklyExport {
            the day happens in, days divided by the document's own separator. A
            slot nobody answered is `-`: a 0 on a 1–5 scale is a reading. */
         func fatigueTrace(_ d: ExportDay) -> String {
-            fatigueLabels(isTrainingDay: d.isTrainingDay).map { slot in
+            /* `isGymDay`, not `d.isTrainingDay`. The BUILDER normalises a
+               reading's slot with "a session logged on the day makes it a
+               training day", and the Pulse screen writes under the same rule.
+               Asking the calendar instead looked for `Waking / Midday / Night`
+               on a rest day that was trained and found `Before training /
+               After training`, printing `-/-/-` on a row this same renderer
+               labels TRAIN. */
+            fatigueLabels(isTrainingDay: isGymDay(d)).map { slot in
                 let hit = (input.fatigue ?? []).first { $0.date == d.date && $0.slot == slot }
                 return hit == nil ? "-" : n(hit!.level)
             }.joined(separator: "/")
         }
-        L.append("fatigue " + days.map(fatigueTrace).joined(separator: sep))
+        L.append("fatigue " + (days.isEmpty ? none : days.map(fatigueTrace).joined(separator: sep)))
 
         if !input.doms.isEmpty {
             L.append("doms " + input.doms.map { "\($0.date) \(domsName($0)) \(n($0.severity))" }.joined(separator: sep))
@@ -1137,8 +1153,16 @@ public enum WeeklyExport {
                 valExact(s.volumeKg).map { "tonnage \($0) kg" },
                 s.prs.isEmpty ? nil : "PRs \(s.prs.map(\.name).joined(separator: ", "))",
             ]))
-            if s.orderSource == "logged" {
+            /* BOTH fallbacks are named. `index` is `workout_sets.exercise_order`,
+               which is the DECK position and not a record of what was performed
+               — a pulled session has no local event log and always lands here,
+               so leaving it unmarked presents the deck as the session. */
+            switch s.orderSource {
+            case "logged":
                 anomalies.append("no performed-order index \(s.date) \(s.label) — movements printed in logged order")
+            case "index":
+                anomalies.append("no performed-order index \(s.date) \(s.label) — movements printed in deck order")
+            default: break
             }
 
             for ex in s.exercises {
@@ -1166,7 +1190,11 @@ public enum WeeklyExport {
                 // What this movement did against the last time it was performed.
                 // Absent on a movement being logged for the first time, which is
                 // a fact and not a gap.
-                if let best = bestSet(ex) {
+                // A cardio set has neither a load nor a rep count, so
+                // `weightKg × reps` ranks every one of them at zero and the
+                // line reads `best BW × 0 · load +0.00 kg`. Suppressed: the set
+                // lines above already carry the duration and the speed.
+                if let best = bestSet(ex), !isCardio(best) {
                     let lift = timed ? "\(grp(exact(best.reps))) s"
                         : SetFormat.isUnloaded(best.weightKg)
                         ? "BW × \(grp(exact(best.reps)))"
