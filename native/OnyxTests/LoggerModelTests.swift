@@ -324,7 +324,7 @@ struct LoggerModelTests {
     /// Face Pull.
     private func seeded(_ date: String) throws -> AppDatabase {
         let db = try AppDatabase.inMemory(deviceId: "test")
-        let id = LoggerModel.exerciseId("Face Pull")
+        let id = ExerciseSlug.id("Face Pull")
         try db.seedRows { conn in
             try Exercise(id: id, name: "Face Pull").insert(conn)
             try WorkoutSession(

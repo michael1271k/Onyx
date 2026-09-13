@@ -1,7 +1,7 @@
 import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Training-phase anchors — the pure half of `src/lib/phases.ts`, over ROWS.
+// Training-phase anchors — the pure half of the web app's `lib/phases.ts`, over ROWS.
 //
 // A programme phase is a direction (`cut` / `bulk`), a polished end state
 // (`peak`), or a bounded easing-off (`deload`). It is never a diet: the

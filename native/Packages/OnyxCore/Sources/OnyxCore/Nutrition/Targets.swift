@@ -1,7 +1,7 @@
 import Foundation
 
 /// What a date is graded against, in one value. A port of
-/// `src/lib/nutrition/targets.ts`.
+/// the web app's `lib/nutrition/targets.ts`.
 ///
 /// ── THE CHAIN, STATED ONCE ──────────────────────────────────────────────────
 /// Your own numbers → the rung in force ON THAT DATE (`Levers.goalsForDate`:

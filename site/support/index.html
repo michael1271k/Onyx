@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support — Onyx</title>
+<meta name="description" content="Help with Onyx: Apple Health permissions, syncing between iPhone and Apple Watch, widgets, exports, and account deletion.">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header><div class="wrap"><a class="brand" href="/">ONYX</a><p class="tag">Training, fuel and recovery.</p></div></header>
+<main class="wrap">
+<article>
+  <h1>Support</h1>
+  <p>Something not behaving? Start here — these are the questions Onyx raises most often. If yours is not one of them, write to a human at the address below.</p>
+
+  <div class="card">
+    <h2>Contact</h2>
+    <p><a href="mailto:support@onyx.fitness">support@onyx.fitness</a> — every message is read, and answered within two working days.</p>
+    <p>It helps enormously to include your iOS version, the app version (<strong>Settings → About → Version</strong>) and what you were doing when it happened.</p>
+  </div>
+
+  <h2>Common questions</h2>
+  <dl>
+    <dt>Onyx is asking for Apple Health access. What does it read, and can I say no?</dt>
+    <dd><p>It asks for <strong>read</strong> access to heart, sleep, activity and body-measurement data — the inputs to the readiness score, the recovery battery and the energy balance. On Apple Watch it also asks to <strong>write</strong> workouts, so a session run on the watch shows up in your activity rings.</p>
+    <p>You can decline, and the app still works. A figure that depends on a reading you have not shared says so rather than guessing at it. You can change your mind later in <strong>Settings → Privacy &amp; Security → Health → Onyx</strong>, and the app picks the history up on the next foreground.</p></dd>
+
+    <dt>A tile says “—” instead of a number.</dt>
+    <dd><p>That is the app saying it has no reading, which is different from saying zero. It happens when Health has not been granted, when the metric genuinely has no data for that day, or when a score needs a baseline it does not have yet — the readiness model wants a couple of weeks behind a day before it will call anything high or low. Give it the readings and the figure fills in.</p></dd>
+
+    <dt>I logged a workout on my Apple Watch and it is not on my phone.</dt>
+    <dd><p>The watch keeps its own copy and hands it over the next time both are awake and in range — open Onyx on the phone with the watch nearby. Sets logged offline are queued, not lost: a session that has not reached the server yet is marked as pending and uploads itself when there is a connection.</p></dd>
+
+    <dt>A widget is showing yesterday.</dt>
+    <dd><p>iOS decides when a widget may redraw, and it is stingier when the battery is low or the app has not been opened for a while. Opening Onyx refreshes every widget immediately. If one stays stale after that, remove it and add it again from the widget gallery.</p></dd>
+
+    <dt>Can I get my data out?</dt>
+    <dd><p>Yes. <strong>Reports</strong> generates a plain-text report for any week — every set, every night, every meal, in full — that you can copy anywhere. Nothing in it is abbreviated or rounded away.</p></dd>
+
+    <dt>How do I delete my account?</dt>
+    <dd><p>In the app: <strong>Settings → Delete account</strong>. It permanently removes every row belonging to you and then the account itself. It is immediate and cannot be undone. If you no longer have the app, write to <a href="mailto:support@onyx.fitness">support@onyx.fitness</a> from the address on the account.</p></dd>
+
+    <dt>I have forgotten my password.</dt>
+    <dd><p>Write to <a href="mailto:support@onyx.fitness">support@onyx.fitness</a> from the address on the account and a reset link will be sent back to it.</p></dd>
+  </dl>
+
+  <h2>Privacy</h2>
+  <p>What Onyx collects, why, where it is stored and how to remove it is set out in full on the <a href="/privacy/">privacy policy</a>. The short version: health and fitness data is used only to produce the figures in the app, it is never sold, never shared and never used for advertising, and there is no analytics or advertising code in the app at all.</p>
+</article>
+</main>
+<footer><nav class="wrap" aria-label="Legal and support"><a href="/privacy/">Privacy</a><a href="/support/">Support</a><span class="end">Onyx</span></nav></footer>
+</body>
+</html>

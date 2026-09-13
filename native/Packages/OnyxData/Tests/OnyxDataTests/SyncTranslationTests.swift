@@ -6,7 +6,7 @@ import OnyxCore
 /// The local↔Postgres translation, case by case.
 ///
 /// Every expectation here was read off the LIVE database on 2026-09-03, not off
-/// `src/lib/supabase/types.ts`. Where a test asserts a string — `upper`, `L` —
+/// the web app's `lib/supabase/types.ts`. Where a test asserts a string — `upper`, `L` —
 /// that string is one Postgres already holds.
 @Suite("Sync translation")
 struct SyncTranslationTests {
@@ -207,7 +207,7 @@ struct SyncTranslationTests {
         // rather than omit them.
         // 17 since `v19.cardioElevation`. The bump is deliberate and this
         // assertion is what forces it to be: `elevation_m` is a column
-        // `docs/sql/cardio-elevation.sql` adds BY HAND, so a body naming it
+        // `cardio-elevation.sql (git history)` adds BY HAND, so a body naming it
         // fails the whole batch until the founder has run that file. Pinning
         // the count is what makes the dependency between the two impossible to
         // add by accident.

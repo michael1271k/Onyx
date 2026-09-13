@@ -3,7 +3,7 @@ import Foundation
 /// The sixteen muscles ONYX actually tracks, and the one rule for crediting a
 /// set to them.
 ///
-/// A 1:1 port of `src/lib/training/landmarks.ts` (the `LANDMARK_MUSCLES` list,
+/// A 1:1 port of the web app's `lib/training/landmarks.ts` (the `LANDMARK_MUSCLES` list,
 /// `toLandmarkMuscle` and `SECONDARY_SET_CREDIT`) plus the accumulator half of
 /// `MuscleDistribution.tsx`. The arithmetic is in `OnyxCore` rather than in a
 /// view because it is arithmetic: it has been wrong three separate times in the

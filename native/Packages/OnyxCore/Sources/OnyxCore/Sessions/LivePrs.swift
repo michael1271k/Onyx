@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Records claimed by the sets ticked green so far. A port of
-// `src/lib/sessions/livePrs.ts`.
+// the web app's `lib/sessions/livePrs.ts`.
 //
 // ONLY COMMITTED SETS COUNT — an untouched template row still holds last week's
 // numbers. Sets are fed to the engine in deck order with the draft's DATE, so an

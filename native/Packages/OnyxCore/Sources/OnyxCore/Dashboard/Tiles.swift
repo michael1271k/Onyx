@@ -1,6 +1,6 @@
 import Foundation
 
-/// The arithmetic behind the dashboard tiles — a port of `src/lib/dashboard/tiles.ts`.
+/// The arithmetic behind the dashboard tiles — a port of the web app's `lib/dashboard/tiles.ts`.
 
 public struct StackDose: Codable, Sendable, Equatable {
     public var key: String

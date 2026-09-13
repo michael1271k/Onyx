@@ -1,6 +1,6 @@
 import Foundation
 
-/// One logged set, as `VolumeSet` in `src/lib/sessions/volume.ts`.
+/// One logged set, as `VolumeSet` in the web app's `lib/sessions/volume.ts`.
 public struct VolumeSet: Codable, Sendable, Equatable {
     public var weightKg: Double
     public var reps: Double
@@ -20,7 +20,7 @@ public struct VolumeSet: Codable, Sendable, Equatable {
     }
 }
 
-/// Session volume — the ONE rule, ported from `src/lib/sessions/volume.ts`.
+/// Session volume — the ONE rule, ported from the web app's `lib/sessions/volume.ts`.
 ///
 /// The history is in the TypeScript header. The rule that must survive:
 ///

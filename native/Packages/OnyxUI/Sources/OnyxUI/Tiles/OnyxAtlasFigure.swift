@@ -9,7 +9,7 @@ import OnyxCore
 
 // MARK: - The atlas, drawn
 //
-// `OnyxAtlas.swift` is GENERATED from `src/lib/body/atlas.ts` and holds only
+// `OnyxAtlas.swift` is GENERATED from the web app's `lib/body/atlas.ts` and holds only
 // geometry. This is the view that draws it, and it is hand-written because how
 // a body is TINTED is a design decision, not a translation of an SVG.
 //

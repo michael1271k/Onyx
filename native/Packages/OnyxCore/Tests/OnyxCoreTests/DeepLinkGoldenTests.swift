@@ -40,11 +40,11 @@ struct DeepLinkGoldenTests {
     ///
     /// Every fixture arrives here as `onyx://` — including the case named
     /// "upper-case scheme", which therefore proves case-insensitive ACCEPTANCE
-    /// and not the scheme rejection the suite's doc comment claims. The old
-    /// scheme is live in the Capacitor app on the same device, so a `helix://`
-    /// URL reaching this parser is a real thing that must be refused, and
+    /// and not the scheme rejection the suite's doc comment claims. The retired
+    /// app's scheme may still sit in a stale Shortcut or a bookmark, so a URL
+    /// under it reaching this parser is a real thing that must be refused, and
     /// nothing in the vector says so.
-    @Test("a foreign scheme is refused, `helix://` included")
+    @Test("a foreign scheme is refused, the retired app's included")
     func foreignSchemesRejected() {
         for raw in ["helix://open?path=/nutrition", "HELIX://open?path=/nutrition",
                     "https://onyx.example/open?path=/nutrition",
@@ -57,15 +57,13 @@ struct DeepLinkGoldenTests {
 
     /// Swap the SCHEME, and only the scheme, on the way in.
     ///
-    /// The fixture is generated from `src/lib/native/deepLink.ts`, which still
-    /// answers to `helix://` — that twin is live code in the Capacitor app,
-    /// whose `Info.plist` registers that scheme and which Phase 2.5 leaves
-    /// alone until Wave 9. Onyx registers `onyx://`. Two apps, two schemes, on
-    /// purpose.
+    /// The fixture was generated from the retired web app's deep-link module,
+    /// which answered to that app's own scheme. Onyx registers `onyx://`, so the
+    /// fixture's scheme is swapped on the way in and nothing else is.
     ///
     /// Everything the allow-list actually decides is downstream of the scheme,
     /// so translating it here keeps all thirty cases — including the
-    /// case-insensitive `HELIX://` one, the traversal attempts and the
+    /// case-insensitive upper-case one, the traversal attempts and the
     /// `//evil.example` protocol-relative smuggling — pointed at the real
     /// parser. A raw string with any OTHER scheme is passed through untouched,
     /// which is what makes the negative cases still negative.

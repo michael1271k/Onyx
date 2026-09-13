@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Calories and heart rate for a session that carries neither. A port of
-// `src/lib/sessions/estimates.ts`.
+// the web app's `lib/sessions/estimates.ts`.
 //
 // Every number here is an ESTIMATE and is stamped as one by the caller. It only
 // ever fills a gap. Calories: your OWN median kcal/min for this split first

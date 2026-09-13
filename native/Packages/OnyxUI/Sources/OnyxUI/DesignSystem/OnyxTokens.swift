@@ -6,13 +6,13 @@ import OnyxCore
 ///
 /// ── WHAT THIS REPLACED ──────────────────────────────────────────────────────
 /// `OnyxPalette` was a Tailwind transliteration: forty flat hexes carried over
-/// from `src/lib/theme/palette.ts` so the web app and the first native screens
+/// from the web app's `lib/theme/palette.ts` so the web app and the first native screens
 /// could be diffed by eye. It did its job and it was not the design. This file
 /// is the design — four domain accents, text at three weights, and a short list
 /// of fixed semantic hues — and every screen reads it.
 ///
 /// The Live Logger was its last reader and Wave 2.4 re-skinned it, so the file
-/// is gone. `src/tests/native-token-discipline.test.ts` keeps it gone.
+/// is gone. the web app's `tests/native-token-discipline.test.ts` keeps it gone.
 ///
 /// ── WHAT CHANGED IN TOKENS v2 (Phase 2 §3.2) ────────────────────────────────
 /// Every accent came down two steps. The v1 palette was Ion `#7C5CFF` and Tide
@@ -24,7 +24,7 @@ import OnyxCore
 ///
 /// ── THE RULE THIS FILE MAKES ENFORCEABLE ────────────────────────────────────
 /// No raw hex in any view. Hexes live here, views name meanings, and
-/// `src/tests/native-token-discipline.test.ts` fails the build if a `0x` or a
+/// the web app's `tests/native-token-discipline.test.ts` fails the build if a `0x` or a
 /// `Color(red:` appears under `Features/`. A token you cannot name is a token
 /// you have not designed yet.
 

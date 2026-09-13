@@ -241,7 +241,7 @@ public struct WorkoutSet: Codable, FetchableRecord, PersistableRecord, Identifia
     /// A set that is not reps and kilograms.
     ///
     /// Seconds under load, treadmill incline as a percent, kilometres covered.
-    /// Postgres grew all three on 2026-09-07 (`docs/sql/hotfix-polish.sql`) for
+    /// Postgres grew all three on 2026-09-07 (`hotfix-polish.sql (git history)`) for
     /// the treadmill warm-up, which `workout_sets` had nowhere to put: it is
     /// `weight_kg 0, reps 0`, and a reader with only those two columns renders
     /// it as `0kg × 0` — a claim that five minutes of walking was nothing.
@@ -258,7 +258,7 @@ public struct WorkoutSet: Codable, FetchableRecord, PersistableRecord, Identifia
     public var incline: Double?
     public var distanceKm: Double?
     /// Total ascent for the bout, in METRES — the fourth cardio axis
-    /// (`docs/sql/cardio-elevation.sql`, `v19.cardioElevation`).
+    /// (`cardio-elevation.sql (git history)`, `v19.cardioElevation`).
     ///
     /// **Measured, never derived.** `incline × distanceKm` looks like the same
     /// number and is only equal while the incline never moved; a real walk is
@@ -269,7 +269,7 @@ public struct WorkoutSet: Codable, FetchableRecord, PersistableRecord, Identifia
     /// `nil` is the normal state — the Postgres column is applied by hand and
     /// nothing writes it yet.
     public var elevationM: Double?
-    /// MEASURED rest before this set, in seconds — `docs/sql/actual-rest.sql`,
+    /// MEASURED rest before this set, in seconds — `actual-rest.sql (git history)`,
     /// `v22.actualRest`.
     ///
     /// The elapsed gap between committing the previous set of the same exercise

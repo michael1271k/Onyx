@@ -77,7 +77,7 @@ struct ExerciseCatalogueWriterTests {
         #expect(row.name == "Zercher Squat")
         #expect(row.primaryMuscle == "Quads")
         // The slug is the same function the logger stamps on a set.
-        #expect(row.slug == ExerciseSlug.id("Zercher Squat"))
+        #expect(row.slug == nil, "a row created today has no legacy id to alias")
 
         let items = try queued(db)
         #expect(items.contains { $0.table == "exercises" })
@@ -411,7 +411,7 @@ struct AccountSeedTests {
 
     /// The half of the app the first version of the gate could not see.
     ///
-    /// A person who used Helix only for food, water and weigh-ins has no plan,
+    /// A person who used the app only for food, water and weigh-ins has no plan,
     /// no routine, no catalogue and no session — the sign-up trigger's `plans`
     /// row carries no `program_id` — so they read as brand new and would have
     /// had a seed written over their `user_goals`.

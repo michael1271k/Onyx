@@ -1,6 +1,7 @@
 # Epic Sprint — Bug map, generic scaling, UI/UX overhaul, Helix sunset
 
 Status: findings + founder decisions locked 2026-09-10. Waves + prompts in §Waves.
+W6 (Helix sunset) shipped 2026-09-13 as 3.0.0 — see `docs/CHANGELOG.md`; the founder checklist below is what remains by hand.
 
 ## Founder decisions (2026-09-10)
 1. Helix web sunset = LAST wave (W6).
@@ -142,7 +143,7 @@ Amazing / Good / Okay / Tired / Exhausted. Stored 1–5 unchanged. No hint prose
 
 ## Manual checklists for the founder
 - **SQL (cannot run from this machine):** paste each `docs/sql/w*.sql` into the Supabase SQL editor when a wave says so; confirm with `schema-truth-checker` after.
-- **Netlify (W6):** site keeps the same name; set publish dir to `site`, remove the Next plugin and all `NEXT_PUBLIC_*`/`NOTION_*`/`SUPABASE_SERVICE_*` env vars; delete `keep-alive` function; verify `curl -i https://helix-health-fitness.netlify.app/.well-known/apple-app-site-association` returns JSON with the native App ID.
+- **Netlify (W6):** site renamed to `onyx-health-fitness`; set publish dir to `site`, remove the Next plugin and all `NEXT_PUBLIC_*`/`NOTION_*`/`SUPABASE_SERVICE_*` env vars; delete `keep-alive` function; verify `curl -i https://onyx-health-fitness.netlify.app/.well-known/apple-app-site-association` returns JSON with the native App ID.
 - **Supabase (W6):** rotate DB password (outstanding since 2026-09-02); confirm dropped tables gone.
 - **Memory (W6):** mark web-only memories SUPERSEDED in `MEMORY.md`.
 

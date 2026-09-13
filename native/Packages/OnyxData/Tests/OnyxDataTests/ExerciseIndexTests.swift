@@ -20,7 +20,7 @@ struct ExerciseIndexTests {
     ///
     /// It was 60 until the hotfix-polish sprint merged fifteen duplicate rows
     /// and moved the equipment out of thirteen titles into `exercises.equipment`
-    /// (docs/sql/hotfix-polish.sql). Every `(Machine)` / `(DB)` / `(Cable)` twin
+    /// (hotfix-polish.sql (git history)). Every `(Machine)` / `(DB)` / `(Cable)` twin
     /// in the old list was a SECOND PR baseline for one movement, which is the
     /// failure `aliases.ts` documents at length. `Treadmill` is the one addition.
     private static let liveNames = [

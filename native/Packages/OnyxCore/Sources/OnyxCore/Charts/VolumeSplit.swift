@@ -1,6 +1,6 @@
 import Foundation
 
-/// The volume chart's buckets — a port of `src/lib/charts/volumeSplit.ts`.
+/// The volume chart's buckets — a port of the web app's `lib/charts/volumeSplit.ts`.
 /// A session is bucketed by what was PERFORMED (its own day_key), never by the
 /// weekday the template says; the weekday guess survives only for legacy rows.
 public enum VolumeSplit {

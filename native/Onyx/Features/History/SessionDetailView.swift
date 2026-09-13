@@ -1570,7 +1570,7 @@ struct SetRow: View {
     /// `42kg × 10` for everything else.
     ///
     /// `SetFormat.cardio` answers nil unless the set carries one of the three
-    /// columns `docs/sql/hotfix-polish.sql` added, so the fallback is the whole
+    /// columns `hotfix-polish.sql (git history)` added, so the fallback is the whole
     /// of the previous behaviour and every lifted row renders byte for byte as
     /// it did. Without it the treadmill that opens 2026-09-07 reads `0 reps` —
     /// `weight_kg 0, reps 0` is exactly what that session stores.

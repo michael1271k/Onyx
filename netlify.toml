@@ -1,37 +1,13 @@
+# Static-only site: the privacy policy, the support page and the Apple App Site
+# Association file the native app's App Store listing points at. There is no
+# build step — `site/` is published as-is — so a push costs no build minute.
 [build]
-  command = "npm run build"
-  publish = ".next"
-  # Native-only commits must not spend a build minute. Netlify SKIPS the build
-  # when this command exits 0, and `git diff --quiet` exits 0 when the range
-  # touched nothing outside the excluded paths — so a wave that only edits
-  # native/, docs/, graphify-out/ or markdown is ignored, while anything that
-  # touches src/, public/, package.json or netlify.toml still deploys.
-  #
-  # This replaces `[skip ci]` in commit messages (retired 2026-09-05). The tag
-  # had to be remembered per commit, and the once it was wrong the API auth fix
-  # sat undeployed for three days behind it.
-  #
-  # Fails open: after a cache clear $CACHED_COMMIT_REF is empty, git errors, the
-  # exit status is non-zero, and the site builds.
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)native' ':(exclude)docs' ':(exclude)graphify-out' ':(exclude)*.md'"
+  publish = "site"
+  command = ""
 
-[build.environment]
-  NEXT_TELEMETRY_DISABLED = "1"
-  # 20 tripped `npm warn EBADENGINE ... required: { node: '>=22.0.0' }` on every
-  # build — a dependency now requires 22. Kept in step with `.nvmrc`.
-  NODE_VERSION = "22"
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
-
-# Serve the Apple App Site Association file (webcredentials → iOS Password
-# AutoFill "Save Password" prompt) as JSON. The file is extensionless, so its
-# content-type must be set explicitly.
+# The AASA file is extensionless, so its content-type must be set explicitly
+# (webcredentials → iOS Password AutoFill "Save Password" prompt).
 [[headers]]
   for = "/.well-known/apple-app-site-association"
   [headers.values]
     Content-Type = "application/json"
-
-[dev]
-  command = "npm run dev"
-  targetPort = 3000

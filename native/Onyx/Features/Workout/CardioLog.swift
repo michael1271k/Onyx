@@ -412,7 +412,7 @@ private struct ImportCard: View {
     /// Foot sports keep pace; wheels and oars get speed.
     ///
     /// Computed here rather than in `CardioMetrics` because that enum is a port
-    /// of `src/lib/cardio` with a twin on the web, and a Swift-only member is
+    /// of the web app's `lib/cardio` with a twin on the web, and a Swift-only member is
     /// how a parity pair starts drifting.
     private var speed: String? {
         let wheeled = [CardioImport.cycling, CardioImport.rowing]

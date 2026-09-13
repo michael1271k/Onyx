@@ -15,8 +15,8 @@ import ActivityKit
 /// project file is generated at all.
 ///
 /// ── AND WHY THIS ONE CROSSES A LINE `OnyxSnapshot` CANNOT ──────────────────
-/// App Groups are a PAID capability, which is why the Capacitor widgets fetch
-/// their own data over HTTP rather than reading anything the app wrote. That
+/// App Groups are a PAID capability, which is why the old web-shell widgets
+/// fetched their own data over HTTP rather than reading anything the app wrote. That
 /// constraint is about SHARED STORAGE, and a Live Activity uses none: the
 /// content travels through ActivityKit itself, from `Activity.update` in the
 /// app to the extension's view body, with no container in between. Nothing is

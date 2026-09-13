@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The session seed — what a day's deck opens with, and where every number in it
-// came from. A port of `src/lib/sessions/sessionSeed.ts`; vectors
+// came from. A port of the web app's `lib/sessions/sessionSeed.ts`; vectors
 // `session-seed.json` and `sessions-for-seed.json`.
 //
 // This replaces `LoggerModel.seedRows`, which seeded every row from
@@ -178,7 +178,7 @@ public struct SessionSeed: Codable, Sendable, Equatable {
 /// sum, so the header would read `0/13` on a twelve-set day and the progression
 /// engine would start grading a walk.
 ///
-/// This is the Swift twin of `WARMUP_CARDIO` in `src/lib/sessions/seedTemplates.ts`
+/// This is the Swift twin of `WARMUP_CARDIO` in the web app's `lib/sessions/seedTemplates.ts`
 /// and it carries the same three numbers, so a session opened on the phone and
 /// one opened on the web propose the same bout. It is logged as a WARM-UP, which
 /// is what `hotfix-polish.sql` wrote for the 7 September session and what keeps

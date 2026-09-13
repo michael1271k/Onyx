@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TARGET rest between sets — prescribed by the plan, adjustable by you. The
-// pure half of `src/lib/training/restTargets.ts`.
+// pure half of the web app's `lib/training/restTargets.ts`.
 //
 // Onyx used to MEASURE rest (the gap between two set ticks) and never
 // prescribe it. Every exercise on the live plan now carries `restSec`, and

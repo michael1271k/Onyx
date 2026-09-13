@@ -4,10 +4,10 @@
  *
  * ── WHY THERE IS A GENERATOR AND NOT A HAND-WRITTEN HTML FILE ───────────────
  * The two parsers this bundle needs — `fmtV2.ts` and `smartBlocks.ts` — are 945
- * lines of rules bought one bug at a time, and they are still the web app's
- * live code. A hand-written copy inside an HTML file would be a second
- * implementation of them, and the two would drift the first time a report used a
- * shape only one of them knew. `scripts/gen-atlas-swift.mjs` exists for exactly
+ * lines of rules bought one bug at a time, and they live in `scripts/src/report/`.
+ * A hand-written copy inside an HTML file would be a second implementation of
+ * them, and the two would drift the first time a report used a shape only one
+ * of them knew. `scripts/gen-atlas-swift.mjs` exists for exactly
  * this reason and this follows it: the checked-in artefact is generated, and the
  * generator is the thing that is reviewed.
  *
@@ -136,7 +136,7 @@ th { color: var(--muted); font-weight: 600; white-space: nowrap; }
 tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
 tbody tr:last-child td { border-bottom: none; }
 /* Numerals hold their column as values change length. */
-.helix-num, td { font-variant-numeric: tabular-nums; }
+.num, td { font-variant-numeric: tabular-nums; }
 
 /* The banner box at the head of a report. */
 .hero {
@@ -221,7 +221,7 @@ async function main() {
       // be a poor trade.
       minify: false,
       lib: {
-        entry: join(ROOT, 'src/lib/reports/webview/renderer.ts'),
+        entry: join(ROOT, 'scripts/src/report/renderer.ts'),
         formats: ['iife'],
         name: 'OnyxReport',
         fileName: () => 'renderer.js',
@@ -242,7 +242,7 @@ async function main() {
      arbitrary pasted text, so a remote image in one must not become a request. -->
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;">
-<title>HELIX report</title>
+<title>Onyx report</title>
 <style>${CSS}</style>
 </head>
 <body>

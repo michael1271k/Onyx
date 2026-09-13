@@ -1,7 +1,7 @@
 import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Body-composition math — the "InBody engine". A port of `src/lib/body/composition.ts`.
+// Body-composition math — the "InBody engine". A port of the web app's `lib/body/composition.ts`.
 //
 // A smart scale reports percentages; the trendable numbers are masses, derived
 // as weight × %. Fat-free mass = weight − fat mass. Protein: its own % when

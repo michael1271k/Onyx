@@ -33,6 +33,14 @@ import OnyxCore
 // does it, and the push splits it back apart.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── THE PHONE MINTS, THE WATCH NEVER DOES ───────────────────────────────────
+// The watch's store is its OWN — Application Support on that device, not an App
+// Group shared with the phone — so a row created there carries an id no other
+// client has ever seen, and the movement exists twice the moment the two logs
+// meet. That rule was a comment until W6; `#if !os(watchOS)` makes breaking it
+// a compile error instead. The static half stays available everywhere because
+// `AccountSeed` builds on it and seeds a database, not a device.
+#if !os(watchOS)
 public extension AppDatabase {
 
     /// Create one catalogue row and queue it for the server.
@@ -80,6 +88,31 @@ public extension AppDatabase {
         }
     }
 
+}
+#endif
+
+public extension AppDatabase {
+
+    /// Canonical name → the one catalogue row that answers to it.
+    ///
+    /// A name TWO rows share is ABSENT from this map rather than resolved to
+    /// one of them, which is the answer `ExerciseIndex.id(forSlug:)` gives by
+    /// throwing `ambiguousExercise`. `Crunch Machine` and `Crunch (Machine)`
+    /// are separate rows that disagree about `is_bodyweight`; choosing between
+    /// them files half a history under the wrong ladder, and a caller that
+    /// cannot tell is better off saying so.
+    static func exerciseIds(byCanonicalNameIn rows: [Exercise]) -> [String: String] {
+        var idsByName: [String: [String]] = [:]
+        for row in rows {
+            idsByName[ExerciseAliases.canonicalName(row.name).lowercased(), default: []].append(row.id)
+        }
+        return idsByName.compactMapValues { $0.count == 1 ? $0[0] : nil }
+    }
+
+    func exerciseIdsByCanonicalName() throws -> [String: String] {
+        Self.exerciseIds(byCanonicalNameIn: try exercises())
+    }
+
     static func createExercise(
         _ db: Database, userId: String, name: String, primaryMuscle: String?,
         secondaryMuscles: [String], equipment: String?, id: String?
@@ -105,7 +138,14 @@ public extension AppDatabase {
             equipment: equipment,
             isUnilateral: Unilateral.isUnilateral(trimmed),
             isBodyweight: Bodyweight.isBodyweight(trimmed),
-            slug: ExerciseSlug.id(trimmed)
+            // ── NO SLUG ON A NEW ROW (W6) ───────────────────────────────────
+            // The column is an alias for the legacy id a pre-W6 build wrote
+            // into `workout_sets.exercise_id`, and it is answered for by rows
+            // that already existed when that build ran. A row created now has
+            // no such history and never will: the logger resolves this id
+            // before it writes. Stamping one would put the retired prefix into
+            // new server data for a lookup nothing will ever perform.
+            slug: nil
         )
         try row.insert(db)
         try Self.enqueueRowUpsert(

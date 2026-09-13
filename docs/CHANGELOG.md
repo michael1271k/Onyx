@@ -1,7 +1,6 @@
 # Changelog
 
-All notable changes to **Onyx** — the native iOS/watchOS app and the Helix web
-app it shares a database with.
+All notable changes to **Onyx** — the native iOS/watchOS app.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -13,15 +12,13 @@ hand-edited:
 
 | Surface | Where the number comes from |
 |---|---|
-| Web app (`/settings` → About, `/api/version`) | `NEXT_PUBLIC_APP_VERSION`, inlined at build time from `package.json` by `next.config.ts` |
 | Native app, widget extension, watch app | `MARKETING_VERSION` in `native/project.yml`, written by `scripts/sync-version.mjs` and read through `$(MARKETING_VERSION)` in each `Info.plist` |
-| Capacitor shell (`ios/App`) | `MARKETING_VERSION` in `App.xcodeproj/project.pbxproj`, written by the same script |
 | Settings → Version (native) | `Bundle.main.infoDictionary` at runtime — `OnyxLinks.versionString` |
 
 ```bash
 # bump the SSoT, then push it everywhere
 npm version 1.4.0 --no-git-tag-version   # or edit package.json by hand
-npm run version:sync                     # writes both Xcode projects
+npm run version:sync                     # writes native/project.yml
 cd native && xcodegen generate           # regenerate, never hand-edit the .xcodeproj
 ```
 
@@ -44,6 +41,128 @@ out of step with the first.
 ## [Unreleased]
 
 _Nothing yet._
+
+---
+
+## [3.0.0] — 2026-09-13 · The Web App Is Gone
+
+Onyx is one app now. The Helix web app — the Next.js dashboard, logger and
+PWA that Onyx grew up beside and shared a database with — is retired, along
+with the Capacitor shell that wrapped it, the old watch app inside that shell,
+the Playwright and Vitest suites that tested it, and every web build config.
+Nothing the phone does changed; what changed is that nothing else is running.
+
+MAJOR because a surface was removed: anyone still opening the web dashboard
+gets a two-page static site instead. Its data is untouched — every row it wrote
+is in the same Supabase the phone reads.
+
+### Removed
+
+- **The web app** (`src/`, 600 files), the Capacitor iOS shell (`ios/`), the
+  PWA assets (`public/`), the end-to-end suite (`e2e/`), the Netlify keep-alive
+  function, and ten web build configs. The web-only maintenance scripts that
+  imported from `src/` (`backfill-prs`, `backfill-notion-sets`,
+  `backfill-supplement-log`, `rebuild-routine-templates`, `seed-demo-account`,
+  `sync-pr-truth`, `reseed-muscle-groups`) went with it — they cannot run
+  without the modules they imported. All of it is in git history before this
+  commit.
+- **The completed migration plans** (`NATIVE_MIGRATION_PLAN`,
+  `NATIVE_PHASE_2_PLAN`, `PHASE_2_POLISH_PLAN`, `PHASE_3_PLAN`) — done, and
+  written in the vocabulary of the app they retired.
+- `package.json` shrinks from 25 dependencies + 23 dev to six dev
+  dependencies: `vite`, `micromark` and `micromark-extension-gfm` (the report
+  renderer bundle), `typescript` (the generator sources are still typechecked,
+  `npm run check:types`), `sharp` (icons) and `@supabase/supabase-js` (the
+  service-role scripts). The package is named `onyx`.
+- **The Supabase keep-alive is gone with the Netlify function that ran it.**
+  Daily use of the phone makes the same calls; a week without opening the app
+  can let the free-tier project pause, after which the next sign-in fails until
+  it is resumed in the Supabase dashboard. If that bites, a Supabase cron or a
+  scheduled GitHub Action is the ten-line replacement.
+- `scripts/recompute-scores.mjs` — it POSTed to the web app's compute-score
+  route. The phone's rescore cascade owns re-scoring now.
+
+### Changed
+
+- **The Netlify site is static.** `site/` holds the privacy policy, the
+  support page and the Apple App Site Association file; `netlify.toml`
+  publishes it with no build command. The AASA file now names only the native
+  App ID. Settings → About links the same two pages at the same domain, with a
+  trailing slash.
+- **The generators read `scripts/src/`.** The body atlas, the soreness
+  vocabularies and the report renderer's TypeScript moved out of the web tree
+  into `scripts/src/{atlas,soreness,subRegions}.ts` and
+  `scripts/src/report/*`; `npm run atlas`, `doms` and `report:bundle` produce
+  byte-identical Swift and a re-bundled `ReportRenderer.html` from there.
+  `sync-version.mjs` writes only `native/project.yml` now.
+- **`npm run check`** is the version check, a `tsc` pass over `scripts/src/`,
+  and the three generator checks. There is no lint step because there is no
+  TypeScript app to lint; the Swift gates
+  (`check:swift`, `swift:core`, `swift:data`, the `xcodebuild` line) are
+  unchanged.
+- **Native comments no longer point at `src/`.** Every "a port of
+  `src/lib/…`" note now reads "a port of the web app's `lib/…`", and
+  `native/README.md` says where those files went. The remaining `helix`
+  strings are load-bearing data, not branding: the `"helix"` era wire value,
+  the `helix.week/1` schema tag, the legacy App Group and sqlite names the
+  one-time store move reads, the `helix_*` preference fallbacks, and the
+  founder's plan and era labels in the golden fixtures.
+
+### One movement, one id
+
+- **The logger writes the catalogue's id.** A set logged on the phone used to
+  carry `helix5-<name-slug>` while the same movement pulled from the server
+  carried the catalogue's uuid — one movement under two identities, which the
+  session summary drew twice, the volume fold split, and a PR could be
+  measured against half of. `storedId` now resolves the local catalogue by
+  canonical name; the commit path alone
+  (`storedIdCreatingCatalogueRow`) may create the row when nothing answers.
+  Opening a screen never mints one. Two refusals guard it: an EMPTY catalogue
+  is treated as "not pulled yet" rather than "new movement", because minting
+  there would queue rows the server already holds under other ids and
+  `UNIQUE (user_id, name)` would reject them on every retry; and a name two
+  rows answer to is left to the slug, which `ExerciseIndex` refuses out loud
+  at push time instead of being guessed at silently.
+- **The watch resolves but never mints**, and `#if !os(watchOS)` now makes
+  breaking that a compile error rather than a code review. Its store is its
+  own, so a row created there would carry an id no other client had seen. It
+  writes the routine payload's id when there is one and the legacy slug
+  otherwise, which `ExerciseIndex` has resolved at push time since W2.
+- **`v23.catalogueIds` remaps the event log, then the projection.**
+  `workout_sets` is a projection of `set_events`, and `reproject` rebuilds it
+  from the append bodies — so a migration that touched only the table would be
+  undone by the first edit to a session, and half-undone at that: the deck
+  would already hold the migrated id while the fold restored the rest under
+  the old one. Both are remapped, with one map, built only from slugs exactly
+  one catalogue row answers for. A slug two rows share is left alone —
+  `Crunch Machine` and `Crunch (Machine)` slug identically and disagree about
+  `is_bodyweight`. A slug that answers to nothing keeps its id: it is still a
+  logged rep. Personal records are untouched either way — the ledger keys on
+  the movement's name, on both sides of the wire.
+
+### Removed, second pass
+
+- **`docs/sql/`** — fifteen applied migrations. The live database is the
+  schema of record and `native/schema/supabase.json` is what the mirror
+  generator reads; the DDL is in git history. The fifteen Swift comments that
+  cited a file by path now cite it by name.
+- **Six service-role scripts** (`backfill-treadmill-sets`, `repair-calcium`,
+  `repair-sep-2026-data`, `split-exercise-by-day`, `merge-exercise`,
+  `reconcile-pr-counts`) — one-off fixes, already run.
+- `docs/UX_WEEKLY_NUTRITION_WIDGETS_PLAN.md`, `docs/SECURITY_SWEEP_2026-09.md`,
+  `docs/superpowers/`, `design-system/`. `READINESS_MODEL.md` and
+  `STRESS_MODEL.md` stay — they are the stated model behind `Readiness`,
+  `Stress` and `Battery`.
+
+### Changed, second pass
+
+- **The Netlify site is `onyx-health-fitness.netlify.app`.** `OnyxLinks.host`,
+  both App Store URLs and the AASA all follow it. The old host dies with the
+  rename.
+- **`README.md` is rewritten** for the App Store: the pitch, the Train /
+  Recover / Fuel philosophy, an architecture diagram, the offline-first and
+  two-client stories, the HealthKit read-write split, and getting-started
+  paths for an athlete and for a developer.
 
 ---
 

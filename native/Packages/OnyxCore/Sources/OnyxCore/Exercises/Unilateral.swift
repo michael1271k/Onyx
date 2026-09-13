@@ -1,7 +1,7 @@
 import Foundation
 
 /// Movements trained ONE SIDE AT A TIME, so a set is two rows — an L and an R
-/// sharing a `pairId`. A port of `src/lib/exercises/unilateral.ts`.
+/// sharing a `pairId`. A port of the web app's `lib/exercises/unilateral.ts`.
 ///
 /// Sibling of `TimedExercise` and `Bodyweight`, and matched the same way: by
 /// NAME, because the exercise catalogue has no laterality column.

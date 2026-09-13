@@ -8,7 +8,7 @@ import OnyxCore
 /// match Supabase and that a translation layer had to exist before anything
 /// could be uploaded. This is that layer. Every difference it bridges was
 /// introspected from the LIVE database on 2026-09-03 — never from
-/// `src/lib/supabase/types.ts`, which is known to have drifted:
+/// the web app's `lib/supabase/types.ts`, which is known to have drifted:
 ///
 ///   · `workout_sets.set_index` → **`set_number`**. There is no `set_index`
 ///     column server-side at all.
@@ -388,7 +388,7 @@ public struct RemoteSetRow: Codable, Sendable, Equatable {
     public var durationSec: Int?
     public var incline: Double?
     public var distanceKm: Double?
-    /// Total ascent for the bout, in metres — `docs/sql/cardio-elevation.sql`.
+    /// Total ascent for the bout, in metres — `cardio-elevation.sql (git history)`.
     ///
     /// Pulled and SENT, on the same terms as the three axes above: the puller
     /// asks for `select=*`, so a server without the column simply answers
@@ -396,7 +396,7 @@ public struct RemoteSetRow: Codable, Sendable, Equatable {
     /// every row so one batch never carries two shapes.
     ///
     /// ── AND THE PUSH IS WHY THE SQL COMES FIRST ─────────────────────────────
-    /// `docs/sql/cardio-elevation.sql` is applied BY HAND, and until it is,
+    /// `cardio-elevation.sql (git history)` is applied BY HAND, and until it is,
     /// PostgREST rejects a body naming a column it does not have — the whole
     /// session, not one field. Sending it conditionally is the alternative and
     /// it is worse: the condition would have to be a schema probe on every

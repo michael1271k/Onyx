@@ -15,11 +15,11 @@ import Foundation
 /// it, because the row it feeds is native-only. W12 rebinds that row to
 /// `TrajectorySeries` and puts the same rate and the same arrival date on a
 /// widget face, so the two now have to agree to the digit in a snapshot built
-/// by a different builder. `src/lib/charts/goalBoard.ts` is the definition and
+/// by a different builder. the web app's `lib/charts/goalBoard.ts` is the definition and
 /// `goal-board.json` is the proof; nothing about the arithmetic changed.
 ///
 /// ── THE RATE IS A REGRESSION, NOT A DIFFERENCE ──────────────────────────────
-/// Ported from `weeklyRateKg` in `src/lib/hooks/useEnergyBalance.ts`, and for
+/// Ported from `weeklyRateKg` in the web app's `lib/hooks/useEnergyBalance.ts`, and for
 /// the reason stated there: two readings a fortnight apart can differ by a kilo
 /// of water, so "latest minus earliest ÷ weeks" computes the rate from
 /// precisely the two noisiest numbers in the window. Least squares over every
@@ -34,7 +34,7 @@ import Foundation
 /// ── CODABLE SINCE W12 ───────────────────────────────────────────────────────
 /// `TrajectorySeries` carries one of these onto a widget face, and the golden
 /// vector that pins the two together (`goal-board.json`) decodes it directly.
-/// The keys are the property names and match `src/lib/charts/goalBoard.ts`
+/// The keys are the property names and match the web app's `lib/charts/goalBoard.ts`
 /// field for field, which is what makes the fixture a comparison rather than a
 /// translation.
 public struct GoalBoard: Codable, Sendable, Equatable {

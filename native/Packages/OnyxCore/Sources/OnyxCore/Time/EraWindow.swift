@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The six windows a chart can be asked to draw — a port of
-// `src/lib/era/eraWindow.ts` (decision 12).
+// the web app's `lib/era/eraWindow.ts` (decision 12).
 //
 // ── WHAT THIS REPLACES ───────────────────────────────────────────────────────
 // Two segmented controls that answered two different questions and called

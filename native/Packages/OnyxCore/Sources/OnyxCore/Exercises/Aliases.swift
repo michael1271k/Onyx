@@ -1,6 +1,6 @@
 import Foundation
 
-/// Exercise alias map — a port of `src/lib/exercises/aliases.ts`.
+/// Exercise alias map — a port of the web app's `lib/exercises/aliases.ts`.
 ///
 /// Historical and variant names → canonical catalogue names. Keys are
 /// lower-case + trimmed. Every entry is a rename or a merge that was performed
@@ -49,9 +49,9 @@ public enum ExerciseAliases {
               // Fifteen catalogue rows were merged and thirteen titles lost their equipment
               // to the new `exercises.equipment` column, so the kit is a TAG and the name is
               // the movement. Every absorbed and every pre-rename name is keyed here for the
-              // usual reason `merge-exercise.mjs` prints on every run: without it the next
-              // draft recreates the row that was just deleted, under a name whose PR
-              // baseline has never seen a rep.
+              // usual reason `merge-exercise.mjs` (git history) printed on every
+              // run: without it the next draft recreates the row that was just
+              // deleted, under a name whose PR baseline has never seen a rep.
               //
               // Two of the merges were not cosmetic. `DB Hammer Curl` (20 sets, from 21 Jul)
               // and `Hammer Curl (DB)` (76 sets, to 19 Jun) were the same movement either
@@ -61,7 +61,7 @@ public enum ExerciseAliases {
               //
               // `Crunch Machine` is NOT renamed to `Crunch`: that matches
               // `BodyweightExercise.patterns`' `^crunch(es)?$` and would hide the load
-              // column on a 57.5 kg machine. See docs/sql/hotfix-polish.sql.
+              // column on a 57.5 kg machine. See hotfix-polish.sql (git history).
         "pec deck (butterfly)": "Pec Deck",
         "butterfly pec deck": "Pec Deck",
         "lat pulldown (cable)": "Lat Pulldown",

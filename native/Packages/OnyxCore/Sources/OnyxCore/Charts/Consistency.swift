@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Planned against done, eight weeks of it — a port of
-// `src/lib/charts/consistency.ts` (§W12).
+// the web app's `lib/charts/consistency.ts` (§W12).
 //
 // ── WHY THE PLAN IS HALF THE DATA ────────────────────────────────────────────
 // A session list cannot draw a MISSED day: a day nothing happened on has no

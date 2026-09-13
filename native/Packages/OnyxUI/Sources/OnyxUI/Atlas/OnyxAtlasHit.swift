@@ -6,7 +6,7 @@ import OnyxCore
 /// ── WHY THE PATHS ARE THE HIT TARGETS AND NOT A GRID OF BOXES ───────────────
 /// The obvious cheap answer is a table of rectangles over the figure — ten
 /// boxes for the ten groups, tuned by eye. It is cheap until the atlas is
-/// regenerated: `OnyxAtlas.swift` is emitted from `src/lib/body/atlas.ts` and
+/// regenerated: `OnyxAtlas.swift` is emitted from the web app's `lib/body/atlas.ts` and
 /// `atlas-parity.test.ts` fails when the two disagree, so the DRAWING can never
 /// drift — but a hand-tuned box table is not in that contract and would drift
 /// silently, leaving taps landing on the muscle next door.

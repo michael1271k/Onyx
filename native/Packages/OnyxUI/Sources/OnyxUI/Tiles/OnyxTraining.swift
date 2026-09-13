@@ -1025,7 +1025,7 @@ private func weekLabel(_ iso: String) -> String {
 // deep am I into this".
 //
 // It briefly counted consecutive SCHEDULED days trained instead. That number is
-// still derived and still tested (`streakFrom`, src/lib/training/streak.ts) —
+// still derived and still tested (`streakFrom`, the web app's `lib/training/streak.ts`) —
 // it is the honest answer to a different question — but nothing renders it. The
 // failure this whole area exists to prevent was never which number was chosen;
 // it was TWO numbers under one flame, ten apart, on the same phone. There is one

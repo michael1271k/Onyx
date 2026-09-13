@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The weekly export's payload — `WeeklyExportInput` and its parts, as declared
-// in `src/lib/reports/weeklyExport.ts`. Nil means "not recorded" throughout;
+// in the web app's `lib/reports/weeklyExport.ts`. Nil means "not recorded" throughout;
 // the renderer prints `—` for it and never a zero.
 // ─────────────────────────────────────────────────────────────────────────────
 

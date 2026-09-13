@@ -3,7 +3,7 @@ import Testing
 @testable import OnyxCore
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PR engine — `src/lib/training/pr*.ts` + `exercises/aliases.ts`,
+// PR engine — the web app's `lib/training/pr*.ts` + `exercises/aliases.ts`,
 // replayed from `npm run golden`.
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Body readings, joined and judged — a port of `src/lib/body/readings.ts`.
+/// Body readings, joined and judged — a port of the web app's `lib/body/readings.ts`.
 
 public struct BodyTrendRow: Codable, Sendable, Equatable {
     public var date: String

@@ -839,7 +839,7 @@ public final class AppDatabase: Sendable {
         // ── v18 ─────────────────────────────────────────────────────────────
         // A set that is not reps and kilograms.
         //
-        // `docs/sql/hotfix-polish.sql` gave Postgres `duration_sec`, `incline`
+        // `hotfix-polish.sql (git history)` gave Postgres `duration_sec`, `incline`
         // and `distance_km` on 2026-09-07 and wrote the first row that uses
         // them — the treadmill that opens that session, five minutes at incline
         // 2 for 0.37 km, carrying no load at all. None of it could reach this
@@ -876,7 +876,7 @@ public final class AppDatabase: Sendable {
         // ── v19 ─────────────────────────────────────────────────────────────
         // The fourth cardio axis: total ascent, in metres.
         //
-        // `docs/sql/cardio-elevation.sql` is the Postgres half and the founder
+        // `cardio-elevation.sql (git history)` is the Postgres half and the founder
         // runs it by hand, so until they do a null is not a gap — it is every
         // row. This column exists first precisely so that the day the server
         // grows it, the value has somewhere to land on the way down.
@@ -921,7 +921,7 @@ public final class AppDatabase: Sendable {
         // what `encodeIfPresent` needs to keep the column OUT of the push body
         // until Postgres grows it. See the note on `DailyLogRow`.
         //
-        // `docs/sql/dashboard-polish.sql` is the Postgres half and the founder
+        // `dashboard-polish.sql (git history)` is the Postgres half and the founder
         // runs it by hand. Until they do, the flag lives on this device and the
         // push drops it — see the note in that file.
         migrator.registerMigration("v20.sleepInaccurate") { db in
@@ -954,7 +954,7 @@ public final class AppDatabase: Sendable {
         //     through data rather than through `Program.onyx5` (D3). The rep
         //     window and rest columns ride along for W5's routine builder.
         //
-        // `docs/sql/w2-generic-model.sql` is the Postgres half and the founder
+        // `w2-generic-model.sql (git history)` is the Postgres half and the founder
         // pastes it by hand. Until they do, the four new tables pull nothing
         // (PGRST205, which the sync HOLDS rather than acknowledges since W1)
         // and the readers see an empty catalogue.
@@ -1011,7 +1011,7 @@ public final class AppDatabase: Sendable {
         //
         // NULLABLE with no default, the `sleep_inaccurate` rule (v20): a nil is
         // what `encodeIfPresent` needs to keep the column OUT of the push body
-        // until Postgres grows it. `docs/sql/actual-rest.sql` is the Postgres
+        // until Postgres grows it. `actual-rest.sql (git history)` is the Postgres
         // half and the founder runs it by hand; until they do the measurement
         // lives on this device, the push drops it, and the export prints the
         // plan alone — which is exactly what it did before.
@@ -1023,7 +1023,117 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // ── EVERY SET UNDER THE CATALOGUE'S ID (W6) ─────────────────────────
+        // Before W6 a set logged on this phone was stamped with a slug of the
+        // movement's name and a set pulled from the server with the catalogue's
+        // uuid, so one movement wore two identities and every reader that keys
+        // on `exercise_id` — the session summary, the volume fold, the PR
+        // engine's own grouping — had to be taught to see through it. The
+        // logger now resolves the catalogue row before it writes; this is the
+        // history, brought to the same rule.
+        //
+        // Two passes, because the local catalogue answers in two ways. The
+        // `slug` column is the server's own alias for the legacy id, pulled
+        // down with the row. The second pass is for the SHADOW rows this app
+        // used to insert so a slug-stamped set had something to point at: their
+        // id IS the slug and their name is the movement, so the real row is the
+        // other one with the same name. A shadow left behind holds no sets and
+        // `exerciseCatalogStream`'s `HAVING COUNT(s.id) > 0` already hides it.
+        //
+        // A row that resolves to NOTHING keeps its slug. It is still a logged
+        // rep, `ExerciseIndex` still resolves it on push, and losing one to
+        // tidiness would be the only unrecoverable outcome here.
+        migrator.registerMigration("v23.catalogueIds") { db in
+            try Self.adoptCatalogueIds(db)
+        }
+
         return migrator
+    }
+}
+
+extension AppDatabase {
+
+    /// Repoint legacy slug-stamped sets at the catalogue row they belong to.
+    ///
+    /// ── THE LOG FIRST, THE PROJECTION SECOND ────────────────────────────────
+    /// `workout_sets` is a PROJECTION of `set_events` (v2), and `reproject`
+    /// deletes every row of a session and rebuilds it from the fold, which
+    /// reads `exercise_id` straight out of the append body. A migration that
+    /// touched only the table would be undone by the first edit to any session
+    /// — and worse, half-undone: the deck would already have read the migrated
+    /// id into `storedExerciseId`, so an added set would land under the new id
+    /// while the fold restored the rest under the old one. One movement, two
+    /// identities, in one session, opened by the very migration meant to close
+    /// it. So the append bodies are remapped too, with the same map, and the
+    /// table is brought along rather than relied on.
+    ///
+    /// ── AND IT REFUSES RATHER THAN GUESSES ──────────────────────────────────
+    /// A slug two catalogue rows answer to is left alone. `Crunch Machine` and
+    /// `Crunch (Machine)` both slug to `helix5-crunch-machine`, both exist, and
+    /// their `is_bodyweight` differs — picking one merges a bodyweight ladder
+    /// into a 57.5 kg one, permanently. It is the same question
+    /// `ExerciseIndex.id(forSlug:)` answers by throwing `ambiguousExercise`,
+    /// and it gets the same answer here.
+    ///
+    /// A slug that resolves to nothing keeps its id. It is still a logged rep,
+    /// `ExerciseIndex` still resolves it on push, and losing one to tidiness
+    /// would be the only unrecoverable outcome available.
+    static func adoptCatalogueIds(_ db: Database) throws {
+        let map = try legacyExerciseIdMap(db)
+        guard !map.isEmpty else { return }
+
+        // The log. Only an append carries a snapshot, and only a snapshot
+        // carries an exercise id; an amend cannot express one at all.
+        for row in try Row.fetchAll(db, sql: "SELECT id, body FROM set_events") {
+            guard let data = row["body"] as Data?,
+                  let body = try? OnyxJSON.decoder.decode(SetEvent.Body.self, from: data),
+                  case .append(var snapshot) = body,
+                  let target = map[snapshot.exerciseId]
+            else { continue }
+            snapshot.exerciseId = target
+            try db.execute(
+                sql: "UPDATE set_events SET body = ? WHERE id = ?",
+                arguments: [try OnyxJSON.encoder.encode(SetEvent.Body.append(snapshot)), row["id"] as String]
+            )
+        }
+
+        // The projection, by the same map — so a session that is never
+        // reprojected reads the same as one that is.
+        for (slug, target) in map {
+            try db.execute(
+                sql: "UPDATE workout_sets SET exercise_id = ? WHERE exercise_id = ?",
+                arguments: [target, slug]
+            )
+        }
+    }
+
+    /// Legacy slug → catalogue id, for every slug exactly ONE row answers for.
+    ///
+    /// Two sources, both of which a real device holds. The `slug` column is the
+    /// server's own alias for the legacy id, pulled down with the row. The
+    /// second is the shadow rows an older build inserted so a slug-stamped set
+    /// had something to point at: their id IS the slug, and the real row is the
+    /// other one carrying the same name.
+    static func legacyExerciseIdMap(_ db: Database) throws -> [String: String] {
+        var map: [String: String] = [:]
+        for row in try Row.fetchAll(db, sql: """
+            SELECT slug, min(id) AS target FROM exercises
+             WHERE slug IS NOT NULL AND slug LIKE 'helix5-%'
+             GROUP BY slug HAVING count(*) = 1
+            """) {
+            map[row["slug"]] = row["target"]
+        }
+        for row in try Row.fetchAll(db, sql: """
+            SELECT legacy.id AS slug, min(c.id) AS target
+              FROM exercises legacy
+              JOIN exercises c ON lower(trim(c.name)) = lower(trim(legacy.name)) AND c.id <> legacy.id
+             WHERE legacy.id LIKE 'helix5-%'
+             GROUP BY legacy.id HAVING count(*) = 1
+            """) {
+            let slug: String = row["slug"]
+            if map[slug] == nil { map[slug] = row["target"] }
+        }
+        return map
     }
 }
 

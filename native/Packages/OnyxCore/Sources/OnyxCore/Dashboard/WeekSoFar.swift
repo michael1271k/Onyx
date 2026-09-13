@@ -1,6 +1,6 @@
 import Foundation
 
-// The Week So Far card's arithmetic — `src/lib/dashboard/weekSoFar.ts`.
+// The Week So Far card's arithmetic — the web app's `lib/dashboard/weekSoFar.ts`.
 //
 // One change worth naming, chosen by relative size, so the card says what
 // actually moved rather than leading with the same metric every week.

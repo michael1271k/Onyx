@@ -1,6 +1,6 @@
 import Foundation
 
-/// Battery state — `BatteryState` in `src/lib/scoring/battery.ts`.
+/// Battery state — `BatteryState` in the web app's `lib/scoring/battery.ts`.
 public struct BatteryState: Codable, Sendable, Equatable {
     /// 0–100, charge at wake, sleep-driven.
     public var morningCharge: Double
@@ -14,7 +14,7 @@ public struct BatteryState: Codable, Sendable, Equatable {
 }
 
 /// Phone-like battery — drain-only (v7), v8's stages-share charge, v9's
-/// readiness signals on top. A direct port of `src/lib/scoring/battery.ts`;
+/// readiness signals on top. A direct port of the web app's `lib/scoring/battery.ts`;
 /// the reasoning lives there and in `docs/READINESS_MODEL.md` and is not
 /// duplicated here, but the one rule that must survive translation is repeated
 /// because a port is exactly where it would be lost:

@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ONE context vocabulary, for the two systems that used to have their own.
-// A port of `src/lib/nutrition/context.ts`.
+// A port of the web app's `lib/nutrition/context.ts`.
 //
 // `daily_logs.nutrition_exception` (a per-day flag that forgives the nutrition
 // grade) and `user_goals.context_mode` (a global switch that relaxes every

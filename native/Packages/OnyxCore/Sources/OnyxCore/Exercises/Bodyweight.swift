@@ -1,7 +1,7 @@
 import Foundation
 
 /// Movements whose record is a REP COUNT, because there is no load to progress
-/// — a port of `src/lib/exercises/bodyweight.ts`.
+/// — a port of the web app's `lib/exercises/bodyweight.ts`.
 ///
 /// Sibling of `TimedExercise`, and matched the same way: by NAME, because the
 /// exercise catalogue has no equipment column and the deck's `wk1Kg: nil`

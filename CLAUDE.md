@@ -1,8 +1,8 @@
 ## Versioning — NOT OPTIONAL
 
 `package.json` → `"version"` is the single source of truth for the version of
-every surface: the web app, the native app, the widget extension, the watch app
-and the Capacitor shell. Nothing else is hand-edited.
+every surface: the app, the widget extension and the watch app. Nothing else
+is hand-edited.
 
 **On the successful completion of any sprint, wave, or major feature — before
 the merge commit — you MUST:**

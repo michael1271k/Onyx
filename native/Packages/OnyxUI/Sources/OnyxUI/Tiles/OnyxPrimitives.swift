@@ -16,7 +16,7 @@ import WidgetKit
 // blank widget — it is a widget confidently reporting zero sessions, zero
 // volume, zero PRs and a 0% battery on a week you trained five times. That is
 // the "widgets show empty data" symptom, and it is a bug independent of whether
-// the network works: `src/lib/widget/snapshot.ts` states the contract in its
+// the network works: the web app's `lib/widget/snapshot.ts` states the contract in its
 // header — a widget showing "—" is correct, one showing an invented number is
 // not — and the Swift side was the half that ignored it.
 //

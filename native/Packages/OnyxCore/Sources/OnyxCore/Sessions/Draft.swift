@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SessionDraft — the editable state between the deck and the commit, and the
-// pure functions over it. A port of the arithmetic in `src/lib/sessions/draft.ts`;
+// pure functions over it. A port of the arithmetic in the web app's `lib/sessions/draft.ts`;
 // storage (localStorage, the v1 migration) and the commit payload belong to
 // OnyxData and its event log.
 // ─────────────────────────────────────────────────────────────────────────────

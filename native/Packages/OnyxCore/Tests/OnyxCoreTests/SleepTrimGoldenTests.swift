@@ -3,7 +3,7 @@ import Testing
 @testable import OnyxCore
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sleep trim — strategy B, `src/lib/sleep/trim.ts`, replayed from `npm run golden`.
+// Sleep trim — strategy B, the web app's `lib/sleep/trim.ts`, replayed from `npm run golden`.
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Suite("Sleep trim — strategy B")

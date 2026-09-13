@@ -1,7 +1,7 @@
 import Foundation
 
-// `isWeekComplete` (`src/lib/utils/week.ts`) and `isWeekReady`
-// (`src/lib/training/weekReady.ts`) — the two halves of "the week is over".
+// `isWeekComplete` (the web app's `lib/utils/week.ts`) and `isWeekReady`
+// (the web app's `lib/training/weekReady.ts`) — the two halves of "the week is over".
 // The calendar says the week is over; `ready` says the work in it is done.
 public enum WeekReady {
     /// Strictly after the week's final day.

@@ -217,7 +217,7 @@ public enum ExerciseSlug {
     /// first return to an old load reads as a new record.
     ///
     /// Wave 4 turns this into a real catalogue lookup and the prefix stops
-    /// existing. Until then it stays, and `rg -i helix native --type swift`
+    /// existing. Until then it stays, and a search for the old prefix
     /// finding it here is the expected answer, not an oversight.
     ///
     /// Must stay byte-identical to `LoggerModel.exerciseId`.
@@ -236,10 +236,25 @@ public enum ExerciseSlug {
     /// is that map as a column, backfilled by the W2 DDL and corrected by the
     /// seed, so it answers for every account and every movement the catalogue
     /// holds, not just the founder's deck.
+    /// ── AND BELOW THE COLUMN, THE SAME SLUG COMPUTED (W6) ──────────────────
+    /// A row created since W6 carries no `slug`: the column is an alias for a
+    /// legacy id, and a row with no history has none to alias. But a WATCH
+    /// still writes the legacy spelling for a movement the routine payload
+    /// could not name, so a set can name a slug no column claims. Without this
+    /// tier the reader falls through to the literal key, the deck counts none
+    /// of those sets, and the next one is appended under a second identity —
+    /// which is the split this file exists to prevent, arriving from the other
+    /// direction. `id(forSlug:)` has had the tier since W2 as `byComputedSlug`;
+    /// this is the same rule for the name lookup.
+    ///
+    /// The column still wins. It is what the server actually claims.
     public static func nameBySlug(_ exercises: [Exercise]) -> [String: String] {
         Dictionary(
             exercises.compactMap { e in e.slug.map { ($0, e.name) } },
             uniquingKeysWith: { first, _ in first }
+        ).merging(
+            Dictionary(exercises.map { (id($0.name), $0.name) }, uniquingKeysWith: { first, _ in first }),
+            uniquingKeysWith: { claimed, _ in claimed }
         )
     }
 }

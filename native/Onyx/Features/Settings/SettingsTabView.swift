@@ -353,17 +353,17 @@ private struct SettingsForm: View {
 // (1.5). The SAME two urls go in the App Store Connect metadata fields — see
 // `docs/APP_STORE.md` §2 — so they are stated once, here, and read from here.
 //
-// Both pages are live as of U7: `src/app/(legal)/privacy` and
-// `src/app/(legal)/support`, prerendered to static HTML and public (see
-// `PUBLIC_ROUTES` — a policy page behind a login is the rejection it exists to
-// prevent). Moving the app to its own domain is a change to `host` alone.
+// Both pages are static HTML under `site/` at the repo root, published by
+// Netlify with no build step and no login in front of them — a policy page
+// behind a login is the rejection it exists to prevent. Moving the app to its
+// own domain is a change to `host` alone.
 enum OnyxLinks {
     /// The one place the domain is written down. A move is one line, and it
     /// cannot leave the two urls below pointing at different hosts.
-    private static let host = "https://helix-health-fitness.netlify.app"
+    private static let host = "https://onyx-health-fitness.netlify.app"
 
-    static let privacyPolicy = URL(string: "\(host)/privacy")!
-    static let support = URL(string: "\(host)/support")!
+    static let privacyPolicy = URL(string: "\(host)/privacy/")!
+    static let support = URL(string: "\(host)/support/")!
 
     /// `1.3.0 (10300)` — what a review note or a bug report needs to identify a build.
     static var versionString: String {

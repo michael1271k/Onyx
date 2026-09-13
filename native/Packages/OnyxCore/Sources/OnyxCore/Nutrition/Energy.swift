@@ -1,7 +1,7 @@
 import Foundation
 
 /// The canonical energy-expenditure arithmetic — a port of
-/// `src/lib/nutrition/energy.ts`. One definition of TDEE, so no two surfaces can
+/// the web app's `lib/nutrition/energy.ts`. One definition of TDEE, so no two surfaces can
 /// disagree about what a day cost.
 ///
 /// `TDEE = BMR + active energy + TEF`.

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Small formatters and measures — ports of `src/lib/utils/{format,duration,measure}.ts`.
+/// Small formatters and measures — ports of the web app's `lib/utils/{format,duration,measure}.ts`.
 public enum Format {
     /// 457 → "7h 37m" · 420 → "7h" · 45 → "45m" · nil/0 → "—".
     public static func sleep(_ min: Double?) -> String {

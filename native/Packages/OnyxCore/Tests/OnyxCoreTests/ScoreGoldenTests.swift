@@ -3,7 +3,7 @@ import Testing
 @testable import OnyxCore
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Score — `src/lib/scoring/score.ts`, replayed from `npm run golden`
+// Score — the web app's `lib/scoring/score.ts`, replayed from `npm run golden`
 //
 // The component fixtures carry only the fields each function reads (the
 // TypeScript takes a `Pick`), so each test builds the full `ScoringInputs`

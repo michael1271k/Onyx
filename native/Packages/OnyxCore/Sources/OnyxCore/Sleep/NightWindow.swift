@@ -1,7 +1,7 @@
 import Foundation
 
 /// The ONE definition of "the night belonging to date D" — a port of
-/// `src/lib/sleep/nightWindow.ts`. Window [prev(D) 12:00Z, D 12:00Z): half-open,
+/// the web app's `lib/sleep/nightWindow.ts`. Window [prev(D) 12:00Z, D 12:00Z): half-open,
 /// exactly 24 h, so consecutive nights TILE without overlapping.
 public struct NightWindow: Codable, Sendable, Equatable {
     /// Inclusive lower bound — previous day 12:00Z.

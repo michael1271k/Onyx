@@ -1,7 +1,7 @@
 import Foundation
 
-/// The supplement protocol — `src/lib/supplements.ts` and the pure half of
-/// `src/lib/hooks/useCustomSupplements.ts`.
+/// The supplement protocol — the web app's `lib/supplements.ts` and the pure half of
+/// the web app's `lib/hooks/useCustomSupplements.ts`.
 ///
 /// ── THE STACK LIVES IN THE DATABASE ──────────────────────────────────────────
 /// `custom_supplements` is the whole protocol, one row per item, editable in

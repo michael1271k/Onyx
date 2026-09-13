@@ -1,6 +1,6 @@
 import Foundation
 
-/// Estimated one-rep max — a port of `epley1RM` in `src/lib/utils/epley.ts`.
+/// Estimated one-rep max — a port of `epley1RM` in the web app's `lib/utils/epley.ts`.
 public enum Epley {
     /// `weight × (1 + reps/30)`, rounded to one decimal. Returns the weight
     /// unchanged for a single rep.

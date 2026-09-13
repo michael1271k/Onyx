@@ -1,0 +1,32 @@
+:root { color-scheme: dark; --bg: #000309; --text: rgba(255,255,255,0.92); --muted: rgba(255,255,255,0.62); --line: rgba(255,255,255,0.06); }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: 15px/1.6 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
+header, footer { border-color: var(--line); border-style: solid; border-width: 0; }
+header { border-bottom-width: 1px; }
+footer { border-top-width: 1px; margin-top: 2rem; }
+.wrap { max-width: 42rem; margin: 0 auto; padding: 1.5rem; }
+.brand { font-size: 1.5rem; font-weight: 900; letter-spacing: 0.12em; color: var(--text); text-decoration: none; }
+.tag { color: var(--muted); font-size: 0.8rem; letter-spacing: 0.02em; margin: 0.4rem 0 0; }
+h1 { font-size: 1.9rem; font-weight: 900; letter-spacing: -0.02em; margin: 0; }
+h2 { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em; margin: 2.2rem 0 0.6rem; }
+p, li { color: var(--muted); }
+strong, th { color: var(--text); }
+a { color: var(--text); text-decoration: underline; text-underline-offset: 4px; }
+a:hover { opacity: 0.8; }
+.updated { font-size: 0.85rem; margin-top: 0.4rem; }
+.lead { color: var(--text); font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.6rem 0.8rem 0.6rem 0; border-top: 1px solid var(--line); }
+thead th { border-top: 0; padding-bottom: 0.4rem; }
+.scroll { overflow-x: auto; }
+.card { border: 1px solid var(--line); background: rgba(255,255,255,0.04); border-radius: 1rem; padding: 1.1rem 1.25rem; margin-top: 1.5rem; }
+.card h2 { margin-top: 0; font-size: 0.95rem; }
+dl { margin: 0; }
+dt { color: var(--text); font-weight: 600; margin-top: 1.4rem; }
+dd { margin: 0.4rem 0 0; }
+dd + dt { padding-top: 1.4rem; border-top: 1px solid var(--line); }
+nav { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; font-size: 0.85rem; }
+nav a { color: var(--muted); text-decoration: none; }
+nav a:hover { color: var(--text); }
+nav .end { margin-left: auto; color: var(--muted); }

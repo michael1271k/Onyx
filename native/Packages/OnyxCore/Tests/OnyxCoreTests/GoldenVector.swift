@@ -12,7 +12,7 @@ import Testing
 ///
 /// ── SWIFT-OWNED SINCE W1 OF THE EPIC SPRINT (2026-09-10) ────────────────────
 /// They were exported from the shipping TypeScript by
-/// `src/tests/golden-vectors.test.ts` (`npm run golden`), which was the right
+/// the web app's `tests/golden-vectors.test.ts` (`npm run golden`), which was the right
 /// oracle while the two implementations had to agree. From W2 the Swift
 /// domain deliberately diverges (founder constants become rows, the `+`
 /// quality grammar, the logged-beats-planned fold), so the TypeScript is no

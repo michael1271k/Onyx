@@ -1,6 +1,6 @@
 import Foundation
 
-/// Cardio personal records — a port of `src/lib/cardio/cardioPrs.ts` and
+/// Cardio personal records — a port of the web app's `lib/cardio/cardioPrs.ts` and
 /// `cardio/zone2.ts`. PURE and derived at read time: `cardio_logs` is the
 /// ledger, the records are a view of it, and they can never disagree.
 ///

@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // How long the workout actually took — the ONE rule, for both clients. A port
-// of `src/lib/sessions/sessionDuration.ts`; vector `session-duration.json`.
+// of the web app's `lib/sessions/sessionDuration.ts`; vector `session-duration.json`.
 //
 // WHY THIS EXISTS: THE 385-MINUTE SESSION. 2026-09-06's Upper A is stored as
 // `duration_min = 385` for about an hour of work. Nobody typed that. It is what

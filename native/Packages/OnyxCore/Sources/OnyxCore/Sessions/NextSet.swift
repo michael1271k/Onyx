@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The set you are walking towards, and what it cost you last time — the Live
-// Activity's one decision. A port of `src/lib/sessions/nextSet.ts` and the
+// Activity's one decision. A port of the web app's `lib/sessions/nextSet.ts` and the
 // alignment rule in `prevAlign.ts`.
 // ─────────────────────────────────────────────────────────────────────────────
 

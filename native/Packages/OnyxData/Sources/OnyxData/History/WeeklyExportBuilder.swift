@@ -4,7 +4,7 @@ import OnyxCore
 
 /// The rows behind one week's export, shaped into `WeeklyExportInput`.
 ///
-/// A port of the FETCH half of `useWeeklyExport` (`src/lib/hooks/useWeeklyLoop.ts`:
+/// A port of the FETCH half of `useWeeklyExport` (the web app's `lib/hooks/useWeeklyLoop.ts`:
 /// `fetchRange`, `fetchTrendLedger`, `toDays`, `withNutrients`, `toSessions`,
 /// `toBodyComp`, `toCardio`, `tonnageRows`, `weekPayload`). The string itself is
 /// OnyxCore's `WeeklyExport.build`, vector-proven; the whole job here is

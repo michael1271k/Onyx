@@ -105,7 +105,7 @@ struct SessionSummaryHotfixTests {
         // catalogue has no row under that id and `nameBySlug` was built from the
         // program alone. `COALESCE(e.name, s.exercise_id)` therefore fell
         // through to the id and the page drew it as a movement's name.
-        let slug = LoggerModel.exerciseId(WarmupCardio.name)
+        let slug = ExerciseSlug.id(WarmupCardio.name)
         #expect(slug == "helix5-treadmill")
 
         let database = try AppDatabase.inMemory(deviceId: "treadmill-name")
@@ -205,7 +205,7 @@ struct SessionSummaryHotfixTests {
         // against the deck the Edit button opens.
         let database = try AppDatabase.inMemory(deviceId: "paired-edit")
         let name = "Single Arm Lateral Raise"
-        let exerciseId = LoggerModel.exerciseId(name)
+        let exerciseId = ExerciseSlug.id(name)
         try database.seedRows { db in
             try Exercise(id: exerciseId, name: name).insert(db)
             let start = LogicalDay.date(fromISO: "2026-09-08")!.addingTimeInterval(10 * 3600)

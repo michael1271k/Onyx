@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Onyx</title>
+<meta name="description" content="What Onyx collects, why, where it goes, and how to delete it. Health and fitness data is used only to compute the figures shown in the app — never sold, never shared, never used for advertising.">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header><div class="wrap"><a class="brand" href="/">ONYX</a><p class="tag">Training, fuel and recovery.</p></div></header>
+<main class="wrap">
+<article>
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated 12 September 2026</p>
+
+  <p>Onyx is a training, nutrition and recovery system. It reads health and fitness data, combines it with the sessions and meals you log, and turns both into a small number of figures you can act on the same morning. This page says exactly what that involves.</p>
+  <p class="lead">Onyx does not sell your data, does not share it with anyone, does not use it for advertising, and contains no advertising or analytics SDK of any kind.</p>
+
+  <section aria-labelledby="collect">
+    <h2 id="collect">What Onyx collects</h2>
+    <p>Three categories, and no others. Each is <strong>linked to you</strong> — it is stored against your account — and <strong>none of it is used for tracking</strong>. Every one is collected for <strong>App Functionality</strong>: the app cannot produce its figures without it.</p>
+    <div class="scroll">
+    <table>
+      
+      <thead><tr><th scope="col">Category</th><th scope="col">What it includes</th><th scope="col">What it is used for</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Health</th><td>Heart rate, resting heart rate, heart-rate variability, respiratory rate, blood oxygen, wrist temperature, sleep stages and duration, body mass, body-fat percentage and the other body-composition readings your scale writes.</td><td>To compute the readiness score, the recovery battery, the stress index and the body trends the app draws. Nothing else reads it.</td></tr>
+        <tr><th scope="row">Fitness</th><td>Steps, distance, active and resting energy, exercise and stand minutes, VO₂ max, and the strength sessions, sets, loads and cardio bouts you log in the app itself.</td><td>To compute training load, the weekly volume targets, progression and the energy balance. Nothing else reads it.</td></tr>
+        <tr><th scope="row">Email address</th><td>The address you sign up with.</td><td>To identify your account and to send you a sign-in confirmation or a password reset. It is not used for marketing, and there is no mailing list.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>Onyx collects no contact details beyond your email address, no identifiers, no location, no contacts, no photos, no browsing history, no purchase history, no diagnostics and no usage data.</p>
+  </section>
+
+  <section aria-labelledby="health">
+    <h2 id="health">Apple Health</h2>
+    <p>On iPhone, Onyx asks for <strong>read</strong> access to the Health categories above. On Apple Watch it also asks to <strong>write</strong> workouts, so a session run on the watch appears alongside the rest of your activity rings. You can decline either, and every screen still works — the figures that depend on a reading you have not shared simply say so rather than guessing.</p>
+    <p>Health data obtained through HealthKit is used only to provide the features described here. It is never used for advertising or marketing, never sold, never shared with a data broker, and never disclosed to a third party. Onyx does not write your Health data to iCloud.</p>
+    <p>You can withdraw Health access at any time in <strong>Settings → Privacy &amp; Security → Health → Onyx</strong> on your device. Doing so stops new readings arriving; readings already stored are removed when you delete your account.</p>
+  </section>
+
+  <section aria-labelledby="where">
+    <h2 id="where">Where your data is stored</h2>
+    <p>In two places, and no others: on the devices you have signed in on, and in a single private database hosted by <a href="https://supabase.com/privacy" target="_blank" rel="noopener noreferrer">Supabase</a>, which Onyx uses purely as infrastructure to hold your rows and sync them between your phone and your watch.</p>
+    <p>Every row carries your user id, and the database enforces row-level security: a request signed as you can read and write your rows and nobody else's. Data in transit is encrypted with TLS; data at rest is encrypted by the host.</p>
+    <p>Onyx talks to no other server. There is no analytics endpoint, no crash-reporting service, no advertising network and no third-party API in the data path.</p>
+  </section>
+
+  <section aria-labelledby="device">
+    <h2 id="device">What stays on the device</h2>
+    <p>Onyx keeps a full local database on the phone so the app works with no signal, and reads a small number of system values to maintain it. Apple requires these to be declared, and they are, in the app's privacy manifest:</p>
+    <ul>
+      <li><strong>User defaults</strong> — your display preferences and the values the Home Screen widgets read. Shared between the app, its widgets and the watch app; never sent anywhere.</li>
+      <li><strong>File timestamps</strong> and <strong>available disk space</strong> — read by the local database when it opens a file and before it writes. Never sent anywhere.</li>
+    </ul>
+    <p>The widgets read that same local database. The watch app keeps its own copy and hands it to the phone; neither makes network requests of its own.</p>
+  </section>
+
+  <section aria-labelledby="tracking">
+    <h2 id="tracking">Tracking</h2>
+    <p>None. Onyx does not track you across apps or websites, does not build an advertising profile, does not use the Advertising Identifier, and does not present the App Tracking Transparency prompt because it has nothing to ask for. The app's privacy manifest declares no tracking domains.</p>
+  </section>
+
+  <section aria-labelledby="third-parties">
+    <h2 id="third-parties">Third-party code</h2>
+    <p>Onyx bundles two open-source libraries, GRDB (the local database) and supabase-swift (the client for your own database), and what they depend on. None of them collects data, and each ships its own privacy manifest. There is no advertising SDK, no analytics SDK and no attribution SDK in the app.</p>
+  </section>
+
+  <section aria-labelledby="retention">
+    <h2 id="retention">Keeping and deleting your data</h2>
+    <p>Your data is kept for as long as your account exists, because the app's whole value is the history — a baseline needs the weeks behind it.</p>
+    <p>You can delete your account and everything in it at any time, in the app: <strong>Settings → Delete account</strong>. It removes every row belonging to you — sessions, sets, nights, meals, weigh-ins and readings — and then the account record itself. It is immediate, permanent, and there is no backup to restore from.</p>
+    <p>If you would rather someone did it for you, write to <a href="mailto:support@onyx.fitness">support@onyx.fitness</a> from the address on the account.</p>
+  </section>
+
+  <section aria-labelledby="rights">
+    <h2 id="rights">Your rights</h2>
+    <p>You can export everything the app holds for a week as a plain-text report from <strong>Reports</strong>, and you can delete everything as described above. If you are in the UK, the EEA or a jurisdiction with comparable law, the same two controls cover access, portability and erasure; write to <a href="mailto:support@onyx.fitness">support@onyx.fitness</a> for anything they do not.</p>
+  </section>
+
+  <section aria-labelledby="children">
+    <h2 id="children">Children</h2>
+    <p>Onyx is not directed at children and does not knowingly collect data from anyone under 13. If you believe a child has created an account, write to <a href="mailto:support@onyx.fitness">support@onyx.fitness</a> and it will be deleted.</p>
+  </section>
+
+  <section aria-labelledby="changes">
+    <h2 id="changes">Changes to this policy</h2>
+    <p>If this policy changes, the date at the top changes with it, and a change that widens what is collected will be announced in the app before it takes effect.</p>
+  </section>
+
+  <section aria-labelledby="contact">
+    <h2 id="contact">Contact</h2>
+    <p>Questions about this policy, or about anything on it: <a href="mailto:support@onyx.fitness">support@onyx.fitness</a>.</p>
+  </section>
+</article>
+</main>
+<footer><nav class="wrap" aria-label="Legal and support"><a href="/privacy/">Privacy</a><a href="/support/">Support</a><span class="end">Onyx</span></nav></footer>
+</body>
+</html>

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Axis scaling — a port of `src/lib/charts/scale.ts`. A "nice" domain fitted to
+/// Axis scaling — a port of the web app's `lib/charts/scale.ts`. A "nice" domain fitted to
 /// the DATA, not to zero; a tight domain that zooms with a floor on the span.
 public enum ChartScale {
     /// Round `x` up to the next 1/2/5 × 10ⁿ.

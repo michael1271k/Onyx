@@ -11,7 +11,7 @@ import OnyxCore
 /// the gap from the athlete's own median kcal/min for the same day key, the
 /// ACSM MET figure on bodyweight after that, and the last measured heart rate
 /// for the same day key — and stamps every one of them `*_estimated = true`.
-/// A port of the block in `src/lib/sessions/save.ts`, run on the device
+/// A port of the block in the web app's `lib/sessions/save.ts`, run on the device
 /// instead of at save time, because the watch's workout can arrive after the
 /// session was finished here.
 ///

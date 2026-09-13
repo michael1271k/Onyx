@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // What a set WAS (its tag) and how it WENT (its quality) — two axes, one
-// vocabulary each. A port of `src/lib/training/setTags.ts` minus colours.
+// vocabulary each. A port of the web app's `lib/training/setTags.ts` minus colours.
 //
 // "Not a working set" used to be `setType !== 'warmup'` in twenty places;
 // adding GHOST — a set that happened and does not count — by hand meant
@@ -116,7 +116,7 @@ public enum SetTags {
 
     /// Guards a value arriving from the DB or a draft before it is written
     /// back. A value the CHECK constraint would refuse is refused here too —
-    /// and the CHECK (`docs/sql/set-quality-tags.sql`) refuses an unknown key,
+    /// and the CHECK (`set-quality-tags.sql (git history)`) refuses an unknown key,
     /// an empty token, a repeat AND a non-canonical order. "Valid" is therefore
     /// exactly "survives a parse-and-join round trip unchanged".
     public static func isSetQuality(_ v: String?) -> Bool {

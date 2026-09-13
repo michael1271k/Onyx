@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Is this date inside a planned maintenance / deload week? A port of
-// `src/lib/nutrition/maintenance.ts`.
+// the web app's `lib/nutrition/maintenance.ts`.
 //
 // Two axes claim to know: the LEVER (`Levers.isRelease`, a rung of kind release,
 // what the targets, the scorer and the export are graded against) and the PHASE

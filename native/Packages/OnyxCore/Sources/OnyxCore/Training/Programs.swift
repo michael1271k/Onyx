@@ -9,7 +9,7 @@ import Foundation
 // / `.bulk` (the macro presets), `Programs.weeklySetTargets` (the per-muscle
 // set targets) were the founder's numbers compiled into the package. They are
 // `plans`, `plan_phase_goals` and `plan_phase_volume` rows now, seeded once by
-// `docs/sql/w2-seed-founder.sql`, and every reader takes the rows. What stays
+// `w2-seed-founder.sql (git history)`, and every reader takes the rows. What stays
 // here is the shape of a plan entry, the phase enum, the `PhaseGoals` value
 // the rows decode into, and the one piece of id hygiene that is not data: the
 // alias table for ids this app itself once wrote.

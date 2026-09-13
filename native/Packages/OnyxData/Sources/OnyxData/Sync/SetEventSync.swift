@@ -1,6 +1,6 @@
 import Foundation
 
-/// The event log's own wire format — `docs/sql/wave-10-set-events.sql`.
+/// The event log's own wire format — `wave-10-set-events.sql (git history)`.
 ///
 /// ── WHY THE SERVER CARRIES EVENTS AS WELL AS ROWS ───────────────────────────
 /// `SyncEngine` reconciles the PROJECTION: for each queued event it upserts or

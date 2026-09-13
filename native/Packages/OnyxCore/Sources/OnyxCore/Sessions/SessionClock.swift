@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The session clock — one running timer in two modes. The MODEL half of
-// `src/lib/sessions/sessionClock.ts`; the store (localStorage, subscribers) is
+// the web app's `lib/sessions/sessionClock.ts`; the store (localStorage, subscribers) is
 // OnyxData's.
 //
 // It stores TIMESTAMPS, not an elapsed count: elapsed is derived from the wall

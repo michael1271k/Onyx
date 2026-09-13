@@ -6,7 +6,7 @@ import OnyxData
 /// The Live Logger.
 ///
 /// ── WHAT SURVIVED THE PORT AND WHAT DID NOT ─────────────────────────────────
-/// The web deck (`src/components/command-center/`, 7,246 lines) got the data
+/// The web deck (the web app's `components/command-center/`, 7,246 lines) got the data
 /// hierarchy right: which workout, what it has accumulated, then the movements
 /// in order with their sets. That hierarchy is reproduced exactly. Almost
 /// nothing else is.

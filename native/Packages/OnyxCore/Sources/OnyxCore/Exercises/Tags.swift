@@ -2,7 +2,7 @@ import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // What a movement IS, as a short row of chips. A port of
-// `src/lib/exercises/tags.ts`; vector `exercise-tags.json`.
+// the web app's `lib/exercises/tags.ts`; vector `exercise-tags.json`.
 //
 // The five facts already exist — `is_compound`, `ExerciseIcon.label`,
 // `UnilateralExercise`, `BodyweightExercise`, `TimedExercise` — and every

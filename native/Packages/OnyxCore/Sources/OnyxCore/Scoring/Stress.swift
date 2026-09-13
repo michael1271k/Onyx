@@ -1,7 +1,7 @@
 import Foundation
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STRESS INDEX v1 — a port of `src/lib/scoring/stress.ts` (Phase 3 E3).
+// STRESS INDEX v1 — a port of the web app's `lib/scoring/stress.ts` (Phase 3 E3).
 // `docs/STRESS_MODEL.md` states the model with its citations; the `stress-*`
 // golden vectors replay every function below case for case.
 //

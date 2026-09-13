@@ -1,7 +1,7 @@
 import Foundation
 
 /// Supplement → micronutrient contributions. The Swift twin of
-/// `src/lib/nutrition/supplementNutrients.ts`, table and all.
+/// the web app's `lib/nutrition/supplementNutrients.ts`, table and all.
 ///
 /// Apple Health cannot export a supplement, so the payloads are the LABEL doses
 /// of this athlete's actual products, per unit of the protocol's dose. Nothing

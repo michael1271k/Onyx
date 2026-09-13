@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 /**
- * The version SSoT, pushed into the two Xcode projects.
+ * The version SSoT, pushed into the XcodeGen spec.
  *
  * ── WHY A SCRIPT AND NOT A BUILD SETTING ─────────────────────────────────────
- * There are three places a version has to be true at once: `package.json` (the
- * web app and every npm script), `native/project.yml` (XcodeGen writes the
- * native app, its widget extension and the watch app from it) and
- * `ios/App/App.xcodeproj/project.pbxproj` (the Capacitor shell, which is
- * hand-edited and cannot be generated). Before this they were four different
- * numbers — `0.1.0`, `1.0`, `1.0` and a watch app that had drifted to `1.1`.
+ * Two places a version has to be true at once: `package.json` (every npm
+ * script) and `native/project.yml` (XcodeGen writes the native app, its widget
+ * extension and the watch app from it). Before this they were four different
+ * numbers across four projects, and a watch app that had drifted to `1.1`.
  *
  * `package.json.version` is now the ONLY place a human edits. Everything else
  * is written from it, and `--check` fails the gate when they disagree.
@@ -55,15 +53,6 @@ const edits = [
     subs: [
       [/^(\s*MARKETING_VERSION: )".*"$/gm, `$1"${marketing}"`],
       [/^(\s*CURRENT_PROJECT_VERSION: )".*"$/gm, `$1"${build}"`],
-    ],
-  },
-  {
-    // The Capacitor shell's Info.plist already reads $(MARKETING_VERSION), so
-    // the build settings are the only thing to touch here.
-    file: 'ios/App/App.xcodeproj/project.pbxproj',
-    subs: [
-      [/^(\s*MARKETING_VERSION = ).*;$/gm, `$1${marketing};`],
-      [/^(\s*CURRENT_PROJECT_VERSION = ).*;$/gm, `$1${build};`],
     ],
   },
 ]

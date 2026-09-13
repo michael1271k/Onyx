@@ -397,7 +397,7 @@ struct TrainingPullerTests {
 
     @Test("a movement merged away on the server stops being a second row in the library")
     func aMergedExerciseIsReconciledAway() async throws {
-        // The `Lat Pulldown (Cable)` bug, end to end. `merge-exercise.mjs`
+        // The `Lat Pulldown (Cable)` bug, end to end. `merge-exercise.mjs` (git history)
         // re-points the sets and deletes the row, and touches NOTHING the sets
         // pull has a delta on — so before this reconciliation the phone kept
         // both the dead catalogue row and the sets naming it, and the library

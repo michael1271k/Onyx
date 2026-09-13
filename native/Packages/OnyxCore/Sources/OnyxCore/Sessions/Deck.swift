@@ -1,6 +1,6 @@
 import Foundation
 
-/// The deck's row arithmetic — a port of `src/lib/sessions/deck.ts` (extracted
+/// The deck's row arithmetic — a port of the web app's `lib/sessions/deck.ts` (extracted
 /// from ExerciseCard and SetEditorRow) plus `setValueLabel` from setGrid.ts.
 
 /// One display group of the deck: a single set, or a unilateral L/R pair folded

@@ -1,6 +1,6 @@
 import Foundation
 
-// The coach headline — `src/lib/coach/scheduleReadiness.ts`.
+// The coach headline — the web app's `lib/coach/scheduleReadiness.ts`.
 //
 // The base readiness is the scored one (`Readiness.compute`). This makes it
 // aware of the plan: never "Rest Today" on a scheduled training day, and on a

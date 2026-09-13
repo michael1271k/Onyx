@@ -1,6 +1,6 @@
 import Foundation
 
-/// Name-matched movement flags — ports of `src/lib/exercises/{bodyweight,
+/// Name-matched movement flags — ports of the web app's `lib/exercises/{bodyweight,
 /// unilateral,icons}.ts`. The catalog is a name table with no equipment or
 /// laterality column, so these are HEURISTICS on the name and behave like one.
 
@@ -98,7 +98,7 @@ public enum ExerciseIcon {
     public static let fallback = "Exercise"
 
     /// The catalogue's own answer, by canonical name — the port of
-    /// `EQUIPMENT_BY_NAME` in `src/lib/exercises/equipment.ts`.
+    /// `EQUIPMENT_BY_NAME` in the web app's `lib/exercises/equipment.ts`.
     ///
     /// ── WHY A TABLE NOW ─────────────────────────────────────────────────────
     /// This file's header says the catalogue is "a name table with no equipment

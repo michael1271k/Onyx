@@ -100,7 +100,42 @@ final class PhoneWatchBridge {
     /// caches whatever arrived last so a cold launch out of range still opens
     /// the right split.
     func send(userId: String, today: String, schedule: ScheduleContext) {
-        link?.send(context: WatchContext(userId: userId, today: today, schedule: schedule))
+        link?.send(
+            context: WatchContext(userId: userId, today: today, schedule: resolved(schedule))
+        )
+    }
+
+    /// Fill in `ProgramExercise.exerciseId` wherever the routine payload left
+    /// it nil, from the phone's own catalogue.
+    ///
+    /// ── SO THE TWO DEVICES AGREE BEFORE THEY WRITE ──────────────────────────
+    /// `WatchModel.exerciseId(of:)` writes this id when it has one and the
+    /// legacy slug when it does not, while the phone resolves the catalogue —
+    /// so a movement the payload could not name is the one case where the two
+    /// spell the same set differently and `SessionAnalysis.grouped` draws it
+    /// twice. The phone knows the answer and already sends the deck; sending it
+    /// resolved costs one read and removes the disagreement at the source.
+    ///
+    /// Resolution only. A name the catalogue does not hold, or holds twice,
+    /// stays nil and both devices fall back to the slug — which is agreement
+    /// too, and `ExerciseIndex` resolves it at push. Minting a row to send to a
+    /// watch would be creating a fact to answer a question nobody asked.
+    private func resolved(_ schedule: ScheduleContext) -> ScheduleContext {
+        guard let byName = try? database.exerciseIdsByCanonicalName(), !byName.isEmpty else {
+            return schedule
+        }
+        var schedule = schedule
+        for program in schedule.programs.indices {
+            for day in schedule.programs[program].days.indices {
+                for slot in schedule.programs[program].days[day].exercises.indices {
+                    let exercise = schedule.programs[program].days[day].exercises[slot]
+                    guard exercise.exerciseId == nil else { continue }
+                    schedule.programs[program].days[day].exercises[slot].exerciseId =
+                        byName[ExerciseAliases.canonicalName(exercise.name).lowercased()]
+                }
+            }
+        }
+        return schedule
     }
 
     /// Mirror the phone's rest clock onto the wrist. `nil` stops it.
@@ -125,7 +160,7 @@ final class PhoneWatchBridge {
                 // the phone's outbox will not push it. It reaches Supabase as a
                 // `workout_sets` row through the projection the next time
                 // anything about that session is queued — and, once
-                // `docs/sql/wave-10-set-events.sql` is applied, as an event from
+                // `wave-10-set-events.sql (git history)` is applied, as an event from
                 // the watch's own drain. Until then the watch's sets reach the
                 // server only through a session the phone also touches.
                 try database.ingest(events)

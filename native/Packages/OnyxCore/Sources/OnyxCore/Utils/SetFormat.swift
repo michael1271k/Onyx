@@ -1,6 +1,6 @@
 import Foundation
 
-/// How one logged set reads, everywhere — a port of `src/lib/utils/setFormat.ts`.
+/// How one logged set reads, everywhere — a port of the web app's `lib/utils/setFormat.ts`.
 ///
 /// An unloaded set's record IS its rep count or its duration, so that is what
 /// gets rendered: `60kg × 12` · `17 reps` · `58 sec`. Never "0kg × 17".
@@ -45,7 +45,7 @@ public enum SetFormat {
     ///
     /// It is rendered rather than computed from the two components before it:
     /// they agree only while the incline never moved, and when they disagree
-    /// this is the measured one. See `docs/sql/cardio-elevation.sql`.
+    /// this is the measured one. See `cardio-elevation.sql (git history)`.
     public static func cardio(durationSec: Double?, distanceKm: Double?, incline: Double?, elevationM: Double?) -> String? {
         func ok(_ v: Double?) -> Double? { v.flatMap { $0.isFinite ? $0 : nil } }
         var parts: [String] = []

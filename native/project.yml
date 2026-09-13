@@ -1,21 +1,18 @@
 # XcodeGen spec for the parallel native app.
 #
 # ── WHY THE PROJECT FILE IS GENERATED ────────────────────────────────────────
-# `ios/App/App.xcodeproj/project.pbxproj` in the Capacitor app is hand-edited,
-# and the `native` skill documents what that costs: a new .swift file that is not
-# ticked into a target fails at LINK time with an error naming a symbol, not a
-# file. That is a bad failure mode with two targets. The native app will have
-# more, so the project file is a build artefact here — regenerate it, never edit
-# it, and never commit it.
+# A hand-edited `.pbxproj` costs this: a new .swift file that is not ticked
+# into a target fails at LINK time with an error naming a symbol, not a file.
+# That is a bad failure mode with four targets, so the project file is a build
+# artefact here — regenerate it, never edit it, and never commit it.
 #
 #     brew install xcodegen
 #     cd native && xcodegen generate && open Onyx.xcodeproj
 #
-# ── AND WHY IT IS A SECOND BUNDLE ID ─────────────────────────────────────────
-# `app.onyx.health.michael.native` installs ALONGSIDE the Capacitor app rather
-# than over it. Both read the same Supabase, so the old app stays your daily
-# driver — and your reference implementation — for as long as this one takes.
-# Nothing about this migration requires a day where neither app works.
+# ── WHY THE BUNDLE ID ENDS IN `.native` ──────────────────────────────────────
+# `app.onyx.health.michael.native` was chosen so this app could install
+# ALONGSIDE the web-shell app it replaced. That app is gone; the id stays,
+# because the App Store listing and every installed copy are keyed on it.
 
 name: Onyx
 
@@ -50,8 +47,8 @@ packages:
 # $(CURRENT_PROJECT_VERSION) rather than restating them.
 settings:
   base:
-    MARKETING_VERSION: "2.7.0"
-    CURRENT_PROJECT_VERSION: "20700"
+    MARKETING_VERSION: "3.0.0"
+    CURRENT_PROJECT_VERSION: "30000"
 
 targets:
   Onyx:
@@ -120,10 +117,10 @@ targets:
         com.apple.developer.healthkit: true
         # ── Associated Domains — PARKED ──────────────────────────────────────
         # `com.apple.developer.associated-domains: [webcredentials:
-        # helix-health-fitness.netlify.app]` lived here and is temporarily out:
+        # <the OnyxLinks host>]` lived here and is temporarily out:
         # a free Personal Development Team cannot sign that entitlement, so
         # Xcode refuses the profile and the build fails at the signing step.
-        # `public/.well-known/apple-app-site-association` still names this App
+        # `site/.well-known/apple-app-site-association` still names this App
         # ID under `webcredentials`, so restoring the key is the only edit
         # needed once the paid Developer Program is in place (Gate 0). Until
         # then Password AutoFill just treats the app and the site as unrelated.
@@ -186,21 +183,21 @@ targets:
         ONYX_SUPABASE_ANON_KEY: $(ONYX_SUPABASE_ANON_KEY)
         # `onyx://open?path=/nutrition` — what every tile's `.widgetURL` opens.
         # Received by `.onOpenURL` in RootView through `DeepLink.safePath`, the
-        # same allow-list the web app used (`src/lib/native/deepLink.ts`).
+        # same allow-list the web app used.
         CFBundleURLTypes:
           - CFBundleURLName: app.onyx.health.michael.native
             CFBundleTypeRole: Editor
             CFBundleURLSchemes:
               - onyx
         # Required-reason API declaration lives in the privacy manifest, not
-        # here — see PrivacyInfo.xcprivacy. The Capacitor app was rejected-ready
+        # here — see PrivacyInfo.xcprivacy. The app it replaced was rejected-ready
         # without one for months; this target starts with it.
 
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.onyx.health.michael.native
-        # The 1024×1024 mark from `Resources/Assets.xcassets`, carried over from
-        # the Capacitor app so both icons are the same brand. Without this the
+        # The 1024×1024 mark from `Resources/Assets.xcassets`, written by
+        # `npm run icons` from `resources/icon.png`. Without this the
         # target has no icon at all: a blank Home Screen tile, and an upload the
         # validator rejects for a missing marketing icon.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
