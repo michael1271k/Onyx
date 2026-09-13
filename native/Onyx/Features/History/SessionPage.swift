@@ -124,6 +124,48 @@ extension SessionAnalysis {
             return now - was
         }
 
+        /// The one sentence worth putting under the title: how this session
+        /// stands against every other session of its split.
+        ///
+        /// ── WHY IT IS NOT THE VERDICT SENTENCE ONE LINE DOWN ────────────────
+        /// `verdict` compares against the PREVIOUS session and belongs to the
+        /// chart it captions, where the reader is already looking at a line
+        /// between two points. This is the other question — not "up on
+        /// Tuesday" but "when was the last time it was this heavy" — and it is
+        /// the one that makes a page worth opening on purpose.
+        ///
+        /// Silent unless it has something to say. Three conditions, each of
+        /// which exists to stop the line from lying:
+        ///
+        ///   · four sessions of history, so "heaviest" is a claim and not an
+        ///     artefact of a short list;
+        ///   · a gap of at least three weeks, because "heaviest in 8 days" is
+        ///     a fortnight's noise wearing a headline's clothes;
+        ///   · a real tonnage, so a bodyweight or cardio day — which records
+        ///     none — says nothing rather than claiming a record of zero.
+        ///
+        /// The split's NAME is passed in rather than resolved here: the title
+        /// at the top of the page resolves it against the environment's active
+        /// programme and this type holds the session's own, and a sentence that
+        /// called the day something other than the heading three lines above it
+        /// would read as being about a different session.
+        func headline(_ label: String) -> String? {
+            guard let index = split.firstIndex(where: { $0.sessionId == report.session.id }),
+                  index >= 3
+            else { return nil }
+            let current = split[index]
+            guard current.tonnageKg > 0 else { return nil }
+            guard let beaten = split[..<index].lastIndex(where: { $0.tonnageKg >= current.tonnageKg }) else {
+                return "Heaviest \(label) on record."
+            }
+            guard let from = LogicalDay.date(fromISO: split[beaten].date),
+                  let to = LogicalDay.date(fromISO: current.date)
+            else { return nil }
+            let weeks = Int(to.timeIntervalSince(from) / (7 * 24 * 3600))
+            guard weeks >= 3 else { return nil }
+            return "Heaviest \(label) in \(weeks) weeks."
+        }
+
         /// The verdict sentence over the Progression chart.
         var verdict: String {
             guard let previous, previous.tonnageKg > 0 else {

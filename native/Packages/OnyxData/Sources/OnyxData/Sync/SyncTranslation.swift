@@ -647,7 +647,13 @@ public extension SyncTranslation {
     /// hide a set that exists; dropping the side shows the set with one field
     /// missing, which is visible and fixable. Outbound, a bad value would have
     /// written a second vocabulary into the column, which is neither.
-    static func localSide(_ remote: String?) -> String? {
+    ///
+    /// `public` for the same reason `domainSide` is: the LIVE deck restores
+    /// logged sets straight from the store, and a row that came back carrying
+    /// the wire's `L` is a row `SetRow.sideLabel` cannot fold and
+    /// `SessionVolume` cannot pair — one physical set drawn as two, and its
+    /// load counted twice.
+    public static func localSide(_ remote: String?) -> String? {
         switch remote?.uppercased() {
         case "L", "LEFT": return "left"
         case "R", "RIGHT": return "right"

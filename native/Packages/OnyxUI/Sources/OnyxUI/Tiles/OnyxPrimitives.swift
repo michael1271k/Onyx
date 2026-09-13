@@ -378,6 +378,55 @@ public struct Sparkline: View {
     return (zeroBased ? floor : floor - pad, hi + pad)
   }
 
+  /// The trace, as a curve rather than as a polyline.
+  ///
+  /// ── WHY CATMULL-ROM AND NOT `addLine` ───────────────────────────────────
+  /// A 40 pt sparkline of eight sessions is seven segments in forty points, so
+  /// every direction change is a hard corner at 5 pt intervals — which at a
+  /// glance reads as jitter in the DATA rather than as the sampling rate of the
+  /// series. A Catmull-Rom spline passes through every point (it interpolates,
+  /// it does not approximate: the readings stay exactly where they are, which
+  /// a Bézier through control points would not guarantee) and rounds only the
+  /// joins between them.
+  ///
+  /// ── AND WHY IT IS SAFE ON A MONOTONIC SERIES ────────────────────────────
+  /// The classic objection to a spline on data is overshoot — a curve that
+  /// dips below a minimum invents a reading nobody logged. The tension here is
+  /// the standard 1/6 and the tangents are clamped to the neighbouring points
+  /// rather than extrapolated past the ends, so the curve stays inside the
+  /// series' own band; and the band itself is padded 12 % (see `band`), so even
+  /// an extreme join cannot leave the drawn area.
+  ///
+  /// Built once per data change inside the `Path` closure — never per frame.
+  static func curve(_ points: [CGPoint]) -> Path {
+    Path { p in
+      guard let first = points.first else { return }
+      p.move(to: first)
+      guard points.count > 2 else {
+        for point in points.dropFirst() { p.addLine(to: point) }
+        return
+      }
+      for i in 0..<(points.count - 1) {
+        // The two points either side of the segment, with the ends repeated —
+        // which is what stops the first and last joins from being aimed at a
+        // point that does not exist.
+        let p0 = points[Swift.max(i - 1, 0)]
+        let p1 = points[i]
+        let p2 = points[i + 1]
+        let p3 = points[Swift.min(i + 2, points.count - 1)]
+        let control1 = CGPoint(
+          x: p1.x + (p2.x - p0.x) / 6,
+          y: p1.y + (p2.y - p0.y) / 6
+        )
+        let control2 = CGPoint(
+          x: p2.x - (p3.x - p1.x) / 6,
+          y: p2.y - (p3.y - p1.y) / 6
+        )
+        p.addCurve(to: p2, control1: control1, control2: control2)
+      }
+    }
+  }
+
   public var body: some View {
     GeometryReader { geo in
       if let values = usable {
@@ -398,11 +447,8 @@ public struct Sparkline: View {
             }
             .stroke(Color.onyx.textSecondary.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
           }
-          Path { p in
-            p.move(to: CGPoint(x: x(0), y: y(values[0])))
-            for i in 1..<values.count { p.addLine(to: CGPoint(x: x(i), y: y(values[i]))) }
-          }
-          .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+          Self.curve((0..<values.count).map { CGPoint(x: x($0), y: y(values[$0])) })
+            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
           // The latest reading, marked. A trace without a "you are here" makes
           // the reader find the right-hand end for themselves every glance.
           Circle()

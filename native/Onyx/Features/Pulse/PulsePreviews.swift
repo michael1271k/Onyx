@@ -322,6 +322,14 @@ enum PulsePreviews {
         case "day-past":
             NavigationStack { PulseTabView(seeded: fullDay(withSession: true), startAtRows: true) }
                 .environment(AppEnvironment.preview)
+        // The same day, at the TOP — where the muscle wash is. It is the one
+        // part of this screen that exists only above the fold and only when the
+        // date holds a session, so `day-past` (which parks on the rows) cannot
+        // photograph it, and a colour nobody has photographed is a colour that
+        // was reviewed by reading the source.
+        case "day-session":
+            NavigationStack { PulseTabView(seeded: fullDay(withSession: true)) }
+                .environment(AppEnvironment.preview)
         case "day-empty":
             NavigationStack { PulseTabView(seeded: model()) }
                 .environment(AppEnvironment.preview)

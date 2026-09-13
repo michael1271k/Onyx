@@ -195,7 +195,13 @@ public enum WarmupCardio {
     public static let durationSec = 300
     public static let distanceKm = 0.37
     public static let inclinePct = 2.0
-    public static let note = "Pace rising 4.3 to 5.0"
+    // ── THE NOTE IS GONE ────────────────────────────────────────────────────
+    // It read "Pace rising 4.3 to 5.0" — one athlete's treadmill, in units
+    // (km/h on his machine) nothing else in the app speaks, printed on the
+    // opener of every deck that qualified for one. What it was trying to say is
+    // now DERIVED and correct for whoever is holding the phone: the card prints
+    // the pace its own duration and distance produce (`CardioMetrics`), and a
+    // bout nobody has entered yet prints nothing at all.
 
     /// Whether a deck already opens with cardio, by the same test the row
     /// itself uses (`SetRow.isCardio`): time, distance or gradient rather than

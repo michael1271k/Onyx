@@ -152,6 +152,33 @@ enum SessionAnalysis {
         let exercises: [ExerciseReport]
         /// Weighted sets per landmark, descending, untrained muscles absent.
         let muscles: [(muscle: LandmarkMuscle, sets: Double)]
+        /// Every performed set's effort, in the order the session performed
+        /// them — the shape of how hard it got.
+        ///
+        /// ── WHY SETS AND NOT MINUTES ────────────────────────────────────────
+        /// `workout_sets` carries no timestamp this page can read
+        /// (`HistorySetRow` selects what the ledger draws, and `created_at` is
+        /// not in it), so a true clock axis would mean widening the store's
+        /// select for one decoration. The session's own ORDER is already here
+        /// and is the axis that answers the question anyway: an eight-set
+        /// opener at RPE 6 followed by four at 9.5 is the same fingerprint
+        /// whether it took fifty minutes or seventy.
+        ///
+        /// Nil is an unrated set, which is a real state and not a zero.
+        let intensity: [Double?]
+        /// The subset of `muscles` that some movement in this session names as
+        /// a PRIMARY mover.
+        ///
+        /// ── WHY THE HEADER NEEDS THE DISTINCTION AND THE CHART DOES NOT ─────
+        /// `muscles` is what the session TRAINED, assistance included at half
+        /// credit — which is the honest input to the Muscle focus card and to
+        /// the atlas figure, where a share is drawn and a small one reads as
+        /// small. In the header it is a flat list of capsules with no share on
+        /// them, so a chest day printed `Chest · Triceps · Front delts · Abs ·
+        /// Side delts · Upper back` and the two muscles the session was FOR
+        /// looked exactly like the four that came along. The header takes the
+        /// primaries; the card keeps the whole truth.
+        let primaryMuscles: Set<LandmarkMuscle>
         let prCount: Int
         /// Every set that was performed, ghosts excluded, a unilateral pair
         /// counted once — the denominator the muscle sheet's weighted total is
@@ -333,6 +360,10 @@ enum SessionAnalysis {
             if sets > 0 { muscles.append((muscle: muscle, sets: sets)) }
         }
         muscles.sort { a, b in a.sets != b.sets ? a.sets > b.sets : a.muscle.rawValue < b.muscle.rawValue }
+        // Read from the same resolver the credit is: name first, the stored
+        // column as a fallback (`MuscleMap.resolveMovers`), so the header and
+        // the chart cannot disagree about what a movement is for.
+        let primaries = Set(groups.flatMap { MuscleMap.landmarks(MuscleMap.resolveMovers($0.name).primary) })
 
         // ── NO MULTI-SERIES TRAIL, AND NO HIGHLIGHTS LIST ───────────────────
         // Wave 7 drew a six-series est-1RM chart at the bottom of this report
@@ -342,9 +373,20 @@ enum SessionAnalysis {
         // reader to match six colours to six names; and a record is a gold row
         // in the ledger with the previous set printed under it, which answers
         // "what did it beat" in place rather than in a second list.
+        // Ghosts never happened and a warm-up is not a performance, so neither
+        // is in the shape. The rows are already in the session's own order
+        // (`fold_order` through `toRows`), which is what makes this a sequence
+        // rather than a bag of numbers.
+        let intensity: [Double?] = exercises.flatMap { report in
+            report.rows
+                .filter { $0.kind != "ghost" && $0.num != nil }
+                .map { row in [row.set, row.left, row.right].compactMap { $0?.rpe }.max() }
+        }
+
         return Report(
             session: session, exercises: exercises,
-            muscles: muscles, prCount: pr.prCount,
+            muscles: muscles, intensity: intensity,
+            primaryMuscles: primaries, prCount: pr.prCount,
             physicalSets: groups.reduce(0) { $0 + physicalSets($1.sets) }
         )
     }

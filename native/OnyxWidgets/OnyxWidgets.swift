@@ -193,12 +193,12 @@ struct OnyxWorkoutActivityWidget: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 6) {
                         WorkoutTotals(state: context.state)
-                        HStack(alignment: .bottom, spacing: 10) {
-                            WorkoutCurrentSet(state: context.state)
-                            Spacer(minLength: 6)
-                            WorkoutSpark(values: context.state.spark, color: Color.onyx.day(context.state.dayKey))
-                                .frame(width: 76, height: 30)
-                        }
+                        // The chart that used to sit in the trailing column
+                        // is gone (`WorkoutActivityCard` says why), and the
+                        // set takes the whole width: the exercise name is the
+                        // longest string on this region and it was sharing a
+                        // 76 pt column boundary with a monotonic line.
+                        WorkoutCurrentSet(state: context.state)
                         // ── `LAST TIME` LEFT WITH `prev` ────────────────────
                         // Same call, same reason: the founder's, and the row it
                         // occupied is what the rest controls now stand in. The

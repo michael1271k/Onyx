@@ -238,6 +238,41 @@ final class DayModel {
         let sets: Int
         let tonnageKg: Double
         let durationMin: Double?
+        /// The muscles the session was FOR, heaviest share first — at most the
+        /// three the card's wash can distinguish.
+        ///
+        /// ── WHY THE CARD NEEDS THEM AND THE ROW DOES NOT ────────────────────
+        /// This card is the door to the session, and it was washed in the
+        /// SPLIT's colour: every Upper B is the same indigo whether it was a
+        /// chest day or a back day, which is the one thing the reader standing
+        /// on Pulse cannot already see from the label. The muscles are already
+        /// being read — the rows this summary is built from are in memory for
+        /// the set count and the tonnage — so this costs a fold, not a query.
+        let muscles: [LandmarkMuscle]
+    }
+
+    /// The session's top muscles by weighted sets — the same accumulator the
+    /// session page's Muscle focus card reads, so the door and the room agree
+    /// about what the session was for.
+    ///
+    /// Three at most. The wash behind the card is 64 pt tall and a gradient of
+    /// four hues at 22 % is a smear; three is where the stops are still
+    /// separable, and a leg day's fourth muscle is not what makes it a leg day.
+    /// `nonisolated` because the summaries are folded on the detached read
+    /// that builds the window, off the main actor — the same rule every other
+    /// pure helper in this model follows.
+    nonisolated static func focus(_ rows: [HistorySetRow]) -> [LandmarkMuscle] {
+        let byExercise = Dictionary(grouping: rows) { ExerciseAliases.canonicalName($0.exerciseName) }
+        let credit = MuscleCredit.weightedSets(byExercise.map { name, sets in
+            MuscleCredit.Contribution(
+                physicalSets: SessionDetail.toRows(sets.map(SessionAnalysis.detailSet)).count,
+                movers: MuscleMap.resolveMovers(name)
+            )
+        })
+        return credit
+            .sorted { a, b in a.value != b.value ? a.value > b.value : a.key.rawValue < b.key.rawValue }
+            .prefix(3)
+            .map(\.key)
     }
 
     /// One detached read of `daily_logs` over the fortnight, plus the day's
@@ -350,7 +385,8 @@ final class DayModel {
                     label: SessionAnalysis.dayLabel(session.dayKey, in: program),
                     sets: SessionDetail.toRows(working.map(SessionAnalysis.detailSet)).filter { $0.num != nil }.count,
                     tonnageKg: SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet)),
-                    durationMin: session.durationMin
+                    durationMin: session.durationMin,
+                    muscles: Self.focus(rows)
                 )
             }
 

@@ -400,6 +400,24 @@ extension Color {
         // A number here is a measurement, not a taste. Re-run
         // `scratchpad/palette.py` before changing one.
 
+        /// A cardio bout's colour — the one movement class the sixteen muscle
+        /// hues cannot answer for.
+        ///
+        /// ── WHY IT IS TIDE AND NOT A SEVENTEENTH HEX ────────────────────────
+        /// `MuscleMap` holds no cardio entry, by design: a treadmill has no
+        /// primary mover to name. So every surface that colours a movement by
+        /// its muscle fell through — the live deck to the DAY's accent (a
+        /// treadmill that changed colour depending on which split it opened)
+        /// and the session ledger to `.recover` lavender, which is the colour
+        /// Core already wears. Neither is an answer; both are a default.
+        ///
+        /// `OnyxDomain.body` already declares itself the domain of "composition,
+        /// atlas intensity, CARDIO", and the cardio sheet has been drawing its
+        /// own chrome in that accent since it was written. This is that answer,
+        /// said once, so the deck, the ledger and the sheet agree — and it
+        /// spends no new colour, which §3.2 has none to spend.
+        public static var cardio: Color { OnyxDomain.body.accent }
+
         /// A muscle FAMILY's colour — what a chart grouping by the eight draws.
         ///
         /// Its MIDDLE landmark's, not a ninth through sixteenth hex of its own.

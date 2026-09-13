@@ -63,6 +63,52 @@ struct UnilateralAndQualityTests {
         }
     }
 
+    // MARK: - The two spellings a side can arrive in
+
+    /// ── THE "SETS JUMP BY 2" REPORT ─────────────────────────────────────────
+    /// The deck writes `left`/`right`; Postgres holds `L`/`R`. Every rule that
+    /// folds a pair reads the first vocabulary, so a session restored with the
+    /// second came back as two rows that were not a pair: numbered 3 and 4
+    /// where one set was performed, and weighed twice by `SessionVolume`.
+    @Test("a pair folds whichever vocabulary its side arrived in")
+    func sideVocabularyFolds() {
+        for (left, right) in [("left", "right"), ("L", "R"), ("l", "r")] {
+            let pair = "pair-\(left)"
+            let rows = [
+                LoggerModel.SetRow(weightKg: 20, reps: 10, isDone: true, side: left, pairId: pair),
+                LoggerModel.SetRow(weightKg: 20, reps: 10, isDone: true, side: right, pairId: pair),
+            ]
+            #expect(LoggerModel.groups(rows).count == 1, "\(left)/\(right) is ONE set")
+            #expect(LoggerModel.physical(rows) == 1)
+            #expect(rows.map(\.sideLabel) == ["L", "R"])
+        }
+    }
+
+    /// The normalisation itself, at the door it is applied in
+    /// (`LoggerModel.restoreLoggedSets`). Both vocabularies in, one out.
+    @Test("restoring normalises a side to the local spelling")
+    func restoreNormalisesSide() {
+        #expect(SyncTranslation.localSide("L") == "left")
+        #expect(SyncTranslation.localSide("R") == "right")
+        #expect(SyncTranslation.localSide("left") == "left")
+        #expect(SyncTranslation.localSide("right") == "right")
+        // A side nobody recognises is no side at all — a set shown whole rather
+        // than half a pair drawn from a value this app cannot read.
+        #expect(SyncTranslation.localSide("middle") == nil)
+        #expect(SyncTranslation.localSide(nil) == nil)
+    }
+
+    /// The stepper's hold retracts the coarse step it took on touch-down and
+    /// puts the fine one on instead (`StepControl`). That correction is only
+    /// correct while the fine step is genuinely the smaller of the two — a
+    /// constant edit that inverted them would make a hold jump UP by 1.25 kg on
+    /// the way down.
+    @Test("the fine load step is smaller than the coarse one")
+    func loadStepsOrdered() {
+        #expect(Ceilings.loadStepFineKg < Ceilings.loadStepKg)
+        #expect(Ceilings.loadStepKg == Ceilings.loadStepFineKg * 2)
+    }
+
     // MARK: - Splitting and merging by hand
 
     @Test("splitting a logged set replaces it with two sides that carry its numbers")

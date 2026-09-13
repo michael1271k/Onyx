@@ -152,7 +152,7 @@ enum WidgetPreviews {
                 timerOrigin: Date().addingTimeInterval(-45 * 60),
                 isPaused: paused,
                 elapsed: paused ? "45:00" : "",
-                spark: [120, 265, 388, 505, 640, 762, 869, 1074],
+                primaryMuscle: "upper_back",
                 dayKey: "arms"
             )
         }

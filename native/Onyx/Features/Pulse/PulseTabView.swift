@@ -71,9 +71,49 @@ struct DayScreen: View {
     /// `isPresented:` because a day can hold two sessions and each card has to
     /// push its own.
     @State private var openSession: DayModel.WorkoutSummary?
+    /// How far the list has been pulled up, in points, clamped to the wash's
+    /// own height. Zero at the top and 1 once the header band has scrolled
+    /// away — see `muscleWash`.
+    @State private var scrolled: CGFloat = 0
 
     var body: some View {
         ScrollViewReader { scroller in list(scroller: scroller) }
+    }
+
+    /// The wash itself. Nil hues — a day with no session, or a session of
+    /// movements the map does not know — draw nothing at all rather than a
+    /// grey band: "nothing was trained" is a real answer and it has no colour.
+    @ViewBuilder
+    private var muscleWash: some View {
+        // Two sessions on one date is two decks' worth of muscles; the first
+        // two distinct ones are what the gradient can distinguish, and the
+        // first session is the one the eye has already seen a card for.
+        var seen: Set<LandmarkMuscle> = []
+        let hues = model.window.sessions
+            .flatMap(\.muscles)
+            .filter { seen.insert($0).inserted }
+            .prefix(2)
+            .map { Color.onyx.muscle($0) }
+        if !hues.isEmpty {
+            LinearGradient(
+                stops: hues.enumerated().map { index, hue in
+                    .init(
+                        color: hue.opacity(0.18),
+                        location: hues.count > 1 ? Double(index) / Double(hues.count - 1) : 0
+                    )
+                },
+                startPoint: .topLeading, endPoint: .topTrailing
+            )
+            .mask { LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom) }
+            .frame(height: 120)
+            // Gone by the time the band itself would have scrolled off, so the
+            // fade tracks the thing it belongs to rather than a guessed
+            // distance.
+            .opacity(Double(max(0, 1 - scrolled / 120)))
+            .allowsHitTesting(false)
+            .ignoresSafeArea(edges: .top)
+            .accessibilityHidden(true)
+        }
     }
 
     private func list(scroller: ScrollViewProxy) -> some View {
@@ -140,6 +180,30 @@ struct DayScreen: View {
             .id(Self.rowsAnchor)
         }
         .listStyle(.plain)
+        // ── THE DAY'S OWN COLOUR, BEHIND THE TOP OF THE LIST ────────────────
+        // A recovery screen that says nothing about what caused the recovery
+        // was the gap: the session card is 600 pt down the page, and the top of
+        // Pulse was black whatever yesterday had been. This is the same
+        // 18 %→0 wash the session card wears, in the same muscle hues, behind
+        // the first 120 pt of the list.
+        //
+        // ── AND WHY IT FADES WITH THE SCROLL ────────────────────────────────
+        // It belongs to the TOP of the screen, not to the screen: pinned, it
+        // would sit behind the vitals and the soreness rows as a coloured band
+        // that means nothing where it is, and it would fight the glass of every
+        // tile that scrolled under it. Tying its opacity to the offset is what
+        // Apple Music does with an album header — the colour is a property of
+        // being at the top, and it leaves when you do.
+        //
+        // `onScrollGeometryChange` rather than a `GeometryReader` in a row: the
+        // reader would re-measure on every row recycle, and this needs ONE
+        // number per frame from the scroll view that already has it.
+        .background(alignment: .top) { muscleWash }
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.contentOffset.y + geometry.contentInsets.top
+        } action: { _, offset in
+            scrolled = max(0, offset)
+        }
         // `m`, not `l`: every section on this screen is now either a tile with
         // its own 12 pt of padding or a run of 44 pt rows, so a 16 pt trench
         // between them is a gap between two gaps. Four of those is 16 pt of the

@@ -25,7 +25,6 @@ struct TodayTabView: View {
     var seeded: TodayModel?
     /// The Workout tab has the logger; the Workout tile hands off to it.
     var onOpenTrain: () -> Void = {}
-    var onOpenReports: () -> Void = {}
     /// The Now strip is a summary of Pulse, so tapping it goes there.
     var onOpenPulse: () -> Void = {}
 
@@ -47,6 +46,24 @@ struct TodayTabView: View {
     /// drag; `SmartStackView`'s header has the whole argument, including why
     /// this is the slot's id rather than a flag.
     @State private var paging: String?
+    /// The week the "Week N is complete" banner opened, once its replay has
+    /// landed. `item:` and not `isPresented:`, for the reason `WorkoutTabView`
+    /// spells out over the same sheet: a sheet whose content is `if let` over a
+    /// separate piece of state can come up empty.
+    @State private var wrapDoor: WrapDoor?
+    /// A tapped banner whose replay is still running. The door is not instant
+    /// (see `openWrap`), and a second tap while the first is in flight replays
+    /// the whole week twice.
+    @State private var openingWrap = false
+
+    /// The summary and the programme it is read against, resolved together: the
+    /// day labels in the reel belong to the programme that was active in the
+    /// week being wrapped, not to today's.
+    private struct WrapDoor: Identifiable {
+        let summary: WeeklyWrap.Summary
+        let program: Program
+        var id: String { summary.weekStart }
+    }
 
     var body: some View {
         Group {
@@ -88,7 +105,8 @@ struct TodayTabView: View {
                     onOpen: onOpenPulse
                 )
                 if let feed = model.feed, feed.weeklySummaryReady {
-                    WeeklySummaryCTA(weekStart: feed.lastWeekStart, onOpen: onOpenReports)
+                    WeeklySummaryCTA(weekStart: feed.lastWeekStart) { openWrap(feed.lastWeekStart) }
+                        .disabled(openingWrap)
                 }
                 DashboardGrid(model: model, paging: $paging) { open($0, model) }
                 if model.editing { WidgetGallery(model: model) }
@@ -180,6 +198,12 @@ struct TodayTabView: View {
         .sheet(isPresented: $showQuickLog) {
             if let quickLog { QuickLogSheet(model: quickLog) }
         }
+        // The view owns its own `NavigationStack` and its own detents — the
+        // same reel the Train tab and History open, with no chrome spelled at
+        // this call site to drift away from theirs.
+        .sheet(item: $wrapDoor) { door in
+            WeeklyWrapView(summary: door.summary, program: door.program)
+        }
         // The ring's sheets read STREAMED state — the day's fatigue rows, its
         // stress readings, its cardio — and a model nobody observes draws every
         // one of them as "not rated" over a day that has them.
@@ -193,6 +217,49 @@ struct TodayTabView: View {
                 quickLog?.refreshToday()
                 quickLog?.select(LogicalDay.today())
             }
+        }
+    }
+
+    /// ── WHY THE BANNER OPENS THE REEL AND NOT THE SETTINGS TAB ─────────────
+    /// It said "Week 12 is complete — every session logged. Review the week."
+    /// and then selected the Settings tab, because Reports live there. The
+    /// review it offers is the weekly wrap, and the wrap already exists: the
+    /// Train tab opens the reel from its This-week panel and History opens it
+    /// from a past week's chip. Today is the third door to one room, not a
+    /// fourth screen about the same week.
+    ///
+    /// ── AND WHY THE SUMMARY IS BUILT ON THE TAP ────────────────────────────
+    /// `TodayFeed` does not carry it, and should not: `WorkoutWeek.wrap` costs
+    /// a PR replay per session of the week — its own header explains that
+    /// `personal_records` is a current-best table, so a week's record count
+    /// read straight from it shrinks as the weeks after it go well — and
+    /// building one on every dashboard load to serve a banner that appears one
+    /// day in seven is six replays for nothing. Detached, on the tap, and the
+    /// door opens when it lands.
+    ///
+    /// A week that no longer qualifies returns nil, and nil opens nothing: the
+    /// banner's own gate (`TodayFeed.weeklySummaryReady`) and the wrap's gate
+    /// are two different questions, and this is the one that can say no.
+    private func openWrap(_ weekStart: String) {
+        guard !openingWrap else { return }
+        openingWrap = true
+        let database = environment.database
+        let userId = environment.userIdString
+        Task {
+            let door = await Task.detached(priority: .userInitiated) { () -> WrapDoor? in
+                guard let summary = WorkoutWeek.wrap(database, userId: userId, weekStart: weekStart) else {
+                    return nil
+                }
+                // The programme as the schedule holds it, which is what the
+                // Train tab hands the same view from `snapshot.program`.
+                let context = try? database.scheduleContext(userId: userId)
+                return WrapDoor(
+                    summary: summary,
+                    program: context?.activeProgram ?? Program(id: "", label: "", days: [])
+                )
+            }.value
+            openingWrap = false
+            wrapDoor = door
         }
     }
 
