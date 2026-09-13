@@ -122,6 +122,32 @@ struct WeeklyExportGoldenTests {
             #expect(md.contains("flagged_days"), "required vitals field — \(c.name)")
         }
     }
+
+    /// §6's grade is ASYMMETRIC, and the rule is `VolumeZone`'s, not this
+    /// document's. A muscle is UNDER only if even its total falls short; only
+    /// DIRECT work can earn an OVER. Graded symmetrically, a muscle that
+    /// reached its number purely by assisting other movements printed OVER, and
+    /// the reader was told to cut work that was never being done.
+    @Test("a muscle is graded UNDER on its total and OVER on its direct sets alone")
+    func setsByMuscleGradesAsymmetrically() throws {
+        // 12 direct against a target of 10 is 1.2 — inside the 1.3 ceiling.
+        #expect(VolumeZone.of(weeklySets: 12, target: 10, directSets: 12) == .optimal)
+        // 14 direct against 10 is 1.4, and only direct work can reach it.
+        #expect(VolumeZone.of(weeklySets: 14, target: 10, directSets: 14) == .over)
+        // The case the symmetric grade got wrong: a total over the ceiling that
+        // is mostly assistance stays ON, because the direct work is 0.6×.
+        #expect(VolumeZone.of(weeklySets: 14, target: 10, directSets: 6) == .optimal)
+        // And a total short of the target is UNDER even where direct is high.
+        #expect(VolumeZone.of(weeklySets: 7.5, target: 10, directSets: 7.5) == .building)
+
+        let rich = try #require(try GoldenFixture<WeeklyExportInput, Out>
+            .load("weekly-export").cases.first { $0.name.hasPrefix("the rich week — every section lit") })
+        let md = WeeklyExport.build(rich.input)
+        #expect(md.contains("| Quadriceps |   12.0 |      0.0 |  12.0 |   10.0 | ON        |"))
+        #expect(md.contains("| Side delts |   14.0 |        — |  14.0 |   10.0 | OVER      |"))
+        // A muscle the plan never named is neither over nor under it.
+        #expect(md.contains("| Adductors  |      — |        — |   2.0 |   none | no target |"))
+    }
 }
 
 @Suite("Weekly export — the small renderers")

@@ -71,7 +71,15 @@ in the new shape from the rows it already had.
   than 0.6 kg, from the fortnight's median is printed **ANOMALOUS** and excluded
   from every mean.
 - **Sessions** print in the order the movements were **performed**, taken from
-  the set event log, rather than in deck order.
+  the set event log, rather than in deck order. Where the log cannot answer —
+  a session pulled from another device, or one whose log was back-filled by an
+  edit — the fallback is named in `ANOMALIES` rather than presented as a record.
+- **Sets by muscle** is graded the way `VolumeZone` has always stated it: a
+  muscle is UNDER only if even its total, assistance included, falls short, and
+  only DIRECT work can earn an OVER. A muscle that reached its number purely by
+  assisting other movements no longer reads OVER.
+- `nights_deep_ge_60` carries the nights that measured deep sleep as its
+  denominator — 4 of 7 and 4 of 4 are different weeks.
 
 ### Fixed
 - **Every timestamp is the phone's own wall clock.** Bed and wake times, session
@@ -104,6 +112,9 @@ in the new shape from the rows it already had.
   answer with (nothing writes `target_profiles.kind`, so every profile resolves
   to `Custom`), and a daily target with no anchor behind it cannot be read as a
   deficit.
+- A micronutrient the week doubted on **every** day still has a row, reading
+  `no plausible reading (0 of 7 d)`. Dropping it made a week of implausible
+  calcium read exactly like a week where calcium was never logged at all.
 - A micronutrient the food source never reported on a day with food logged is
   named in `ANOMALIES`, so a gap in what MyFitnessPal wrote to Apple Health no
   longer reads as a low intake. There is no food database in Onyx to fix — every

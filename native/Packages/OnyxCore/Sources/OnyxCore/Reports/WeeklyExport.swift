@@ -604,12 +604,6 @@ public enum WeeklyExport {
     /// never showed. `WeeklyExportInput.leverBaselineKcal` overrides it.
     public static let leverBaselineKcal: Double = 1935
 
-    /// A muscle is ON its target within this many sets either way. Weekly
-    /// counts land on halves — an indirect set credits 0.5 — so an exact match
-    /// almost never happens and a strict comparison prints UNDER or OVER for
-    /// every muscle in the week, which tells the reader nothing.
-    static let setTargetTolerance: Double = 1.0
-
     /// Sample standard deviation, `n − 1`: a week is a sample of days and not
     /// the population of them. Nil under two readings.
     static func sdOf(_ values: [Double?]) -> Double? {
@@ -883,8 +877,14 @@ public enum WeeklyExport {
         /// over. `(4 of 6 d)` where two days were thrown out says more than a
         /// mean that quietly absorbed them.
         func microMean(_ label: String, _ keys: [String]) -> String? {
-            guard let m = micros.first(where: { keys.contains($0.key) && $0.days > 0 }) else { return nil }
+            guard let m = micros.first(where: { keys.contains($0.key) }) else { return nil }
             let denom = m.excluded > 0 ? "\(m.days) of \(m.days + m.excluded) d" : "\(m.days) d"
+            /* `weeklyNutrients` keeps a key whose every reading was excluded —
+               "the week had readings and none survived" — and this dropped the
+               row, so a week where calcium was implausible seven days running
+               read exactly like a week where it was never logged. Those are
+               opposite findings. */
+            guard m.days > 0 else { return "\(label) no plausible reading (\(denom))" }
             return "\(label) \(val(m.total, microDp(m.total)) ?? noData) \(m.unit) (\(denom))"
         }
         L.append("intake " + line([
@@ -921,7 +921,13 @@ public enum WeeklyExport {
             sleepSum > 0 ? "REM \(val(remSum / sleepSum * 100, 1) ?? noData) %" : nil,
             clockOfMinutes(onsetMean(days.map { clockOrNil($0.bedTime) })).map { "onset_local \($0)" },
             clockOfMinutes(wakeMean(days.map { clockOrNil($0.wakeTime) })).map { "wake_local \($0)" },
-            "nights_deep_ge_60 \(days.filter { ($0.deepMin ?? 0) >= 60 }.count)",
+            // OVER THE NIGHTS THAT MEASURED IT. `?? 0` folded a night with no
+            // stage reading at all into "not 60 minutes", where the absence is
+            // the finding — 4 of 7 and 4 of 4 are different weeks.
+            {
+                let measured = days.compactMap { $0.deepMin?.isFinite == true ? $0.deepMin : nil }
+                return "nights_deep_ge_60 \(measured.filter { $0 >= 60 }.count) of \(measured.count)"
+            }(),
         ]))
 
         let flaggedDays = days.filter { $0.hrvFlag?.isEmpty == false }
@@ -1242,14 +1248,26 @@ public enum WeeklyExport {
         L.append(contentsOf: input.volumeByMuscle.isEmpty ? [] : markdownTable(
             header: ["muscle", "direct", "indirect", "total", "target", "status"],
             body: input.volumeByMuscle.map { v in
-                // No target is not a target of zero: `Adductors` genuinely
-                // carries 0 on a cut, and a muscle the plan never named carries
-                // none at all — neither can be UNDER.
+                /* ── THE GRADE IS ASYMMETRIC, AND `VolumeZone` OWNS IT ────────
+                   A muscle is UNDER only if even its TOTAL — direct plus
+                   half-credited assistance — falls short, and only DIRECT work
+                   can earn an OVER. Grading both ends off the total told the
+                   reader to cut a muscle that had reached its number entirely
+                   through being an assistant somewhere else.
+
+                   `VolumeZone.of` is that rule, with its own golden vectors
+                   (`volume-zone.json`), and it was sitting one module over
+                   while this table hand-rolled a symmetric tolerance. Its five
+                   zones fold onto the schema's three: `building` is short of
+                   the target and reads UNDER; `na` is a muscle the plan never
+                   named, which cannot be either. */
                 let status: String
-                if v.target <= 0 { status = "ON" }
-                else if v.sets < v.target - setTargetTolerance { status = "UNDER" }
-                else if v.sets > v.target + setTargetTolerance { status = "OVER" }
-                else { status = "ON" }
+                switch VolumeZone.of(weeklySets: v.sets, target: v.target, directSets: v.directSets) {
+                case .over: status = "OVER"
+                case .under, .building: status = "UNDER"
+                case .optimal: status = "ON"
+                case .na: status = "no target"
+                }
                 return [
                     v.muscle,
                     val(v.directSets, 1) ?? dash,
