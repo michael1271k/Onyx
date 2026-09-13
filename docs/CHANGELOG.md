@@ -44,6 +44,72 @@ _Nothing yet._
 
 ---
 
+## [3.2.0] — 2026-09-13 · One Language for a Set
+
+Two waves of UI and mechanics. The live deck and the session page had been
+drawing the same objects in two different languages; they speak one now, and
+four things that were quietly wrong underneath them are fixed.
+
+### Added
+- **The Sunday banner opens the week.** "Week N is complete" on Today now opens
+  the Weekly Wrap reel — the same one the Train tab and History open. It used to
+  select the Settings tab.
+- **A door to every trophy.** Double-tapping a gold set badge in the live logger
+  opens the record sheet: which axes it won, and by how much. Attached only to
+  rows that hold a record, so every other set keeps an instant tap.
+- **The session page says one sentence.** "Heaviest Upper A in 6 weeks", under
+  the title, when the session has earned it — silent otherwise.
+- **Intensity.** A single bar on the session page, one stop per set in the
+  effort ramp: the shape of how hard the session got, from the first set to the
+  last.
+- **A muscle on the Lock Screen.** The running-workout card and the Dynamic
+  Island now name the primary muscle of the set you are on, in that muscle's own
+  colour.
+- **Pace, derived.** A cardio card computes its own pace from the duration and
+  distance actually entered.
+- **Weight and reps as columns** in the session ledger, each with a green or red
+  arrow against the same set number the last time that movement was trained.
+
+### Changed
+- **A record badge is the movement's colour with a gold trophy in it**, on both
+  screens, with a soft glow behind the glyph. It used to be solid gold on the
+  deck and a grey circle in the ledger.
+- **The session ledger draws the deck's badge.** Same shape, same states, same
+  hue — `SetBadge` is now the only place a set's box is drawn.
+- **Header metrics are colour-coded and carry SF Symbols** — a flame on
+  calories, a red heart on average HR, a trophy on records, an arrow on volume,
+  the effort ramp on difficulty.
+- **Only primary muscles in the session header.** The assisting ones stay on the
+  movement cards, where they carry a share; as flat capsules in the header they
+  made a chest day look like a six-muscle day.
+- **Per-exercise trails are the movement's own hue and curve** (Catmull-Rom)
+  rather than a four-colour domain accent and a polyline.
+- **Pulse carries the day's muscles**: a wash at the top of the screen that
+  fades as you scroll, and a session card washed in the muscles it trained
+  rather than in the split's colour.
+- **Cardio is an ordinary movement.** No `W` badge, no lift-only tags, no rep
+  window, and a colour of its own instead of the day's accent on one screen and
+  Core's lavender on the other.
+- The lock-screen and Dynamic Island **sparkline is gone**; the exercise name is
+  the headline, with the load and the rating under it.
+
+### Fixed
+- **Sets no longer jump by 2** on unilateral movements after a session is
+  reopened. The pair's two rows were folded only under the local spelling of a
+  side, so a restored `L`/`R` drew one set as two — and weighed the arm twice.
+- **A weight hold steps by 1.25 kg.** It took the 2.5 kg tap step and then
+  ramped; it now hands that plate back the moment the hold engages, with a
+  haptic at the swap and one per tick.
+- **PRs show up live.** The bar the live deck measured against was built before
+  the session's own rows were read, so a movement whose catalogue row the deck
+  could not resolve was measured against nothing — and nothing is never a
+  record. The trophies matched the summary page's afterwards; they match it
+  during the workout now.
+- The founder's hardcoded treadmill note ("Pace rising 4.3 to 5.0") is gone from
+  every deck.
+
+---
+
 ## [3.1.0] — 2026-09-13 · The Export Answers to the Audit
 
 The weekly export is rebuilt from the ground up for the coaching audit that

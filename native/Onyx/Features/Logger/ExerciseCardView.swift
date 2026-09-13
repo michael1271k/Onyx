@@ -1293,90 +1293,25 @@ private struct SetRowView: View {
     /// "this one has never been beaten" is the same kind of fact. Gold fill,
     /// trophy in place of the tick, and the row keeps its gold sweep.
     private var badge: some View {
-        ZStack {
-            badgeSurface
-            if isDone && row.kind == .normal {
-                // ── THREE OUTCOMES, ONE GLYPH SLOT ──────────────────────────
-                // A record outranks a failure: both are true of a set taken to
-                // the stop that beat something, and "you beat it" is the fact
-                // worth the slot. `F` then says the set went to failure, which
-                // the effort column ALSO says in words — deliberately, because
-                // the badge is what you see in peripheral vision scrolling the
-                // deck and the word is what you read when you stop.
-                //
-                // ── AND WHEN IT IS BOTH ─────────────────────────────────────
-                // A set that beat something AND went to the stop is the best
-                // set in the session, and it must not have to choose which
-                // half of that to say. The slot keeps the trophy — the fact
-                // that is news — and the `F` becomes a pip in the corner, in
-                // the same red the failure chip uses. One glyph, one badge,
-                // both facts, and no second box.
-                ZStack(alignment: .bottomTrailing) {
-                    Group {
-                        if isRecord {
-                            Image(systemName: "trophy.fill")
-                                // Layered rather than flat: the cup and its
-                                // base separate at 13 pt, which is what makes
-                                // it read as a trophy and not as a blob.
-                                .symbolRenderingMode(.hierarchical)
-                        } else if isFailure {
-                            Text("F")
-                        } else {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                        .onyxType(.caption).fontWeight(.heavy)
-                        // ── THE GOLD IS THE GLYPH, NOT THE BOX ──────────────
-                        // A record badge used to be SOLID gold, which cost the
-                        // set the one thing every other badge on the deck has:
-                        // its movement's own hue. The card is washed in that
-                        // hue, the rail carries it, the chip names it — and the
-                        // best set of the movement was the one box that did not
-                        // belong to it.
-                        //
-                        // Gold means "never beaten" app-wide and it is the only
-                        // fifth hue §3.2 allows (`Color.onyx.record`'s own
-                        // header). Blending it with sixteen muscle hues would
-                        // spend it sixteen times and leave none of them
-                        // recognisable — two of the blends land on the carbs
-                        // amber it was deliberately moved away from. So the
-                        // hybrid is COMPOSED instead: the box is the muscle,
-                        // the glyph is the gold, and the glow is what makes a
-                        // 13 pt cup on a dim screen read as an achievement.
-                        .foregroundStyle(isRecord ? Color.onyx.record : Color.onyx.base)
-                        // On the glyph and never on the row: a shadow on a
-                        // recycled `LazyVStack` row is an offscreen pass per
-                        // frame, on the one screen that must hold 120 Hz while
-                        // a thumb is dragging a stepper.
-                        .shadow(color: Color.onyx.record.opacity(isRecord ? 0.55 : 0), radius: 5)
-                        .transition(.scale(scale: 0.6).combined(with: .opacity))
-                    if isRecord && isFailure {
-                        Text("F")
-                            .onyxType(.micro).fontWeight(.heavy)
-                            .foregroundStyle(Color.onyx.danger)
-                            .offset(x: 7, y: 5)
-                    }
-                }
-            } else {
-                // ── THE ORDINAL, AND ONLY THE ORDINAL ───────────────────────
-                // The side used to outrank it, because a pair was two boxes
-                // and two boxes reading "3" would have been unreadable. There
-                // is one box now: the pair's own set number goes here, and the
-                // `L` / `R` moved to the sub-lines that actually differ.
-                Text(badgeKind.badge ?? "\(ordinal)")
-                    .onyxType(.caption).fontWeight(.bold).onyxNumeral()
-                    .foregroundStyle(badgeInk)
-                    // The badge is the one column that must NOT grow with the
-                    // type size — it is the row's identity and its 44 pt
-                    // target, and a badge that grew would take the width from
-                    // the two numbers beside it. So the glyph scales inside it
-                    // instead: at AX5 an unscaled `W` drew wider than the box
-                    // and clipped to a shape that was no longer a letter.
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-            }
-        }
-        .frame(width: 32, height: 32)
+        // ── ONE BADGE, TWO SCREENS ──────────────────────────────────────
+        // Everything that decides what this box LOOKS like moved to `SetBadge`,
+        // which the session ledger now draws too: the ledger was rendering the
+        // same set as a 22 pt grey circle, so a movement logged on the deck and
+        // reviewed ten seconds later on the session page had two shapes and two
+        // colour languages. What stays here is everything that makes it a
+        // CONTROL — the target, the press, the gestures and the rotor.
+        SetBadge(
+            label: badgeKind.badge ?? "\(ordinal)",
+            tint: rail,
+            kind: badgeKind,
+            filled: isDone,
+            isRecord: isRecord,
+            isFailure: isFailure,
+            // The deck's own rule: the ordinal until the set is logged, then
+            // the mark it earned. Nothing is lost — an unlogged row is the only
+            // place the number is still doing work.
+            showsCheck: true
+        )
         // A set carrying a technique note says so, or the second axis is data
         // you can only see by opening the sheet that wrote it. A dot rather
         // than a chip: the row has no width for a sixth thing, and what the
@@ -1530,43 +1465,6 @@ private struct SetRowView: View {
     /// questions, which is cheaper than a third `SetKind` that every ledger,
     /// export and CHECK constraint downstream would have to learn.
     private var badgeKind: LoggerModel.SetKind { isCardio ? .normal : row.kind }
-
-    @ViewBuilder
-    private var badgeSurface: some View {
-        let shape = RoundedRectangle(cornerRadius: OnyxCorner.row, style: .continuous)
-        switch badgeKind {
-        case .warmup:
-            shape.strokeBorder(rail, lineWidth: 2)
-        case .ghost:
-            shape.strokeBorder(
-                Color.onyx.textTertiary,
-                style: StrokeStyle(lineWidth: 1.5, dash: [3, 3])
-            )
-        default:
-            if isDone && isRecord {
-                // 16 % is the tint weight every chip in this app wears, and
-                // the ring is what carries the hue at 32 pt against an OLED
-                // black — the same job the card's 3 pt rail does at card size.
-                shape.fill(rail.opacity(0.16))
-                    .overlay(shape.strokeBorder(rail, lineWidth: 1.5))
-            } else {
-                shape.fill(isDone ? rail : Color.onyx.hairline)
-            }
-        }
-    }
-
-    /// Ink that survives every one of the five surfaces above: on a solid fill
-    /// it is the base colour, on an outline it is the outline's own.
-    private var badgeInk: Color {
-        switch badgeKind {
-        case .warmup: rail
-        case .ghost:  Color.onyx.textTertiary
-        // A logged set's box is solid and its ink is the base it is drawn on —
-        // except a RECORD's, which is now a 16 % tint with a ring, and base ink
-        // on that is invisible. It takes the rail, like the outline states do.
-        default:      row.isDone ? (isRecord ? rail : Color.onyx.base) : Color.onyx.textSecondary
-        }
-    }
 
     /// A value that every target row carries the same, or nil when they differ.
     ///

@@ -32,6 +32,26 @@ struct WorkoutSummaryCard: View {
     /// it — a leg day is the same teal everywhere or it is decoration.
     private var tint: Color { Color.onyx.day(session.dayKey) }
 
+    /// The session's OWN colours — its top muscles, heaviest share first.
+    ///
+    /// ── WHY THE WASH STOPPED BEING THE SPLIT'S ──────────────────────────────
+    /// The dot, the label and the chips still carry the split: that is what
+    /// says which day of the programme this was, and it has to stay stable.
+    /// The WASH is the one part of this card that was saying the same thing a
+    /// second time — every Upper B the same indigo — while the thing the
+    /// reader cannot get from the label is what the session actually trained.
+    /// Two hues, blended, is a chest-and-triceps day looking different from a
+    /// back-and-biceps day at a glance, with no new vocabulary to learn: they
+    /// are the same sixteen muscle hues the session page, the atlas and the
+    /// legend use.
+    ///
+    /// Falls back to the split when the session trained nothing the map knows
+    /// — a cardio-only day, or a movement nobody has classified.
+    private var wash: [Color] {
+        let hues = session.muscles.prefix(2).map { Color.onyx.muscle($0) }
+        return hues.isEmpty ? [tint] : Array(hues)
+    }
+
     /// ── WHY A BUTTON AND NOT A `NavigationLink` ─────────────────────────────
     /// A `NavigationLink` inside a `List` row draws the system disclosure at
     /// the ROW's trailing edge — outside this card's glass, because `plainRow()`
@@ -52,8 +72,22 @@ struct WorkoutSummaryCard: View {
             // one is the door and that one is the room — and two treatments of
             // one object is the drift the tint tokens exist to stop.
             .background(alignment: .top) {
-                LinearGradient(colors: [tint.opacity(0.22), .clear], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 64)
+                // Two stops of the session's own muscles across the top, then
+                // out — the same 22 %→0 over 64 pt the session page's band
+                // wears, so the door and the room are painted in one language.
+                LinearGradient(
+                    stops: wash.enumerated().map { index, hue in
+                        .init(
+                            color: hue.opacity(0.22),
+                            location: wash.count > 1 ? Double(index) / Double(wash.count - 1) : 0
+                        )
+                    },
+                    startPoint: .topLeading, endPoint: .topTrailing
+                )
+                .mask {
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                }
+                .frame(height: 64)
             }
             .onyxGlass(.tile)
             .contentShape(.rect)
