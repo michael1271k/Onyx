@@ -63,7 +63,7 @@ public struct PostgRESTRemote: SyncRemote {
             .execute()
     }
 
-    /// The event log — `docs/sql/wave-10-set-events.sql`.
+    /// The event log — `wave-10-set-events.sql (git history)`.
     ///
     /// `ignoreDuplicates: true` is `ON CONFLICT DO NOTHING`, and it is the only
     /// legal setting: an event is immutable, so an id the server already holds

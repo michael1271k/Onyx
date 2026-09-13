@@ -185,7 +185,7 @@ enum SetQuality: String, CaseIterable, Identifiable, Sendable {
     /// this app has always written, which is what makes the change free — every
     /// existing row still parses, every existing reader still reads, and the
     /// only thing the database needs is a wider CHECK
-    /// (`docs/sql/set-quality-tags.sql`). Until that is applied a combination is
+    /// (`set-quality-tags.sql (git history)`). Until that is applied a combination is
     /// refused by Postgres and a single tag still syncs, which is the failure
     /// worth having: partial, loud, and never silently wrong.
     ///

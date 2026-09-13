@@ -68,7 +68,7 @@ public actor TrainingPuller {
     /// has events, which is the common case.
     ///
     /// ── AND THE WHOLE THING IS BEST-EFFORT ───────────────────────
-    /// `set_events` is applied by hand (`docs/sql/wave-10-set-events.sql`).
+    /// `set_events` is applied by hand (`wave-10-set-events.sql (git history)`).
     /// Until the SQL is run PostgREST answers 404, and a refresh that threw on
     /// that would take the sessions and sets — which landed fine — down with
     /// it. Returns 0 instead, and the pull starts working the day the table
@@ -118,7 +118,7 @@ public actor TrainingPuller {
         // server and went on being a second row in the phone's library.
         //
         // It is a second row rather than a dead one because
-        // `scripts/merge-exercise.mjs` re-points `workout_sets.exercise_id`
+        // `merge-exercise.mjs` (git history) re-points `workout_sets.exercise_id`
         // WITHOUT touching the parent session's `updated_at` — the only delta
         // the sets pull below has. So the cursor skips exactly the rows that
         // need re-pointing, the local sets keep the dead id, and
@@ -375,7 +375,7 @@ extension AppDatabase {
                         incline: row.incline,
                         distanceKm: row.distanceKm,
                         // The fourth axis, on the same terms: nil on every row
-                        // until `docs/sql/cardio-elevation.sql` is applied.
+                        // until `cardio-elevation.sql (git history)` is applied.
                         elevationM: row.elevationM,
                         isPendingSync: false,
                         foldOrder: order

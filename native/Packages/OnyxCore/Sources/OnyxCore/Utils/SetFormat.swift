@@ -45,7 +45,7 @@ public enum SetFormat {
     ///
     /// It is rendered rather than computed from the two components before it:
     /// they agree only while the incline never moved, and when they disagree
-    /// this is the measured one. See `docs/sql/cardio-elevation.sql`.
+    /// this is the measured one. See `cardio-elevation.sql (git history)`.
     public static func cardio(durationSec: Double?, distanceKm: Double?, incline: Double?, elevationM: Double?) -> String? {
         func ok(_ v: Double?) -> Double? { v.flatMap { $0.isFinite ? $0 : nil } }
         var parts: [String] = []

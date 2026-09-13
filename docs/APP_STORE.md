@@ -36,7 +36,7 @@ reviewer hits before they ever open the app.
 
 One more that is a decision rather than a defect:
 
-- **The pages live on a domain still named after the retired web app.** `helix-health-fitness.netlify.app` now serves only `site/` — the privacy policy, the support page and the AASA file, all branded Onyx. Moving to an Onyx domain is a change to `OnyxLinks.host` alone.
+- **The pages live on a Netlify subdomain, not a custom domain.** `onyx-health-fitness.netlify.app` serves only `site/` — the privacy policy, the support page and the AASA file. Apple accepts a subdomain; moving to a custom domain later is a change to `OnyxLinks.host` alone.
 - **"Onyx is a single-user personal training log"** must never appear in the metadata or the review notes — Apple rejects apps positioned for one person (4.2/4.3). The copy in §2 and §4 is written accordingly, and the old single-user framing has been removed from both.
 
 Verified clean at the same pass, with values: bundle ids and the extension's
@@ -171,9 +171,9 @@ no second icon to tell it apart from.
 they are already in the app's name, subtitle and category, and App Store search
 indexes those fields; spending keyword characters on them buys nothing.)*
 
-**Support URL** — `https://helix-health-fitness.netlify.app/support/`
+**Support URL** — `https://onyx-health-fitness.netlify.app/support/`
 **Marketing URL** — *(optional; leave empty)*
-**Privacy Policy URL** — `https://helix-health-fitness.netlify.app/privacy/`
+**Privacy Policy URL** — `https://onyx-health-fitness.netlify.app/privacy/`
 
 > **Both pages are static HTML under `site/`** (W6), published by Netlify with no build step. `curl -I` each URL before submitting.
 

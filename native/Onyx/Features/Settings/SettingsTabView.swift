@@ -360,7 +360,7 @@ private struct SettingsForm: View {
 enum OnyxLinks {
     /// The one place the domain is written down. A move is one line, and it
     /// cannot leave the two urls below pointing at different hosts.
-    private static let host = "https://helix-health-fitness.netlify.app"
+    private static let host = "https://onyx-health-fitness.netlify.app"
 
     static let privacyPolicy = URL(string: "\(host)/privacy/")!
     static let support = URL(string: "\(host)/support/")!

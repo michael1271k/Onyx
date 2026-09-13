@@ -91,7 +91,7 @@ struct WatchConvergenceTests {
         func count(table: String) async throws -> Int { 0 }
 
         /// Wipe the event table, leaving the rows — this database on the day
-        /// before `docs/sql/wave-10-set-events.sql` was applied.
+        /// before `wave-10-set-events.sql (git history)` was applied.
         func forgetEvents() { events.removeAll() }
 
         /// Encode then decode, so the values cross the same JSON boundary they

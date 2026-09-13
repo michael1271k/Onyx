@@ -28,7 +28,7 @@ public protocol SyncRemote: Sendable {
     /// device produced and then tombstoned.
     func deleteSets(ids: [String]) async throws
 
-    /// The append-only event log — `docs/sql/wave-10-set-events.sql`.
+    /// The append-only event log — `wave-10-set-events.sql (git history)`.
     ///
     /// ── IT IS A REQUIREMENT, NOT JUST AN EXTENSION ──────────────────────────
     /// It has a default implementation (a no-op, in `SetEventSync`) so that

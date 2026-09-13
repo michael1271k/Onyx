@@ -125,7 +125,7 @@ final class PhoneWatchBridge {
                 // the phone's outbox will not push it. It reaches Supabase as a
                 // `workout_sets` row through the projection the next time
                 // anything about that session is queued — and, once
-                // `docs/sql/wave-10-set-events.sql` is applied, as an event from
+                // `wave-10-set-events.sql (git history)` is applied, as an event from
                 // the watch's own drain. Until then the watch's sets reach the
                 // server only through a session the phone also touches.
                 try database.ingest(events)

@@ -207,7 +207,7 @@ struct SyncTranslationTests {
         // rather than omit them.
         // 17 since `v19.cardioElevation`. The bump is deliberate and this
         // assertion is what forces it to be: `elevation_m` is a column
-        // `docs/sql/cardio-elevation.sql` adds BY HAND, so a body naming it
+        // `cardio-elevation.sql (git history)` adds BY HAND, so a body naming it
         // fails the whole batch until the founder has run that file. Pinning
         // the count is what makes the dependency between the two impossible to
         // add by accident.

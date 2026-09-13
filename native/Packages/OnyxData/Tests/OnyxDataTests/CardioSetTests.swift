@@ -6,7 +6,7 @@ import Testing
 /// The trip a cardio set makes, end to end.
 ///
 /// ── WHAT WAS BROKEN ─────────────────────────────────────────────────────────
-/// `docs/sql/hotfix-polish.sql` gave `workout_sets` three columns on 2026-09-07
+/// `hotfix-polish.sql (git history)` gave `workout_sets` three columns on 2026-09-07
 /// — `duration_sec`, `incline`, `distance_km` — and wrote the first row that
 /// uses them: the treadmill that opens that session, five minutes at incline 2
 /// for 0.37 km, `weight_kg 0, reps 0`. None of the three could reach the phone.
@@ -18,7 +18,7 @@ import Testing
 /// the axes have already been dropped once:
 ///
 /// ── AND THEN A FOURTH AXIS ──────────────────────────────────────────────────
-/// `docs/sql/cardio-elevation.sql` adds `elevation_m` — total ascent in metres,
+/// `cardio-elevation.sql (git history)` adds `elevation_m` — total ascent in metres,
 /// MEASURED rather than `incline` × `distance_km`, because a real bout changes
 /// incline and `incline` keeps one reading. It makes exactly the journey below,
 /// and it is asserted at every hop for the reason the other three are: each hop
