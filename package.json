@@ -2,7 +2,7 @@
   "name": "onyx",
   "version": "3.0.0",
   "private": true,
-  "description": "Onyx, the native iOS/watchOS app. This package holds the generators, the version SSoT and the service-role maintenance scripts; the app itself is under native/.",
+  "description": "Onyx, the native iOS/watchOS app. This package holds the code generators and the version single source of truth; the app itself is under native/.",
   "scripts": {
     "check": "npm run version:check && npm run check:types && npm run check:atlas && npm run check:mirror && npm run check:doms",
     "check:swift": "bash scripts/check-swift.sh",

@@ -234,11 +234,10 @@ Paste into **App Review Information → Notes**:
 > the same local database the app writes and make no network requests.
 
 > ⚠️ **The password is deliberately NOT written in this file.** `origin` is a
-> **public** GitHub repository, the Supabase project URL and anon key already
-> ship in the web bundle, and the demo account is a real account on the
-> production auth endpoint — so a literal here completes a working credential
-> pair for anyone who reads the repo. `docs/SECURITY_SWEEP_2026-09.md` row 1 is
-> the same finding against the seeder that created this account.
+> **public** GitHub repository, the Supabase project URL and anon key ship in
+> the app, and the demo account is a real account on the production auth
+> endpoint — so a literal here completes a working credential pair for anyone
+> who reads the repo.
 >
 > The account already exists; set or reset its password in the Supabase
 > dashboard (Authentication → Users → `appreview@onyx.fitness`). If it ever has
