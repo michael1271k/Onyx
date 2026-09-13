@@ -93,6 +93,26 @@ public extension AppDatabase {
 
 public extension AppDatabase {
 
+    /// Canonical name → the one catalogue row that answers to it.
+    ///
+    /// A name TWO rows share is ABSENT from this map rather than resolved to
+    /// one of them, which is the answer `ExerciseIndex.id(forSlug:)` gives by
+    /// throwing `ambiguousExercise`. `Crunch Machine` and `Crunch (Machine)`
+    /// are separate rows that disagree about `is_bodyweight`; choosing between
+    /// them files half a history under the wrong ladder, and a caller that
+    /// cannot tell is better off saying so.
+    static func exerciseIds(byCanonicalNameIn rows: [Exercise]) -> [String: String] {
+        var idsByName: [String: [String]] = [:]
+        for row in rows {
+            idsByName[ExerciseAliases.canonicalName(row.name).lowercased(), default: []].append(row.id)
+        }
+        return idsByName.compactMapValues { $0.count == 1 ? $0[0] : nil }
+    }
+
+    func exerciseIdsByCanonicalName() throws -> [String: String] {
+        Self.exerciseIds(byCanonicalNameIn: try exercises())
+    }
+
     static func createExercise(
         _ db: Database, userId: String, name: String, primaryMuscle: String?,
         secondaryMuscles: [String], equipment: String?, id: String?

@@ -1976,17 +1976,9 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         // onto the movement it files its records under.
         let rows = (try? store.exercises()) ?? []
         let catalogue = Dictionary(rows.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-        // The slug half is the catalogue's `slug` column since W2 (D3), and
-        // BELOW it the same slug computed from the name — the tier
-        // `ExerciseIndex.byComputedSlug` has and `nameBySlug` does not. A row
-        // created after W6 carries no `slug` at all, so without this a set the
-        // watch logged under the legacy spelling resolves to no name, the card
-        // shows none of it, and the next set appends under a second id.
-        let bySlug = ExerciseSlug.nameBySlug(rows).merging(
-            Dictionary(rows.map { (ExerciseSlug.id($0.name), $0.name) },
-                       uniquingKeysWith: { first, _ in first }),
-            uniquingKeysWith: { claimed, _ in claimed }
-        )
+        // The slug half is the catalogue's `slug` column since W2 (D3), with
+        // the computed tier under it since W6 — see `ExerciseSlug.nameBySlug`.
+        let bySlug = ExerciseSlug.nameBySlug(rows)
         func canonical(_ id: String) -> String {
             ExerciseAliases.canonicalName(catalogue[id] ?? bySlug[id] ?? id)
         }
@@ -2083,11 +2075,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         guard let store, let rows = try? store.exercises() else { return }
         catalogueLoaded = true
         catalogueIsEmpty = rows.isEmpty
-        var idsByName: [String: [String]] = [:]
-        for row in rows {
-            idsByName[ExerciseAliases.canonicalName(row.name).lowercased(), default: []].append(row.id)
-        }
-        idByCanonicalName = idsByName.compactMapValues { $0.count == 1 ? $0[0] : nil }
+        idByCanonicalName = AppDatabase.exerciseIds(byCanonicalNameIn: rows)
     }
 
     private func catalogueIndex() -> [String: String] {
