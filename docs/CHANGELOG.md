@@ -44,6 +44,84 @@ _Nothing yet._
 
 ---
 
+## [3.1.0] — 2026-09-13 · The Export Answers to the Audit
+
+The weekly export is rebuilt from the ground up for the coaching audit that
+reads it. **The document format is replaced wholesale** — nothing that parsed
+export v4 will parse v5. There is no data migration; every past week re-renders
+in the new shape from the rows it already had.
+
+### Changed
+- **History → Export week** now writes **export v5**: seven fixed sections —
+  `WEEK`, `WEEK AGGREGATES`, `BODY COMPOSITION`, `DAILY ROWS`, `SESSIONS`,
+  `SETS BY MUSCLE`, `ANOMALIES` — and nothing between them. A field with nothing
+  behind it prints nothing at all rather than a dash, except the handful where
+  the absence is itself the finding. A normal week is about 120 lines, down
+  from roughly 700.
+- Gone with v4: the legend, the four standing closing notes, the per-day
+  `Not recorded:` line, the energy-balance paragraph, the micronutrient and
+  stack sections, and every prose sentence. The audit writes the prose now.
+- **No Score and no Battery figures anywhere.** Both were this app's opinion of
+  the week; the audit forms its own, and a test bans the words.
+- **Body composition** no longer compares the week's first weigh-in to its last
+  — that read `61.7 → 61.7 (+0.00)` for a week that moved. It reports the
+  **trailing-four weigh-in mean** and the sample centre that says which part of
+  the week those four came from.
+- A scan whose bone mass sits more than 0.10 kg, or whose body water sits more
+  than 0.6 kg, from the fortnight's median is printed **ANOMALOUS** and excluded
+  from every mean.
+- **Sessions** print in the order the movements were **performed**, taken from
+  the set event log, rather than in deck order. Where the log cannot answer —
+  a session pulled from another device, or one whose log was back-filled by an
+  edit — the fallback is named in `ANOMALIES` rather than presented as a record.
+- **Sets by muscle** is graded the way `VolumeZone` has always stated it: a
+  muscle is UNDER only if even its total, assistance included, falls short, and
+  only DIRECT work can earn an OVER. A muscle that reached its number purely by
+  assisting other movements no longer reads OVER.
+- `nights_deep_ge_60` carries the nights that measured deep sleep as its
+  denominator — 4 of 7 and 4 of 4 are different weeks.
+
+### Fixed
+- **Every timestamp is the phone's own wall clock.** Bed and wake times, session
+  starts and ends and cardio starts were all rendered in UTC — a 19:00 session
+  read 16:00, and a night in Asia/Jerusalem read three hours early.
+- **Session start and end are the first and last set**, from the event log, not
+  when the logger screen was opened and the finish button tapped. A workout
+  performed at 19:00 exported as 10:46–17:12.
+- **Sets to failure** are counted from set-level **RPE 10** as well as the
+  failure tick. A session with six sets rated 10 reported `0`, directly above
+  the list of them. A unilateral pair is examined per side and counted once.
+- **Duplicate cardio** is removed on start, duration and distance — one walk had
+  been importing as 23 rows on a Friday and 8 on a Saturday, multiplying the
+  week's bouts, minutes and calories.
+- **Sleep duration** falls back to the sleep session's own figure and then to
+  deep + REM + core when `daily_logs` carries none. Most nights had none, so the
+  week's average was a mean of one night.
+- **Treadmill warm-ups** carry their duration, distance, incline and a derived
+  speed instead of rendering as `W 0 reps`. The export's own set query had never
+  selected the four cardio columns, all of which are `Optional`, so the omission
+  was silent.
+- **The supplement stack's micronutrients** — vitamin C, B12, D and magnesium —
+  are credited again. A `custom_supplements.micros` payload that was present but
+  empty short-circuited the fallback table, and the item silently credited
+  nothing; the two are merged now, per micronutrient.
+- **HRV readings** are run through `VitalsGate` — the same gate every ingest path
+  already used — and a doubted night is named, excluded from a second mean, and
+  listed in `ANOMALIES`.
+- **The lever line carries a 1,935 kcal baseline.** The ladder has no rungs to
+  answer with (nothing writes `target_profiles.kind`, so every profile resolves
+  to `Custom`), and a daily target with no anchor behind it cannot be read as a
+  deficit.
+- A micronutrient the week doubted on **every** day still has a row, reading
+  `no plausible reading (0 of 7 d)`. Dropping it made a week of implausible
+  calcium read exactly like a week where calcium was never logged at all.
+- A micronutrient the food source never reported on a day with food logged is
+  named in `ANOMALIES`, so a gap in what MyFitnessPal wrote to Apple Health no
+  longer reads as a low intake. There is no food database in Onyx to fix — every
+  food micronutrient arrives as a daily total from Apple Health.
+
+---
+
 ## [3.0.0] — 2026-09-13 · The Web App Is Gone
 
 Onyx is one app now. The Helix web app — the Next.js dashboard, logger and

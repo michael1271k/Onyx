@@ -77,6 +77,77 @@ struct WeeklyExportGoldenTests {
     // never a second serialisation of itself: nothing read the JSON fence, and
     // the cross-language check it provided is already covered by `derivedWeek`,
     // which this suite compares field for field above.
+
+    /// v5's SHAPE, which the byte comparison above cannot state.
+    ///
+    /// A snapshot test fails when the document changes and says nothing about
+    /// whether the change was allowed. These are the rules of the schema
+    /// itself: seven sections, in this order, nothing else between them, no
+    /// figure this app formed an opinion with, and short enough to paste.
+    @Test("every document is seven sections, in order, and nothing else")
+    func grammarHolds() throws {
+        let sections = [
+            "## 1 · WEEK", "## 2 · WEEK AGGREGATES", "## 3 · BODY COMPOSITION",
+            "## 4 · DAILY ROWS", "## 5 · SESSIONS", "## 6 · SETS BY MUSCLE", "## 7 · ANOMALIES",
+        ]
+        // `Score` and `Battery` are this app's OPINION of a week. The audit
+        // reading this document is here to form its own, and a number it cannot
+        // recompute from the rows beside it is one it has to either trust or
+        // ignore. Banned outright rather than merely unused, so a later wave
+        // cannot reintroduce one by helpfulness.
+        let banned = try NSRegularExpression(pattern: #"\b(score|batter(y|ies))\b"#, options: .caseInsensitive)
+
+        for c in try GoldenFixture<WeeklyExportInput, Out>.load("weekly-export").cases {
+            let md = WeeklyExport.build(c.input)
+            let lines = md.components(separatedBy: "\n")
+            #expect(lines.filter { $0.hasPrefix("## ") } == sections, "sections — \(c.name)")
+            // A `#` heading of any other depth is a section by another name.
+            #expect(!lines.contains { $0.hasPrefix("# ") || $0.hasPrefix("### #") }, "stray heading — \(c.name)")
+            let ns = md as NSString
+            #expect(banned.firstMatch(in: md, range: NSRange(location: 0, length: ns.length)) == nil,
+                    "a Score or a Battery reached the document — \(c.name)")
+            // The budget is 400 for a normal week; a fixture is smaller still,
+            // and the number is here so a wave that doubles the document has to
+            // change the rule on purpose.
+            #expect(lines.count < 400, "\(lines.count) lines — \(c.name)")
+            // The one field of §1 that is required.
+            #expect(md.contains("\(c.input.weekStart) → \(c.input.weekEnd)"), "date_range — \(c.name)")
+            // And the §2 rows the schema marks required, which print even with
+            // nothing behind them.
+            for required in ["\nwater ", "\nsteps ", "\nvitals ", "\ntraining ", "\nPRs ", "\ncardio ", "\nfatigue "] {
+                let row = required == "\nwater " ? "water " : required
+                #expect(md.contains(row), "required row \(row.trimmingCharacters(in: .whitespacesAndNewlines)) — \(c.name)")
+            }
+            #expect(md.contains("nights_deep_ge_60"), "required sleep field — \(c.name)")
+            #expect(md.contains("flagged_days"), "required vitals field — \(c.name)")
+        }
+    }
+
+    /// §6's grade is ASYMMETRIC, and the rule is `VolumeZone`'s, not this
+    /// document's. A muscle is UNDER only if even its total falls short; only
+    /// DIRECT work can earn an OVER. Graded symmetrically, a muscle that
+    /// reached its number purely by assisting other movements printed OVER, and
+    /// the reader was told to cut work that was never being done.
+    @Test("a muscle is graded UNDER on its total and OVER on its direct sets alone")
+    func setsByMuscleGradesAsymmetrically() throws {
+        // 12 direct against a target of 10 is 1.2 — inside the 1.3 ceiling.
+        #expect(VolumeZone.of(weeklySets: 12, target: 10, directSets: 12) == .optimal)
+        // 14 direct against 10 is 1.4, and only direct work can reach it.
+        #expect(VolumeZone.of(weeklySets: 14, target: 10, directSets: 14) == .over)
+        // The case the symmetric grade got wrong: a total over the ceiling that
+        // is mostly assistance stays ON, because the direct work is 0.6×.
+        #expect(VolumeZone.of(weeklySets: 14, target: 10, directSets: 6) == .optimal)
+        // And a total short of the target is UNDER even where direct is high.
+        #expect(VolumeZone.of(weeklySets: 7.5, target: 10, directSets: 7.5) == .building)
+
+        let rich = try #require(try GoldenFixture<WeeklyExportInput, Out>
+            .load("weekly-export").cases.first { $0.name.hasPrefix("the rich week — every section lit") })
+        let md = WeeklyExport.build(rich.input)
+        #expect(md.contains("| Quadriceps |   12.0 |      0.0 |  12.0 |   10.0 | ON        |"))
+        #expect(md.contains("| Side delts |   14.0 |        — |  14.0 |   10.0 | OVER      |"))
+        // A muscle the plan never named is neither over nor under it.
+        #expect(md.contains("| Adductors  |      — |        — |   2.0 |   none | no target |"))
+    }
 }
 
 @Suite("Weekly export — the small renderers")

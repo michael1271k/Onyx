@@ -154,7 +154,12 @@ struct WeeklyExportBuilderTests {
 
     @Test func assemblesTheHandWrittenInput() throws {
         let db = try seeded()
-        let got = try WeeklyExportBuilder(database: db, userId: user).input(weekStart: weekStart, today: weekStart)
+        // UTC EXPLICITLY. The builder now defaults to the phone's own zone —
+        // a document about a day should be in the clock that day happened on —
+        // and this fixture's timestamps are written in UTC, so the assertion
+        // pins the zone rather than the machine that runs the suite.
+        let got = try WeeklyExportBuilder(database: db, userId: user, timeZone: TimeZone(identifier: "UTC")!)
+            .input(weekStart: weekStart, today: weekStart)
         let want = try JSONDecoder().decode(WeeklyExportInput.self, from: Data(Self.expected.utf8))
 
         // Section by section first, so a miss names its section.
@@ -164,12 +169,32 @@ struct WeeklyExportBuilderTests {
         // Readiness v9's per-day signals are asserted on their own below — the
         // hand-written payload predates them, and a 49-day EWMA is not a thing
         // to write out by hand seven times.
-        func withoutReadiness(_ d: ExportDay) -> ExportDay { var x = d; x.readiness = nil; return x }
+        func withoutReadiness(_ d: ExportDay) -> ExportDay {
+            var x = d; x.readiness = nil; x.hrvFlag = nil; return x
+        }
         for (g, w) in zip(got.days, want.days) { #expect(withoutReadiness(g) == w, "day \(w.date)") }
         #expect(got.days.count == want.days.count)
+        /* ── v5's FIELDS ARE ASSERTED BY NAME, NOT WRITTEN INTO THE FIXTURE ──
+           `prescription`, `previous` and `compound` are read out of the PLAN
+           and out of every session before this one, and `anomaly`/`hrvFlag` out
+           of a fortnight and six weeks of history. Writing them into the
+           hand-written payload would be copying what the code produced, which
+           is a snapshot and not a specification. They are stripped here and
+           each is asserted below against a figure worked out by hand — the same
+           bargain `withoutReadiness` already struck for Readiness v9. */
+        func withoutV5(_ e: ExportExercise) -> ExportExercise {
+            var x = e; x.compound = nil; x.prescription = nil; x.previous = nil; return x
+        }
+        func withoutV5(_ s: ExportSession) -> ExportSession {
+            var x = s; x.exercises = s.exercises.map(withoutV5); return x
+        }
         var gotStripped = got
         gotStripped.days = got.days.map(withoutReadiness)
-        #expect(got.sessions == want.sessions)
+        gotStripped.sessions = got.sessions.map(withoutV5)
+        gotStripped.bodyComp = got.bodyComp?.map { var x = $0; x.anomaly = nil; return x }
+        gotStripped.leverBaselineKcal = nil
+        gotStripped.anomalies = nil
+        #expect(got.sessions.map(withoutV5) == want.sessions)
         #expect(got.volumeByMuscle == want.volumeByMuscle)
         #expect(got.tonnageByMuscle == want.tonnageByMuscle)
         #expect(got.doms == want.doms)
@@ -180,6 +205,37 @@ struct WeeklyExportBuilderTests {
         #expect(got.supplementProtocol == want.supplementProtocol)
         #expect(got.ledger == want.ledger)
         #expect(gotStripped == want)
+
+        // ── v5, FIELD BY FIELD ──
+        // The anchor is forced: `active_lever` is "custom" in this seed, so the
+        // ladder has no rung to name a baseline with.
+        #expect(got.leverBaselineKcal == WeeklyExport.leverBaselineKcal)
+        // Nothing to correct: no duplicate bout, and every night with a sleep
+        // reading had one in `daily_logs` already.
+        #expect(got.anomalies == [])
+        // One HRV reading in the whole seed. `VitalsGate` needs seven nights
+        // before it has an opinion, so it declines to have one.
+        #expect(got.days.allSatisfy { $0.hrvFlag == nil })
+        // One scan, so the fortnight's median IS that scan and nothing can
+        // deviate from itself.
+        #expect((got.bodyComp ?? []).allSatisfy { $0.anomaly == nil })
+
+        let legPress = try #require(got.sessions.first?.exercises.first { $0.name == "Leg Press" })
+        // Onyx-5's `legs_a` row, at the CUT set count.
+        #expect(legPress.prescription?.sets == 3)
+        #expect(legPress.prescription?.reps == "8–12")
+        #expect(legPress.prescription?.loadKg == 70)
+        #expect(legPress.compound == true)
+        // s0, the week before — 70 kg × 12, the only prior Leg Press there is.
+        #expect(legPress.previous?.date == "2026-08-18")
+        #expect(legPress.previous?.weightKg == 70)
+        #expect(legPress.previous?.reps == 12)
+        // Reverse Crunch is in the deck but was never performed before.
+        #expect(got.sessions.first?.exercises.first { $0.name == "Reverse Crunch" }?.previous == nil)
+        // a4 is the one set rated 10; a2 and a3 at 8.5 and 9.5 are not failures.
+        #expect(got.sessions.first?.failureSets == 1)
+        // No `set_events` in this seed, and `ex-rc` carries no `exercise_order`.
+        #expect(got.sessions.allSatisfy { $0.orderSource == "logged" })
 
         // ── READINESS v9 on the days ──
         // Every day carries the signals; with six weeks of history absent the
@@ -204,11 +260,12 @@ struct WeeklyExportBuilderTests {
 
         let markdown = WeeklyExport.build(got)
         #expect(markdown.contains("Legs & Core A"))
-        // v4's header is two lines: the week's name, then what it was run under.
-        #expect(markdown.hasPrefix("# ONYX \u{00B7} WEEK 6\n2026-08-23 \u{2192} 2026-08-29 \u{00B7} Onyx-5 Cut \u{00B7} Cut \u{00B7}"))
-        // And every day is a section of its own, in order.
-        #expect(markdown.contains("## DAY 1 \u{00B7} Sun \u{00B7} 2026-08-23 \u{00B7}"))
-        #expect(markdown.hasSuffix(WeeklyExport.notes[3]))
+        // v5 opens on §1 and closes on §7. There is no title, no legend and no
+        // closing notes: the document is seven sections of data and nothing else.
+        #expect(markdown.hasPrefix("## 1 \u{00B7} WEEK\nweek_id Week 6 \u{00B7} 2026-08-23 \u{2192} 2026-08-29 \u{00B7} phase Cut"))
+        #expect(markdown.contains("\n## 7 \u{00B7} ANOMALIES\n"))
+        // The forced anchor — the ladder has no rungs to answer with.
+        #expect(markdown.contains("baseline 1,935 kcal"))
     }
 
     /// The whole payload, by hand — every field the web's `weekPayload` would
@@ -367,4 +424,205 @@ struct WeeklyExportBuilderTests {
       ]
     }
     """#
+}
+
+/// The four data defects v5 fixed in the BUILDER, each on rows that reproduce
+/// it. None of them was ever a renderer bug: the document printed what it was
+/// handed, and what it was handed was a UTC clock, a duplicated bout, a
+/// treadmill with its measurement dropped by the SELECT, and a session span
+/// taken from when the screen opened.
+@Suite("Weekly export builder — v5")
+struct WeeklyExportBuilderV5Tests {
+    private let user = "u1"
+    private let weekStart = "2026-08-23"
+
+    private func iso(_ s: String) -> Date {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f.date(from: s)!
+    }
+
+    /// One `set_events` row. Written as SQL because the fold's `body` is a blob
+    /// this query never opens — only `kind` and `created_at` matter here.
+    private func event(_ db: Database, id: String, session: String, set: String, seq: Int, at: String) throws {
+        try db.execute(
+            sql: """
+                INSERT INTO set_events (id, session_id, set_id, device_id, seq, kind, body, created_at, is_synced)
+                VALUES (?, ?, ?, 'device-a', ?, 'append', X'7B7D', ?, 0)
+                """,
+            arguments: [id, session, set, seq, iso(at)])
+    }
+
+    private func seeded() throws -> AppDatabase {
+        let db = try AppDatabase.inMemory(deviceId: "device-a")
+        let t = iso("2026-08-23T00:00:00Z")
+        try db.writer.write { conn in
+            try UserGoalRow(
+                id: "g1", userId: user, calorieGoal: 1999, proteinGoalG: 170, stepsGoal: 10_000,
+                contextMode: "normal", createdAt: t, updatedAt: t, autoLogSupplements: false,
+                activeProgram: "onyx5", dayCutoffHour: 4, unitSystem: "metric", reduceMotion: false,
+                timezone: "UTC", activePlan: "onyx5", activePhase: "cut", trackRpe: true, activeLever: "custom"
+            ).insert(conn)
+            try Exercise(id: "ex-tm", name: "Treadmill").insert(conn)
+            try Exercise(id: "ex-lp", name: "Leg Press").insert(conn)
+            try Exercise(id: "ex-hs", name: "Hack Squat").insert(conn)
+
+            /* The session ran 19:00–20:31. `started_at` and `ended_at` are the
+               screen's: opened at 10:46, finished at 17:12 — which is exactly
+               the span the export used to print for it. */
+            try WorkoutSession(id: "s1", userId: user, dayKey: "legs_a", date: "2026-08-24",
+                               startedAt: iso("2026-08-24T10:46:00Z"), endedAt: iso("2026-08-24T17:12:00Z"),
+                               durationMin: 91, sessionRpe: 8).insert(conn)
+            // A treadmill warm-up: no load, no reps, five minutes and 0.37 km.
+            try WorkoutSet(id: "w1", sessionId: "s1", exerciseId: "ex-tm", setIndex: 0, weightKg: 0, reps: 0,
+                           setType: "warmup", exerciseOrder: 0,
+                           durationSec: 300, incline: 2, distanceKm: 0.37).insert(conn)
+            /* Hack Squat sits SECOND in the deck and was performed FIRST.
+               `exercise_order` records the deck; the event log records the
+               session. The two disagree, on purpose. */
+            try WorkoutSet(id: "h1", sessionId: "s1", exerciseId: "ex-hs", setIndex: 1, weightKg: 60, reps: 10,
+                           rpe: 10, exerciseOrder: 2).insert(conn)
+            try WorkoutSet(id: "p1", sessionId: "s1", exerciseId: "ex-lp", setIndex: 2, weightKg: 75, reps: 12,
+                           rpe: 8, exerciseOrder: 1).insert(conn)
+
+            try event(conn, id: "e1", session: "s1", set: "w1", seq: 1, at: "2026-08-24T19:00:00Z")
+            try event(conn, id: "e2", session: "s1", set: "h1", seq: 2, at: "2026-08-24T19:20:00Z")
+            try event(conn, id: "e3", session: "s1", set: "p1", seq: 3, at: "2026-08-24T20:31:00Z")
+
+            // The same walk, imported three times. Identical start, duration
+            // and distance — one physical bout.
+            for (i, id) in ["c1", "c2", "c3"].enumerated() {
+                try CardioLogRow(id: id, userId: user, date: "2026-08-24", kind: "walk",
+                                 distanceM: 4200, durationMin: 48, kcal: 190, fromHealthkit: true,
+                                 createdAt: iso("2026-08-24T07:32:00Z")).insert(conn)
+                _ = i
+            }
+            // A genuinely different bout on the same day, same distance.
+            try CardioLogRow(id: "c4", userId: user, date: "2026-08-24", kind: "walk",
+                             distanceM: 4200, durationMin: 51, kcal: 200, fromHealthkit: true,
+                             createdAt: iso("2026-08-24T17:40:00Z")).insert(conn)
+            // A bout with no start at all: never deduped, and never a duplicate
+            // of the clockless bout beside it.
+            try CardioLogRow(id: "c5", userId: user, date: "2026-08-26", kind: "cycle",
+                             durationMin: 30, fromHealthkit: false).insert(conn)
+            try CardioLogRow(id: "c6", userId: user, date: "2026-08-28", kind: "swim",
+                             durationMin: 45, fromHealthkit: false).insert(conn)
+
+            /* A SECOND session whose event log was BACK-FILLED, not logged:
+               `SessionEditing.seedEventLog` stamps every row with the session's
+               own `started_at`, so all three instants are identical. */
+            try WorkoutSession(id: "s2", userId: user, dayKey: "arms", date: "2026-08-26",
+                               startedAt: iso("2026-08-26T18:00:00Z"), endedAt: iso("2026-08-26T19:05:00Z"),
+                               durationMin: 65).insert(conn)
+            for (i, (id, ex, order)) in [("z1", "ex-lp", 0), ("z2", "ex-hs", 1), ("z3", "ex-tm", 2)].enumerated() {
+                try WorkoutSet(id: id, sessionId: "s2", exerciseId: ex, setIndex: i, weightKg: 20, reps: 10,
+                               exerciseOrder: order).insert(conn)
+                try event(conn, id: "se\(i)", session: "s2", set: id, seq: 10 + i, at: "2026-08-26T18:00:00Z")
+            }
+
+            // A reading taken before training on a day the calendar calls rest.
+            try FatigueLogRow(id: "f1", userId: user, date: "2026-08-24", slot: "pre", level: 3,
+                              createdAt: iso("2026-08-24T18:55:00Z")).insert(conn)
+        }
+        return db
+    }
+
+    private func built(_ zone: String) throws -> WeeklyExportInput {
+        try WeeklyExportBuilder(database: try seeded(), userId: user, timeZone: TimeZone(identifier: zone)!)
+            .input(weekStart: weekStart, today: weekStart)
+    }
+
+    @Test("the session's span is the first and last set, in the phone's own zone")
+    func spanComesFromTheEventLog() throws {
+        let got = try built("Asia/Jerusalem")
+        let s = try #require(got.sessions.first)
+        // 19:00 and 20:31 UTC are 22:00 and 23:31 in Jerusalem — the point is
+        // that both the SOURCE and the ZONE changed, and neither is 10:46.
+        #expect(s.startedAt == "2026-08-24T22:00:00+03:00")
+        #expect(s.endedAt == "2026-08-24T23:31:00+03:00")
+        #expect(WeeklyExport.build(got).contains("22:00–23:31"))
+    }
+
+    @Test("a bout is imported many times and exported once")
+    func duplicateCardioIsRemoved() throws {
+        let got = try built("UTC")
+        // Three imports of one walk become one; the second walk, the cycle and
+        // the swim are four distinct bouts.
+        #expect((got.cardio ?? []).count == 4)
+        #expect(got.anomalies?.contains("duplicate cardio removed 2") == true)
+        // And the bout that only shares its distance survives.
+        #expect((got.cardio ?? []).filter { $0.date == "2026-08-24" }.map(\.durationMin) == [48, 51])
+        // Its own start, in the same clock as everything else.
+        #expect((got.cardio ?? []).first?.startedAt == "2026-08-24T07:32:00Z")
+    }
+
+    @Test("the movements print in the order they were performed")
+    func performedOrderWinsOverTheDeck() throws {
+        let got = try built("UTC")
+        let s = try #require(got.sessions.first)
+        #expect(s.orderSource == "performed")
+        // Deck order would be Treadmill, Leg Press, Hack Squat.
+        #expect(s.exercises.map(\.name) == ["Treadmill", "Hack Squat", "Leg Press"])
+    }
+
+    @Test("a treadmill warm-up carries its duration, its distance and a derived speed")
+    func treadmillWarmupIsNotZeroReps() throws {
+        let got = try built("UTC")
+        let treadmill = try #require(got.sessions.first?.exercises.first { $0.name == "Treadmill" })
+        let set = try #require(treadmill.sets.first)
+        #expect(set.durationSec == 300)
+        #expect(set.distanceKm == 0.37)
+        #expect(set.inclinePct == 2)
+        // 0.37 km in 300 s is 4.44 km/h.
+        let md = WeeklyExport.build(got)
+        #expect(md.contains("warm-ups Treadmill 5:00 4.4 km/h 0.37 km 2%"))
+        #expect(!md.contains("0 reps"))
+    }
+
+    @Test("a back-filled event log is not a record of what was performed")
+    func seededEventsDoNotClaimPerformedOrder() throws {
+        let got = try built("UTC")
+        let s = try #require(got.sessions.first { $0.label != got.sessions.first?.label || $0.date == "2026-08-26" }
+            ?? got.sessions.first { $0.date == "2026-08-26" })
+        /* Every seeded event carries the session's own `started_at`, so there
+           is no order in them. Without the guard the sort falls through to the
+           NAME tiebreak and prints Hack Squat, Leg Press, Treadmill under the
+           word `performed`; the span collapses onto 18:00–18:00. */
+        #expect(s.orderSource == "index")
+        #expect(s.exercises.map(\.name) == ["Leg Press", "Hack Squat", "Treadmill"])
+        #expect(s.startedAt == "2026-08-26T18:00:00Z")
+        #expect(s.endedAt == "2026-08-26T19:05:00Z")
+        // Deck order is a guess too, and §7 says so.
+        #expect(WeeklyExport.build(got).contains("no performed-order index 2026-08-26"))
+    }
+
+    @Test("a clockless bout is never a duplicate of another clockless bout")
+    func clocklessCardioIsNotDeduped() throws {
+        let got = try built("UTC")
+        let kinds = (got.cardio ?? []).map(\.kind).sorted()
+        #expect(kinds == ["cycle", "swim", "walk", "walk"])
+    }
+
+    @Test("the fatigue slots follow the day that was trained, not the calendar")
+    func fatigueSlotsFollowTheSession() throws {
+        let got = try built("UTC")
+        // The builder normalised `pre` against a day with a session on it.
+        #expect(got.fatigue?.first { $0.date == "2026-08-24" }?.slot == "Before training")
+        // And the renderer asks for the same three slots, so the reading lands.
+        let day = try #require(got.days.first { $0.date == "2026-08-24" })
+        let trace = WeeklyExport.fatigueLabels(isTrainingDay: true)
+        #expect(trace.contains("Before training"))
+        #expect(WeeklyExport.build(got).contains("2026-08-24 · TRAIN"))
+        #expect(!WeeklyExport.build(got).split(separator: "\n")
+            .first { $0.hasPrefix("2026-08-24 · TRAIN") }!.contains("fatigue -/-/-"))
+        _ = day
+    }
+
+    @Test("a set rated 10 is a set to failure, whatever the tick says")
+    func failureComesFromTheRating() throws {
+        let got = try built("UTC")
+        // h1 is rated 10 and carries `set_type = normal`; p1 is rated 8.
+        #expect(got.sessions.first?.failureSets == 1)
+        #expect(WeeklyExport.build(got).contains("failure_sets 1"))
+    }
 }

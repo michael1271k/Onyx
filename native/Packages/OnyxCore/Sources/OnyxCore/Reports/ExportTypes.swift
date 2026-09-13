@@ -120,6 +120,10 @@ public struct ExportDay: Codable, Equatable, Sendable {
     public var weighInSkipReason: String?
     public var nutritionException: String?
     public var nutritionEstimated: Bool
+    /// Why `VitalsGate.hrvArtifact` refused to believe the day's HRV, in its
+    /// own words. Present ONLY when the reading is doubted — a nil is "the
+    /// gate had no objection", which is every ordinary night.
+    public var hrvFlag: String?
     public var targetProfile: String?
     public var trackCarbs: Bool?
     public var trackFat: Bool?
@@ -155,6 +159,22 @@ public struct ExportSet: Codable, Equatable, Sendable {
     public var dropset: Bool?
     public var quality: String?
     public var pairId: String?
+    /// A CARDIO set's own axes — `workout_sets.duration_sec / distance_km /
+    /// incline`, the four columns `SessionHistoryStore` has always selected and
+    /// the export's hand-rolled copy of that query never did.
+    ///
+    /// A treadmill warm-up carries `weight_kg 0, reps 0` and all of its real
+    /// measurement in here, so an export that drops them renders `W 0 reps` —
+    /// a row that reads as nothing having happened. Nil on every resistance
+    /// set, which is what these being optional means.
+    ///
+    /// SPEED IS NOT STORED and is not a column: it is distance over duration,
+    /// derived at the render boundary. A treadmill's pace rises through a
+    /// warm-up, so the stored pair is the honest record and a single speed is
+    /// the average of it.
+    public var durationSec: Double?
+    public var distanceKm: Double?
+    public var inclinePct: Double?
 
     var isWarmup: Bool { warmup == true }
     var isGhost: Bool { ghost == true }
@@ -177,6 +197,34 @@ public struct ExportExercise: Codable, Equatable, Sendable {
     public var secondaryMuscles: [String]?
     public var topKg: Double?
     public var repWindow: String?
+    /// `exercises.is_compound` / `ProgramExercise.isCompound`, carried so the
+    /// week can count the compound sets taken past RPE 8.5. Never guessed from
+    /// the name — see `Exercises/Tags.swift`.
+    public var compound: Bool?
+    /// What the ACTIVE PLAN asked for, as it stands. Nil for a movement the
+    /// plan does not name (a substitution, an accessory added on the day).
+    public var prescription: ExportPrescription?
+    /// The best set of the last session that performed this movement, before
+    /// this one. Nil the first time it is ever logged.
+    public var previous: ExportPrevious?
+}
+
+/// `3 × 8–12 @ 40 kg` — the plan's own row, never a back-formed average.
+public struct ExportPrescription: Codable, Equatable, Sendable {
+    public var sets: Double
+    /// The window as the plan writes it: `"8–12"`, `"55s"`.
+    public var reps: String
+    /// `ProgramExercise.wk1Kg`. Absent for bodyweight and for a plan row that
+    /// never carried a load.
+    public var loadKg: Double?
+}
+
+/// The previous best set of one movement — the comparison every ACTUAL line is
+/// read against. Dated, because "last time" is a date and not a week.
+public struct ExportPrevious: Codable, Equatable, Sendable {
+    public var date: String
+    public var weightKg: Double
+    public var reps: Double
 }
 
 public struct ExportPr: Codable, Equatable, Sendable {
@@ -282,6 +330,10 @@ public struct ExportBodyComp: Codable, Equatable, Sendable {
     public var proteinPercent: Double?
     public var skeletalMuscleMassKg: Double?
     public var estimatedWaistToHipRatio: Double?
+    /// Why the scan is not believed, in words — `bone 0.14 kg from the 14-day
+    /// median`. The row is still PRINTED; it is excluded from every mean and
+    /// from the trailing-four window. Nil is a valid scan.
+    public var anomaly: String?
 }
 
 public struct VolumeByMuscle: Codable, Equatable, Sendable {
@@ -342,4 +394,17 @@ public struct WeeklyExportInput: Codable, Equatable, Sendable {
     public var cardio: [ExportCardio]?
     public var supplementProtocol: [ExportSupplement]?
     public var ledger: [LedgerWeek]?
+    /// The maintenance anchor every rung of the ladder is a step away from.
+    /// Printed on the lever line so a target can be read as a deficit rather
+    /// than as a bare number.
+    public var leverBaselineKcal: Double?
+    /// Everything the BUILDER corrected or refused on the way out, one clause
+    /// each — a duplicate bout dropped, a sleep duration rebuilt from stages,
+    /// a session whose stamps disagreed. The renderer adds what IT can see
+    /// (doubted micros, flagged HRV, anomalous scans) and prints both under
+    /// `## 7 · ANOMALIES`, which is the only place the document admits to
+    /// having changed anything.
+    public var anomalies: [String]?
+    /// Free text the athlete keeps against the protocol, at most three lines.
+    public var protocolNotes: [String]?
 }
