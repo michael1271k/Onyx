@@ -1976,8 +1976,17 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         // onto the movement it files its records under.
         let rows = (try? store.exercises()) ?? []
         let catalogue = Dictionary(rows.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-        // The slug half is the catalogue's `slug` column since W2 (D3).
-        let bySlug = ExerciseSlug.nameBySlug(rows)
+        // The slug half is the catalogue's `slug` column since W2 (D3), and
+        // BELOW it the same slug computed from the name — the tier
+        // `ExerciseIndex.byComputedSlug` has and `nameBySlug` does not. A row
+        // created after W6 carries no `slug` at all, so without this a set the
+        // watch logged under the legacy spelling resolves to no name, the card
+        // shows none of it, and the next set appends under a second id.
+        let bySlug = ExerciseSlug.nameBySlug(rows).merging(
+            Dictionary(rows.map { (ExerciseSlug.id($0.name), $0.name) },
+                       uniquingKeysWith: { first, _ in first }),
+            uniquingKeysWith: { claimed, _ in claimed }
+        )
         func canonical(_ id: String) -> String {
             ExerciseAliases.canonicalName(catalogue[id] ?? bySlug[id] ?? id)
         }
@@ -2055,42 +2064,39 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     }
 
     /// Canonical name → the local catalogue's id.
+    ///
+    /// A name TWO rows answer to is absent from this map, not resolved to one
+    /// of them. That is the question `ExerciseIndex.id(forSlug:)` answers by
+    /// throwing `ambiguousExercise`, and for the same reason: `Crunch Machine`
+    /// and `Crunch (Machine)` are separate rows with different `is_bodyweight`,
+    /// and picking one files half a history under the wrong ladder.
     private var idByCanonicalName: [String: String] = [:]
+
+    /// Whether the local catalogue has been read at all, and whether it had
+    /// anything in it. An EMPTY catalogue means "not pulled yet", not "this
+    /// movement does not exist" — see `storedIdCreatingCatalogueRow`.
+    private var catalogueLoaded = false
+    private var catalogueIsEmpty = true
 
     /// Rebuild `idByCanonicalName` from the local catalogue.
     private func refreshCatalogueIndex() {
         guard let store, let rows = try? store.exercises() else { return }
-        idByCanonicalName = Dictionary(
-            rows.map { (ExerciseAliases.canonicalName($0.name).lowercased(), $0.id) },
-            uniquingKeysWith: { first, _ in first }
-        )
+        catalogueLoaded = true
+        catalogueIsEmpty = rows.isEmpty
+        var idsByName: [String: [String]] = [:]
+        for row in rows {
+            idsByName[ExerciseAliases.canonicalName(row.name).lowercased(), default: []].append(row.id)
+        }
+        idByCanonicalName = idsByName.compactMapValues { $0.count == 1 ? $0[0] : nil }
     }
 
-    /// The catalogue id for a movement, created on demand.
-    ///
-    /// ── WHY A ROW IS CREATED HERE (W6) ──────────────────────────────────────
-    /// Until W6 this returned a slug of the name, and a set logged against a
-    /// movement the catalogue had never heard of went into
-    /// `workout_sets.exercise_id` under a second identity. That was survivable
-    /// while one account and one deck existed; it is the SPLIT `ExerciseIndex`'s
-    /// header describes, and on a generic account — where a template names
-    /// movements no catalogue row answers for — it is the common case, not the
-    /// edge one.
-    ///
-    /// `createExercise` is idempotent on the name and writes LOCALLY first,
-    /// queueing the row through the ordinary outbox, so this stays correct with
-    /// no network. The slug survives as the last resort for a store that cannot
-    /// be written to at all (previews, a disk error): a logged rep is never
-    /// worth losing to a catalogue write.
-    private func catalogueId(for name: String) -> String {
-        if idByCanonicalName.isEmpty { refreshCatalogueIndex() }
-        let key = ExerciseAliases.canonicalName(name).lowercased()
-        if let known = idByCanonicalName[key] { return known }
-        guard let store, let created = try? store.createExercise(userId: userId, name: name) else {
-            return ExerciseSlug.id(name)
-        }
-        idByCanonicalName[key] = created
-        return created
+    private func catalogueIndex() -> [String: String] {
+        if !catalogueLoaded { refreshCatalogueIndex() }
+        return idByCanonicalName
+    }
+
+    private func canonicalKey(_ name: String) -> String {
+        ExerciseAliases.canonicalName(name).lowercased()
     }
 
     /// `actualRestSec` is passed only by the APPEND path. An amend rebuilds the
@@ -2100,7 +2106,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         _ row: SetRow, in exercise: ExerciseState, actualRestSec: Int? = nil
     ) -> SetSnapshot {
         SetSnapshot(
-            exerciseId: storedId(for: exercise),
+            exerciseId: storedIdCreatingCatalogueRow(for: exercise),
             setIndex: (exercise.rows.firstIndex { $0.id == row.id } ?? 0) + 1,
             // A missing load is 0 kg — a real bodyweight set — and a missing rep
             // count cannot reach here, because `toggleDone` refuses to tick one.
@@ -2154,16 +2160,52 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// row every other client resolves; then the slug, which is what a live
     /// session writes and what `ExerciseIndex.id(forSlug:)` resolves on push.
     ///
-    /// ── THE UUID, ALWAYS (W6) ───────────────────────────────────────────────
-    /// The routine payload names the catalogue row for every movement it
-    /// prescribes, and `catalogueId` answers for the ones it does not — by name
-    /// against the local catalogue, and by creating the row when even that
-    /// misses. So every set this device writes carries a catalogue id, the same
-    /// id every other client resolves, and the push needs no slug lookup at all.
+    /// The id this movement's sets are filed under. READ ONLY — creates
+    /// nothing. Four callers reach here before a set exists (the two attaches,
+    /// the live-PR tick, and the records view), and a screen opening is not a
+    /// reason to invent a row anybody else has to live with.
     private func storedId(for exercise: ExerciseState) -> String {
         if let stored = exercise.storedExerciseId { return stored }
         if let catalogued = exercise.plan.exerciseId { return catalogued }
-        return catalogueId(for: exercise.name)
+        return catalogueIndex()[canonicalKey(exercise.name)] ?? ExerciseSlug.id(exercise.name)
+    }
+
+    /// ── THE UUID, AT COMMIT (W6) ────────────────────────────────────────────
+    /// `storedId`, plus the one thing it will not do: give a movement the
+    /// catalogue has never heard of a row of its own. Called from `snapshot`
+    /// and nowhere else, so a row appears exactly when a logged fact needs
+    /// something to point at.
+    ///
+    /// Until W6 this wrote a slug of the name, and the set landed under a
+    /// second identity — the SPLIT `ExerciseIndex`'s header describes. On a
+    /// generic account, where a template names movements no catalogue row
+    /// answers for, that is the common case rather than the edge one.
+    ///
+    /// `createExercise` is idempotent on the name and writes LOCALLY first,
+    /// queueing the row through the ordinary outbox, so this is correct with no
+    /// network. Two refusals keep it safe:
+    ///
+    ///   * An EMPTY catalogue is not evidence the movement is new. A reinstall,
+    ///     a second device, or a deck opened before `TrainingPuller` finishes
+    ///     all look identical to one, and minting there would queue a row the
+    ///     server already holds under another id — which `UNIQUE (user_id,
+    ///     name)` rejects on every retry, stranding the sets behind it.
+    ///   * An AMBIGUOUS name is absent from the index by construction, so it
+    ///     falls to the slug and `ExerciseIndex` refuses it out loud at push
+    ///     time, rather than being guessed at silently here.
+    ///
+    /// Both fall back to the slug, which has resolved at push since W2. A
+    /// logged rep is never worth losing to a catalogue write.
+    private func storedIdCreatingCatalogueRow(for exercise: ExerciseState) -> String {
+        if let stored = exercise.storedExerciseId { return stored }
+        if let catalogued = exercise.plan.exerciseId { return catalogued }
+        let key = canonicalKey(exercise.name)
+        if let known = catalogueIndex()[key] { return known }
+        guard let store, !catalogueIsEmpty,
+              let created = try? store.createExercise(userId: userId, name: exercise.name)
+        else { return ExerciseSlug.id(exercise.name) }
+        idByCanonicalName[key] = created
+        return created
     }
 
     /// The session row this device is writing into, created on demand.

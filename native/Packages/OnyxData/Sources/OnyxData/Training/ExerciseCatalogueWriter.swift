@@ -33,6 +33,14 @@ import OnyxCore
 // does it, and the push splits it back apart.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── THE PHONE MINTS, THE WATCH NEVER DOES ───────────────────────────────────
+// The watch's store is its OWN — Application Support on that device, not an App
+// Group shared with the phone — so a row created there carries an id no other
+// client has ever seen, and the movement exists twice the moment the two logs
+// meet. That rule was a comment until W6; `#if !os(watchOS)` makes breaking it
+// a compile error instead. The static half stays available everywhere because
+// `AccountSeed` builds on it and seeds a database, not a device.
+#if !os(watchOS)
 public extension AppDatabase {
 
     /// Create one catalogue row and queue it for the server.
@@ -79,6 +87,11 @@ public extension AppDatabase {
             }
         }
     }
+
+}
+#endif
+
+public extension AppDatabase {
 
     static func createExercise(
         _ db: Database, userId: String, name: String, primaryMuscle: String?,

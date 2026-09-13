@@ -13,8 +13,9 @@ import Testing
 /// its own history. The logger now resolves the catalogue row before it writes;
 /// this brings what is already on disk to the same rule.
 ///
-/// Both resolution paths are asserted, and so is the refusal: a slug that
-/// answers to nothing keeps its id, because it is still a logged rep.
+/// The cases that matter are the ones a table-only migration gets wrong: an
+/// event-backed session, which reprojection rebuilds from the log; and a slug
+/// two rows answer to, which must be refused rather than guessed at.
 @Suite("Adopting catalogue ids")
 struct CatalogueIdMigrationTests {
 
@@ -22,11 +23,8 @@ struct CatalogueIdMigrationTests {
         try AppDatabase.inMemory(deviceId: "d1")
     }
 
-    private func set(_ id: String, exercise: String) -> WorkoutSet {
-        WorkoutSet(
-            id: id, sessionId: "s1", exerciseId: exercise,
-            setIndex: 1, weightKg: 60, reps: 8, setType: "normal"
-        )
+    private func snapshot(_ exercise: String, _ index: Int = 1) -> SetSnapshot {
+        SetSnapshot(exerciseId: exercise, setIndex: index, weightKg: 60, reps: 8, setType: "normal")
     }
 
     private func seed(_ db: AppDatabase, _ work: (Database) throws -> Void) throws {
@@ -37,12 +35,14 @@ struct CatalogueIdMigrationTests {
         }
     }
 
-    private func exerciseId(of setId: String, in db: AppDatabase) throws -> String? {
+    private func ids(in db: AppDatabase) throws -> [String] {
         try db.writer.read { conn in
-            try String.fetchOne(
-                conn, sql: "SELECT exercise_id FROM workout_sets WHERE id = ?", arguments: [setId]
-            )
+            try String.fetchAll(conn, sql: "SELECT exercise_id FROM workout_sets ORDER BY set_index")
         }
+    }
+
+    private func adopt(_ db: AppDatabase) throws {
+        try db.writer.write { try AppDatabase.adoptCatalogueIds($0) }
     }
 
     @Test("the server's own slug column answers first")
@@ -50,12 +50,15 @@ struct CatalogueIdMigrationTests {
         let db = try database()
         try seed(db) { conn in
             try Exercise(id: "uuid-hack", name: "Hack Squat", slug: "helix5-hack-squat").insert(conn)
-            try set("set-1", exercise: "helix5-hack-squat").insert(conn)
+            try WorkoutSet(
+                id: "set-1", sessionId: "s1", exerciseId: "helix5-hack-squat",
+                setIndex: 1, weightKg: 60, reps: 8, setType: "normal"
+            ).insert(conn)
         }
 
-        try db.writer.write { try AppDatabase.adoptCatalogueIds($0) }
+        try adopt(db)
 
-        #expect(try exerciseId(of: "set-1", in: db) == "uuid-hack")
+        #expect(try ids(in: db) == ["uuid-hack"])
     }
 
     @Test("a shadow row keyed by the slug is resolved through its name")
@@ -63,42 +66,101 @@ struct CatalogueIdMigrationTests {
         let db = try database()
         try seed(db) { conn in
             // The pair a real device holds: the row the pull created, and the
-            // one this app inserted so a slug-stamped set had a target.
+            // one an older build inserted so a slug-stamped set had a target.
             try Exercise(id: "uuid-pec-deck", name: "Pec Deck").insert(conn)
             try Exercise(id: "helix5-pec-deck", name: "Pec Deck").insert(conn)
-            try set("set-2", exercise: "helix5-pec-deck").insert(conn)
+            try WorkoutSet(
+                id: "set-2", sessionId: "s1", exerciseId: "helix5-pec-deck",
+                setIndex: 1, weightKg: 40, reps: 12, setType: "normal"
+            ).insert(conn)
         }
 
-        try db.writer.write { try AppDatabase.adoptCatalogueIds($0) }
+        try adopt(db)
 
-        #expect(try exerciseId(of: "set-2", in: db) == "uuid-pec-deck")
+        #expect(try ids(in: db) == ["uuid-pec-deck"])
+    }
+
+    @Test("the append event is remapped too, so a reprojection keeps the new id")
+    func remapsTheEventLog() throws {
+        let db = try database()
+        try seed(db) { conn in
+            try Exercise(id: "uuid-hack", name: "Hack Squat", slug: "helix5-hack-squat").insert(conn)
+        }
+        _ = try db.appendSet(sessionId: "s1", snapshot("helix5-hack-squat"))
+
+        try adopt(db)
+        #expect(try ids(in: db) == ["uuid-hack"])
+
+        // The gesture that used to undo it: any edit reprojects the session
+        // from the log, and the log used to still say `helix5-hack-squat`.
+        try db.reprojectAll()
+        #expect(try ids(in: db) == ["uuid-hack"])
+    }
+
+    @Test("a slug two rows answer to is refused, not guessed at")
+    func refusesAnAmbiguousSlug() throws {
+        let db = try database()
+        try seed(db) { conn in
+            // `Crunch Machine` and `Crunch (Machine)` slug identically and
+            // differ in `is_bodyweight`. Picking one merges the ladders.
+            try Exercise(id: "uuid-a", name: "Crunch Machine", slug: "helix5-crunch-machine").insert(conn)
+            try Exercise(id: "uuid-b", name: "Crunch (Machine)", slug: "helix5-crunch-machine").insert(conn)
+            try WorkoutSet(
+                id: "set-3", sessionId: "s1", exerciseId: "helix5-crunch-machine",
+                setIndex: 1, weightKg: 57.5, reps: 10, setType: "normal"
+            ).insert(conn)
+        }
+
+        try adopt(db)
+
+        #expect(try ids(in: db) == ["helix5-crunch-machine"])
+    }
+
+    @Test("a shadow row whose name two catalogue rows share is refused as well")
+    func refusesAnAmbiguousName() throws {
+        let db = try database()
+        try seed(db) { conn in
+            try Exercise(id: "uuid-1", name: "Leg Press").insert(conn)
+            try Exercise(id: "uuid-2", name: "leg press ").insert(conn)
+            try Exercise(id: "helix5-leg-press", name: "Leg Press").insert(conn)
+            try WorkoutSet(
+                id: "set-4", sessionId: "s1", exerciseId: "helix5-leg-press",
+                setIndex: 1, weightKg: 120, reps: 10, setType: "normal"
+            ).insert(conn)
+        }
+
+        try adopt(db)
+
+        #expect(try ids(in: db) == ["helix5-leg-press"])
     }
 
     @Test("a slug nothing claims keeps its id rather than losing the rep")
     func leavesAnUnresolvableSlugAlone() throws {
         let db = try database()
         try seed(db) { conn in
-            try set("set-3", exercise: "helix5-movement-nothing-knows").insert(conn)
+            try WorkoutSet(
+                id: "set-5", sessionId: "s1", exerciseId: "helix5-movement-nothing-knows",
+                setIndex: 1, weightKg: 20, reps: 20, setType: "normal"
+            ).insert(conn)
         }
 
-        try db.writer.write { try AppDatabase.adoptCatalogueIds($0) }
+        try adopt(db)
 
-        #expect(try exerciseId(of: "set-3", in: db) == "helix5-movement-nothing-knows")
+        #expect(try ids(in: db) == ["helix5-movement-nothing-knows"])
     }
 
-    @Test("a set already carrying the catalogue uuid is untouched, and running twice changes nothing")
+    @Test("a set already carrying the catalogue id is untouched, and running twice changes nothing")
     func isIdempotent() throws {
         let db = try database()
         try seed(db) { conn in
             try Exercise(id: "uuid-hack", name: "Hack Squat", slug: "helix5-hack-squat").insert(conn)
-            try set("set-4", exercise: "uuid-hack").insert(conn)
-            try set("set-5", exercise: "helix5-hack-squat").insert(conn)
         }
+        _ = try db.appendSet(sessionId: "s1", snapshot("uuid-hack", 1))
+        _ = try db.appendSet(sessionId: "s1", snapshot("helix5-hack-squat", 2))
 
-        try db.writer.write { try AppDatabase.adoptCatalogueIds($0) }
-        try db.writer.write { try AppDatabase.adoptCatalogueIds($0) }
+        try adopt(db)
+        try adopt(db)
 
-        #expect(try exerciseId(of: "set-4", in: db) == "uuid-hack")
-        #expect(try exerciseId(of: "set-5", in: db) == "uuid-hack")
+        #expect(try ids(in: db) == ["uuid-hack", "uuid-hack"])
     }
 }

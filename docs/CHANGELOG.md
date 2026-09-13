@@ -114,21 +114,31 @@ is in the same Supabase the phone reads.
   carry `helix5-<name-slug>` while the same movement pulled from the server
   carried the catalogue's uuid — one movement under two identities, which the
   session summary drew twice, the volume fold split, and a PR could be
-  measured against half of. `storedId` now falls through to a catalogue lookup
-  by canonical name, and creates the row when even that misses.
-  `createExercise` is idempotent on the name and writes locally first, so it
-  is correct with no network. The slug remains only as the last resort for a
-  store that cannot be written to at all.
-- **The watch resolves but never mints.** Its store is its own, so a row
-  created there would carry a uuid no other client had seen. It writes the
-  routine payload's id when there is one and the legacy slug otherwise, which
-  `ExerciseIndex` has resolved at push time since W2.
-- **`v23.catalogueIds`** repoints the sets already on disk: by the server's
-  `slug` column first, then by the name of the shadow catalogue row older
-  builds inserted so a slug-stamped set had a target. A slug that answers to
-  nothing keeps its id — it is still a logged rep. Personal records are
-  untouched either way: the ledger keys on the movement's name, on both sides
-  of the wire.
+  measured against half of. `storedId` now resolves the local catalogue by
+  canonical name; the commit path alone
+  (`storedIdCreatingCatalogueRow`) may create the row when nothing answers.
+  Opening a screen never mints one. Two refusals guard it: an EMPTY catalogue
+  is treated as "not pulled yet" rather than "new movement", because minting
+  there would queue rows the server already holds under other ids and
+  `UNIQUE (user_id, name)` would reject them on every retry; and a name two
+  rows answer to is left to the slug, which `ExerciseIndex` refuses out loud
+  at push time instead of being guessed at silently.
+- **The watch resolves but never mints**, and `#if !os(watchOS)` now makes
+  breaking that a compile error rather than a code review. Its store is its
+  own, so a row created there would carry an id no other client had seen. It
+  writes the routine payload's id when there is one and the legacy slug
+  otherwise, which `ExerciseIndex` has resolved at push time since W2.
+- **`v23.catalogueIds` remaps the event log, then the projection.**
+  `workout_sets` is a projection of `set_events`, and `reproject` rebuilds it
+  from the append bodies — so a migration that touched only the table would be
+  undone by the first edit to a session, and half-undone at that: the deck
+  would already hold the migrated id while the fold restored the rest under
+  the old one. Both are remapped, with one map, built only from slugs exactly
+  one catalogue row answers for. A slug two rows share is left alone —
+  `Crunch Machine` and `Crunch (Machine)` slug identically and disagree about
+  `is_bodyweight`. A slug that answers to nothing keeps its id: it is still a
+  logged rep. Personal records are untouched either way — the ledger keys on
+  the movement's name, on both sides of the wire.
 
 ### Removed, second pass
 

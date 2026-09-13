@@ -1055,42 +1055,85 @@ extension AppDatabase {
 
     /// Repoint legacy slug-stamped sets at the catalogue row they belong to.
     ///
-    /// Extracted from `v23.catalogueIds` so it can be run against a database
-    /// whose rows are already in the mixed state a real device is in — a
-    /// migration that only ever runs on a fresh schema is a migration nothing
-    /// has tested.
+    /// ── THE LOG FIRST, THE PROJECTION SECOND ────────────────────────────────
+    /// `workout_sets` is a PROJECTION of `set_events` (v2), and `reproject`
+    /// deletes every row of a session and rebuilds it from the fold, which
+    /// reads `exercise_id` straight out of the append body. A migration that
+    /// touched only the table would be undone by the first edit to any session
+    /// — and worse, half-undone: the deck would already have read the migrated
+    /// id into `storedExerciseId`, so an added set would land under the new id
+    /// while the fold restored the rest under the old one. One movement, two
+    /// identities, in one session, opened by the very migration meant to close
+    /// it. So the append bodies are remapped too, with the same map, and the
+    /// table is brought along rather than relied on.
+    ///
+    /// ── AND IT REFUSES RATHER THAN GUESSES ──────────────────────────────────
+    /// A slug two catalogue rows answer to is left alone. `Crunch Machine` and
+    /// `Crunch (Machine)` both slug to `helix5-crunch-machine`, both exist, and
+    /// their `is_bodyweight` differs — picking one merges a bodyweight ladder
+    /// into a 57.5 kg one, permanently. It is the same question
+    /// `ExerciseIndex.id(forSlug:)` answers by throwing `ambiguousExercise`,
+    /// and it gets the same answer here.
+    ///
+    /// A slug that resolves to nothing keeps its id. It is still a logged rep,
+    /// `ExerciseIndex` still resolves it on push, and losing one to tidiness
+    /// would be the only unrecoverable outcome available.
     static func adoptCatalogueIds(_ db: Database) throws {
-        // By the server's own alias for the legacy id, pulled down with the row.
-        try db.execute(sql: """
-            UPDATE workout_sets
-               SET exercise_id = (
-                   SELECT e.id FROM exercises e WHERE e.slug = workout_sets.exercise_id
-               )
-             WHERE exercise_id LIKE 'helix5-%'
-               AND EXISTS (
-                   SELECT 1 FROM exercises e WHERE e.slug = workout_sets.exercise_id
-               )
-            """)
-        // Then by the SHADOW rows this app used to insert so a slug-stamped set
-        // had something to point at: their id IS the slug and their name is the
-        // movement, so the real row is the other one carrying the same name.
-        try db.execute(sql: """
-            UPDATE workout_sets
-               SET exercise_id = (
-                   SELECT c.id FROM exercises c
-                     JOIN exercises legacy ON legacy.id = workout_sets.exercise_id
-                    WHERE lower(trim(c.name)) = lower(trim(legacy.name))
-                      AND c.id <> legacy.id
-                    LIMIT 1
-               )
-             WHERE exercise_id LIKE 'helix5-%'
-               AND EXISTS (
-                   SELECT 1 FROM exercises c
-                     JOIN exercises legacy ON legacy.id = workout_sets.exercise_id
-                    WHERE lower(trim(c.name)) = lower(trim(legacy.name))
-                      AND c.id <> legacy.id
-               )
-            """)
+        let map = try legacyExerciseIdMap(db)
+        guard !map.isEmpty else { return }
+
+        // The log. Only an append carries a snapshot, and only a snapshot
+        // carries an exercise id; an amend cannot express one at all.
+        for row in try Row.fetchAll(db, sql: "SELECT id, body FROM set_events") {
+            guard let data = row["body"] as Data?,
+                  let body = try? OnyxJSON.decoder.decode(SetEvent.Body.self, from: data),
+                  case .append(var snapshot) = body,
+                  let target = map[snapshot.exerciseId]
+            else { continue }
+            snapshot.exerciseId = target
+            try db.execute(
+                sql: "UPDATE set_events SET body = ? WHERE id = ?",
+                arguments: [try OnyxJSON.encoder.encode(SetEvent.Body.append(snapshot)), row["id"] as String]
+            )
+        }
+
+        // The projection, by the same map — so a session that is never
+        // reprojected reads the same as one that is.
+        for (slug, target) in map {
+            try db.execute(
+                sql: "UPDATE workout_sets SET exercise_id = ? WHERE exercise_id = ?",
+                arguments: [target, slug]
+            )
+        }
+    }
+
+    /// Legacy slug → catalogue id, for every slug exactly ONE row answers for.
+    ///
+    /// Two sources, both of which a real device holds. The `slug` column is the
+    /// server's own alias for the legacy id, pulled down with the row. The
+    /// second is the shadow rows an older build inserted so a slug-stamped set
+    /// had something to point at: their id IS the slug, and the real row is the
+    /// other one carrying the same name.
+    static func legacyExerciseIdMap(_ db: Database) throws -> [String: String] {
+        var map: [String: String] = [:]
+        for row in try Row.fetchAll(db, sql: """
+            SELECT slug, min(id) AS target FROM exercises
+             WHERE slug IS NOT NULL AND slug LIKE 'helix5-%'
+             GROUP BY slug HAVING count(*) = 1
+            """) {
+            map[row["slug"]] = row["target"]
+        }
+        for row in try Row.fetchAll(db, sql: """
+            SELECT legacy.id AS slug, min(c.id) AS target
+              FROM exercises legacy
+              JOIN exercises c ON lower(trim(c.name)) = lower(trim(legacy.name)) AND c.id <> legacy.id
+             WHERE legacy.id LIKE 'helix5-%'
+             GROUP BY legacy.id HAVING count(*) = 1
+            """) {
+            let slug: String = row["slug"]
+            if map[slug] == nil { map[slug] = row["target"] }
+        }
+        return map
     }
 }
 
