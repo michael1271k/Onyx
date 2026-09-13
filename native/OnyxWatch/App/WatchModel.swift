@@ -86,11 +86,11 @@ final class WatchModel {
         guard let day, let context else { return [] }
         let phase = context.schedule.phase
         return day.exercises(for: phase).enumerated().map { order, plan in
-            let id = ExerciseSlug.id(plan.name)
+            let ids = Self.identities(of: plan)
             return Movement(
                 plan: plan,
                 order: order,
-                logged: sets.filter { $0.exerciseId == id && SetTags.isWorkingSet($0.setType) }
+                logged: sets.filter { ids.contains($0.exerciseId) && SetTags.isWorkingSet($0.setType) }
             )
         }
     }
@@ -288,7 +288,7 @@ final class WatchModel {
         do {
             let id = try ensureSession(store: store, context: context, day: day)
             let snapshot = SetSnapshot(
-                exerciseId: ExerciseSlug.id(cursor.movement.plan.name),
+                exerciseId: Self.exerciseId(of: cursor.movement.plan),
                 setIndex: cursor.setNumber,
                 weightKg: load,
                 reps: reps,
@@ -338,6 +338,30 @@ final class WatchModel {
         } catch {
             storeError = String(describing: error)
         }
+    }
+
+    /// The id a set of this movement is written under.
+    ///
+    /// ── THE WATCH RESOLVES, IT DOES NOT MINT (W6) ───────────────────────────
+    /// The phone creates a catalogue row for a movement the catalogue has never
+    /// heard of; the watch must not. Its store is its OWN — Application Support
+    /// on this device, not an App Group shared with the phone — so a row minted
+    /// here would carry a uuid no other client has ever seen, and the movement
+    /// would exist twice the moment the two logs met. The routine payload
+    /// already names the catalogue row for all but a handful of movements; for
+    /// the rest the legacy slug travels, and `ExerciseIndex` resolves it on the
+    /// phone at push time, exactly as it has since W2.
+    static func exerciseId(of plan: ProgramExercise) -> String {
+        plan.exerciseId ?? ExerciseSlug.id(plan.name)
+    }
+
+    /// Both spellings a logged set of this movement can carry: the catalogue id
+    /// and the legacy slug. A session begun on a build that wrote one and
+    /// continued on a build that writes the other still counts its sets once.
+    static func identities(of plan: ProgramExercise) -> Set<String> {
+        var ids: Set<String> = [ExerciseSlug.id(plan.name)]
+        if let catalogued = plan.exerciseId { ids.insert(catalogued) }
+        return ids
     }
 
     private func ensureSession(store: AppDatabase, context: WatchContext, day: ProgramDay) throws -> String {

@@ -1830,7 +1830,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             let bar = try store.livePrBaselines(
                 // Both ids a movement can be filed under: the catalogue uuid
                 // the payload carries (W2) and the legacy slug older rows hold.
-                exerciseIds: Array(Set(exercises.flatMap { [storedId(for: $0), Self.exerciseId($0.name)] })),
+                exerciseIds: Array(Set(exercises.flatMap { [storedId(for: $0), ExerciseSlug.id($0.name)] })),
                 excluding: live,
                 dayKey: day.key,
                 program: Program(id: "", label: "", days: [day])
@@ -1925,7 +1925,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         do {
             baselines = try store.livePrBaselines(
                 exerciseIds: Array(Set(
-                    exercises.flatMap { [storedId(for: $0), Self.exerciseId($0.name)] }
+                    exercises.flatMap { [storedId(for: $0), ExerciseSlug.id($0.name)] }
                         + exercises.compactMap(\.storedExerciseId)
                 )),
                 excluding: session.id,
@@ -1964,12 +1964,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         guard !logged.isEmpty else { return }
 
         // ── MATCHED BY NAME, NOT BY ID ──────────────────────────────────────
-        // `Self.exerciseId(name)` is right for a session this phone logged and
-        // finds nothing at all in one the web logged, where `exercise_id` is a
-        // catalogue uuid (F2). A live `attach` never sees one — a live session
-        // is by definition this device's — but every session §U4.5 re-opens
-        // might be, and the failure is silent: the deck comes up blank and
-        // looks like a session with nothing in it.
+        // A session re-opened here can hold rows from any client and any era:
+        // a catalogue uuid, or the legacy slug a pre-W6 build of this app wrote.
+        // Matching on the id alone would find nothing in half of them, and the
+        // failure is silent — the deck comes up blank and looks like a session
+        // with nothing in it.
         //
         // `PrRecorder.nameResolver`'s rule, over rows the caller already holds:
         // the local catalogue, then `ExerciseSlug.nameBySlug`, then the alias
@@ -1983,16 +1982,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             ExerciseAliases.canonicalName(catalogue[id] ?? bySlug[id] ?? id)
         }
         // ── AND THE REVERSE, FOR A MOVEMENT THIS SESSION DOES NOT HOLD ──────
-        // `snapshot` falls back to `ExerciseSlug.id` when an exercise has no
-        // stored id, which is right on a session this phone logged and wrong on
-        // one the web logged: a forgotten set of Cable Fly added to it would go
-        // up as `helix5-cable-fly`, an id no catalogue row on the server
-        // matches, and the web's own `COALESCE(e.name, s.exercise_id)` would
-        // then render the movement as that literal string.
-        idByCanonicalName = Dictionary(
-            catalogue.map { (ExerciseAliases.canonicalName($0.value).lowercased(), $0.key) },
-            uniquingKeysWith: { first, _ in first }
-        )
+        // `storedId` resolves a movement with no rows of its own through this
+        // index, so a forgotten set added to an old session joins the catalogue
+        // row the rest of its history is already filed under instead of opening
+        // a second identity beside it.
+        refreshCatalogueIndex()
 
         for exercise in exercises {
             // Lowercased on BOTH sides. `SessionDetailView.editorDay` compares
@@ -2060,26 +2054,43 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         }
     }
 
-    /// Canonical name → the local catalogue's uuid, built by `restoreLoggedSets`.
-    /// Empty on a live session, which needs no such lookup: the slug IS the id
-    /// there, and it is what `closeSession` expects.
+    /// Canonical name → the local catalogue's id.
     private var idByCanonicalName: [String: String] = [:]
 
-    /// The catalogue id for a movement.
+    /// Rebuild `idByCanonicalName` from the local catalogue.
+    private func refreshCatalogueIndex() {
+        guard let store, let rows = try? store.exercises() else { return }
+        idByCanonicalName = Dictionary(
+            rows.map { (ExerciseAliases.canonicalName($0.name).lowercased(), $0.id) },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    /// The catalogue id for a movement, created on demand.
     ///
-    /// A slug of the name, because `workout_sets.exercise_id` lost its foreign
-    /// key in `v4` precisely so a set logged against an exercise this device has
-    /// not synced cannot make the projection reject a fact. When the exercise
-    /// catalogue syncs (Wave 4) this becomes a real lookup; the slug is stable
-    /// in the meantime and nothing downstream reads it yet.
+    /// ── WHY A ROW IS CREATED HERE (W6) ──────────────────────────────────────
+    /// Until W6 this returned a slug of the name, and a set logged against a
+    /// movement the catalogue had never heard of went into
+    /// `workout_sets.exercise_id` under a second identity. That was survivable
+    /// while one account and one deck existed; it is the SPLIT `ExerciseIndex`'s
+    /// header describes, and on a generic account — where a template names
+    /// movements no catalogue row answers for — it is the common case, not the
+    /// edge one.
     ///
-    /// The `helix5-` prefix survived the Onyx rename on purpose — it is a key
-    /// written into local set rows, not a brand. See `ExerciseSlug.id`, which
-    /// must stay byte-identical to this.
-    static func exerciseId(_ name: String) -> String {
-        "helix5-" + name.lowercased()
-            .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    /// `createExercise` is idempotent on the name and writes LOCALLY first,
+    /// queueing the row through the ordinary outbox, so this stays correct with
+    /// no network. The slug survives as the last resort for a store that cannot
+    /// be written to at all (previews, a disk error): a logged rep is never
+    /// worth losing to a catalogue write.
+    private func catalogueId(for name: String) -> String {
+        if idByCanonicalName.isEmpty { refreshCatalogueIndex() }
+        let key = ExerciseAliases.canonicalName(name).lowercased()
+        if let known = idByCanonicalName[key] { return known }
+        guard let store, let created = try? store.createExercise(userId: userId, name: name) else {
+            return ExerciseSlug.id(name)
+        }
+        idByCanonicalName[key] = created
+        return created
     }
 
     /// `actualRestSec` is passed only by the APPEND path. An amend rebuilds the
@@ -2143,21 +2154,16 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// row every other client resolves; then the slug, which is what a live
     /// session writes and what `ExerciseIndex.id(forSlug:)` resolves on push.
     ///
-    /// ── THE UUID FIRST, SINCE W2 (D3) ───────────────────────────────────────
+    /// ── THE UUID, ALWAYS (W6) ───────────────────────────────────────────────
     /// The routine payload names the catalogue row for every movement it
-    /// prescribes, so a set logged today carries the same id a web-logged set
-    /// does and the push needs no slug lookup. The slug is written only for a
-    /// movement the payload could not resolve — a template row the catalogue
-    /// has not been seeded for yet — and stays resolvable through
-    /// `exercises.slug`.
+    /// prescribes, and `catalogueId` answers for the ones it does not — by name
+    /// against the local catalogue, and by creating the row when even that
+    /// misses. So every set this device writes carries a catalogue id, the same
+    /// id every other client resolves, and the push needs no slug lookup at all.
     private func storedId(for exercise: ExerciseState) -> String {
         if let stored = exercise.storedExerciseId { return stored }
         if let catalogued = exercise.plan.exerciseId { return catalogued }
-        if isEditing,
-           let catalogued = idByCanonicalName[ExerciseAliases.canonicalName(exercise.name).lowercased()] {
-            return catalogued
-        }
-        return Self.exerciseId(exercise.name)
+        return catalogueId(for: exercise.name)
     }
 
     /// The session row this device is writing into, created on demand.

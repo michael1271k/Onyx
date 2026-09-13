@@ -108,7 +108,7 @@ struct WorkoutWeekTests {
         let name = day.exercises(for: .cut)[0].name
         // Resolved on the main actor and captured as a plain `String`:
         // `seedRows` takes a `@Sendable` closure and `LoggerModel` is isolated.
-        let exerciseId = LoggerModel.exerciseId(name)
+        let exerciseId = ExerciseSlug.id(name)
         // The catalogue row the mirror supplies; the logger writes sets against
         // its id but never invents the movement itself.
         try database.seedRows { db in
@@ -138,7 +138,7 @@ struct WorkoutWeekTests {
         let database = try AppDatabase.inMemory(deviceId: "test")
         let day = PlanTemplates.day("onyx5", "cb_a")
         let name = day.exercises(for: .cut)[0].name          // Incline DB Press, 8–12
-        let exerciseId = LoggerModel.exerciseId(name)
+        let exerciseId = ExerciseSlug.id(name)
         let user = Self.userId
         let dayKey = day.key
         try database.seedRows { db in

@@ -839,7 +839,7 @@ public final class AppDatabase: Sendable {
         // ── v18 ─────────────────────────────────────────────────────────────
         // A set that is not reps and kilograms.
         //
-        // `docs/sql/hotfix-polish.sql` gave Postgres `duration_sec`, `incline`
+        // `hotfix-polish.sql (git history)` gave Postgres `duration_sec`, `incline`
         // and `distance_km` on 2026-09-07 and wrote the first row that uses
         // them — the treadmill that opens that session, five minutes at incline
         // 2 for 0.37 km, carrying no load at all. None of it could reach this
@@ -876,7 +876,7 @@ public final class AppDatabase: Sendable {
         // ── v19 ─────────────────────────────────────────────────────────────
         // The fourth cardio axis: total ascent, in metres.
         //
-        // `docs/sql/cardio-elevation.sql` is the Postgres half and the founder
+        // `cardio-elevation.sql (git history)` is the Postgres half and the founder
         // runs it by hand, so until they do a null is not a gap — it is every
         // row. This column exists first precisely so that the day the server
         // grows it, the value has somewhere to land on the way down.
@@ -921,7 +921,7 @@ public final class AppDatabase: Sendable {
         // what `encodeIfPresent` needs to keep the column OUT of the push body
         // until Postgres grows it. See the note on `DailyLogRow`.
         //
-        // `docs/sql/dashboard-polish.sql` is the Postgres half and the founder
+        // `dashboard-polish.sql (git history)` is the Postgres half and the founder
         // runs it by hand. Until they do, the flag lives on this device and the
         // push drops it — see the note in that file.
         migrator.registerMigration("v20.sleepInaccurate") { db in
@@ -954,7 +954,7 @@ public final class AppDatabase: Sendable {
         //     through data rather than through `Program.onyx5` (D3). The rep
         //     window and rest columns ride along for W5's routine builder.
         //
-        // `docs/sql/w2-generic-model.sql` is the Postgres half and the founder
+        // `w2-generic-model.sql (git history)` is the Postgres half and the founder
         // pastes it by hand. Until they do, the four new tables pull nothing
         // (PGRST205, which the sync HOLDS rather than acknowledges since W1)
         // and the readers see an empty catalogue.
@@ -1011,7 +1011,7 @@ public final class AppDatabase: Sendable {
         //
         // NULLABLE with no default, the `sleep_inaccurate` rule (v20): a nil is
         // what `encodeIfPresent` needs to keep the column OUT of the push body
-        // until Postgres grows it. `docs/sql/actual-rest.sql` is the Postgres
+        // until Postgres grows it. `actual-rest.sql (git history)` is the Postgres
         // half and the founder runs it by hand; until they do the measurement
         // lives on this device, the push drops it, and the export prints the
         // plan alone — which is exactly what it did before.
@@ -1023,7 +1023,74 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // ── EVERY SET UNDER THE CATALOGUE'S ID (W6) ─────────────────────────
+        // Before W6 a set logged on this phone was stamped with a slug of the
+        // movement's name and a set pulled from the server with the catalogue's
+        // uuid, so one movement wore two identities and every reader that keys
+        // on `exercise_id` — the session summary, the volume fold, the PR
+        // engine's own grouping — had to be taught to see through it. The
+        // logger now resolves the catalogue row before it writes; this is the
+        // history, brought to the same rule.
+        //
+        // Two passes, because the local catalogue answers in two ways. The
+        // `slug` column is the server's own alias for the legacy id, pulled
+        // down with the row. The second pass is for the SHADOW rows this app
+        // used to insert so a slug-stamped set had something to point at: their
+        // id IS the slug and their name is the movement, so the real row is the
+        // other one with the same name. A shadow left behind holds no sets and
+        // `exerciseCatalogStream`'s `HAVING COUNT(s.id) > 0` already hides it.
+        //
+        // A row that resolves to NOTHING keeps its slug. It is still a logged
+        // rep, `ExerciseIndex` still resolves it on push, and losing one to
+        // tidiness would be the only unrecoverable outcome here.
+        migrator.registerMigration("v23.catalogueIds") { db in
+            try Self.adoptCatalogueIds(db)
+        }
+
         return migrator
+    }
+}
+
+extension AppDatabase {
+
+    /// Repoint legacy slug-stamped sets at the catalogue row they belong to.
+    ///
+    /// Extracted from `v23.catalogueIds` so it can be run against a database
+    /// whose rows are already in the mixed state a real device is in — a
+    /// migration that only ever runs on a fresh schema is a migration nothing
+    /// has tested.
+    static func adoptCatalogueIds(_ db: Database) throws {
+        // By the server's own alias for the legacy id, pulled down with the row.
+        try db.execute(sql: """
+            UPDATE workout_sets
+               SET exercise_id = (
+                   SELECT e.id FROM exercises e WHERE e.slug = workout_sets.exercise_id
+               )
+             WHERE exercise_id LIKE 'helix5-%'
+               AND EXISTS (
+                   SELECT 1 FROM exercises e WHERE e.slug = workout_sets.exercise_id
+               )
+            """)
+        // Then by the SHADOW rows this app used to insert so a slug-stamped set
+        // had something to point at: their id IS the slug and their name is the
+        // movement, so the real row is the other one carrying the same name.
+        try db.execute(sql: """
+            UPDATE workout_sets
+               SET exercise_id = (
+                   SELECT c.id FROM exercises c
+                     JOIN exercises legacy ON legacy.id = workout_sets.exercise_id
+                    WHERE lower(trim(c.name)) = lower(trim(legacy.name))
+                      AND c.id <> legacy.id
+                    LIMIT 1
+               )
+             WHERE exercise_id LIKE 'helix5-%'
+               AND EXISTS (
+                   SELECT 1 FROM exercises c
+                     JOIN exercises legacy ON legacy.id = workout_sets.exercise_id
+                    WHERE lower(trim(c.name)) = lower(trim(legacy.name))
+                      AND c.id <> legacy.id
+               )
+            """)
     }
 }
 
