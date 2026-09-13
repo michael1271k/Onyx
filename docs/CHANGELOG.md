@@ -44,7 +44,7 @@ _Nothing yet._
 
 ---
 
-## [3.0.0] — 2026-09-12 · The Web App Is Gone
+## [3.0.0] — 2026-09-13 · The Web App Is Gone
 
 Onyx is one app now. The Helix web app — the Next.js dashboard, logger and
 PWA that Onyx grew up beside and shared a database with — is retired, along
@@ -102,14 +102,57 @@ is in the same Supabase the phone reads.
   unchanged.
 - **Native comments no longer point at `src/`.** Every "a port of
   `src/lib/…`" note now reads "a port of the web app's `lib/…`", and
-  `native/README.md` says where those files went. The load-bearing `helix`
-  strings stay, on purpose: the `helix5-` exercise-id prefix, the `"helix"`
-  era wire value, the `helix.week/1` schema tag, the legacy App Group and
-  sqlite names the one-time store move reads, the `helix_*` preference
-  fallbacks, the founder's plan and era labels in the golden fixtures, and the
-  Netlify host name.
-- `README.md` describes the native-only repo; the `native` and `ship` skills
-  say the same.
+  `native/README.md` says where those files went. The remaining `helix`
+  strings are load-bearing data, not branding: the `"helix"` era wire value,
+  the `helix.week/1` schema tag, the legacy App Group and sqlite names the
+  one-time store move reads, the `helix_*` preference fallbacks, and the
+  founder's plan and era labels in the golden fixtures.
+
+### One movement, one id
+
+- **The logger writes the catalogue's id.** A set logged on the phone used to
+  carry `helix5-<name-slug>` while the same movement pulled from the server
+  carried the catalogue's uuid — one movement under two identities, which the
+  session summary drew twice, the volume fold split, and a PR could be
+  measured against half of. `storedId` now falls through to a catalogue lookup
+  by canonical name, and creates the row when even that misses.
+  `createExercise` is idempotent on the name and writes locally first, so it
+  is correct with no network. The slug remains only as the last resort for a
+  store that cannot be written to at all.
+- **The watch resolves but never mints.** Its store is its own, so a row
+  created there would carry a uuid no other client had seen. It writes the
+  routine payload's id when there is one and the legacy slug otherwise, which
+  `ExerciseIndex` has resolved at push time since W2.
+- **`v23.catalogueIds`** repoints the sets already on disk: by the server's
+  `slug` column first, then by the name of the shadow catalogue row older
+  builds inserted so a slug-stamped set had a target. A slug that answers to
+  nothing keeps its id — it is still a logged rep. Personal records are
+  untouched either way: the ledger keys on the movement's name, on both sides
+  of the wire.
+
+### Removed, second pass
+
+- **`docs/sql/`** — fifteen applied migrations. The live database is the
+  schema of record and `native/schema/supabase.json` is what the mirror
+  generator reads; the DDL is in git history. The fifteen Swift comments that
+  cited a file by path now cite it by name.
+- **Six service-role scripts** (`backfill-treadmill-sets`, `repair-calcium`,
+  `repair-sep-2026-data`, `split-exercise-by-day`, `merge-exercise`,
+  `reconcile-pr-counts`) — one-off fixes, already run.
+- `docs/UX_WEEKLY_NUTRITION_WIDGETS_PLAN.md`, `docs/SECURITY_SWEEP_2026-09.md`,
+  `docs/superpowers/`, `design-system/`. `READINESS_MODEL.md` and
+  `STRESS_MODEL.md` stay — they are the stated model behind `Readiness`,
+  `Stress` and `Battery`.
+
+### Changed, second pass
+
+- **The Netlify site is `onyx-health-fitness.netlify.app`.** `OnyxLinks.host`,
+  both App Store URLs and the AASA all follow it. The old host dies with the
+  rename.
+- **`README.md` is rewritten** for the App Store: the pitch, the Train /
+  Recover / Fuel philosophy, an architecture diagram, the offline-first and
+  two-client stories, the HealthKit read-write split, and getting-started
+  paths for an athlete and for a developer.
 
 ---
 

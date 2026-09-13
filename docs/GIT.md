@@ -15,7 +15,7 @@ Netlify publishes `site/` as-is on every push to `main` — no build command, no
 build minute. `[skip ci]` once spared build minutes on native-only work and
 once withheld a security fix for three days; the static site makes both the
 tag and the `[build] ignore` rule that replaced it unnecessary. The local push
-guard in `.claude/settings.json` still asks for `[skip ci]` or `HELIX_DEPLOY=1`
+guard in `.claude/settings.json` still asks for `[skip ci]` or `ONYX_DEPLOY=1`
 on a bare `git push`; either satisfies it.
 
 ## The `merge=ours` driver is machine-local — run this once per clone

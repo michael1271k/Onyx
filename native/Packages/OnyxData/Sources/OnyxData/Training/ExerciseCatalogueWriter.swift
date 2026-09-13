@@ -105,7 +105,14 @@ public extension AppDatabase {
             equipment: equipment,
             isUnilateral: Unilateral.isUnilateral(trimmed),
             isBodyweight: Bodyweight.isBodyweight(trimmed),
-            slug: ExerciseSlug.id(trimmed)
+            // ── NO SLUG ON A NEW ROW (W6) ───────────────────────────────────
+            // The column is an alias for the legacy id a pre-W6 build wrote
+            // into `workout_sets.exercise_id`, and it is answered for by rows
+            // that already existed when that build ran. A row created now has
+            // no such history and never will: the logger resolves this id
+            // before it writes. Stamping one would put the retired prefix into
+            // new server data for a lookup nothing will ever perform.
+            slug: nil
         )
         try row.insert(db)
         try Self.enqueueRowUpsert(

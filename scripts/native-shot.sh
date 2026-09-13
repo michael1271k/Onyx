@@ -14,7 +14,7 @@
 # real screenshot. It is slower and it is the truth.
 #
 # ── AND WHY A LAUNCH ARGUMENT RATHER THAN A DEEP LINK ───────────────────────
-# The plan's Wave 0 sketch used `helix://open?path=`. A deep link has to travel
+# An early sketch used a different URL scheme. A deep link has to travel
 # through the app's real navigation, which means a real session, which means
 # Supabase credentials in the loop and screenshots that differ by whatever is in
 # the database today. `--onyx-screen` swaps the root view for one screen backed

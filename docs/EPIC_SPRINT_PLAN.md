@@ -1,7 +1,7 @@
 # Epic Sprint — Bug map, generic scaling, UI/UX overhaul, Helix sunset
 
 Status: findings + founder decisions locked 2026-09-10. Waves + prompts in §Waves.
-W6 (Helix sunset) shipped 2026-09-12 as 3.0.0 — see `docs/CHANGELOG.md`; the founder checklist below is what remains by hand.
+W6 (Helix sunset) shipped 2026-09-13 as 3.0.0 — see `docs/CHANGELOG.md`; the founder checklist below is what remains by hand.
 
 ## Founder decisions (2026-09-10)
 1. Helix web sunset = LAST wave (W6).

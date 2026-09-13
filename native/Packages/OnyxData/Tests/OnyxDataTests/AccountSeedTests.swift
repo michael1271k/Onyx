@@ -77,7 +77,7 @@ struct ExerciseCatalogueWriterTests {
         #expect(row.name == "Zercher Squat")
         #expect(row.primaryMuscle == "Quads")
         // The slug is the same function the logger stamps on a set.
-        #expect(row.slug == ExerciseSlug.id("Zercher Squat"))
+        #expect(row.slug == nil, "a row created today has no legacy id to alias")
 
         let items = try queued(db)
         #expect(items.contains { $0.table == "exercises" })
