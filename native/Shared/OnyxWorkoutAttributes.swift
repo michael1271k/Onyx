@@ -127,15 +127,32 @@ struct OnyxWorkoutAttributes: ActivityAttributes {
         /// `isPaused`; the producer owns the formatting, as it does for every
         /// other string here.
         var elapsed: String?
-        /// Cumulative session tonnage after each completed set, oldest first.
+        /// ── `spark` IS GONE ─────────────────────────────────────────────────
+        /// It carried cumulative tonnage per set and drew a 26 pt sparkline
+        /// across the middle of the Lock Screen card and a 76×30 one in the
+        /// island. A chart of a number that only ever goes UP has one shape,
+        /// and it was spending the best horizontal band on the face to draw it
+        /// while the exercise NAME — the one thing a glance at a locked phone
+        /// is actually for — was set at 12 pt beside it.
         ///
-        /// The one non-scalar field, and the exception earns itself: a
-        /// sparkline is a SHAPE and a shape cannot be pre-rendered into text
-        /// the way a load can. Capped at 12 points by the producer —
-        /// ActivityKit budgets updates by payload size as well as by frequency,
-        /// and a chart that grew without bound would cost more the longer the
-        /// session ran, which is exactly backwards.
-        var spark: [Double]
+        /// Removing a key is safe in a way adding one is not: a decoder ignores
+        /// fields it does not know, so an activity encoded by the old build
+        /// still decodes here. See the rule below before adding anything.
+        ///
+        /// The muscle this movement is FOR — a `LandmarkMuscle.token`, or the
+        /// literal `cardio` for a bout that has no mover to name.
+        ///
+        /// ── WHY A TOKEN AND NOT A LABEL OR A COLOUR ─────────────────────────
+        /// The same argument `dayKey` makes one field down, and for the same
+        /// reason: a colour sent over the wire is a colour that keeps whatever
+        /// value it had on the day the activity started, and a label sent over
+        /// the wire is a second place the vocabulary can drift from
+        /// `LandmarkMuscle`. The token resolves on the far side through the one
+        /// function that owns it, so the chip on the card and the rail on the
+        /// deck are the same hue by construction.
+        ///
+        /// Optional, like every field added after the first release.
+        var primaryMuscle: String?
         /// THIS set's effort as a NUMBER, so the badge can be tinted with the
         /// same ramp the effort picker uses.
         ///

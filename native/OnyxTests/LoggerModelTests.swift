@@ -201,21 +201,10 @@ struct LoggerModelTests {
         #expect(model.restingExercise == nil)
     }
 
-    @Test("the volume curve is cumulative, capped, and silent below two points")
-    func volumeCurveShape() {
-        let model = armsBulk()
-        #expect(model.volumeCurve.isEmpty)
-
-        log(model, "Shoulder Press", sets: 1)
-        // One point is not a trend; a single dot on an axis reads as a failure.
-        #expect(model.volumeCurve.isEmpty)
-
-        log(model, "Seated Incline DB Curl", sets: 3)
-        let curve = model.volumeCurve
-        #expect(curve.count == 4)
-        #expect(curve == curve.sorted(), "cumulative tonnage cannot decrease")
-        #expect(curve.last == model.totalVolumeKg)
-    }
+    // The volume-curve test left with `LoggerModel.volumeCurve`: the Live
+    // Activity's sparkline was removed (`WorkoutActivityCard` says why), and it
+    // was the only reader. A test for a shape nothing draws is a test that only
+    // makes the next deletion harder.
 
     @Test("the current set is the first one not yet ticked")
     func currentSetWalksForward() {

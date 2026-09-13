@@ -164,11 +164,16 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         var pairId: String?
 
         /// `L` / `R` for the badge and for VoiceOver, or nil.
+        ///
+        /// Both vocabularies, deliberately. Ingestion normalises to the local
+        /// spelling (`restoreLoggedSets`), and this is the second guard rather
+        /// than the first: a future writer that puts the wire's `L` in here
+        /// should draw a pair badge, not silently split one set into two.
         var sideLabel: String? {
-            switch side {
-            case "left":  "L"
-            case "right": "R"
-            default:      nil
+            switch side?.lowercased() {
+            case "left", "l":  "L"
+            case "right", "r": "R"
+            default:           nil
             }
         }
         var isDone: Bool
@@ -649,25 +654,6 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         )
     }
 
-    /// Cumulative tonnage after each completed set, oldest first — the shape the
-    /// Live Activity's sparkline draws.
-    ///
-    /// Capped at 12 points: ActivityKit budgets updates by payload size as well
-    /// as by frequency, and a chart that grew without bound would cost more the
-    /// longer the session ran, which is exactly backwards.
-    var volumeCurve: [Double] {
-        var running = 0.0
-        var points: [Double] = []
-        for exercise in exercises {
-            for row in exercise.rows where row.isDone {
-                running += row.volumeKg
-                points.append(running)
-            }
-        }
-        guard points.count > 1 else { return [] }
-        return points.count <= 12 ? points : Array(points.suffix(12))
-    }
-
     /// The set you are standing in front of: the first one not yet ticked.
     /// ── COUNTED IN SETS, NOT IN ROWS ────────────────────────────────────────
     /// `ordinal` and `total` are what the Lock Screen renders as "Set 3 of 4".
@@ -905,7 +891,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             incline: WarmupCardio.inclinePct,
             distanceKm: WarmupCardio.distanceKm
         )
-        return [ExerciseState(plan: plan, rows: [row], note: WarmupCardio.note)] + exercises
+        return [ExerciseState(plan: plan, rows: [row])] + exercises
     }
 
     private static func inDeckOrder(
@@ -1808,6 +1794,28 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// row has to exist before the first append — and it is looked up by day
     /// key rather than created blindly, so relaunching mid-workout rejoins the
     /// session instead of starting a second one beside it.
+    /// The bar the deck's ticked sets are measured against, built from every id
+    /// this movement's history can be filed under.
+    ///
+    /// Extracted because the live path and the edit path must build it the SAME
+    /// way: two copies of this union is how they came to disagree about whether
+    /// a set was a record (see the note in `attach`).
+    ///
+    /// `before` is the edit path's date bound and nothing else: a live session
+    /// has nothing after it to exclude.
+    private func buildLiveBaselines(store: AppDatabase, excluding sessionId: String?, before: String? = nil) throws {
+        baselines = try store.livePrBaselines(
+            exerciseIds: Array(Set(
+                exercises.flatMap { [storedId(for: $0), ExerciseSlug.id($0.name)] }
+                    + exercises.compactMap(\.storedExerciseId)
+            )),
+            excluding: sessionId,
+            before: before,
+            dayKey: day.key,
+            program: Program(id: "", label: "", days: [day])
+        )
+    }
+
     func attach() {
         guard let store, sessionId == nil else { return }
         do {
@@ -1824,23 +1832,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // already holds, which is a duplicated set in the projection and in
             // the upload. Everything is read into locals first.
             let live = try store.liveSession(dayKey: day.key, date: LogicalDay.today())?.id
-            // The bar, built ONCE and from the same function that writes the
-            // ledger on close (`PrRecorder.baselines`). Excluding this session
-            // is what stops every set being measured against itself.
-            let bar = try store.livePrBaselines(
-                // Both ids a movement can be filed under: the catalogue uuid
-                // the payload carries (W2) and the legacy slug older rows hold.
-                exerciseIds: Array(Set(exercises.flatMap { [storedId(for: $0), ExerciseSlug.id($0.name)] })),
-                excluding: live,
-                dayKey: day.key,
-                program: Program(id: "", label: "", days: [day])
-            )
             // Rejoining a session that was paused when the app was killed: the
             // log knows, and the wall clock has kept running.
             let paused = try live.map { (try store.isPaused(sessionId: $0), try store.pausedSeconds(sessionId: $0)) }
 
             sessionId = live
-            baselines = bar
             if let paused {
                 // The store's total already includes the interval still open at
                 // this instant, so the local `pausedAt` is re-anchored to NOW
@@ -1850,7 +1846,34 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
                 pausedTotal = paused.1
             }
             try restoreLoggedSets()
-            refreshLivePrs()
+            // ── THE BAR IS BUILT AFTER THE RESTORE, LIKE THE EDIT PATH'S ────
+            // It used to be built before anything was assigned, from the deck's
+            // ids alone — `storedId` plus a slug of the name. That is every id
+            // the PLAN knows, and it is not every id the movement's history is
+            // filed under: `storedExerciseId` is learned by `restoreLoggedSets`
+            // from the rows already in the session, and a movement whose
+            // catalogue row this deck could not resolve fell back to a slug
+            // that matches nothing in `workout_sets`. The bar then came back
+            // empty, and `PrEngine` awards no axis against an empty index — so
+            // the deck showed no trophy on a set whose own session page, one
+            // screen later, showed two. `attach(editing:)` hit this in U4 and
+            // fixed it by restoring first and taking the union; the LIVE path
+            // never got the same treatment.
+            //
+            // Widening an id set can only raise a bar or fill an empty one
+            // (`PrRecorder.baselines`'s own note), so this removes trophies that
+            // should never have lit and cannot invent one.
+            //
+            // In its own `do`, for the reason the ordering above exists: a bar
+            // that cannot be built costs the record badges and nothing else,
+            // and must not unwind a deck that is already restored and usable.
+            // The edit path has said the same since U4.
+            do {
+                try buildLiveBaselines(store: store, excluding: live)
+                refreshLivePrs()
+            } catch {
+                storeError = String(describing: error)
+            }
         } catch {
             // A store failure must not take the screen down with it: the deck
             // is still correct and still usable, and the events it could not
@@ -1923,25 +1946,15 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             return
         }
         do {
-            baselines = try store.livePrBaselines(
-                exerciseIds: Array(Set(
-                    exercises.flatMap { [storedId(for: $0), ExerciseSlug.id($0.name)] }
-                        + exercises.compactMap(\.storedExerciseId)
-                )),
-                excluding: session.id,
-                // ── THE BAR IS WHAT CAME BEFORE THIS SESSION ────────────────
-                // `baselines` has no date bound of its own: `save.ts` never
-                // needed one because it builds the bar at close, when there IS
-                // nothing after. Editing a three-week-old session is the first
-                // caller for which "every other session" and "every EARLIER
-                // session" are different sets — without this the deck measures
-                // an August set against a September one and shows no records
-                // at all on a session whose own summary page, one screen back,
-                // shows three.
-                before: session.date,
-                dayKey: day.key,
-                program: Program(id: "", label: "", days: [day])
-            )
+            // ── THE BAR IS WHAT CAME BEFORE THIS SESSION ────────────────────
+            // `baselines` has no date bound of its own: `save.ts` never needed
+            // one because it builds the bar at close, when there IS nothing
+            // after. Editing a three-week-old session is the first caller for
+            // which "every other session" and "every EARLIER session" are
+            // different sets — without this the deck measures an August set
+            // against a September one and shows no records at all on a session
+            // whose own summary page, one screen back, shows three.
+            try buildLiveBaselines(store: store, excluding: session.id, before: session.date)
             refreshLivePrs()
             storeError = nil
         } catch {
@@ -2027,7 +2040,20 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
                     // come back as two unsided rows the moment anything on the
                     // card was amended — and `SessionVolume` would then score
                     // the two arms separately, very nearly doubling the session.
-                    side: set.side,
+                    //
+                    // ── AND IT RESTORES IN THE LOCAL SPELLING ───────────────
+                    // Not `set.side` verbatim. The column can hold either
+                    // vocabulary — `left`/`right` is what this deck writes, and
+                    // `L`/`R` is what the wire carries — and every rule that
+                    // folds a pair downstream of here tests for the first one:
+                    // `sideLabel` (the badge), `groups(_:)` (which set the row
+                    // belongs to) and `SessionVolume`'s pair collapse. A
+                    // restored `L` therefore drew ONE physical set as two rows,
+                    // numbered them 3 and 4, and weighed the arm twice — the
+                    // "sets jump by 2 on some exercises" report, on exactly the
+                    // exercises that are unilateral, and only after the session
+                    // had been closed and reopened.
+                    side: SyncTranslation.localSide(set.side),
                     pairId: set.pairId,
                     // A treadmill bout restores as a treadmill bout. Dropped
                     // here, the first amend of the session wrote them back as

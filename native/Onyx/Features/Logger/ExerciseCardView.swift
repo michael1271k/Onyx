@@ -68,8 +68,11 @@ struct ExerciseCardView: View {
     }
 
     private var rail: Color {
-        guard let family else { return Color.onyx.day(model.day.key) }
-        return Color.onyx.muscle(family)
+        // A bout has no primary mover to be coloured by, and the day's accent
+        // is not a substitute: it made one treadmill teal on Legs and indigo on
+        // Upper A — the same movement, two colours, on one deck.
+        if let family { return Color.onyx.muscle(family) }
+        return isCardio ? Color.onyx.cardio : Color.onyx.day(model.day.key)
     }
 
     /// The bottom half of the rail — the movement's first ASSISTING mover.
@@ -425,7 +428,8 @@ struct ExerciseCardView: View {
         if typeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: OnyxSpace.xs) {
                 HStack(spacing: OnyxSpace.xs) {
-                    repWindow
+                    if !isCardio { repWindow }
+                    if let pace { tag(pace, Color.onyx.cardio) }
                     Spacer(minLength: 0)
                     progress
                 }
@@ -444,11 +448,23 @@ struct ExerciseCardView: View {
                     if let family {
                         tag(family.displayName, Color.onyx.muscle(family))
                     }
-                    if let first = tags.first {
+                    // ── NOT ON A BOUT ───────────────────────────────────────
+                    // `ExerciseTags` classifies LIFTS — compound, isolation,
+                    // the equipment that carries the load — and a treadmill has
+                    // none of those. It was being labelled "Isolation", which
+                    // is a claim about a movement pattern that does not exist
+                    // here, next to a rep window reading `@ 5–5` because the
+                    // prescription "5 min" parses as a number.
+                    if !isCardio, let first = tags.first {
                         tag(first.label, Color.onyx.textSecondary)
                     }
                 }
-                repWindow
+                // Same call, same reason: minutes and kilometres are the
+                // prescription, and the row underneath prints both.
+                if !isCardio { repWindow }
+                // The bout's own figure, in the slot a lift spends on its
+                // progression chip — a treadmill has no load to progress.
+                if let pace { tag(pace, Color.onyx.cardio) }
                 // The progression chip is `fixedSize` — a bumped load that
                 // truncates is a number you cannot read — so it cannot share
                 // this line with the rest control either. At 375 pt the card's
@@ -460,6 +476,26 @@ struct ExerciseCardView: View {
             }
             .lineLimit(1)
         }
+    }
+
+    /// Minutes and kilometres, as one figure. Nil until the bout has both.
+    ///
+    /// ── WHY THE CARD SAYS IT AND NOT THE ROW ────────────────────────────────
+    /// Pace is DERIVED (`CardioMetrics`'s own header: "distance and duration
+    /// are the facts, pace is a view"), so it needs no stepper and no column —
+    /// and there is no column to give it. The row's two flexible tracks already
+    /// sit at their floor on a 375 pt phone; a third would truncate a number,
+    /// which is the trap this file's column budget exists to stop. A bout is
+    /// ONE set, so its pace is one figure, and the header is where the card's
+    /// one figures live.
+    private var pace: String? {
+        let bouts = exercise.rows.filter(\.isCardio)
+        let minutes = bouts.reduce(0.0) { $0 + Double($1.durationSec ?? 0) } / 60
+        let metres = bouts.reduce(0.0) { $0 + ($1.distanceKm ?? 0) } * 1000
+        guard let pace = CardioMetrics.paceMinPerKm(distanceM: metres, durationMin: minutes) else {
+            return nil
+        }
+        return CardioMetrics.formatPace(pace)
     }
 
     /// What the movement IS, from `OnyxCore.ExerciseTags` — the same list the
@@ -1279,6 +1315,10 @@ private struct SetRowView: View {
                     Group {
                         if isRecord {
                             Image(systemName: "trophy.fill")
+                                // Layered rather than flat: the cup and its
+                                // base separate at 13 pt, which is what makes
+                                // it read as a trophy and not as a blob.
+                                .symbolRenderingMode(.hierarchical)
                         } else if isFailure {
                             Text("F")
                         } else {
@@ -1286,7 +1326,29 @@ private struct SetRowView: View {
                         }
                     }
                         .onyxType(.caption).fontWeight(.heavy)
-                        .foregroundStyle(Color.onyx.base)
+                        // ── THE GOLD IS THE GLYPH, NOT THE BOX ──────────────
+                        // A record badge used to be SOLID gold, which cost the
+                        // set the one thing every other badge on the deck has:
+                        // its movement's own hue. The card is washed in that
+                        // hue, the rail carries it, the chip names it — and the
+                        // best set of the movement was the one box that did not
+                        // belong to it.
+                        //
+                        // Gold means "never beaten" app-wide and it is the only
+                        // fifth hue §3.2 allows (`Color.onyx.record`'s own
+                        // header). Blending it with sixteen muscle hues would
+                        // spend it sixteen times and leave none of them
+                        // recognisable — two of the blends land on the carbs
+                        // amber it was deliberately moved away from. So the
+                        // hybrid is COMPOSED instead: the box is the muscle,
+                        // the glyph is the gold, and the glow is what makes a
+                        // 13 pt cup on a dim screen read as an achievement.
+                        .foregroundStyle(isRecord ? Color.onyx.record : Color.onyx.base)
+                        // On the glyph and never on the row: a shadow on a
+                        // recycled `LazyVStack` row is an offscreen pass per
+                        // frame, on the one screen that must hold 120 Hz while
+                        // a thumb is dragging a stepper.
+                        .shadow(color: Color.onyx.record.opacity(isRecord ? 0.55 : 0), radius: 5)
                         .transition(.scale(scale: 0.6).combined(with: .opacity))
                     if isRecord && isFailure {
                         Text("F")
@@ -1301,7 +1363,7 @@ private struct SetRowView: View {
                 // and two boxes reading "3" would have been unreadable. There
                 // is one box now: the pair's own set number goes here, and the
                 // `L` / `R` moved to the sub-lines that actually differ.
-                Text(row.kind.badge ?? "\(ordinal)")
+                Text(badgeKind.badge ?? "\(ordinal)")
                     .onyxType(.caption).fontWeight(.bold).onyxNumeral()
                     .foregroundStyle(badgeInk)
                     // The badge is the one column that must NOT grow with the
@@ -1349,6 +1411,22 @@ private struct SetRowView: View {
         // accident. So: a plain surface with both gestures, the press scale a
         // `buttonStyle` was giving it driven from `pressing:`, and the button
         // trait and default action put back by hand for VoiceOver.
+        // ── THE TROPHY IS A DOOR, AND IT COSTS NOTHING TO OPEN IT ───────────
+        // `PrRecordSheet` has existed since E4 and the only way to it was the
+        // ROW — tapping the numbers, which is also how you read them. A double
+        // tap on the badge says "tell me about this trophy" with the thing that
+        // is actually gold under the finger.
+        //
+        // Attached with `including:` rather than behind an `if`, because a
+        // double-tap recogniser DELAYS every single tap it shares a target
+        // with, and the single tap here logs the set. `.none` switches it off
+        // entirely, so the 39 rows of a session that hold no record keep an
+        // instant tap and only the one that does pays the disambiguation — the
+        // exact trade Apple's gesture guidance asks you to make consciously.
+        .highPriorityGesture(
+            TapGesture(count: 2).onEnded { onRecord() },
+            including: isRecord ? .all : .none
+        )
         .onTapGesture { log() }
         .onLongPressGesture(
             minimumDuration: 0.45,
@@ -1357,7 +1435,7 @@ private struct SetRowView: View {
         )
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(spokenLabel)
-        .accessibilityHint("Tap to log. Hold for set options.")
+        .accessibilityHint(isRecord ? "Tap to log. Double tap for the record. Hold for set options." : "Tap to log. Hold for set options.")
         .accessibilityAction { log() }
         // The actions hang off the BADGE, not off the row.
         //
@@ -1437,10 +1515,26 @@ private struct SetRowView: View {
     /// Filled / outlined / dashed is separable before the glyph resolves, at
     /// 32 pt, in peripheral vision, on a dim screen — and it spends no new
     /// colour, which §3.2 has none of to spend.
+    /// ── A BOUT IS AN ORDINARY SET TO LOOK AT ───────────────────────────────
+    /// The founder's opener is stored as a WARM-UP, and it has to stay one:
+    /// that is what keeps five minutes of walking out of tonnage, out of
+    /// `workingSets` and out of the PR engine, and it is what the September
+    /// backfill wrote into the ledger. But `W` is a claim about a LIFT — the
+    /// ramp-up sets before the working ones — and a treadmill block has no
+    /// working set to be a ramp for. Drawn as a warm-up it was an outlined
+    /// badge lettered `W` at the top of the deck, which read as "this does not
+    /// count yet" on the one row of the session that is already finished.
+    ///
+    /// So the KIND stays and the DRAWING changes: a bout is set 1, filled,
+    /// exactly like the single set it is. Two answers to two different
+    /// questions, which is cheaper than a third `SetKind` that every ledger,
+    /// export and CHECK constraint downstream would have to learn.
+    private var badgeKind: LoggerModel.SetKind { isCardio ? .normal : row.kind }
+
     @ViewBuilder
     private var badgeSurface: some View {
         let shape = RoundedRectangle(cornerRadius: OnyxCorner.row, style: .continuous)
-        switch row.kind {
+        switch badgeKind {
         case .warmup:
             shape.strokeBorder(rail, lineWidth: 2)
         case .ghost:
@@ -1449,17 +1543,28 @@ private struct SetRowView: View {
                 style: StrokeStyle(lineWidth: 1.5, dash: [3, 3])
             )
         default:
-            shape.fill(isDone ? (isRecord ? Color.onyx.record : rail) : Color.onyx.hairline)
+            if isDone && isRecord {
+                // 16 % is the tint weight every chip in this app wears, and
+                // the ring is what carries the hue at 32 pt against an OLED
+                // black — the same job the card's 3 pt rail does at card size.
+                shape.fill(rail.opacity(0.16))
+                    .overlay(shape.strokeBorder(rail, lineWidth: 1.5))
+            } else {
+                shape.fill(isDone ? rail : Color.onyx.hairline)
+            }
         }
     }
 
     /// Ink that survives every one of the five surfaces above: on a solid fill
     /// it is the base colour, on an outline it is the outline's own.
     private var badgeInk: Color {
-        switch row.kind {
+        switch badgeKind {
         case .warmup: rail
         case .ghost:  Color.onyx.textTertiary
-        default:      row.isDone ? Color.onyx.base : Color.onyx.textSecondary
+        // A logged set's box is solid and its ink is the base it is drawn on —
+        // except a RECORD's, which is now a 16 % tint with a ring, and base ink
+        // on that is invisible. It takes the rail, like the outline states do.
+        default:      row.isDone ? (isRecord ? rail : Color.onyx.base) : Color.onyx.textSecondary
         }
     }
 
@@ -1961,6 +2066,11 @@ private struct StepControl: View {
     @State private var ramping = false
     @State private var ramp: Task<Void, Never>?
     @State private var detentTicks = 0
+    /// One per fine step the ramp takes — the haptic's trigger, and nothing
+    /// else reads it.
+    @State private var rampTicks = 0
+    /// One per hold that swapped the plate for the half-plate.
+    @State private var retractions = 0
 
     /// ── HOW A PRESS IS TOLD FROM AN ACTIVATION, WITHOUT DEPENDING ON ORDER ──
     /// The press path applies the coarse step on touch-DOWN, so the `Button`'s
@@ -2054,7 +2164,19 @@ private struct StepControl: View {
         }
         .animation(OnyxMotion.flick, value: ramping)
         .sensoryFeedback(.selection, trigger: detentTicks)
-        .sensoryFeedback(.impact(flexibility: .rigid), trigger: ramping) { _, now in now }
+        // ── THREE FEELINGS, AND EACH MEANS ONE THING ────────────────────────
+        // The detent above is the tap. This one is the moment the hold takes
+        // over and the grid halves — soft, because it is a mode change and not
+        // a value change, and it lands on the same frame as the correction and
+        // the badge that names the new step. The third is the ramp itself: a
+        // crisp medium per fine step, so a hold that is crossing a stack feels
+        // like it is counting rather than sliding.
+        //
+        // ponytail: 10 Hz of `.medium` is a lot of haptic. If it reads as a
+        // buzz on a device rather than as detents, throttle it by bumping
+        // `rampTicks` every OTHER tick — one `% 2` at the increment.
+        .sensoryFeedback(.impact(weight: .light), trigger: retractions)
+        .sensoryFeedback(.impact(weight: .medium), trigger: rampTicks)
         // `onDisappear` covers the row being recycled by the deck's LazyVStack
         // and nothing else — it does not fire when a sheet covers the row, and
         // it does not fire on backgrounding. Those are the scene phase's job.
@@ -2091,11 +2213,16 @@ private struct StepControl: View {
     @State private var lastCoarseStep = Date.distantPast
     private static let coalesce: TimeInterval = 0.06
 
-    private func coarseStep() {
+    /// Returns whether this call actually moved the value: false when the
+    /// coalesce window swallowed it, and false when the value was already at
+    /// its floor. The hold's retraction below needs to know, or a `−` held at
+    /// zero would hand back a plate that was never taken.
+    @discardableResult
+    private func coarseStep() -> Bool {
         let now = Date()
-        guard now.timeIntervalSince(lastCoarseStep) > Self.coalesce else { return }
+        guard now.timeIntervalSince(lastCoarseStep) > Self.coalesce else { return false }
         lastCoarseStep = now
-        _ = apply(sign * coarse)
+        return apply(sign * coarse)
     }
 
     private func press(_ isDown: Bool) {
@@ -2107,7 +2234,7 @@ private struct StepControl: View {
         // second, with nothing left holding a handle to cancel it.
         cancelRamp()
         pressGeneration += 1
-        coarseStep()
+        let tookCoarse = coarseStep()
         // The detent, once per press. It used to live on the row and be bumped
         // by every ramp tick, which is ten selection haptics a second — a buzz
         // rather than a detent, and the opposite of what §3.4 asks for.
@@ -2119,6 +2246,27 @@ private struct StepControl: View {
             // one, and a haptic announcing a change that did not happen — with
             // no badge, correctly, to explain it — is the control lying.
             if fine != nil { ramping = true }
+            // ── A HOLD RETRACTS THE PLATE THE TOUCH-DOWN TOOK ───────────────
+            // Touch-down applies the COARSE step, and it has to: a control that
+            // does nothing for 450 ms under the thumb is the latency cliff
+            // Apple's fluid-interfaces rule is about, and a tap is a coarse
+            // step by definition. But that left a HOLD reading as coarse too —
+            // press and let go after half a second and the only change was
+            // 2.5 kg, which is the "long press also moves by 2.5" report, with
+            // `loadStepFineKg` correctly declared at 1.25 the whole time.
+            //
+            // So the moment the ramp engages, the control hands the plate back
+            // and puts the half-plate on instead: one `fine - coarse`
+            // correction, then the fine grid from there. A tap is 2.5, a hold
+            // is 1.25 from its first tick, and the instant feedback survives.
+            //
+            // Only when the touch-down step actually landed. A `−` held at zero
+            // took nothing, and retracting nothing would ADD 1.25 kg to a value
+            // the user is holding the minus button on.
+            if tookCoarse, let fine, fine < coarse {
+                _ = apply(sign * (fine - coarse))
+                retractions += 1
+            }
             for _ in 0 ..< Self.maxTicks {
                 guard !Task.isCancelled else { return }
                 guard apply(sign * (fine ?? coarse)) else {
@@ -2128,6 +2276,7 @@ private struct StepControl: View {
                     ramping = false
                     return
                 }
+                rampTicks += 1
                 try? await Task.sleep(for: Self.repeatInterval)
             }
         }

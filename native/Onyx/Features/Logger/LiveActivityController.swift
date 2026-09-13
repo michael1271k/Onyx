@@ -137,6 +137,21 @@ final class LiveActivityController {
         }
     }
 
+    /// The token the card's muscle chip resolves, or nil when the movement has
+    /// no mover this app can name.
+    ///
+    /// Read from `plan.movers`, which is where the deck's own rail reads it, so
+    /// the Lock Screen and the card in your hand cannot disagree about what the
+    /// set is for.
+    private static func primaryMuscle(of exercise: LoggerModel.ExerciseState?) -> String? {
+        guard let exercise else { return nil }
+        if let token = exercise.plan.movers.primary.first,
+           LandmarkMuscle.from(token: token) != nil {
+            return token
+        }
+        return exercise.rows.contains(where: \.isCardio) ? "cardio" : nil
+    }
+
     /// Compose the card. Every formatting decision the deck already made is
     /// carried across as text rather than re-derived on the far side.
     private static func state(
@@ -200,7 +215,11 @@ final class LiveActivityController {
             timerOrigin: clock.timerOrigin,
             isPaused: clock.isPaused,
             elapsed: elapsed,
-            spark: model.volumeCurve,
+            // The movement's own muscle, as a token the card resolves through
+            // `Color.onyx.muscle` — see `ContentState.primaryMuscle`. A bout
+            // has no mover in `MuscleMap` (a treadmill is not a lift), and the
+            // literal is what the card draws its Tide chip from.
+            primaryMuscle: primaryMuscle(of: current?.exercise),
             // The same rating as `rpe` above, in the register the card needs to
             // TINT with rather than to draw — see `ContentState.rpeValue`.
             rpeValue: rpeValue,

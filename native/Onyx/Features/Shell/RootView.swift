@@ -65,7 +65,6 @@ private struct SignedInTabs: View {
                 NavigationStack {
                     TodayTabView(
                         onOpenTrain: { selection = .train },
-                        onOpenReports: { selection = .you },
                         onOpenPulse: { selection = .body }
                     )
                 }

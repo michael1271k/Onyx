@@ -1,4 +1,5 @@
 import SwiftUI
+import OnyxCore
 import OnyxUI
 
 /// Everything the running workout draws, on every surface ActivityKit offers.
@@ -86,9 +87,6 @@ struct WorkoutLockCard: View {
             }
             WorkoutTotals(state: state)
             WorkoutCurrentSet(state: state)
-            WorkoutSpark(values: state.spark, color: accent)
-                .frame(maxWidth: .infinity)
-                .frame(height: 26)
             if let countdown = restCountdown(state.restEndsAt) {
                 WorkoutRestBand(countdown: countdown, state: state, showsSkip: true)
             }
@@ -300,7 +298,7 @@ struct WorkoutCurrentSet: View {
     private var name: String { state.nextExercise ?? state.exercise }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 // `NEXT` rather than a different colour or a smaller name: the
                 // card changes SUBJECT here, and a label is the only channel
@@ -320,10 +318,16 @@ struct WorkoutCurrentSet: View {
                 // so a card that ends at the bracket is a card that cannot tell
                 // you which of the two you are on.
                 Text(name)
-                    .font(OnyxWidgetType.label(12))
+                    // ── THE NAME IS THE HEADLINE NOW ────────────────────────
+                    // It was 12 pt, one line among four, beside a chart. On a
+                    // locked phone at arm's length the question is "what am I
+                    // about to lift", and the answer was the smallest readable
+                    // thing on the card. 16 pt semibold is what the sparkline's
+                    // band paid for.
+                    .font(OnyxWidgetType.label(16, weight: .semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.7)
                 if !showsNext, !state.setLabel.isEmpty {
                     Text(state.setLabel)
                         .font(OnyxWidgetType.label(9, weight: .bold))
@@ -331,6 +335,9 @@ struct WorkoutCurrentSet: View {
                         .foregroundStyle(Color.onyx.textTertiary)
                 }
             }
+            // What this movement is FOR, under its name — the deck's own chip,
+            // in the deck's own hue, on the one surface that never had it.
+            WorkoutMuscleTag(token: state.primaryMuscle)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 if !state.load.isEmpty {
                     Text(state.load)
@@ -371,6 +378,42 @@ struct WorkoutCurrentSet: View {
     }
 }
 
+/// The movement's primary muscle, as the deck draws it.
+///
+/// ── WHY IT RESOLVES THE TOKEN HERE ──────────────────────────────────────────
+/// `ContentState.primaryMuscle` is a `LandmarkMuscle.token` on the wire, so the
+/// hue comes from `Color.onyx.muscle` — the same function the card's rail, the
+/// legend dot and the body figure read. A colour sent over the wire would be
+/// frozen at whatever the palette was when the activity started, which is the
+/// mistake `dayKey` already documents.
+///
+/// A bout carries the literal `cardio`: there is no mover to name, and the
+/// alternative — an empty slot on a treadmill block — reads as a card that
+/// failed to load rather than as a movement with no muscle.
+struct WorkoutMuscleTag: View {
+    let token: String?
+
+    private var resolved: (label: String, tint: Color)? {
+        guard let token, !token.isEmpty else { return nil }
+        if let muscle = LandmarkMuscle.from(token: token) {
+            return (muscle.displayName, Color.onyx.muscle(muscle))
+        }
+        return token == "cardio" ? ("Cardio", Color.onyx.cardio) : nil
+    }
+
+    var body: some View {
+        if let resolved {
+            Text(resolved.label.uppercased())
+                .font(OnyxWidgetType.label(9, weight: .black))
+                .tracking(0.8)
+                .foregroundStyle(resolved.tint)
+                .padding(.horizontal, 5)
+                .frame(height: 14)
+                .background(resolved.tint.opacity(0.16), in: Capsule())
+        }
+    }
+}
+
 /// The rest-skip button (§9, decision 16).
 ///
 /// 44 pt on both surfaces it appears on, including the expanded Dynamic Island
@@ -407,44 +450,12 @@ struct WorkoutSkipRest: View {
     }
 }
 
-/// The session's cumulative tonnage, as a line.
+/// ── THE SPARKLINE IS GONE ──────────────────────────────────────────────────
+/// `WorkoutSpark` drew the session's cumulative tonnage as a line, 26 pt across
+/// the Lock Screen card and 76×30 in the island. Cumulative tonnage is
+/// monotonic: it has exactly one shape, going up, on every session anyone has
+/// ever logged — so the chart could not distinguish a good session from a bad
+/// one, and it was spending the card's best horizontal band to say so while the
+/// exercise NAME sat at 12 pt. The name is what a glance at a locked phone is
+/// for. Removed, and the space went to it.
 ///
-/// Hand-drawn rather than Swift Charts: a widget extension has a hard memory
-/// budget and this is four points of geometry, not a chart. It draws nothing
-/// below two points — one dot on an axis reads as a rendering failure, not as a
-/// trend.
-struct WorkoutSpark: View {
-    let values: [Double]
-    let color: Color
-
-    var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-            if values.count > 1, let low = values.min(), let high = values.max() {
-                let span = high - low
-                let points = values.enumerated().map { index, value -> CGPoint in
-                    let x = size.width * CGFloat(index) / CGFloat(values.count - 1)
-                    // A flat series (identical totals) would divide by zero;
-                    // it sits on the baseline instead, which is what a flat
-                    // series looks like.
-                    let ratio = span > 0 ? (value - low) / span : 0
-                    return CGPoint(x: x, y: size.height * (1 - CGFloat(ratio)))
-                }
-                ZStack {
-                    Path { path in
-                        path.addLines(points)
-                        path.addLine(to: CGPoint(x: size.width, y: size.height))
-                        path.addLine(to: CGPoint(x: 0, y: size.height))
-                        path.closeSubpath()
-                    }
-                    .fill(LinearGradient(
-                        colors: [color.opacity(0.28), color.opacity(0.02)],
-                        startPoint: .top, endPoint: .bottom
-                    ))
-                    Path { $0.addLines(points) }
-                        .stroke(color, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
-                }
-            }
-        }
-    }
-}
