@@ -216,14 +216,14 @@ public extension AppDatabase {
 
     // MARK: - stress_logs
 
-    /// The day's psych-stress readings. Ordered by the stored slot string,
+    /// The day's psych-stress events. Ordered by the stored slot string,
     /// which is alphabetical rather than chronological — `stressReadings` on
-    /// the model is what puts them in the order the day happens.
+    /// the model is what puts them in the order the day happens
+    /// (`PsychStress.sorted`).
     ///
-    /// One row per (day, slot) and at most three slots, so this is a whole-day
-    /// read rather than a latest-row one: `StressInputsBuilder` takes the MEAN
-    /// of the rows for the index's `self` term (D6) and the sheet has to show
-    /// the reader the same set the term is built from.
+    /// A whole-day read rather than a latest-row one: `StressInputsBuilder`
+    /// takes the MEAN of the rows for the index's `self` term (D6) and the
+    /// sheet has to show the reader the same set the term is built from.
     func stressStream(userId: String, date: String) -> AsyncThrowingStream<[StressLogRow], any Error> {
         stream(ValueObservation.tracking { db in
             try StressLogRow
@@ -233,57 +233,34 @@ public extension AppDatabase {
         })
     }
 
-    /// Write one slot's reading, or clear it with a nil `level`.
+    /// Log one stress EVENT. Returns the new row's id.
     ///
-    /// The slot is the time-of-day bucket the clock picked (`StressSlot.forClock`),
-    /// never a value the user typed: the server key is `(user_id, date, slot)`,
-    /// so a free-text slot would fork the row the next answer meant to replace.
+    /// `date` is the logical day the caller passes (the Pulse day); `loggedAt`
+    /// is when it was felt, and backdating keeps the day and moves the time.
+    /// The slot is DERIVED from `loggedAt` in the local calendar
+    /// (`StressSlot.forMinutes`), never typed. There is no same-slot replace
+    /// or shadow delete any more: two events in one bucket are two answers,
+    /// and the index's mean weighs both.
     ///
     /// `tags` is stored as a JSON ARRAY of the raw tag strings. The column is a
     /// Postgres `text[]`, not jsonb — a JSON array is what PostgREST coerces
     /// into one, and an object written there would not coerce at all. The
     /// reader (`PsychStress.tags`) drops anything it does not know, so a tag
     /// added in a later version costs a chip and never a reading.
-    func setStress(
-        userId: String, date: String, slot: StressSlot, level: Int?,
+    @discardableResult
+    func logStress(
+        userId: String, date: String, loggedAt: Date, level: Int,
         tags: [StressTag] = [], note: String? = nil, now: Date = Date()
-    ) throws {
+    ) throws -> String {
+        let trimmed = (note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let row = StressLogRow(
+            id: newOnyxID(), userId: userId, date: date,
+            slot: StressSlot.forMinutes(PsychStress.minuteOfDay(loggedAt)).rawValue,
+            level: level, tags: Self.tagsJSON(tags), note: trimmed.isEmpty ? nil : trimmed,
+            createdAt: now, updatedAt: now, loggedAt: loggedAt
+        )
         try writer.write { db in
-            let scope = StressLogRow
-                .filter(Column("user_id") == userId && Column("date") == date && Column("slot") == slot.rawValue)
-            guard let level else {
-                for row in try scope.fetchAll(db) {
-                    try row.delete(db)
-                    try Self.enqueueRowDelete(table: StressLogRow.databaseTableName, key: ["id": row.id], in: db)
-                }
-                return
-            }
-            let trimmed = (note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let existing = try scope.order(Column("created_at")).fetchAll(db)
-            var row = existing.first
-                ?? StressLogRow(
-                    id: newOnyxID(), userId: userId, date: date, slot: slot.rawValue,
-                    level: level, tags: Self.tagsJSON([]), note: nil,
-                    createdAt: now, updatedAt: now
-                )
-            row.level = level
-            row.tags = Self.tagsJSON(tags)
-            row.note = trimmed.isEmpty ? nil : trimmed
-            row.updatedAt = now
-            try row.save(db)
-            // ── A SECOND ROW FOR ONE SLOT IS A DOUBLE-COUNTED ANSWER ────────
-            // The local table's primary key is `id` and the pull upserts on it,
-            // so a row this device wrote offline and a row the server wrote for
-            // the SAME (user_id, date, slot) land side by side — Postgres holds
-            // the unique constraint, SQLite does not. `stressDayMean` is a flat
-            // mean over the day's rows, so the duplicate would weigh that slot
-            // twice in the index's `self` term, and the sheet would draw two
-            // answers under one heading. `setFatigue` has deleted its shadows
-            // since Wave 2 for exactly this reason; this does the same.
-            for shadow in existing.dropFirst() {
-                try shadow.delete(db)
-                try Self.enqueueRowDelete(table: StressLogRow.databaseTableName, key: ["id": shadow.id], in: db)
-            }
+            try row.insert(db)
             // `note` is the one nullable column here, and a note the user just
             // cleared has to say its own name or the merge upsert leaves the
             // old text standing on the server (`editCustomSupplement`'s note).
@@ -291,6 +268,18 @@ public extension AppDatabase {
                 table: StressLogRow.databaseTableName, id: row.id,
                 nulls: row.note == nil ? ["note"] : [], in: db
             )
+        }
+        return row.id
+    }
+
+    /// Delete one stress event, locally and on the server.
+    func deleteStress(userId: String, id: String, now: Date = Date()) throws {
+        try writer.write { db in
+            guard let row = try StressLogRow
+                .filter(Column("id") == id && Column("user_id") == userId)
+                .fetchOne(db) else { return }
+            try row.delete(db)
+            try Self.enqueueRowDelete(table: StressLogRow.databaseTableName, key: ["id": row.id], in: db)
         }
     }
 
@@ -304,7 +293,10 @@ public extension AppDatabase {
     static func reading(_ row: StressLogRow) -> StressReading? {
         guard let slot = StressSlot(rawValue: row.slot) else { return nil }
         let raw = (try? JSONDecoder().decode([String].self, from: Data(row.tags.raw.utf8))) ?? []
-        return StressReading(slot: slot, level: row.level, tags: PsychStress.tags(raw), note: row.note)
+        return StressReading(
+            id: row.id, slot: slot, loggedAt: row.loggedAt,
+            level: row.level, tags: PsychStress.tags(raw), note: row.note
+        )
     }
 
     // MARK: - doms_logs

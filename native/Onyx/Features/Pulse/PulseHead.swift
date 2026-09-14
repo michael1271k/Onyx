@@ -151,7 +151,7 @@ struct HeadSheet: View {
 
     /// Take the stored answer, but never over the top of one being written.
     ///
-    /// FIELD BY FIELD, because `setStress` writes the whole row: a reader who
+    /// FIELD BY FIELD, because `logStress` writes the whole row: a reader who
     /// tapped a word before the stream yielded would otherwise Save a level
     /// over a bucket that already held tags and a note, and take both with it.
     /// Each field is adopted only while it is still untouched, so a tap costs
@@ -297,7 +297,7 @@ struct HeadSheet: View {
     private var clearSection: some View {
         Section {
             Button("Clear this reading", role: .destructive) {
-                if model.setStress(slot, level: nil) { dismiss() }
+                if let existing, model.deleteStress(id: existing.id) { dismiss() }
             }
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         }
@@ -305,7 +305,7 @@ struct HeadSheet: View {
 
     private func save() {
         guard let level else { return }
-        if model.setStress(slot, level: level, tags: StressTag.sorted(tags), note: note) {
+        if model.logStress(at: Date(), level: level, tags: StressTag.sorted(tags), note: note) {
             dismiss()
         }
     }
