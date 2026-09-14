@@ -596,6 +596,38 @@ struct WeeklyExportBuilderV5Tests {
         #expect(WeeklyExport.build(got).contains("no performed-order index 2026-08-26"))
     }
 
+    @Test("a stress event prints its time; a legacy slot row still prints its slot")
+    func stressEventPrintsItsTime() throws {
+        let db = try seeded()
+        try db.writer.write { conn in
+            // 11:32 UTC is 14:32 in Jerusalem — the time printed is the zone's, not the clock's.
+            try StressLogRow(id: "st-t", userId: user, date: "2026-08-24", slot: "midday", level: 3,
+                             tags: JSONText(raw: "[]"), note: nil,
+                             createdAt: iso("2026-08-24T11:32:00Z"), updatedAt: iso("2026-08-24T11:32:00Z"),
+                             loggedAt: iso("2026-08-24T11:32:00Z")).insert(conn)
+            // Written before W1: a slot and no time. Created AFTER the timed
+            // row on purpose — the order is the day's, not the write's.
+            try StressLogRow(id: "st-l", userId: user, date: "2026-08-24", slot: "evening", level: 4,
+                             tags: JSONText(raw: "[]"), note: nil,
+                             createdAt: iso("2026-08-24T12:00:00Z"), updatedAt: iso("2026-08-24T12:00:00Z")).insert(conn)
+            // And a legacy MORNING row created last of all still sorts first.
+            try StressLogRow(id: "st-m", userId: user, date: "2026-08-24", slot: "morning", level: 2,
+                             tags: JSONText(raw: "[]"), note: nil,
+                             createdAt: iso("2026-08-24T13:00:00Z"), updatedAt: iso("2026-08-24T13:00:00Z")).insert(conn)
+        }
+        let got = try WeeklyExportBuilder(database: db, userId: user, timeZone: TimeZone(identifier: "Asia/Jerusalem")!)
+            .input(weekStart: weekStart, today: weekStart)
+        #expect(got.stress?.map(\.time) == ["morning", "14:32", "evening"].map { $0.contains(":") ? $0 : nil })
+        #expect(got.stress?.map(\.slot) == ["morning", "midday", "evening"])
+
+        let md = WeeklyExport.build(got)
+        // §2 trace: one token differs between a timed event and a legacy row.
+        #expect(md.contains("stress 2026-08-24 morning 2 · 2026-08-24 14:32 3 · 2026-08-24 evening 4"))
+        // §4 daily cell, same rule.
+        let day = try #require(md.split(separator: "\n").first { $0.hasPrefix("2026-08-24 · ") })
+        #expect(day.contains("stress morning 2, 14:32 3, evening 4"))
+    }
+
     @Test("a clockless bout is never a duplicate of another clockless bout")
     func clocklessCardioIsNotDeduped() throws {
         let got = try built("UTC")

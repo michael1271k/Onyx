@@ -157,19 +157,26 @@ public struct WeeklyExportBuilder: Sendable {
             ])
         }
 
-        /* THE HEAD ROW — self-reported psychological stress.
-           The slot is derived from the CLOCK when the reading is taken, never
-           chosen, so it passes through as stored. The word comes from
-           `PsychStress.levels` for the same reason fatigue carries one: a bare
-           4 is not readable and a bare "Strained" cannot be compared.
-           Ordered by date then by the order a day HAPPENS in — a string sort
-           would put "evening" before "morning". A slot the vocabulary does not
-           name sorts last rather than first. */
-        func slotOrder(_ slot: String) -> Int {
-            StressSlot.allCases.firstIndex { $0.rawValue == slot } ?? StressSlot.allCases.count
+        /* THE HEAD ROW — self-reported psychological stress, an EVENT log.
+           The slot is derived from the event's time, never chosen, so it
+           passes through as stored. The word comes from `PsychStress.levels`
+           for the same reason fatigue carries one: a bare 4 is not readable
+           and a bare "Strained" cannot be compared.
+           Ordered by date then by the order the day HAPPENED in — the same
+           key `PsychStress.sorted` uses: a timed event by its minute of the
+           day in the user's zone, a legacy row without a time at its slot's
+           lower boundary, `created_at` breaking ties. A slot the vocabulary
+           does not name sorts last rather than first. */
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        func minute(_ r: StressLogRow) -> Int {
+            if let at = r.loggedAt { return PsychStress.minuteOfDay(at, calendar: calendar) }
+            return StressSlot(rawValue: r.slot)?.startMinutes ?? 24 * 60
         }
         let stressOrdered = Self.stableSorted(rows.stress) { a, b in
-            a.date != b.date ? a.date < b.date : slotOrder(a.slot) < slotOrder(b.slot)
+            if a.date != b.date { return a.date < b.date }
+            if minute(a) != minute(b) { return minute(a) < minute(b) }
+            return a.createdAt < b.createdAt
         }
         var stress: [ExportStress] = []
         for r in stressOrdered {
@@ -182,6 +189,7 @@ public struct WeeklyExportBuilder: Sendable {
             var row: [String: Any] = [:]
             row["date"] = r.date
             row["slot"] = r.slot
+            row["time"] = j(r.loggedAt.map(clock))
             row["level"] = Double(r.level)
             row["label"] = word
             row["tags"] = tags
@@ -1352,6 +1360,15 @@ public struct WeeklyExportBuilder: Sendable {
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = timeZone
         f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXXXX"
+        return f.string(from: date)
+    }
+
+    /// Local wall-clock `HH:mm` — what a stress event prints as.
+    func clock(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = timeZone
+        f.dateFormat = "HH:mm"
         return f.string(from: date)
     }
 

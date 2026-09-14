@@ -274,8 +274,11 @@ public struct ExportFatigue: Codable, Equatable, Sendable {
 /// day. See `Recovery/PsychStress.swift`, which owns the vocabulary.
 public struct ExportStress: Codable, Equatable, Sendable {
     public var date: String
-    /// `morning` / `midday` / `evening`, derived from the clock, never chosen.
+    /// `morning` / `midday` / `evening`, derived from the event's time, never chosen.
     public var slot: String
+    /// `HH:mm` of the event in the user's own zone. Nil on a row written
+    /// before stress was an event log; the document prints the slot instead.
+    public var time: String?
     public var level: Double
     /// `PsychStress.levels`' own word — the number alone is not readable and
     /// the word alone cannot be compared.
