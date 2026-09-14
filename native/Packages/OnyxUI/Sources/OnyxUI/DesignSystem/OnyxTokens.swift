@@ -49,25 +49,21 @@ public enum OnyxDomain: String, CaseIterable, Sendable {
     /// Lunar — sleep, readiness, fatigue, DOMS. Lavender → mist.
     case recover
 
+    /// The eight stops as designed — the DEFAULT theme. `OnyxTheme` derives
+    /// every other theme from these by hue rotation, so a number here is the
+    /// palette's origin, not merely its first value.
+    public static let defaultDomainHex: [OnyxDomain: (start: UInt32, end: UInt32)] = [
+        .train:   (start: 0x6B78F0, end: 0x4FB6E8),
+        .fuel:    (start: 0xE3A650, end: 0xE07A7A),
+        .body:    (start: 0x46B39D, end: 0x2E9AA6),
+        .recover: (start: 0xA79FD6, end: 0xC9D3EE),
+    ]
+
     /// The mesh's first stop. Also the accent when only one colour will do.
-    public var start: Color {
-        switch self {
-        case .train:   Color(hex: 0x6B78F0)
-        case .fuel:    Color(hex: 0xE3A650)
-        case .body:    Color(hex: 0x46B39D)
-        case .recover: Color(hex: 0xA79FD6)
-        }
-    }
+    public var start: Color { Color(hex: Self.defaultDomainHex[self]!.start) }
 
     /// The mesh's second stop.
-    public var end: Color {
-        switch self {
-        case .train:   Color(hex: 0x4FB6E8)
-        case .fuel:    Color(hex: 0xE07A7A)
-        case .body:    Color(hex: 0x2E9AA6)
-        case .recover: Color(hex: 0xC9D3EE)
-        }
-    }
+    public var end: Color { Color(hex: Self.defaultDomainHex[self]!.end) }
 
     /// What a `Section` header, a `Gauge` tint or a selected row is coloured.
     ///
@@ -449,25 +445,30 @@ extension Color {
         /// parameters were not merely unused: keeping them would have left the
         /// call site claiming a ramp the function no longer performs.
         public static func muscle(_ muscle: LandmarkMuscle) -> Color {
-            switch muscle {
-            case .chest:      Color(hex: 0xF66D64)
-            case .lats:       Color(hex: 0x00D4CE)
-            case .upperBack:  Color(hex: 0x00B6B0)
-            case .lowerBack:  Color(hex: 0x009894)
-            case .frontDelts: Color(hex: 0xFF9F46)
-            case .sideDelts:  Color(hex: 0xE68100)
-            case .rearDelts:  Color(hex: 0xC26C00)
-            case .biceps:     Color(hex: 0x998BFF)
-            case .triceps:    Color(hex: 0x0EA6FF)
-            case .forearms:   Color(hex: 0xB49F00)
-            case .quads:      Color(hex: 0x8AE171)
-            case .hamstrings: Color(hex: 0x76CC5C)
-            case .glutes:     Color(hex: 0x61B647)
-            case .adductors:  Color(hex: 0x4DA230)
-            case .calves:     Color(hex: 0x388D15)
-            case .absCore:    Color(hex: 0xE66DB6)
-            }
+            Color(hex: defaultMuscleHex[muscle]!)
         }
+
+        /// The sixteen as measured — the DEFAULT theme's muscle palette, in
+        /// `LandmarkMuscle` declaration order. `OnyxTheme` rotates all sixteen
+        /// by the train accent's hue offset, so the family ramps hold.
+        public static let defaultMuscleHex: [LandmarkMuscle: UInt32] = [
+            .chest:      0xF66D64,
+            .lats:       0x00D4CE,
+            .upperBack:  0x00B6B0,
+            .lowerBack:  0x009894,
+            .frontDelts: 0xFF9F46,
+            .sideDelts:  0xE68100,
+            .rearDelts:  0xC26C00,
+            .biceps:     0x998BFF,
+            .triceps:    0x0EA6FF,
+            .forearms:   0xB49F00,
+            .quads:      0x8AE171,
+            .hamstrings: 0x76CC5C,
+            .glutes:     0x61B647,
+            .adductors:  0x4DA230,
+            .calves:     0x388D15,
+            .absCore:    0xE66DB6,
+        ]
     }
 }
 
