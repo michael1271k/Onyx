@@ -243,8 +243,9 @@ extension SessionAnalysis {
             calorieBasis: storedKcal == nil ? estimate?.basis : nil,
             avgBpm: session.avgBpm.map(Double.init),
             avgBpmEstimated: session.avgBpmEstimated,
-            planLabel: ctx.schedule.plans.first { $0.id == Schedule.planId(owning: session.date, in: ctx.schedule) }?.label
-                ?? ctx.schedule.programId,
+            // The same read the deck's own tag makes — one expression, so the
+            // header and the summary cannot drift apart again.
+            planLabel: Schedule.planLabel(owning: session.date, in: ctx.schedule),
             week: Phases.weekPhase(
                 weekStart: Week.start(of: session.date, startDay: Week.startDay(fromEndDay: goals?.weekEndDay)),
                 in: ctx.schedule.phases

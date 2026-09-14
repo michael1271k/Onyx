@@ -382,4 +382,66 @@ struct LoggerModelTests {
                 "all three working sets survive; two of them are still to do")
         #expect(rebuilt.rows.contains { $0.kind == .warmup }, "and the warm-up is not thrown away")
     }
+
+    // ── Rejoining a session the system killed (W7) ──────────────────────────
+
+    /// The clock has to survive iOS terminating the app mid-workout.
+    ///
+    /// `attach()` restored the session id, the pause ledger and every logged
+    /// set, and left `startedAt` where `init` put it — at the instant of
+    /// resumption. Forty minutes of training came back onto a deck claiming to
+    /// be seconds old, and every reader of the session clock believed it: the
+    /// hero's timer, the Live Activity, and `closeSession`'s `duration_min`.
+    ///
+    /// The row already held the right answer — `ensureSession` writes it at the
+    /// first append — so nothing new is persisted here. The read was throwing
+    /// it away.
+    @Test("rejoining a killed session keeps the original start, not the resume instant")
+    func attachRestoresTheClock() throws {
+        let db = try AppDatabase.inMemory(deviceId: "resume-test")
+        let began = Date().addingTimeInterval(-40 * 60)
+        let id = ExerciseSlug.id("Face Pull")
+        try db.seedRows { conn in
+            try Exercise(id: id, name: "Face Pull").insert(conn)
+            // `ended_at` nil and dated TODAY — the predicate `liveSession` runs.
+            try WorkoutSession(
+                id: "s-live", userId: "u1", dayKey: "cb_a", date: LogicalDay.today(),
+                startedAt: began
+            ).insert(conn)
+            try WorkoutSet(id: "n1", sessionId: "s-live", exerciseId: id, setIndex: 1,
+                           weightKg: 16.25, reps: 15).insert(conn)
+        }
+        // Built the way a relaunch builds it: a brand-new model whose clock
+        // starts NOW, with no idea a session is already running.
+        let model = LoggerModel(
+            day: PlanTemplates.day("onyx5", "cb_a"), phase: .cut, store: db, userId: "u1"
+        )
+        model.attach()
+
+        #expect(model.sessionId == "s-live")
+        #expect(abs(model.startedAt.timeIntervalSince(began)) < 1,
+                "the stored instant, not the resume instant")
+        #expect(model.elapsed() > 39 * 60,
+                "the forty minutes already trained are still on the clock")
+    }
+
+    /// A deck opened on a day with no live session keeps its own clock.
+    ///
+    /// The restore must not reach for a session that is not there and must not
+    /// fall back to something older than the deck — `LogicalDay.date(fromISO:)`
+    /// is midnight, and a deck opened at 18:00 that adopted it would open
+    /// claiming eighteen hours of training.
+    @Test("with no live session the deck keeps the clock it opened with")
+    func attachWithoutALiveSessionKeepsTheOpeningClock() throws {
+        let db = try AppDatabase.inMemory(deviceId: "resume-test-2")
+        let opened = Date().addingTimeInterval(-90)
+        let model = LoggerModel(
+            day: PlanTemplates.day("onyx5", "cb_a"), phase: .cut, store: db, userId: "u1",
+            startedAt: opened
+        )
+        model.attach()
+
+        #expect(model.sessionId == nil)
+        #expect(model.startedAt == opened)
+    }
 }

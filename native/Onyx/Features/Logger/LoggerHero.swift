@@ -101,6 +101,31 @@ struct LoggerHero: View {
         return Week.label(ofWeekStart: Week.start(of: iso), anchor: schedule?.weekZeroStart, phases: schedule?.phases ?? [])
     }
 
+    /// Tag 1's text, or nil when the catalogue has not loaded.
+    private var planLabel: String? {
+        environment.targets.map { Schedule.planLabel(owning: iso, in: $0.schedule) }
+    }
+
+    /// Tag 2's text — `WeekPhase.short`, the string the summary page draws.
+    ///
+    /// ── WHY THE WEEK IS CUT ON THE ATHLETE'S OWN DAY ────────────────────────
+    /// `Week.start(of:)` defaults to Sunday and this screen took the default,
+    /// while `SessionPage` passed `week_end_day`. For anyone whose week ends on
+    /// a day other than Saturday that is a different week start, so the same
+    /// session could be W9 on the deck and W10 on its own summary. The resolver
+    /// already knows the answer.
+    ///
+    /// Falls back to `week` — "Week 9", or an era label — when the phase table
+    /// has no row for this week. A date outside the table still has a POSITION,
+    /// and dropping the tag would lose it to say nothing.
+    private var phaseWeek: String {
+        guard let resolver = environment.targets else { return week }
+        return Phases.weekPhase(
+            weekStart: Week.start(of: iso, startDay: resolver.weekStartDay),
+            in: resolver.schedule.phases
+        )?.short ?? week
+    }
+
     /// "Sat 30 Aug" — the session's own date, which in edit mode takes the
     /// sub-line's place.
     ///
@@ -225,8 +250,8 @@ struct LoggerHero: View {
     @ViewBuilder
     private var tagRow: some View {
         HStack(spacing: OnyxSpace.xs) {
-            phaseChip
-            weekChip
+            planChip
+            phaseWeekChip
             if !typeSize.isAccessibilitySize {
                 ForEach(dayMuscles, id: \.self) { muscle in
                     chip(muscle.displayName, tint: Color.onyx.muscle(muscle))
@@ -259,13 +284,43 @@ struct LoggerHero: View {
         return Array(seen.prefix(3))
     }
 
-    /// The phase, as a tag that is also the way to change it.
-    private var phaseChip: some View {
+    // ── THE TWO TAGS, AND WHY THEY ARE THE SAME TWO EVERYWHERE ─────────────
+    // This row used to carry `Cut` and `Week 9` as separate chips while the
+    // session's own summary page, one tap later, carried `Onyx-5` and `Cut W9`.
+    // Four strings for two facts, and a reader comparing the two screens had to
+    // work out that `Cut` + `Week 9` and `Cut W9` were the same claim while
+    // `Onyx-5` appeared from nowhere.
+    //
+    // There are now exactly two, in this order, on both: the PLAN, then the
+    // PHASE AND WEEK. `SessionDetailView.planTags` is the shape being matched —
+    // it already read `WeekPhase.short`, so the unification is this screen
+    // moving to what the summary always did, not a new format for both.
+
+    /// Tag 1 — the plan that owns this session's date. "Onyx-5".
+    ///
+    /// `planId(owning:)`, not the ACTIVE plan: a deck re-opened on a session
+    /// from a previous block belongs to the block that was running then, and
+    /// the tag is about the session rather than about today.
+    @ViewBuilder
+    private var planChip: some View {
+        if let label = planLabel {
+            chip(label, tint: Color.onyx.textSecondary)
+        }
+    }
+
+    /// Tag 2 — the phase and the week inside it, as one string. "Cut W9".
+    ///
+    /// ── STILL THE WAY INTO THE PHASE PICKER ─────────────────────────────────
+    /// The phase used to be its own chip and that chip was the button. Folding
+    /// it into the week's would have removed the only entry point to
+    /// `PhaseSheet` from this screen, so the COMBINED tag carries the button
+    /// instead. The affordance moves; it does not disappear.
+    private var phaseWeekChip: some View {
         Button(action: onPhase) {
-            chip(phase.label, tint: Color.onyx.textSecondary)
+            chip(phaseWeek, tint: accent)
         }
         .onyxPress()
-        .accessibilityLabel("Phase, \(phase.label)")
+        .accessibilityLabel("Phase and week, \(phaseWeek)")
         .accessibilityHint("Opens the phase picker.")
     }
 
@@ -297,14 +352,6 @@ struct LoggerHero: View {
     // `restCountdown`, `onSkipRest` and `onAdjustRest` stay on this type: the
     // Live Stats face still draws `LoggerRestCapsule` from them, and the Lock
     // Screen shares the same validated range.
-
-    /// The programme week, as a chip rather than another `·`-joined fragment.
-    /// It is the one piece of this line that is a POSITION in the block rather
-    /// than a description of the day, and a chip is how the rest of the app says
-    /// so already.
-    private var weekChip: some View {
-        chip(week, tint: accent)
-    }
 
     // MARK: - The clock
 

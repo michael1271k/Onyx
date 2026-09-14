@@ -229,4 +229,10 @@ public final class TargetResolver {
     public var schedule: ScheduleContext { snapshot.schedule }
     /// The rungs and the schedule of rungs.
     public var ladder: LeverLadder { snapshot.ladder }
+    /// The weekday the athlete's week is cut on, from `user_goals.week_end_day`.
+    /// Forwarded like `schedule` and `ladder` above: a caller that needs only
+    /// the week NUMBER for a date should not have to build a whole window, and
+    /// one that defaulted to Sunday numbered a Monday athlete's weeks off by
+    /// one against the same date's summary page.
+    public var weekStartDay: Int { snapshot.weekStartDay }
 }

@@ -187,10 +187,13 @@ public enum PrRecorder {
     static func baselines(
         _ db: Database, exerciseIds: Set<String>, excluding sessionId: String?,
         before: String? = nil,
-        dayKey: String?, program: Program, name: @escaping (String) -> String
+        dayKey: String?, program: Program, name: @escaping (String) -> String,
+        standingRecordFloors: Bool = false
     ) throws -> PrBaselines {
         guard !exerciseIds.isEmpty else { return .empty }
-        let floors = try floors(db)
+        // Off for every rebuild path; the live deck is the one caller that
+        // passes true. `floors`' header says why.
+        let floors = try floors(db, standingRecords: standingRecordFloors)
         // ── EVERY ID THAT IS THIS MOVEMENT, NOT JUST THE ONE IN HAND ────────
         //
         // This filtered on `exerciseIds` alone — the ids the session's OWN rows
@@ -260,18 +263,63 @@ public enum PrRecorder {
     /// The asserted floors — every `personal_records` row with NO session,
     /// folded per exercise key (W2; `PrTruth.swift` says why). Read once per
     /// baseline build: the table is a few dozen rows.
-    static func floors(_ db: Database) throws -> [String: PrFloor] {
+    ///
+    /// ── `standingRecords` IS THE LIVE DECK'S TIER, AND ONLY ITS ─────────────
+    /// A session-backed row's own `value` is normally NOT a floor: the set that
+    /// achieved it is in `workout_sets`, so the bar already stands there and
+    /// folding it in again would say the same thing twice.
+    ///
+    /// That holds while this device can SEE the set. It cannot always: a
+    /// movement's history is filed under every id it has ever been logged
+    /// under, `baselines` gathers those ids by resolving each to a canonical
+    /// NAME, and `nameResolver` can only resolve an id the local `exercises`
+    /// table claims. An id whose catalogue row has not been pulled yet resolves
+    /// to itself, matches no deck name, and its rows drop silently out of the
+    /// bar. The bar is then built from HALF a history — which is not an empty
+    /// index that awards nothing, but a LOW one that awards a record the full
+    /// history would have refused. 2026-09-14: a 47.5 × 13 seated leg curl lit
+    /// as 617.5 kg "was 550" mid-session and was gone after the next launch,
+    /// because the catalogue row landed in between and the replay could then
+    /// see what the live bar could not.
+    ///
+    /// The ledger already knew. `personal_records` holds the standing record
+    /// for the movement whether or not this device holds the set behind it, so
+    /// reading it as a floor makes the deck's bar agree with the ledger by
+    /// construction rather than by both happening to read the same rows.
+    ///
+    /// ── WHY IT IS OFF FOR `record`, `replay` AND `recomputeAll` ─────────────
+    /// Those three REBUILD the ledger, and `recomputeAll` does it by upserting
+    /// session by session over a table that still holds the previous answer. A
+    /// floor taken from the standing record would measure session 1 against the
+    /// all-time best, award nothing, and leave the stale rows exactly where
+    /// they were — a recompute that silently does nothing. They keep the
+    /// original two tiers; the flag defaults off so they get it by saying
+    /// nothing.
+    ///
+    /// It can only ever RAISE the live bar, so it removes false trophies and
+    /// cannot invent one — the direction `baselines`' own header requires of
+    /// any change to detection. The deck can now light FEWER records than the
+    /// close path files, which is the trade being made on purpose: a trophy
+    /// withheld is corrected by the summary one screen later, and a false one
+    /// is a number the athlete has already believed.
+    static func floors(_ db: Database, standingRecords: Bool = false) throws -> [String: PrFloor] {
         var out: [String: PrFloor] = [:]
         for row in try PersonalRecordRow.fetchAll(db) {
             // A floor is a session-less row's value, or the `floor_value` a
             // session's record carries from the floor row it replaced —
             // the natural key holds ONE row per axis, so a beaten floor
             // lives on inside the row that beat it (`carryFloor`).
-            guard let axis = PrAxis(rawValue: row.axis),
-                  let value = row.sessionId == nil ? row.value : row.floorValue
-            else { continue }
+            guard let axis = PrAxis(rawValue: row.axis) else { continue }
+            let timed = TimedExercise.isTimed(row.exerciseKey)
             var floor = out[row.exerciseKey] ?? PrFloor()
-            floor.absorb(axis: axis, value: value, timed: TimedExercise.isTimed(row.exerciseKey))
+            if let value = row.sessionId == nil ? row.value : row.floorValue {
+                floor.absorb(axis: axis, value: value, timed: timed)
+            }
+            // `absorb` keeps whichever side is the better mark for the axis, so
+            // this is a max (a min on a timed lift) and never a downgrade.
+            if standingRecords, row.sessionId != nil {
+                floor.absorb(axis: axis, value: row.value, timed: timed)
+            }
             out[row.exerciseKey] = floor
         }
         return out
@@ -560,7 +608,11 @@ extension AppDatabase {
             let name = try PrRecorder.nameResolver(db)
             return try PrRecorder.baselines(
                 db, exerciseIds: Set(exerciseIds), excluding: sessionId,
-                before: before, dayKey: dayKey, program: program, name: name
+                before: before, dayKey: dayKey, program: program, name: name,
+                // The ONE place this is on — see `PrRecorder.floors`. The deck
+                // is the surface that shows a record the instant it happens,
+                // with no chance to take it back before it is read.
+                standingRecordFloors: true
             )
         }
     }
