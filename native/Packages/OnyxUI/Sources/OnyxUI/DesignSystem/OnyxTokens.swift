@@ -12,7 +12,8 @@ import OnyxCore
 /// of fixed semantic hues — and every screen reads it.
 ///
 /// The Live Logger was its last reader and Wave 2.4 re-skinned it, so the file
-/// is gone. the web app's `tests/native-token-discipline.test.ts` keeps it gone.
+/// is gone. `OnyxUITests/TokenDisciplineTests.swift` (run by `npm run swift:ui`
+/// inside `npm run check`) keeps it gone.
 ///
 /// ── WHAT CHANGED IN TOKENS v2 (Phase 2 §3.2) ────────────────────────────────
 /// Every accent came down two steps. The v1 palette was Ion `#7C5CFF` and Tide
@@ -24,7 +25,7 @@ import OnyxCore
 ///
 /// ── THE RULE THIS FILE MAKES ENFORCEABLE ────────────────────────────────────
 /// No raw hex in any view. Hexes live here, views name meanings, and
-/// the web app's `tests/native-token-discipline.test.ts` fails the build if a `0x` or a
+/// `OnyxUITests/TokenDisciplineTests.swift` fails the build if a `0x` or a
 /// `Color(red:` appears under `Features/`. A token you cannot name is a token
 /// you have not designed yet.
 ///
@@ -144,7 +145,7 @@ extension Color {
         /// ── WHY THIS IS A TOKEN AND NOT A `Color(hex:)` IN THE VIEW ─────────
         /// It reads like a violation of the one native design rule and is not:
         /// nothing is being SPELLED OUT, a stored value is being decoded. But
-        /// `native-token-discipline` scans text, not intent, so the call site
+        /// `TokenDisciplineTests` scans text, not intent, so the call site
         /// was indistinguishable in review from a designer-invented hex — which
         /// is exactly the confusion the rule exists to prevent.
         ///
@@ -324,7 +325,7 @@ extension Color {
         /// the way through `OnyxCore` for exactly that reason. Rendering it
         /// would put an arbitrary hue on a screen whose palette is a
         /// measurement (see the muscle landmarks), and a `Features/` file that
-        /// spelled the hex would fail `native-token-discipline`. So it is
+        /// spelled the hex would fail `TokenDisciplineTests`. So it is
         /// MAPPED, here, where the tokens live.
         ///
         /// Never `record` and never `danger`: gold means a personal record

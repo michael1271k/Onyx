@@ -31,7 +31,7 @@ struct HeadSummaryRow: View {
     /// about a different thing and a reader should not have to parse two.
     private var detail: String {
         guard let latest else { return "Not rated · 0 of \(StressSlot.allCases.count)" }
-        return "\(latest.slot.label) · \(readings.count) of \(StressSlot.allCases.count)"
+        return "\(latest.slot.label) · \(Set(readings.map(\.slot)).count) of \(StressSlot.allCases.count)"
     }
 
     var body: some View {
@@ -96,12 +96,14 @@ struct HeadSummaryRow: View {
 /// each optional.
 ///
 /// ── AND WHY THE TIME OF DAY IS NOT A CONTROL ────────────────────────────────
-/// The server key is `(user_id, date, slot)` and the index reads the MEAN of
-/// the day's rows, so the day can hold three answers. Which one you are writing
-/// is a question about the clock, and the clock knows — a picker there would be
-/// a control whose only correct setting is the one it already has. It is stated
-/// as the section header instead, so an answer is never filed somewhere
-/// surprising.
+/// The server key is `id` and a day holds any number of events — stress is a
+/// log, not three buckets. The slot is derived from the event's time at write,
+/// not stored as a choice, so which one you are writing is a question about
+/// the clock, and the clock knows — a picker there would be a control whose
+/// only correct setting is the one it already has. It is stated as the
+/// section header instead (`model.stressSlot`, `forClock(now)`), so an answer
+/// is never filed somewhere surprising. That header word matches the stored
+/// slot only because the sheet always opens on today's model.
 struct HeadSheet: View {
     let model: DayModel
 

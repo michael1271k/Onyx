@@ -1053,11 +1053,14 @@ public final class AppDatabase: Sendable {
         // ── v24 ─────────────────────────────────────────────────────────────
         // Stress becomes an EVENT log (Live UX W1, decision A5): any number of
         // rows a day, each stamped with when it was felt. `logged_at` is
-        // nullable locally for the `sleep_inaccurate` reason — the Postgres half
-        // (`docs/sql/w1-stress-events.sql`) is pasted by hand, a pull that ran
-        // before the paste must still decode, and `encodeIfPresent` keeps a nil
-        // out of the push body until the server has the column. A fresh install
-        // gets it from the regenerated `migrateMirrorV2`; the guard is for that.
+        // nullable locally so a pull that ran before the founder pastes
+        // `docs/sql/w1-stress-events.sql` still decodes; `logStress` always
+        // stamps a time, so an event logged before that paste has a non-nil
+        // `logged_at`, `encodeIfPresent` pushes it, and the server rejects the
+        // row until the column exists. That failure is per-row: it lands in
+        // `outboxFailed` and retries under `SyncBackoff` without jamming the
+        // rest of the queue. A fresh install gets the column from the
+        // regenerated `migrateMirrorV2`; the guard is for that.
         migrator.registerMigration("v24.stressEvents") { db in
             guard try !db.columns(in: "stress_logs").contains(where: { $0.name == "logged_at" }) else { return }
             try db.alter(table: "stress_logs") { t in
