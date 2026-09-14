@@ -122,6 +122,23 @@ public enum Schedule {
         return dated.min(by: { $0.start < $1.start })?.id ?? ctx.programId
     }
 
+    /// The plan's DISPLAY NAME for a date — "Onyx-5" — falling back to the id.
+    ///
+    /// ── WHY THIS IS A FUNCTION AND NOT THREE COPIES ─────────────────────────
+    /// `planId(owning:)` answers WHICH plan; every caller that wants to show it
+    /// then has to join it back to `plans` and pick a fallback, and the two
+    /// screens that did so wrote the same expression twice. The tag on a
+    /// session header and the tag on its summary are the same claim about the
+    /// same date, and they now read it from one place.
+    ///
+    /// The fallback is the plan ID rather than "—": an id is a name the athlete
+    /// has seen before, and a plan row missing its label is a sync gap, not an
+    /// absence of plan.
+    public static func planLabel(owning dateISO: String, in ctx: ScheduleContext) -> String {
+        let id = planId(owning: dateISO, in: ctx)
+        return ctx.plans.first { $0.id == id }?.label ?? id
+    }
+
     /// The plan that owns a date, with the layout that applies to it.
     ///
     /// `program_day_layout` records a remap of the plan you are RUNNING, so

@@ -1831,12 +1831,43 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // set 1 would then append a FRESH set id at an index the log
             // already holds, which is a duplicated set in the projection and in
             // the upload. Everything is read into locals first.
-            let live = try store.liveSession(dayKey: day.key, date: LogicalDay.today())?.id
+            let session = try store.liveSession(dayKey: day.key, date: LogicalDay.today())
+            let live = session?.id
             // Rejoining a session that was paused when the app was killed: the
             // log knows, and the wall clock has kept running.
             let paused = try live.map { (try store.isPaused(sessionId: $0), try store.pausedSeconds(sessionId: $0)) }
 
             sessionId = live
+            // ── THE CLOCK SURVIVES THE KILL, LIKE THE PAUSE LEDGER BELOW ────
+            // `init` defaults `startedAt` to NOW, which is the right answer for
+            // a deck being opened and the wrong one for a deck being REJOINED.
+            // iOS suspending and then terminating a session mid-workout built a
+            // fresh model on relaunch, and this method restored the session id,
+            // the pause ledger and every logged set — but left the clock at the
+            // instant of resumption. The deck came back correct and claimed the
+            // workout had just started.
+            //
+            // `started_at` was never the missing fact: `ensureSession` writes
+            // the model's own `startedAt` into the row at the first append, and
+            // `setStart`/`setElapsed` push corrections through
+            // `setSessionStart`, so the stored instant is already the corrected
+            // one. `liveSession` returns the whole row and this read was
+            // throwing away everything but the id.
+            //
+            // Suspended time is deliberately NOT pause time: a workout the
+            // phone slept through still happened, and `elapsed` is
+            // `(pausedAt ?? now) − (startedAt + pausedTotal)`. Only an explicit
+            // pause is banked, which is the same arithmetic the watch and
+            // `SessionElapsed.activeSec` use.
+            //
+            // The fallback ladder matches `attach(editing:)`'s exactly. Last
+            // rung is the value `init` already set rather than a new `Date()`:
+            // a session row with a null `started_at` is a row this deck opened
+            // moments ago, and the deck's own instant is the older, honester of
+            // the two.
+            if let session {
+                startedAt = session.startedAt ?? LogicalDay.date(fromISO: session.date) ?? startedAt
+            }
             if let paused {
                 // The store's total already includes the interval still open at
                 // this instant, so the local `pausedAt` is re-anchored to NOW

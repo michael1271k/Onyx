@@ -44,6 +44,42 @@ _Nothing yet._
 
 ---
 
+## [3.4.0] — 2026-09-14 · The Clock Survives, the Trophy Has to Earn It
+
+### Fixed
+- **The session clock survives the app being killed.** iOS suspending and then
+  terminating a workout used to bring the deck back with every set restored and
+  the timer at zero — forty minutes of training reported as seconds. Rejoining
+  a live session now reads the start instant the session row has held all
+  along, so the elapsed time, the Live Activity and the recorded duration all
+  count from when you actually started. An explicit pause is still the only
+  thing taken off the clock; a workout the phone slept through still happened.
+- **Phantom records on the Live Logger.** A movement whose history is filed
+  under a catalogue id this device had not pulled yet was measured against half
+  its own history — a bar low enough to light a trophy the next launch quietly
+  took away (a 47.5 kg × 13 seated leg curl reading as 617.5 kg "was 550"). The
+  deck now reads `personal_records` as a floor, so the live bar can never sit
+  below the record the ledger already holds. The bar can only rise, so this
+  removes false trophies and cannot hide a real one.
+
+### Changed
+- **Two tags, the same two everywhere.** The Live Logger showed `Cut` and
+  `Week 9` while the session's own summary showed `Onyx-5` and `Cut W9` — four
+  strings for two facts. Every session surface now carries exactly the plan
+  (`Onyx-5`) and the phase with its week (`Cut W9`), read from one place. The
+  phase picker moved onto the combined tag rather than disappearing with the
+  chip that used to carry it.
+- The logger's week is now cut on the athlete's own week-end day. It defaulted
+  to Sunday, so anyone on a different week could see a session numbered one week
+  on the deck and another on its summary page.
+
+### Added
+- **Settings › Training › Warm-up calculator** — off by default. The
+  "WARM-UP FROM … KG" line and its ramp-up chips now appear only when it is on,
+  and the row reclaims its space when it is off.
+
+---
+
 ## [3.3.0] — 2026-09-14 · The Session, Read as a Table
 
 The post-workout summary stops being a list of sentences and becomes a page you

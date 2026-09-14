@@ -39,6 +39,21 @@ struct ExerciseCardView: View {
 
     @Environment(\.dynamicTypeSize) private var typeSize
 
+    /// Whether the warm-up ladder is shown at all (Settings ▸ Training).
+    ///
+    /// ── WHY A LOCAL DEFAULT AND NOT A PREFERENCES ROW ───────────────────────
+    /// `trackRpe` and `reduceMotion` are GRDB columns because they are the
+    /// ACCOUNT's and the server mirrors them. This one is a per-device view
+    /// preference with nothing to sync, and `MirrorModels.swift` is generated
+    /// from `native/schema/supabase.json` — a column added here would need DDL
+    /// this machine cannot run and would fail `npm run check:mirror` until it
+    /// did. `@AppStorage` on `UserDefaults.standard`, the same idiom as
+    /// `onyx.phase` in `LiveLoggerView` and `WorkoutTabView`.
+    ///
+    /// Default false: the ladder is five chips and a caption on every card that
+    /// resolves a target, and most decks do not want the vertical space.
+    @AppStorage("onyx.warmupCalculator") private var warmupCalculator = false
+
     /// ── WHY THE SHEETS LIVE ON THE CARD AND NOT ON THE ROW ──────────────────
     /// They were on `SetRowView`, and "Delete set" in the options sheet removes
     /// the row — which destroys the view PRESENTING the sheet, in the same
@@ -776,7 +791,13 @@ struct ExerciseCardView: View {
     /// 44 points; a compound the heuristic missed costs the feature.
     @ViewBuilder
     private var warmupRungs: some View {
-        if let target = model.warmupTarget(exercise) {
+        // The pref is read FIRST, so an off switch skips `warmupTarget` rather
+        // than computing a ladder to throw away. `warmupRungs` is already a
+        // conditional `@ViewBuilder` inside the sets `VStack`, and the false
+        // branch is an `EmptyView` the stack neither lays out nor spaces — the
+        // padding and the frame below sit inside the `if` and leave with it, so
+        // hiding this reclaims the space instead of leaving a gap.
+        if warmupCalculator, let target = model.warmupTarget(exercise) {
             VStack(alignment: .leading, spacing: OnyxSpace.xs) {
                 Text("WARM-UP FROM \(OnyxFormat.kg(target)) KG")
                     .onyxMicro()

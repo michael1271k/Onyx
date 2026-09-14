@@ -59,6 +59,11 @@ private struct SettingsForm: View {
     @Environment(\.scenePhase) private var scenePhase
     let model: SettingsModel
 
+    /// Mirrors `ExerciseCardView`'s key — a per-device view preference, not an
+    /// account row. Bound with `$` rather than a computed `Binding` because it
+    /// has no GRDB row to proxy.
+    @AppStorage("onyx.warmupCalculator") private var warmupCalculator = false
+
     @State private var isSigningOut = false
     @State private var isDeleting = false
     /// Held while the RPC is in flight, so the row cannot be tapped twice.
@@ -160,10 +165,11 @@ private struct SettingsForm: View {
 
             Section {
                 Toggle("Track effort (RPE)", isOn: trackRpe)
+                Toggle("Warm-up calculator", isOn: $warmupCalculator)
             } header: {
                 OnyxSectionHeader("Training", .train)
             } footer: {
-                Text("Adds an RPE control to every logged set. Half of the double-progression rule reads it.")
+                Text("Adds an RPE control to every logged set. Half of the double-progression rule reads it. The warm-up calculator adds a row of ramp-up loads to each card that can resolve a working weight.")
             }
 
             // ── ADMIN ONLY, AND FAILING CLOSED ──────────────────────────────

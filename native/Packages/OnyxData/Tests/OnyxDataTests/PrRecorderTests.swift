@@ -253,4 +253,82 @@ struct PrRecorderTests {
         // and that is a test worth writing on its own rather than smuggling
         // into this one.
     }
+
+    // ── THE PHANTOM, AND THE LEDGER THAT KNEW BETTER (W7) ───────────────────
+
+    /// A live bar must never sit below the record the ledger already holds.
+    ///
+    /// 2026-09-14: a 47.5 kg x 13 seated leg curl lit mid-session as 617.5 kg
+    /// "was 550" on a movement the athlete had beaten before, and was gone
+    /// after the next launch. The history was filed under a catalogue id this
+    /// device had not pulled, so `nameResolver` could not name it, `baselines`
+    /// could not gather its rows, and the bar was built from half a history —
+    /// low rather than empty, which awards rather than declines.
+    ///
+    /// `personal_records` held the true mark the whole time. The live bar now
+    /// reads it as a floor, so the deck and the ledger cannot disagree about
+    /// what has already been done.
+    @Test("the live bar cannot sit below the ledger's standing record")
+    func liveBarHonoursTheLedger() throws {
+        let db = try store()
+        try db.writer.write { conn in
+            try Exercise(id: "ex-curl", name: "Seated Leg Curl", slug: "helix5-seated-leg-curl").save(conn)
+            try WorkoutSession(
+                id: "s-old", userId: user, dayKey: "legs_a", date: "2026-08-01",
+                startedAt: Date(), endedAt: Date()
+            ).insert(conn)
+            // What this device CAN see: 50 x 11, 550 kg of tonnage. This is the
+            // "was 550" the phantom was measured against.
+            try WorkoutSet(
+                id: "old-1", sessionId: "s-old", exerciseId: "helix5-seated-leg-curl",
+                setIndex: 1, weightKg: 50, reps: 11
+            ).insert(conn)
+            // The heavier set that holds the REAL best, filed under a catalogue
+            // id no `exercises` row claims — the not-yet-pulled uuid.
+            // `nameResolver` cannot name it, so `baselines` cannot gather it and
+            // the bar stops at 550. A partial history, not an empty one: an
+            // empty index awards nothing, a low one awards a phantom.
+            try WorkoutSet(
+                id: "old-2", sessionId: "s-old", exerciseId: "catalogue-uuid-not-pulled",
+                setIndex: 2, weightKg: 50, reps: 14
+            ).insert(conn)
+            // What the ledger recorded when a client that COULD name that id
+            // closed the session: 700 kg of single-set tonnage.
+            try PersonalRecordRow(
+                userId: user, exerciseKey: "Seated Leg Curl", axis: "volume",
+                value: 700, sessionId: "s-old", achievedOn: "2026-08-01"
+            ).insert(conn)
+        }
+
+        let bar = try db.livePrBaselines(
+            exerciseIds: ["helix5-seated-leg-curl"], excluding: nil, dayKey: "legs_a",
+            program: Program(id: "", label: "", days: [])
+        )
+        // 700, not the 550 the visible half of the history stops at — so a
+        // 47.5 x 13 = 617.5 candidate is not a record.
+        #expect(bar.bestSetVolume.first { $0.key == "helix5-seated-leg-curl" }?.value == 700,
+                "617.5 must not read as a record against a ledger that already holds 700")
+    }
+
+    /// And the rebuild paths do NOT get that floor.
+    ///
+    /// `recomputeAll` upserts session by session over a table that still holds
+    /// the previous answer. A floor taken from the standing record would judge
+    /// the FIRST session against the all-time best, award nothing, and leave
+    /// every stale row in place — a recompute that silently does nothing. The
+    /// flag defaults off so the three rebuild paths keep the original tiers.
+    @Test("a rebuild does not read standing records as floors")
+    func rebuildIgnoresStandingRecords() throws {
+        let db = try store()
+        try log(db, id: "s1", date: "2026-09-04", weights: [100, 110])
+        _ = try db.closeSession(id: "s1")
+        let before = try records(db)
+        #expect(!before.isEmpty)
+
+        // Replaying over a populated ledger still reproduces it rather than
+        // measuring the history against its own result.
+        _ = try db.recomputeAllPrs(userId: user)
+        #expect(try records(db).map(\.value) == before.map(\.value))
+    }
+
 }
