@@ -30,7 +30,7 @@ public enum ExceptionDay {
     /// Deliberately no "Other"-with-free-text: the reason exists so a week-old
     /// row still explains itself in the export, and five words do that as well
     /// as a sentence would.
-    public static let reasons = ["Event", "Refeed", "Travel", "Illness", "Social"]
+    public static let reasons = ["Event", "Holiday", "Refeed", "Travel", "Illness", "Social"]
 
     /// The reason stored against a day, or nil for an ordinary day.
     ///
