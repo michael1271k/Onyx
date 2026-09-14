@@ -4,7 +4,9 @@ alter table public.stress_logs add column if not exists logged_at timestamptz;
 update public.stress_logs set logged_at = created_at where logged_at is null;
 
 -- 2. Drop the one-row-per-slot rule, whatever it is called: any UNIQUE
---    constraint or unique index whose columns are exactly (user_id, date, slot).
+--    constraint or unique index whose columns are exactly (user_id, date, slot),
+--    in any column order. Expect ONE "dropped …" notice. Zero notices means the
+--    rule was never there — still read step 3's verify SELECTs before trusting it.
 do $$
 declare r record;
 begin
@@ -21,7 +23,9 @@ begin
     from pg_indexes i
     where i.schemaname = 'public' and i.tablename = 'stress_logs'
       and i.indexdef ilike 'create unique index%'
-      and i.indexdef ~* '\(\s*user_id\s*,\s*date\s*,\s*slot\s*\)'
+      and (select array_agg(trim(x) order by trim(x))
+           from unnest(string_to_array(substring(i.indexdef from '\((.*)\)'), ',')) x)
+          = array['date','slot','user_id']
       and not exists (select 1 from pg_constraint c where c.conname = i.indexname)
   loop
     if r.kind = 'constraint' then

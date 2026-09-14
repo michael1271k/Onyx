@@ -664,6 +664,9 @@ public final class AppDatabase: Sendable {
         // about to be — nothing is lost, at worst something is late. Today's
         // score is the visible case, and `DailyScoreStore` recomputes it on
         // the next tick regardless.
+        // Reads `MirrorCatalogue.conflict` LIVE, so a later schema change moves
+        // this migration: `stress_logs` went from `(user_id, date, slot)` to `id`
+        // in W1, and a store still below v12 no longer twin-merges that table.
         migrator.registerMigration("v12.lowercaseUserIds") { db in
             let naturalKeys = Dictionary(
                 uniqueKeysWithValues: MirrorCatalogue.tables.map { ($0.name, $0.conflict.split(separator: ",").map(String.init)) }

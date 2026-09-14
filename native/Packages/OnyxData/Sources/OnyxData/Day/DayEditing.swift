@@ -273,7 +273,7 @@ public extension AppDatabase {
     }
 
     /// Delete one stress event, locally and on the server.
-    func deleteStress(userId: String, id: String, now: Date = Date()) throws {
+    func deleteStress(userId: String, id: String) throws {
         try writer.write { db in
             guard let row = try StressLogRow
                 .filter(Column("id") == id && Column("user_id") == userId)

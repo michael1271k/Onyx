@@ -110,7 +110,6 @@ struct HeadSheet: View {
     @State private var level: Int?
     @State private var tags: Set<StressTag> = []
     @State private var note = ""
-    @State private var loaded = false
     /// The chip grid's column minimum, scaled — see `tagSection`.
     @ScaledMetric(relativeTo: .footnote) private var chipWidth: CGFloat = 96
 
@@ -132,39 +131,12 @@ struct HeadSheet: View {
                 if !model.stressReadings.isEmpty { todaySection }
                 tagSection
                 noteSection
-                if existing != nil { clearSection }
+                if model.stressLatest != nil { clearSection }
             }
         }
-        // ── LOAD THE BUCKET'S OWN ANSWER, ONCE, WHENEVER IT ARRIVES ─────────
-        // Without this a second visit to the same bucket writes a fresh reading
-        // over the one already there and silently drops its tags and its note.
-        //
-        // It cannot be `onAppear` alone: the readings come off a GRDB stream and
-        // `onAppear` fires before its first yield, so a sheet opened from a
-        // screen whose streams are still starting (Quick Log builds its model on
-        // the tap) showed an answered bucket as blank. `onChange` catches the
-        // row when it lands — and both paths refuse to touch anything the user
-        // has already typed.
-        .onAppear(perform: adopt)
-        .onChange(of: existing) { _, _ in adopt() }
+        // The sheet opens BLANK: stress is an event log (W1, A5) and every
+        // Save is a new event, so nothing stored is pre-filled for editing.
     }
-
-    /// Take the stored answer, but never over the top of one being written.
-    ///
-    /// FIELD BY FIELD, because `logStress` writes the whole row: a reader who
-    /// tapped a word before the stream yielded would otherwise Save a level
-    /// over a bucket that already held tags and a note, and take both with it.
-    /// Each field is adopted only while it is still untouched, so a tap costs
-    /// the level and nothing else.
-    private func adopt() {
-        guard !loaded, let existing else { return }
-        loaded = true
-        if level == nil { level = existing.level }
-        if tags.isEmpty { tags = Set(existing.tags) }
-        if note.isEmpty { note = existing.note ?? "" }
-    }
-
-    private var existing: StressReading? { model.stressReading(slot) }
 
     // MARK: The five words
 
@@ -296,8 +268,8 @@ struct HeadSheet: View {
 
     private var clearSection: some View {
         Section {
-            Button("Clear this reading", role: .destructive) {
-                if let existing, model.deleteStress(id: existing.id) { dismiss() }
+            Button("Remove the last entry", role: .destructive) {
+                if let latest = model.stressLatest, model.deleteStress(id: latest.id) { dismiss() }
             }
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         }
