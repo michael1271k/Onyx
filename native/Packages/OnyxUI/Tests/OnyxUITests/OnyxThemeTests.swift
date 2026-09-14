@@ -6,7 +6,9 @@ import OnyxCore
 /// The runtime theme. `.serialized` because three of these tests move the
 /// process-wide `OnyxTheme.current` and put it back; a parallel reader of
 /// `Color.onyx.*` in another suite would otherwise see a preset for a frame.
+/// `@MainActor` because every writer is.
 @Suite("OnyxTheme", .serialized)
+@MainActor
 struct OnyxThemeTests {
 
     @Test("the default spec reproduces every default colour, bit for bit")
@@ -42,7 +44,9 @@ struct OnyxThemeTests {
         #expect(OnyxTheme.presets.count >= 6 && OnyxTheme.presets.count <= 8)
         #expect(OnyxTheme.presets.first?.spec == .default)
         for preset in OnyxTheme.presets {
-            #expect(preset.spec.normalised() == preset.spec, "\(preset.name) is in range")
+            // Identity, not idempotence: the literals in the table ARE the
+            // normalised values, so the source shows what ships.
+            #expect(preset.spec.normalised() == preset.spec, "\(preset.name) literal is already in range")
             let theme = OnyxTheme(spec: preset.spec)
             let accents = OnyxDomain.allCases.map { theme.start[$0]!.description }
             #expect(Set(accents).count == accents.count, "\(preset.name)")
@@ -75,6 +79,31 @@ struct OnyxThemeTests {
         #expect(Color.onyx.fat != fat)
         #expect(Color.onyx.calories != calories)
         #expect(Color.onyx.series[0] != series0)
+    }
+
+    @Test("an out-of-range spec is normalised on the way in, never rendered raw")
+    func appliedSpecsAreNormalised() throws {
+        defer { OnyxTheme.apply(json: "") }
+        let raw = OnyxThemeSpec(primary: 0x101020, secondary: 0xFF0000)
+        #expect(raw.normalised() != raw)
+        let json = try #require(String(data: JSONEncoder().encode(raw), encoding: .utf8))
+
+        OnyxTheme.apply(json: json)
+        #expect(OnyxTheme.current.spec == raw.normalised())
+
+        let suite = "onyx.theme.tests.normalised"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(json, forKey: OnyxTheme.key)
+        OnyxTheme.apply(json: "")
+        OnyxTheme.load(defaults)
+        #expect(OnyxTheme.current.spec == raw.normalised())
+
+        OnyxTheme.apply(json: "")
+        OnyxTheme.save(raw, to: defaults)
+        #expect(OnyxTheme.current.spec == raw.normalised())
+        let stored = try #require(defaults.string(forKey: OnyxTheme.key))
+        #expect(try JSONDecoder().decode(OnyxThemeSpec.self, from: Data(stored.utf8)) == raw.normalised())
     }
 
     @Test("apply, load and save move the current theme; corrupt or empty means default")

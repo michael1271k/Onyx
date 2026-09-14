@@ -27,15 +27,11 @@ struct OKLCHTests {
         [Int((hex >> 16) & 0xFF), Int((hex >> 8) & 0xFF), Int(hex & 0xFF)]
     }
 
-    private func withinOne(_ a: UInt32, _ b: UInt32) -> Bool {
-        zip(channels(a), channels(b)).allSatisfy { abs($0 - $1) <= 1 }
-    }
-
-    @Test("hex → OKLCH → hex round-trips within one step per channel")
+    @Test("hex → OKLCH → hex round-trips bit-exact for every default hex")
     func roundTrip() {
         for hex in Self.defaults {
             let back = OKLCHConvert.hex(from: OKLCHConvert.oklch(fromHex: hex))
-            #expect(withinOne(hex, back), "\(String(hex, radix: 16)) → \(String(back, radix: 16))")
+            #expect(back == hex, "\(String(hex, radix: 16)) → \(String(back, radix: 16))")
         }
     }
 
@@ -50,11 +46,11 @@ struct OKLCHTests {
         }
     }
 
-    @Test("a full turn lands within one step per channel")
+    @Test("a full turn lands on the same bits")
     func fullTurn() {
         for hex in Self.defaults {
             let back = OKLCHConvert.rotate(hex, byDegrees: 360)
-            #expect(withinOne(hex, back), "\(String(hex, radix: 16)) → \(String(back, radix: 16))")
+            #expect(back == hex, "\(String(hex, radix: 16)) → \(String(back, radix: 16))")
         }
     }
 
@@ -73,12 +69,23 @@ struct OKLCHTests {
     @Test("a rotation that leaves the gamut is fitted, not trapped")
     func gamutFit() {
         // Pure red at 90° is a chroma no sRGB green can carry.
-        let fitted = OKLCHConvert.rotate(0xFF0000, byDegrees: 90)
-        #expect(fitted <= 0xFFFFFF)
         let red = OKLCHConvert.oklch(fromHex: 0xFF0000)
+        var turned = red
+        turned.h = OKLCHConvert.wrap(red.h + 90)
+        let before = OKLCHConvert.linear(l: turned.l, c: turned.c, h: turned.h)
+        #expect(!OKLCHConvert.inGamut(before), "the unfitted colour must actually be out of gamut")
+
+        let fittedColour = OKLCHConvert.fit(turned)
+        let after = OKLCHConvert.linear(l: fittedColour.l, c: fittedColour.c, h: fittedColour.h)
+        for channel in [after.r, after.g, after.b] {
+            #expect(channel >= -1e-6 && channel <= 1 + 1e-6)
+        }
+        #expect(fittedColour.c < red.c)
+        #expect(fittedColour.l == red.l && fittedColour.h == turned.h)
+
+        let fitted = OKLCHConvert.rotate(0xFF0000, byDegrees: 90)
         let got = OKLCHConvert.oklch(fromHex: fitted)
-        // C came DOWN to fit; L and h are what the fit was told to keep.
-        #expect(got.c < red.c)
+        // L and h are what the fit was told to keep, through quantisation.
         #expect(abs(got.l - red.l) < 0.02)
         var dh = (got.h - red.h - 90).truncatingRemainder(dividingBy: 360)
         if dh > 180 { dh -= 360 }
@@ -108,8 +115,8 @@ struct OnyxThemeSpecTests {
     func darkPrimaryIsLifted() {
         let spec = OnyxThemeSpec(primary: 0x101020, secondary: 0xE3A650).normalised()
         let got = OKLCHConvert.oklch(fromHex: spec.primary)
-        // 8-bit quantisation can shave a few thousandths off the clamp.
-        #expect(got.l >= 0.60 - 0.005)
+        // 8-bit quantisation can shave a thousandth off the clamp.
+        #expect(got.l >= 0.60 - 1e-3)
         var dh = (got.h - OKLCHConvert.hue(ofHex: 0x101020)).truncatingRemainder(dividingBy: 360)
         if dh > 180 { dh -= 360 }
         if dh < -180 { dh += 360 }
@@ -121,13 +128,13 @@ struct OnyxThemeSpecTests {
     @Test("a very saturated primary is pulled back to the chroma ceiling")
     func saturatedPrimaryIsPulledBack() {
         let spec = OnyxThemeSpec(primary: 0xFF0000, secondary: 0xE3A650).normalised()
-        #expect(OKLCHConvert.oklch(fromHex: spec.primary).c <= 0.20 + 0.003)
+        #expect(OKLCHConvert.oklch(fromHex: spec.primary).c <= 0.20 + 1e-3)
     }
 
     @Test("a very light secondary comes down to the ceiling")
     func lightSecondaryIsLowered() {
         let spec = OnyxThemeSpec(primary: 0x6B78F0, secondary: 0xFFF7E0).normalised()
-        #expect(OKLCHConvert.oklch(fromHex: spec.secondary).l <= 0.78 + 0.005)
+        #expect(OKLCHConvert.oklch(fromHex: spec.secondary).l <= 0.78 + 1e-3)
     }
 
     @Test("the spec round-trips through JSON as two integers")

@@ -53,17 +53,24 @@ public enum OKLCHConvert {
     /// in steps of 0.01 at fixed `l` and `h` until every linear channel is
     /// inside [0, 1], then the result is clamped and quantised.
     public static func hex(from colour: OKLCH) -> UInt32 {
-        var c = colour.c
-        var rgb = linear(l: colour.l, c: c, h: colour.h)
-        // ponytail: linear C-reduction, ≤30 steps; binary search if a profiler ever sees this
-        var steps = 0
-        while !inGamut(rgb), steps < 30, c > 0 {
-            c = max(0, c - 0.01)
-            rgb = linear(l: colour.l, c: c, h: colour.h)
-            steps += 1
-        }
+        let fitted = fit(colour)
+        let rgb = linear(l: fitted.l, c: fitted.c, h: fitted.h)
         let r = quantise(rgb.r), g = quantise(rgb.g), b = quantise(rgb.b)
         return (r << 16) | (g << 8) | b
+    }
+
+    /// The gamut fit on its own: the same colour with its chroma reduced until
+    /// sRGB can carry it. Separate from `hex(from:)` so a test can see that the
+    /// fit ran, not merely that some bytes came back.
+    static func fit(_ colour: OKLCH) -> OKLCH {
+        var fitted = colour
+        // ponytail: linear C-reduction, ≤30 steps; binary search if a profiler ever sees this
+        var steps = 0
+        while !inGamut(linear(l: fitted.l, c: fitted.c, h: fitted.h)), steps < 30, fitted.c > 0 {
+            fitted.c = max(0, fitted.c - 0.01)
+            steps += 1
+        }
+        return fitted
     }
 
     /// Rotate a hex's hue by `delta` degrees at fixed L and C.
