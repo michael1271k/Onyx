@@ -23,8 +23,8 @@ import OnyxUI
 
 // MARK: - The clock
 
-/// The rest countdown as a range `Text(timerInterval:)` will accept, or `nil`
-/// once it has run out.
+/// The rest countdown as a range `Text(timerInterval:)` / `ProgressView(timerInterval:)`
+/// will accept, or `nil` once it has run out.
 ///
 /// ── WHY THIS IS NOT `Date()...endsAt` INLINE ────────────────────────────────
 /// It was, on four surfaces, and every one of them was a crash waiting for the
@@ -38,10 +38,25 @@ import OnyxUI
 /// `nil` therefore means "the rest is over", and each caller falls back to what
 /// it shows when it was never resting — which is the truth at that moment
 /// anyway.
-func restCountdown(_ endsAt: Date?) -> ClosedRange<Date>? {
+///
+/// ── WHY `total` MOVES THE LOWER BOUND INTO THE PAST ─────────────────────────
+/// With no total the lower bound is `now`, so `ProgressView(timerInterval:)`'s
+/// implicit fraction (elapsed / span) is always elapsed-since-render over
+/// remaining-time — a denominator that shrinks every time the range is
+/// recomputed, so the bar snaps back toward full on every redraw instead of
+/// draining. A real denominator needs a lower bound that does not move with
+/// `now`: `endsAt − total` is fixed for the life of the rest, so elapsed grows
+/// and the span stays put. Both `Text(timerInterval:)` and
+/// `ProgressView(timerInterval:)` accept a lower bound in the past — the timer
+/// just starts already-elapsed.
+func restCountdown(_ endsAt: Date?, total: Int? = nil) -> ClosedRange<Date>? {
     let now = Date()
     guard let endsAt, endsAt > now else { return nil }
-    return now...endsAt
+    guard let total, total > 0 else { return now...endsAt }
+    // A total shorter than what's actually left cannot happen, but must not
+    // crash: `ClosedRange` traps on lower > upper, so clamp to `now`.
+    let lowerBound = min(endsAt.addingTimeInterval(-Double(total)), now)
+    return lowerBound...endsAt
 }
 
 // MARK: - The Lock Screen

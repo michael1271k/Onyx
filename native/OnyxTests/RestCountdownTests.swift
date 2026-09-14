@@ -51,4 +51,36 @@ struct RestCountdownTests {
             #expect(range.lowerBound <= range.upperBound)
         }
     }
+
+    @Test("A total puts the lower bound exactly total seconds before endsAt")
+    func totalSetsTheLowerBound() {
+        let endsAt = Date().addingTimeInterval(5)
+        let range = restCountdown(endsAt, total: 90)
+        let unwrapped = try! #require(range)
+        #expect(abs(unwrapped.lowerBound.timeIntervalSince(endsAt) - -90) < 0.01)
+        #expect(unwrapped.upperBound == endsAt)
+    }
+
+    @Test("No total keeps the lower bound at now")
+    func nilTotalKeepsNow() {
+        let endsAt = Date().addingTimeInterval(90)
+        let range = restCountdown(endsAt, total: nil)
+        let unwrapped = try! #require(range)
+        #expect(abs(unwrapped.lowerBound.timeIntervalSinceNow) < 0.5)
+    }
+
+    @Test("A past deadline is still nil, total or not")
+    func pastIsNilEvenWithTotal() {
+        #expect(restCountdown(Date().addingTimeInterval(-1), total: 90) == nil)
+    }
+
+    @Test("Every total in the stride yields an ordered range")
+    func everyTotalIsWellFormed() {
+        let endsAt = Date().addingTimeInterval(45)
+        for total in [0, 1, 30, 90, 600] {
+            let range = restCountdown(endsAt, total: total)
+            let unwrapped = try! #require(range)
+            #expect(unwrapped.lowerBound <= unwrapped.upperBound)
+        }
+    }
 }
