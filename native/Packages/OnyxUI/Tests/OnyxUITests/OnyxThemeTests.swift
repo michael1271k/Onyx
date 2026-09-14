@@ -53,6 +53,20 @@ struct OnyxThemeTests {
         }
     }
 
+    @Test("the six chart series stay six colours under every preset")
+    func seriesStayDistinctUnderEveryPreset() {
+        // `Chart kit`'s distinctness test runs in parallel with this suite and
+        // may read `series` while a test here holds a preset; the property has
+        // to be true under every theme, not just the default.
+        defer { OnyxTheme.apply(json: "") }
+        for preset in OnyxTheme.presets {
+            OnyxTheme.set(preset.spec)
+            let series = Color.onyx.series.map(\.description)
+            #expect(series.count == 6)
+            #expect(Set(series).count == series.count, "\(preset.name): \(series)")
+        }
+    }
+
     @Test("a non-default spec moves train and fuel and drags the rest with them")
     func derivation() {
         let ember = OnyxTheme.presets.first { $0.name == "Ember" }!.spec

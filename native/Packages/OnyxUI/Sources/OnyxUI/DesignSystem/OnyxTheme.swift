@@ -54,9 +54,11 @@ public struct OnyxTheme: Sendable {
     /// The theme every static token reads.
     ///
     /// What is guaranteed, exactly:
-    ///   · every WRITE goes through `set`, which is `@MainActor` (as are
-    ///     `load`, `save` and `apply`), so writes are serialised by the
-    ///     compiler, not by convention;
+    ///   · outside OnyxUI every WRITE is one of the `@MainActor` entry points
+    ///     `set`, `load`, `save` or `apply` — the setter is `internal(set)`, so
+    ///     another module cannot assign the property, and the compiler
+    ///     serialises the writes it can reach. Inside OnyxUI the setter is
+    ///     internal and used only by `set` and by the tests;
     ///   · READS are unsynchronised. A view, a widget timeline builder or a
     ///     Sendable value type may read from any actor and may observe the
     ///     previous theme for up to a frame after a write. The struct is four
@@ -66,7 +68,7 @@ public struct OnyxTheme: Sendable {
     /// `@MainActor` isolation of the property itself was rejected because the
     /// off-main-actor readers above would stop compiling under language mode
     /// v6, and a theme swap is a Settings gesture, not a hot path.
-    public nonisolated(unsafe) static var current = OnyxTheme(spec: .default)
+    public nonisolated(unsafe) internal(set) static var current = OnyxTheme(spec: .default)
 
     /// The UserDefaults key. The caller passes the App Group suite so the app,
     /// the widgets and the watch bridge all read one value.
@@ -77,13 +79,14 @@ public struct OnyxTheme: Sendable {
         apply(json: defaults.string(forKey: key) ?? "")
     }
 
-    /// Persist the spec (normalised) and make it current.
+    /// Make the spec current, then persist exactly what became current — one
+    /// normalisation, so the stored blob and `current.spec` cannot drift by a
+    /// requantised LSB.
     @MainActor public static func save(_ spec: OnyxThemeSpec, to defaults: UserDefaults) {
-        let spec = spec.normalised()
-        if let data = try? JSONEncoder().encode(spec), let json = String(data: data, encoding: .utf8) {
+        set(spec)
+        if let data = try? JSONEncoder().encode(current.spec), let json = String(data: data, encoding: .utf8) {
             defaults.set(json, forKey: key)
         }
-        set(spec)
     }
 
     /// `load` from a string — what an `@AppStorage` observer hands over. Empty
@@ -92,10 +95,11 @@ public struct OnyxTheme: Sendable {
         set((try? JSONDecoder().decode(OnyxThemeSpec.self, from: Data(json.utf8))) ?? .default)
     }
 
-    /// The one writer. Normalises first — a hand-edited or corrupt defaults
-    /// blob must not render unreadable text — and is idempotent, so a
-    /// redundant `load` on every foreground is free.
-    @MainActor private static func set(_ spec: OnyxThemeSpec) {
+    /// The one writer — the app root and the watch call it with a spec in
+    /// hand. Normalises first — a hand-edited or corrupt defaults blob must
+    /// not render unreadable text — and is idempotent, so a redundant `load`
+    /// on every foreground is free.
+    @MainActor public static func set(_ spec: OnyxThemeSpec) {
         let spec = spec.normalised()
         guard current.spec != spec else { return }
         current = OnyxTheme(spec: spec)
