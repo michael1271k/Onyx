@@ -27,6 +27,12 @@ import OnyxCore
 /// the web app's `tests/native-token-discipline.test.ts` fails the build if a `0x` or a
 /// `Color(red:` appears under `Features/`. A token you cannot name is a token
 /// you have not designed yet.
+///
+/// Two files may hold a hex: this one (the DEFAULT palette, `defaultDomainHex`
+/// and `defaultMuscleHex`) and `OnyxTheme.swift` (the preset table). The
+/// domain stops and the sixteen muscles are read through `OnyxTheme.current`,
+/// so a theme change reaches every static `Color.onyx.*` call site without an
+/// Environment and without a call-site edit.
 
 // MARK: - Domains
 
@@ -60,10 +66,13 @@ public enum OnyxDomain: String, CaseIterable, Sendable {
     ]
 
     /// The mesh's first stop. Also the accent when only one colour will do.
-    public var start: Color { Color(hex: Self.defaultDomainHex[self]!.start) }
+    ///
+    /// Read through `OnyxTheme.current`: the dictionaries are total over the
+    /// enum, so the `!` is a programming error, never data.
+    public var start: Color { OnyxTheme.current.start[self]! }
 
     /// The mesh's second stop.
-    public var end: Color { Color(hex: Self.defaultDomainHex[self]!.end) }
+    public var end: Color { OnyxTheme.current.end[self]! }
 
     /// What a `Section` header, a `Gauge` tint or a selected row is coloured.
     ///
@@ -445,7 +454,7 @@ extension Color {
         /// parameters were not merely unused: keeping them would have left the
         /// call site claiming a ramp the function no longer performs.
         public static func muscle(_ muscle: LandmarkMuscle) -> Color {
-            Color(hex: defaultMuscleHex[muscle]!)
+            OnyxTheme.current.muscle[muscle]!
         }
 
         /// The sixteen as measured — the DEFAULT theme's muscle palette, in

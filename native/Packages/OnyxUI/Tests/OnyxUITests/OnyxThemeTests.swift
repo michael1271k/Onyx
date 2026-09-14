@@ -76,6 +76,10 @@ struct OnyxThemeTests {
 
         OnyxTheme.save(ember, to: defaults)
         #expect(OnyxTheme.current.spec == ember)
+        // The static tokens follow — this is the whole point.
+        #expect(OnyxDomain.train.start == Color(hex: ember.primary))
+        #expect(OnyxDomain.fuel.accent == Color(hex: ember.secondary))
+        #expect(Color.onyx.muscle(.chest) != Color(hex: Color.onyx.defaultMuscleHex[.chest]!))
         let json = defaults.string(forKey: OnyxTheme.key)!
         #expect(json.contains("\"primary\""))
 
