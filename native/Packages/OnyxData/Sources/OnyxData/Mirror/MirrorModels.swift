@@ -685,6 +685,7 @@ public struct StressLogRow: Codable, FetchableRecord, PersistableRecord, Sendabl
     public var note: String?
     public var createdAt: Date
     public var updatedAt: Date
+    public var loggedAt: Date?
 
     public enum CodingKeys: String, CodingKey {
         case id
@@ -696,6 +697,7 @@ public struct StressLogRow: Codable, FetchableRecord, PersistableRecord, Sendabl
         case note
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case loggedAt = "logged_at"
     }
 
     public init(
@@ -707,7 +709,8 @@ public struct StressLogRow: Codable, FetchableRecord, PersistableRecord, Sendabl
         tags: JSONText,
         note: String? = nil,
         createdAt: Date,
-        updatedAt: Date
+        updatedAt: Date,
+        loggedAt: Date? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -718,6 +721,7 @@ public struct StressLogRow: Codable, FetchableRecord, PersistableRecord, Sendabl
         self.note = note
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.loggedAt = loggedAt
     }
 }
 
@@ -2224,6 +2228,7 @@ extension AppDatabase {
                 t.column("note", .text)
                 t.column("created_at", .datetime).notNull()
                 t.column("updated_at", .datetime).notNull()
+                t.column("logged_at", .datetime)
             }
             try db.create(table: "routines") { t in
                 t.column("user_id", .text).notNull()
@@ -2314,9 +2319,9 @@ public enum MirrorCatalogue {
                     pull: { try await $0.pull(FatigueLogRow.self, from: $1) },
                     push: { try await $1.pushRow(FatigueLogRow.self, from: $0, table: "fatigue_logs", conflict: "user_id,date,slot", ref: $2) }),
         MirrorTable(name: "stress_logs", group: .daily, strategy: .window(column: "date"),
-                    conflict: "user_id,date,slot", order: ["id"],
+                    conflict: "id", order: ["id"],
                     pull: { try await $0.pull(StressLogRow.self, from: $1) },
-                    push: { try await $1.pushRow(StressLogRow.self, from: $0, table: "stress_logs", conflict: "user_id,date,slot", ref: $2) }),
+                    push: { try await $1.pushRow(StressLogRow.self, from: $0, table: "stress_logs", conflict: "id", ref: $2) }),
         MirrorTable(name: "doms_logs", group: .daily, strategy: .window(column: "date"),
                     conflict: "user_id,date,muscle_group", order: ["id"],
                     pull: { try await $0.pull(DomsLogRow.self, from: $1) },
