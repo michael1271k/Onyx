@@ -5,6 +5,7 @@ import GRDB
 import Observation
 import OnyxCore
 import OnyxData
+import OnyxUI
 import SwiftUI
 
 /// The watch app's whole state.
@@ -169,6 +170,11 @@ final class WatchModel {
         }
 
         context = WatchContextCache.load()
+        // The cache already persists the context, so the phone's palette
+        // survives a relaunch and an out-of-range morning for free. A context
+        // from a phone that predates the theme field carries nil — which is
+        // the default palette, i.e. exactly what the watch looked like before.
+        OnyxTheme.set(context?.theme ?? .default)
         resolveDay()
 
         let link = WatchLink { [weak self] inbound in
@@ -471,6 +477,7 @@ final class WatchModel {
         case .context(let next):
             context = next
             WatchContextCache.save(next)
+            OnyxTheme.set(next.theme ?? .default)
             resolveDay()
             rejoinLiveSession()
         case .rest(let pulse):

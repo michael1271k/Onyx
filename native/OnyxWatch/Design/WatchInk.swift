@@ -53,6 +53,11 @@ enum WatchInk {
     /// The one background. See the type header.
     static let ground = Color.onyx.base
 
+    /// The split's colour. A FUNCTION, not a `let`, for the reason the header
+    /// gives about themes: a stored property freezes at first read, and the
+    /// day tint has to follow whatever theme the phone last sent.
+    static func day(_ key: String?) -> Color { Color.onyx.day(key) }
+
     /// A filled control that is not the tick — the RPE rungs, the deck rows.
     /// Flat, because a material over black costs a blur pass to arrive here.
     static let fill = Color.white.opacity(0.10)

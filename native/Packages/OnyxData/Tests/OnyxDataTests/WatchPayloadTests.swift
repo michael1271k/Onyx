@@ -110,4 +110,39 @@ struct WatchPayloadTests {
         guard case .amend(let patch) = back[1].body else { return #expect(Bool(false)) }
         #expect(patch.rpe == 8.5)
     }
+
+    /// The payload-versioning story, in one test.
+    ///
+    /// `theme` is optional and last, so the synthesised `Codable` uses
+    /// `decodeIfPresent`: an OLD phone's context (no `theme` key) decodes on a
+    /// NEW watch as nil — which `WatchModel` reads as the default theme — and a
+    /// NEW phone's context decodes on an OLD watch because an unknown key is
+    /// ignored. That is why the field was added optional rather than with a
+    /// non-optional default, which would have been the same wire but a decode
+    /// that throws the day someone makes it non-optional.
+    @Test("a context from a build that had no theme decodes with theme nil")
+    func contextWithoutThemeDecodes() throws {
+        let sent = WatchContext(userId: "u-1", today: "2026-09-08", schedule: schedule)
+        var object = try #require(
+            try JSONSerialization.jsonObject(
+                with: try OnyxJSON.encoder.encode(sent)
+            ) as? [String: Any]
+        )
+        #expect(object["theme"] == nil, "a nil theme must not be encoded at all")
+        object.removeValue(forKey: "theme")
+
+        let back = try OnyxJSON.decoder.decode(
+            WatchContext.self, from: try JSONSerialization.data(withJSONObject: object)
+        )
+        #expect(back.theme == nil)
+        #expect(back == sent)
+
+        // And the other direction: a themed context round-trips its spec.
+        var themed = sent
+        themed.theme = OnyxThemeSpec(primary: 0xE07A5F, secondary: 0x5FB0E0)
+        let there = try OnyxJSON.decoder.decode(
+            WatchContext.self, from: try OnyxJSON.encoder.encode(themed)
+        )
+        #expect(there.theme == themed.theme)
+    }
 }

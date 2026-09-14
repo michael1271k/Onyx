@@ -3,6 +3,7 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 import OnyxCore
+import OnyxData
 import OnyxUI
 
 /// The native app's widget extension.
@@ -18,6 +19,22 @@ import OnyxUI
 /// the web-shell extension used, so a re-install keeps what the user placed.
 @main
 struct OnyxWidgets: WidgetBundle {
+    /// The theme, once per extension launch.
+    ///
+    /// NOT per timeline entry: WidgetKit rebuilds a provider for every refresh
+    /// and the palette is a `UserDefaults` read plus sixteen OKLCH rotations —
+    /// paying that on every entry would be the same colours computed dozens of
+    /// times an hour in an extension with a 30 MB memory budget.
+    ///
+    /// `assumeIsolated` because a `WidgetBundle` init runs on the main actor
+    /// but is not annotated as doing so, and `load` is `@MainActor`. Nothing is
+    /// weakened: this is the assertion, not an escape from it.
+    init() {
+        MainActor.assumeIsolated {
+            OnyxTheme.load(UserDefaults(suiteName: AppDatabase.appGroupID) ?? .standard)
+        }
+    }
+
     var body: some Widget {
         // Gallery order: what to eat, what to train, how the body is doing,
         // the whole day at once, the overnight readings, the running session,

@@ -39,11 +39,23 @@ public struct WatchContext: Codable, Sendable, Equatable {
     /// ISO `yyyy-MM-dd`, as the phone resolved it — `LogicalDay`, not midnight.
     public var today: String
     public var schedule: ScheduleContext
+    /// The palette the phone is wearing, so the wrist matches without a second
+    /// place to set it.
+    ///
+    /// OPTIONAL AND LAST, and that is the whole payload-versioning story: the
+    /// synthesised `Codable` reads it with `decodeIfPresent`, so an old phone's
+    /// context (no key) decodes on a new watch as nil — the watch reads nil as
+    /// the default theme — and a new phone's context decodes on an old watch,
+    /// which ignores the key it does not know. Neither side throws, and neither
+    /// side stops receiving the context, which is the failure this file exists
+    /// to prevent.
+    public var theme: OnyxThemeSpec?
 
-    public init(userId: String, today: String, schedule: ScheduleContext) {
+    public init(userId: String, today: String, schedule: ScheduleContext, theme: OnyxThemeSpec? = nil) {
         self.userId = userId
         self.today = today
         self.schedule = schedule
+        self.theme = theme
     }
 }
 

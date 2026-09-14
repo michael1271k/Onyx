@@ -3,6 +3,7 @@ import GRDB
 import Observation
 import OnyxCore
 import OnyxData
+import OnyxUI
 
 /// The phone's half of the watch link.
 ///
@@ -101,7 +102,13 @@ final class PhoneWatchBridge {
     /// the right split.
     func send(userId: String, today: String, schedule: ScheduleContext) {
         link?.send(
-            context: WatchContext(userId: userId, today: today, schedule: resolved(schedule))
+            context: WatchContext(
+                userId: userId, today: today, schedule: resolved(schedule),
+                // The wrist wears what the phone wears. The watch has no
+                // Settings screen for this, and a second place to set a theme
+                // is a second place for the two to disagree.
+                theme: OnyxTheme.current.spec
+            )
         )
     }
 
