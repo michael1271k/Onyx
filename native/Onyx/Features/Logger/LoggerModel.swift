@@ -613,6 +613,33 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     var recordCount: Int { prsThisSession }
     var physicalSets: Int { exercises.reduce(0) { $0 + $1.physicalSets } }
 
+    /// What the Live Stats timeline draws for one exercise: dots done over dots
+    /// planned.
+    ///
+    /// Lifting: today's rule — working sets over the larger of the plan's sets
+    /// and the prescribed physical rows, so a set you added yourself grows the
+    /// denominator instead of overflowing it.
+    ///
+    /// ── WHY A CARDIO BOUT NEEDS ITS OWN BRANCH ──────────────────────────────
+    /// The opening bout is minted `kind: .warmup` on purpose: that is what
+    /// keeps it out of `workingSets`, out of tonnage and out of the PR engine.
+    /// The lifting numerator is `workingSets`, so a bout you HAVE done read 0
+    /// done out of 1 planned forever — the one row on the timeline that could
+    /// never be filled. An exercise whose every non-ghost row is cardio is
+    /// therefore counted in ROWS TICKED, which changes nothing anybody else
+    /// reads.
+    func dotProgress(for exercise: ExerciseState) -> (done: Int, planned: Int) {
+        let live = exercise.rows.filter { $0.kind != .ghost }
+        if !live.isEmpty, live.allSatisfy(\.isCardio) {
+            return (live.filter(\.isDone).count, max(1, live.count))
+        }
+        let prescribed = live.filter { $0.kind != .warmup }
+        return (
+            exercise.workingSets,
+            max(exercise.plan.sets(for: phase), Self.physical(prescribed))
+        )
+    }
+
     /// How many SETS a list of rows is, once a set can be two rows.
     ///
     /// Each `pairId` once, every unpaired row once — the same rule as

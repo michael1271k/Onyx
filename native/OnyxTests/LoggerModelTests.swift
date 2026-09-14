@@ -444,4 +444,59 @@ struct LoggerModelTests {
         #expect(model.sessionId == nil)
         #expect(model.startedAt == opened)
     }
+
+    // MARK: - Timeline dots and the next movement (D6)
+
+    /// The opening bout. Every deck built without a store opens with one
+    /// (`withWarmupCardio`), and it is the only exercise in the app whose rows
+    /// are all cardio.
+    private func bout(_ model: LoggerModel) -> LoggerModel.ExerciseState? {
+        model.exercises.first { $0.rows.allSatisfy(\.isCardio) && !$0.rows.isEmpty }
+    }
+
+    @Test("a ticked cardio bout fills its dot")
+    func cardioDotFillsOnTick() throws {
+        let model = armsBulk()
+        let cardio = try #require(bout(model))
+
+        #expect(model.dotProgress(for: cardio).done == 0)
+        #expect(model.dotProgress(for: cardio).planned == 1,
+                "one bout is one dot, never zero")
+
+        model.toggleDone(cardio.rows[0], in: cardio)
+
+        #expect(model.dotProgress(for: cardio).done == 1)
+        #expect(model.dotProgress(for: cardio).planned == 1)
+    }
+
+    /// The invariant the Live Activity audits: the bout is a warm-up and a
+    /// warm-up is not work.
+    @Test("ticking the bout leaves working sets, tonnage and the PR engine alone")
+    func cardioTickIsNotAWorkingSet() throws {
+        let model = armsBulk()
+        let cardio = try #require(bout(model))
+        let volume = model.totalVolumeKg
+        let records = model.recordCount
+
+        model.toggleDone(cardio.rows[0], in: cardio)
+
+        #expect(cardio.workingSets == 0)
+        #expect(model.completedSets == 0)
+        #expect(model.totalVolumeKg == volume)
+        #expect(model.recordCount == records)
+    }
+
+    @Test("a lifting exercise keeps the timeline's own arithmetic")
+    func liftingDotProgressIsTodaysRule() throws {
+        let model = armsBulk()
+        let lift = try #require(model.exercises.first { $0.name == "Single Arm Lateral Raise" })
+        log(model, "Single Arm Lateral Raise", sets: 2)
+
+        let prescribed = lift.rows.filter { $0.kind != .warmup && $0.kind != .ghost }
+        let expected = max(lift.plan.sets(for: model.phase), LoggerModel.physical(prescribed))
+        let read = model.dotProgress(for: lift)
+
+        #expect(read.done == lift.workingSets)
+        #expect(read.planned == expected)
+    }
 }
