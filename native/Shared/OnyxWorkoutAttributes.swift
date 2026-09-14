@@ -83,9 +83,10 @@ struct OnyxWorkoutAttributes: ActivityAttributes {
         /// card back, and the next launch would request a second card beside an
         /// orphan nothing can end.
         ///
-        /// They are also nil on the LAST set of the session, which has no next
-        /// lift — the card falls back to the current set, which is correct
-        /// rather than a placeholder.
+        /// The FOLLOWING movement, not the current one: the next lift in deck
+        /// order with work still to do, so the card can say NEXT while the rest
+        /// clock runs. Nil on the last movement of the session — the card falls
+        /// back to the current set, which is correct rather than a placeholder.
         var nextExercise: String?
         /// What that lift cost last time, as a rating: "RPE 9". Nil when the
         /// movement is new, or when the previous set was never rated.

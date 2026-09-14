@@ -447,6 +447,21 @@ struct LoggerModelTests {
 
     // MARK: - Timeline dots and the next movement (D6)
 
+    /// A deck of three plain lifts, A prescribed twice. Named rather than taken
+    /// from a template because the assertion is about ORDER and about a lift
+    /// finishing, and a real deck's set counts move with the program.
+    private func abcDeck() -> LoggerModel {
+        let day = ProgramDay(
+            key: "test-abc", label: "ABC", accent: 0x808080, weekday: 1,
+            exercises: [
+                ProgramExercise("A", sets: 2, wk1Kg: 20, reps: "8\u{2013}12"),
+                ProgramExercise("B", sets: 1, wk1Kg: 20, reps: "8\u{2013}12"),
+                ProgramExercise("C", sets: 1, wk1Kg: 20, reps: "8\u{2013}12")
+            ]
+        )
+        return LoggerModel(day: day, phase: .bulk)
+    }
+
     /// The opening bout. Every deck built without a store opens with one
     /// (`withWarmupCardio`), and it is the only exercise in the app whose rows
     /// are all cardio.
@@ -498,5 +513,45 @@ struct LoggerModelTests {
 
         #expect(read.done == lift.workingSets)
         #expect(read.planned == expected)
+    }
+
+    @Test("nextExercise is the movement after the current one, in deck order")
+    func nextExerciseFollowsTheDeck() throws {
+        let model = abcDeck()
+        let cardio = try #require(bout(model))
+        // The bout is the deck's opener, so clear it first: until it is ticked
+        // the CURRENT movement is the treadmill, not A.
+        model.toggleDone(cardio.rows[0], in: cardio)
+
+        let a = try #require(model.exercises.first { $0.name == "A" })
+        model.toggleDone(a.rows[0], in: a)
+        #expect(model.currentSet?.exercise.name == "A", "A still has a second set")
+        #expect(model.nextExercise?.name == "B")
+
+        model.toggleDone(a.rows[1], in: a)
+        // A is finished, so the cursor has moved to B and the movement AFTER
+        // the current one is C. (The brief's table says "still B"; that reads
+        // the CURRENT movement, which is what this property exists to stop
+        // saying — see the report.)
+        #expect(model.currentSet?.exercise.name == "B")
+        #expect(model.nextExercise?.name == "C")
+
+        let b = try #require(model.exercises.first { $0.name == "B" })
+        model.toggleDone(b.rows[0], in: b)
+        #expect(model.currentSet?.exercise.name == "C", "on the last movement's last set")
+        #expect(model.nextExercise == nil, "nothing follows C")
+    }
+
+    @Test("nextExercise skips a movement that is already finished")
+    func nextExerciseSkipsFinishedWork() throws {
+        let model = abcDeck()
+        let cardio = try #require(bout(model))
+        model.toggleDone(cardio.rows[0], in: cardio)
+
+        let b = try #require(model.exercises.first { $0.name == "B" })
+        model.toggleDone(b.rows[0], in: b)
+
+        #expect(model.currentSet?.exercise.name == "A")
+        #expect(model.nextExercise?.name == "C", "B has nothing left to do")
     }
 }

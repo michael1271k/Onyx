@@ -698,6 +698,25 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         return nil
     }
 
+    /// The movement AFTER the one you are standing in front of, in deck order,
+    /// skipping anything already finished. Nil on the last movement.
+    ///
+    /// ── WHY THE CARD USED TO NAME THE LIFT YOU WERE ALREADY DOING ───────────
+    /// `LiveActivityController` sent `currentSet`'s own exercise as BOTH
+    /// `exercise` and `nextExercise`, on the reasoning that the cursor is the
+    /// first unticked row and so is already what you are walking back to. That
+    /// is true of the set and false of the movement: resting between set 2 and
+    /// set 3 of a press, "NEXT" said press. Named off `currentSet` here too, so
+    /// the two fields can never disagree about which one is current.
+    var nextExercise: ExerciseState? {
+        guard let current = currentSet?.exercise,
+              let at = exercises.firstIndex(where: { $0.id == current.id })
+        else { return nil }
+        return exercises[(at + 1)...].first { exercise in
+            exercise.rows.contains { !$0.isDone && $0.kind != .ghost }
+        }
+    }
+
     // MARK: - Init
 
     init(
