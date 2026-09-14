@@ -83,4 +83,16 @@ struct RestCountdownTests {
             #expect(unwrapped.lowerBound <= unwrapped.upperBound)
         }
     }
+
+    /// A total shorter than the actual remaining time clamps to `now` rather
+    /// than landing `endsAt − total` in the future — the case that only the
+    /// `min(..., now)` clamp handles. Pinned at `now`, not at `endsAt − total`,
+    /// so deleting the clamp fails this test specifically.
+    @Test("A total shorter than the remaining time clamps the lower bound to now")
+    func shortTotalClampsToNow() {
+        let endsAt = Date().addingTimeInterval(45)
+        let range = restCountdown(endsAt, total: 1)
+        let unwrapped = try! #require(range)
+        #expect(abs(unwrapped.lowerBound.timeIntervalSinceNow) < 0.01)
+    }
 }

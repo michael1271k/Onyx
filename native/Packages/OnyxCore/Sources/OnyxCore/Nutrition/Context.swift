@@ -11,8 +11,8 @@ import Foundation
 // range is stamped into the day column as it is written, so a RECOMPUTE of a
 // past day is stable — the day carries its own context.
 //
-// Event, Refeed and Social are one-day statements; Travel, Illness and
-// Emergency are ranges. Same enum, same column, different persistence.
+// Event, Holiday, Refeed and Social are one-day statements; Travel, Illness
+// and Emergency are ranges. Same enum, same column, different persistence.
 // ─────────────────────────────────────────────────────────────────────────────
 
 public enum ContextMode: String, Codable, Sendable, CaseIterable {
