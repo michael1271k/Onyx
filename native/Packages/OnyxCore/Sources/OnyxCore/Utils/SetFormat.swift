@@ -49,19 +49,29 @@ public enum SetFormat {
     public static func cardio(durationSec: Double?, distanceKm: Double?, incline: Double?, elevationM: Double?) -> String? {
         func ok(_ v: Double?) -> Double? { v.flatMap { $0.isFinite ? $0 : nil } }
         var parts: [String] = []
-        if let d = ok(durationSec), d > 0 {
-            // Rounded to the nearest second and split afterwards, for the
-            // reason `CardioMetrics.formatPace` gives: flooring twice loses a
-            // second to binary error.
-            let total = jsRound(d)
-            let mins = (total / 60).rounded(.down)
-            var ss = jsIntegerString(total.truncatingRemainder(dividingBy: 60))
-            while ss.count < 2 { ss = "0" + ss }
-            parts.append("\(jsIntegerString(mins)):\(ss)")
-        }
+        if let d = ok(durationSec), d > 0 { parts.append(clock(d)) }
         if let km = ok(distanceKm), km > 0 { parts.append("\(jsIntegerString(km)) km") }
         if let i = ok(incline), i != 0 { parts.append("\(jsIntegerString(i))%") }
         if let e = ok(elevationM), e > 0 { parts.append("\(jsIntegerString(e)) m") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// Seconds as `5:00`.
+    ///
+    /// Rounded to the nearest second and split afterwards, for the reason
+    /// `CardioMetrics.formatPace` gives: flooring twice loses a second to
+    /// binary error.
+    ///
+    /// Public because the session ledger draws a bout's duration in a column of
+    /// its own now, beside the distance and the pace, rather than inside the
+    /// joined string `cardio(…)` returns. One formatter, two callers — the
+    /// alternative was six lines of the same arithmetic in a view, allowed to
+    /// disagree with this one about a rounding.
+    public static func clock(_ seconds: Double) -> String {
+        let total = jsRound(seconds)
+        let mins = (total / 60).rounded(.down)
+        var ss = jsIntegerString(total.truncatingRemainder(dividingBy: 60))
+        while ss.count < 2 { ss = "0" + ss }
+        return "\(jsIntegerString(mins)):\(ss)"
     }
 }
