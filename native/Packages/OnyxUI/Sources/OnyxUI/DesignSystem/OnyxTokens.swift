@@ -212,20 +212,24 @@ extension Color {
         // Nutrition and teal in a widget is two facts the reader has to hold.
         // Three of the four are domain stops rather than new hues, so the macro
         // rails still read as Solar and Lunar rather than as a fifth palette.
+        //
+        // Computed, not stored: a Swift static is lazy and would capture the
+        // theme at first read, so a `let` here is a macro rail that ignores the
+        // theme switch every other token follows.
 
         /// Coral — Solar's far stop.
-        public static let protein = OnyxDomain.fuel.end
+        public static var protein: Color { OnyxDomain.fuel.end }
         /// Honey — Solar's near stop.
-        public static let carbs = OnyxDomain.fuel.start
+        public static var carbs: Color { OnyxDomain.fuel.start }
         /// Lavender — Lunar's near stop.
-        public static let fat = OnyxDomain.recover.start
+        public static var fat: Color { OnyxDomain.recover.start }
         /// Sapphire. The one macro-adjacent hue that is not on a domain mesh,
         /// because water is not a macro and must not be mistaken for one.
         public static let water = Color(hex: 0x5AA9E6)
         /// Calories are the Atwater SUM of the three macros, so they take the
         /// domain the three sit on rather than a colour of their own. Use
         /// `OnyxDomain.fuel.ramp` where the fill is a gradient.
-        public static let calories = OnyxDomain.fuel.accent
+        public static var calories: Color { OnyxDomain.fuel.accent }
 
         /// The colour of a ROUTINE DAY — what tints a calendar ring, a session
         /// chip and the This-week panel — keyed onto the domains by what the day

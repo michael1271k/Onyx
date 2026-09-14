@@ -59,6 +59,24 @@ struct OnyxThemeTests {
         #expect(theme.muscle[.chest] != Color(hex: Color.onyx.defaultMuscleHex[.chest]!))
     }
 
+    @Test("the derived statics follow a theme change instead of freezing at first read")
+    func derivedStaticsFollow() {
+        defer { OnyxTheme.apply(json: "") }
+        OnyxTheme.apply(json: "")
+        let protein = Color.onyx.protein
+        let carbs = Color.onyx.carbs
+        let fat = Color.onyx.fat
+        let calories = Color.onyx.calories
+        let series0 = Color.onyx.series[0]
+
+        OnyxTheme.current = OnyxTheme(spec: OnyxTheme.presets.first { $0.name == "Ember" }!.spec)
+        #expect(Color.onyx.protein != protein)
+        #expect(Color.onyx.carbs != carbs)
+        #expect(Color.onyx.fat != fat)
+        #expect(Color.onyx.calories != calories)
+        #expect(Color.onyx.series[0] != series0)
+    }
+
     @Test("apply, load and save move the current theme; corrupt or empty means default")
     func plumbing() {
         defer { OnyxTheme.apply(json: "") }
