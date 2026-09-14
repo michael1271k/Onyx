@@ -75,7 +75,13 @@ struct MetaTagRow: View {
         let tint = tag.tint
         return HStack(spacing: OnyxSpace.xs) {
             if let symbol = tag.symbol {
+                // `.hierarchical` and not flat: at 11 pt the flame's inner
+                // lobe, the trophy's base and the scale's pan separate into
+                // layers, which is what makes a glyph read as an object rather
+                // than as a blob — and it takes the tint the capsule is already
+                // spending, so it costs no second colour.
                 Image(systemName: symbol)
+                    .symbolRenderingMode(.hierarchical)
                     .onyxType(.micro)
                     .foregroundStyle(tint ?? Color.onyx.textTertiary)
             }
@@ -95,11 +101,17 @@ struct MetaTagRow: View {
         .padding(.horizontal, OnyxSpace.s)
         .padding(.vertical, OnyxSpace.xs)
         .frame(minHeight: 24)
-        // A plain fact gets the hairline; a tinted one gets its own colour at
-        // the same weight the tag row on the title band uses, so the two rows
-        // on this page read as one family.
+        // A plain fact gets the hairline; a tinted one gets a wash of its OWN
+        // ink, so the capsule and the text it holds are one colour at two
+        // strengths.
+        //
+        // 0.12 and not the 0.16 the title band's capsules wear: those sit on
+        // the page's own black, these sit on a card that already carries
+        // `onyxMuscleWash` at 6 %→2 % of a related hue. The same opacity over
+        // a lit surface reads a step heavier, and a row of five heavy capsules
+        // is a row of buttons — these are readings.
         .background(
-            (tint?.opacity(0.16) ?? Color.onyx.hairline.opacity(0.55)),
+            (tint?.opacity(0.12) ?? Color.onyx.hairline.opacity(0.55)),
             in: .capsule
         )
         .accessibilityHidden(true)

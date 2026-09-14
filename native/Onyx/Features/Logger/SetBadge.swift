@@ -53,12 +53,28 @@ struct SetBadge: View {
         RoundedRectangle(cornerRadius: OnyxCorner.row, style: .continuous)
     }
 
+    /// ── THE STACK IS CENTRED, AND THAT IS THE WHOLE BUG ────────────────────
+    /// It was `ZStack(alignment: .bottomTrailing)`, which was set that way so
+    /// the failure `pip` could ride the corner. But a `ZStack`'s alignment
+    /// applies to EVERY child, and only one of them fills: `surface` is a
+    /// `Shape` and takes the whole frame regardless, while `content` — a
+    /// number, an `F`, a 13 pt trophy — is intrinsically sized and was
+    /// therefore pinned to the bottom-right of the box. Every ordinal in the
+    /// app sat low and right of centre, on the deck and in the ledger both,
+    /// and the smaller the glyph the further off it looked.
+    ///
+    /// The pip does not need the stack's alignment to reach the corner — an
+    /// `.overlay` has its own, and it is the one that should carry it, because
+    /// it is the only child the corner is correct for.
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack {
             surface
             content
         }
         .frame(width: side, height: side)
+        .overlay(alignment: .bottomTrailing) {
+            if isRecord, isFailure { pip }
+        }
     }
 
     /// ── STATE IS THE FILL TREATMENT, NOT THE HUE ────────────────────────────
@@ -97,7 +113,6 @@ struct SetBadge: View {
                 // row is an offscreen pass per frame, on screens that have to
                 // hold 120 Hz under a scrolling thumb.
                 .shadow(color: Color.onyx.record.opacity(0.55), radius: 5)
-            if isFailure { pip }
         } else if showsCheck, filled, kind == .normal {
             if isFailure {
                 glyph(Text("F"), ink)
@@ -117,11 +132,27 @@ struct SetBadge: View {
         }
     }
 
+    /// The failure mark on a set that was ALSO a record — the one case where
+    /// two outcomes are true of one box and the glyph slot can only hold one.
+    ///
+    /// ── WHY IT CARRIES A RING OF THE PAGE'S OWN COLOUR ──────────────────────
+    /// It sits on the badge's surface, which on a record is the movement's hue
+    /// at 16 % behind a glowing gold cup — so a bare 9 pt letter had no edge of
+    /// its own and read as part of the trophy rather than as a second fact. A
+    /// 1 pt band of the base colour is what separates two marks sharing twelve
+    /// points of screen, and it is the same trick an unread-count badge plays
+    /// against an app icon.
     private var pip: some View {
         Text("F")
             .onyxType(.micro).fontWeight(.heavy)
             .foregroundStyle(Color.onyx.danger)
-            .offset(x: 7, y: 5)
+            .padding(.horizontal, 1.5)
+            .background {
+                Capsule()
+                    .fill(Color.onyx.base)
+                    .stroke(Color.onyx.base, lineWidth: 1)
+            }
+            .offset(x: 4, y: 4)
     }
 
     private func glyph(_ view: some View, _ color: Color) -> some View {

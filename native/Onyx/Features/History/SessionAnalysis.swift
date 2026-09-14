@@ -166,8 +166,8 @@ enum SessionAnalysis {
         ///
         /// Nil is an unrated set, which is a real state and not a zero.
         let intensity: [Double?]
-        /// The subset of `muscles` that some movement in this session names as
-        /// a PRIMARY mover.
+        /// The muscles some movement in this session names as a PRIMARY mover,
+        /// heaviest-worked first.
         ///
         /// ── WHY THE HEADER NEEDS THE DISTINCTION AND THE CHART DOES NOT ─────
         /// `muscles` is what the session TRAINED, assistance included at half
@@ -178,7 +178,22 @@ enum SessionAnalysis {
         /// Side delts · Upper back` and the two muscles the session was FOR
         /// looked exactly like the four that came along. The header takes the
         /// primaries; the card keeps the whole truth.
-        let primaryMuscles: Set<LandmarkMuscle>
+        ///
+        /// ── AND WHY IT IS ORDERED ON RAW SETS, NOT ON `muscles`' ORDER ──────
+        /// `muscles` ranks on WEIGHTED sets, where an assisting mover earns
+        /// partial credit — correct for a share, wrong for a headline. The
+        /// header answers "what did I train today", and the honest ranking for
+        /// that is the count of working sets whose movement names the muscle as
+        /// the point: twelve leg sets put Quads above four core sets, and a
+        /// muscle can never climb the list on work it merely helped with.
+        ///
+        /// Equal counts break on the TONNAGE behind them rather than
+        /// alphabetically, which is what the old sort fell back to — three leg
+        /// muscles at eight sets each were ordered G, H, Q by the letter.
+        ///
+        /// Built here, in the loader, and off the main actor with everything
+        /// else on this type: the view receives an array and sorts nothing.
+        let primaryOrder: [LandmarkMuscle]
         let prCount: Int
         /// Every set that was performed, ghosts excluded, a unilateral pair
         /// counted once — the denominator the muscle sheet's weighted total is
@@ -363,7 +378,26 @@ enum SessionAnalysis {
         // Read from the same resolver the credit is: name first, the stored
         // column as a fallback (`MuscleMap.resolveMovers`), so the header and
         // the chart cannot disagree about what a movement is for.
-        let primaries = Set(groups.flatMap { MuscleMap.landmarks(MuscleMap.resolveMovers($0.name).primary) })
+        //
+        // Two tallies per landmark, both over the movements this session
+        // actually logged: the working sets it was the point of, and the
+        // tonnage behind them. See `Report.primaryOrder` for why the count is
+        // raw and why the tie-break is load.
+        var rawSets: [LandmarkMuscle: Double] = [:]
+        var rawLoad: [LandmarkMuscle: Double] = [:]
+        for report in exercises {
+            for muscle in MuscleMap.landmarks(MuscleMap.resolveMovers(report.canonical).primary) {
+                rawSets[muscle, default: 0] += report.detail.workingSets
+                rawLoad[muscle, default: 0] += report.detail.volumeKg
+            }
+        }
+        let primaryOrder = rawSets.keys.sorted { a, b in
+            let (setsA, setsB) = (rawSets[a] ?? 0, rawSets[b] ?? 0)
+            if setsA != setsB { return setsA > setsB }
+            let (loadA, loadB) = (rawLoad[a] ?? 0, rawLoad[b] ?? 0)
+            if loadA != loadB { return loadA > loadB }
+            return a.rawValue < b.rawValue
+        }
 
         // ── NO MULTI-SERIES TRAIL, AND NO HIGHLIGHTS LIST ───────────────────
         // Wave 7 drew a six-series est-1RM chart at the bottom of this report
@@ -386,7 +420,7 @@ enum SessionAnalysis {
         return Report(
             session: session, exercises: exercises,
             muscles: muscles, intensity: intensity,
-            primaryMuscles: primaries, prCount: pr.prCount,
+            primaryOrder: primaryOrder, prCount: pr.prCount,
             physicalSets: groups.reduce(0) { $0 + physicalSets($1.sets) }
         )
     }

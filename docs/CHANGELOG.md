@@ -44,6 +44,74 @@ _Nothing yet._
 
 ---
 
+## [3.3.0] — 2026-09-14 · The Session, Read as a Table
+
+The post-workout summary stops being a list of sentences and becomes a page you
+can scan: a masthead that names the session, one row of anatomy, one row of
+performance, and a real table under every movement. Plus the badge-centering
+defect that had been off by four points in both the live deck and the ledger
+since the badge was shared.
+
+### Added
+- **Columns.** Every movement's sets are now a table — `KG · REPS · RPE` under
+  a heading, three equal tracks, one shape for the whole card. Under each
+  reading is a reserved line carrying the change against the SAME SET NUMBER
+  the last time the movement was trained: a green or red triangle and the
+  amount. A set added this week has no counterpart and says so with a dash
+  rather than inventing a verdict.
+- **A treadmill reads like a lift.** A bout gets `MIN · KM · PACE` in the same
+  table, in the cardio colour. The pace is derived from the distance and the
+  duration and is never stored. Incline and total ascent are no longer drawn —
+  they describe the bout rather than the set, and VoiceOver still speaks them.
+- **The session's ordinal, in the masthead.** `#45` sits at the right-hand end
+  of the title row, in the split's own colour — and in record gold, with a soft
+  bloom, on any session that set one. Same condition the trophies below it are
+  drawn on.
+- **The prescription beside the movement.** `@ 10–12` now follows the exercise
+  name in that movement's own hue, set one step down and rounded so it reads as
+  a brief rather than as part of the name. How much of it landed (`2/3 @ 10–12`)
+  stays with the results, where it belongs.
+
+### Changed
+- **The page header is three rows and a remark.** Name and session number;
+  plan, phase week and lever on the left with the start date and time on the
+  right; then the primary muscles. The verdict sentence closes the band under
+  them, set as a quiet italic aside rather than as another heading.
+- **Muscles are ranked by the work, not by the credit.** The header row sorts on
+  the raw count of working sets whose movement names the muscle as a PRIMARY
+  mover, with the tonnage behind them breaking the ties — so twelve leg sets
+  always precede four core sets, and no muscle climbs the list on work it only
+  assisted with. Computed in the loader, off the main actor. The Muscle focus
+  card keeps the weighted share it was always right to draw.
+- **The exercise header separates anatomy from arithmetic.** The chip row now
+  carries muscles and nothing else; the row beneath it carries the whole of the
+  performance — the session-on-session percentage, top set, tonnage, RPE and
+  the ceiling count.
+- **That row is no longer grey.** Each capsule takes the token that already
+  means its reading: the verdict and the tonnage take green or red, the top set
+  takes the movement's muscle hue, the RPE takes the effort ramp. Glyphs render
+  `.hierarchical`, and each capsule is washed in 12 % of its own ink.
+- **The `vs 30 Aug` capsule is now `▲ +7%`.** The date was the half of the fact
+  a reader could not use thirty seconds after finishing the session.
+- **The effort column is a number.** `8.5` in the effort ramp's own colour,
+  which is what bought the width for a third track. The word comes back at the
+  accessibility sizes, where the rows stop being a table.
+
+### Fixed
+- **Set badges were not centred.** `SetBadge` stacked its surface and its
+  content `.bottomTrailing` so that the failure pip could reach the corner — but
+  a `ZStack`'s alignment applies to every child, and only the surface fills. The
+  ordinal, the tick and the trophy were therefore pinned low and right in every
+  badge in the app, on the live deck and in the ledger both. The stack is
+  centred and the pip has moved to an overlay of its own, where it now carries a
+  1 pt ring of the page's base colour so it separates from the badge under it.
+- **The rep window clashed on every card.** It was drawn in the domain accent,
+  which folds sixteen landmarks onto four hues — so a chest movement's brief
+  came out violet beside a red rail, red chips and a red trail. It takes the
+  movement's own colour, like the other five surfaces on the card.
+
+---
+
 ## [3.2.0] — 2026-09-13 · One Language for a Set
 
 Two waves of UI and mechanics. The live deck and the session page had been
