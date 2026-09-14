@@ -717,6 +717,28 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         }
     }
 
+    /// The movement to HEADLINE while resting, and only at a movement boundary:
+    /// the lift you are about to start, when the rest you are in is the last
+    /// one of the previous lift. Nil mid-exercise and nil when not resting.
+    ///
+    /// ── WHY THE CARD CANNOT JUST DRAW `nextExercise` ────────────────────────
+    /// The Live Activity's load, `lastTime` and `lastRpe` all come from
+    /// `currentSet.row` — the set you are about to perform. `nextExercise` is
+    /// the movement AFTER that set's movement, so resting between set 2 and set
+    /// 3 of a squat the card would headline "NEXT · Bench" above the squat's
+    /// weight and the squat's "Set 3 of 4": one card, two different lifts. The
+    /// subject only changes when the SET does, which is exactly when the
+    /// movement being rested from (`restingExercise`, stamped by `startRest`)
+    /// is no longer the movement the cursor is on.
+    var restBoundaryExercise: ExerciseState? {
+        guard restEndsAt != nil,
+              let resting = restingExercise,
+              let current = currentSet?.exercise,
+              current.name != resting
+        else { return nil }
+        return current
+    }
+
     // MARK: - Init
 
     init(

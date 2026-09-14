@@ -454,9 +454,9 @@ struct LoggerModelTests {
         let day = ProgramDay(
             key: "test-abc", label: "ABC", accent: 0x808080, weekday: 1,
             exercises: [
-                ProgramExercise("A", sets: 2, wk1Kg: 20, reps: "8\u{2013}12"),
-                ProgramExercise("B", sets: 1, wk1Kg: 20, reps: "8\u{2013}12"),
-                ProgramExercise("C", sets: 1, wk1Kg: 20, reps: "8\u{2013}12")
+                ProgramExercise("A", sets: 2, wk1Kg: 20, reps: "8\u{2013}12", restSec: 90),
+                ProgramExercise("B", sets: 1, wk1Kg: 20, reps: "8\u{2013}12", restSec: 90),
+                ProgramExercise("C", sets: 1, wk1Kg: 20, reps: "8\u{2013}12", restSec: 90)
             ]
         )
         return LoggerModel(day: day, phase: .bulk)
@@ -553,5 +553,34 @@ struct LoggerModelTests {
 
         #expect(model.currentSet?.exercise.name == "A")
         #expect(model.nextExercise?.name == "C", "B has nothing left to do")
+    }
+
+    /// What the Live Activity actually sends as `nextExercise`. The card's
+    /// load, set label and `lastTime` are all the UPCOMING set, so the headline
+    /// may only change lift when that set does.
+    @Test("the card changes subject at a movement boundary and nowhere else")
+    func restBoundaryNamesTheLiftYouAreWalkingTo() throws {
+        let model = abcDeck()
+        let cardio = try #require(bout(model))
+        model.toggleDone(cardio.rows[0], in: cardio)
+        model.stopRest()
+
+        #expect(model.restBoundaryExercise == nil, "not resting")
+
+        let a = try #require(model.exercises.first { $0.name == "A" })
+        model.toggleDone(a.rows[0], in: a)
+        #expect(model.restEndsAt != nil, "A prescribes rest")
+        #expect(model.restBoundaryExercise == nil,
+                "mid-exercise the card stays on A, whose load it is showing")
+        // The model's own `nextExercise` is unchanged by any of this — the Mini
+        // Player wants the following MOVEMENT, boundary or not.
+        #expect(model.nextExercise?.name == "B")
+
+        model.toggleDone(a.rows[1], in: a)
+        #expect(model.restBoundaryExercise?.name == "B",
+                "A is finished, so the numbers under the headline are B's first set")
+
+        model.stopRest()
+        #expect(model.restBoundaryExercise == nil, "rest over, back to the set in front of you")
     }
 }

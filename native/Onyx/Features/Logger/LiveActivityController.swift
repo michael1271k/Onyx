@@ -194,14 +194,17 @@ final class LiveActivityController {
             setsDone: model.completedSets,
             setsPlanned: model.plannedSets,
             prsThisSession: model.recordCount,
-            // The upcoming MOVEMENT, named so the card can say NEXT while the
-            // rest clock runs — and nil on the last one, which has nothing to
-            // walk to. This was `current?.exercise.name`, the same string as
-            // `exercise` above: resting between two sets of a press, the card
-            // said NEXT PRESS. `LoggerModel.nextExercise` is named off the same
-            // `currentSet`, so the two fields cannot disagree about which lift
-            // is the current one.
-            nextExercise: model.nextExercise?.name,
+            // The movement the card changes subject TO while resting, sent
+            // only at a movement boundary. This was `current?.exercise.name`,
+            // the same string as `exercise` above — the card said NEXT PRESS
+            // while you rested between two sets of the press. The model's own
+            // `nextExercise` is the following MOVEMENT and is the wrong string
+            // for this wire: mid-exercise it would headline the lift after this
+            // one over THIS one's load, `lastTime` and "Set 3 of 4", all of
+            // which are `current?.row`. `restBoundaryExercise` is nil until the
+            // cursor actually leaves the lift being rested from, so the name
+            // and the numbers under it are always the same lift.
+            nextExercise: model.restBoundaryExercise?.name,
             // ── AND WHY THE RATING IS READ OFF THE SEED ─────────────────────
             // `row.rpe` on an unticked row is what E4's seed REMEMBERED from
             // the last time this set number was performed, which is exactly
