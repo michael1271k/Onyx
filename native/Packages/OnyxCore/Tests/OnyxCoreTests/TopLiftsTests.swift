@@ -107,9 +107,14 @@ struct TopLiftsTests {
 
     @Test("the Epley figure equals the app's existing estimated1RM formula for 100 kg x 5 reps")
     func epleyFigureMatchesApp() {
-        let expected = Epley.oneRepMax(weight: 100, reps: 5)
+        // Epley's own definition (Training/Epley.swift): weight × (1 + reps/30),
+        // then jsRound1 (Math.round(x*10)/10 — round-half-up to one decimal).
+        // 100 × (1 + 5/30) = 116.6666… → 116.7. Computed as a literal here, NOT
+        // by calling `Epley.oneRepMax` — this test must be able to fail if that
+        // formula itself regresses.
+        let expected = 116.7
         let groups = TopLifts.group([set("Bench Press", kg: 100, reps: 5, rpe: 9)], previous: [:])
         let oneRM = groups[0].lifts.first { $0.role == .oneRM }
-        #expect(oneRM?.figure == expected)
+        #expect(abs((oneRM?.figure ?? .nan) - expected) < 1e-6)
     }
 }
