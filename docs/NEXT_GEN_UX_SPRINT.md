@@ -1195,7 +1195,7 @@ Whole-sprint acceptance, on a device:
 6. Only the right glute can be marked sore, and the battery does not move because of it.
 
 **Founder's manual steps (nothing here can be done from this machine):**
-- Paste `docs/sql/w1-hk-uuid.sql` after W1.
+- ~~Paste `docs/sql/w1-hk-uuid.sql` after W1.~~ **Done 2026-09-15; file deleted.**
 - Paste `docs/sql/w9-doms-laterality.sql` after W9.
 - Paste `docs/sql/w11-isolation-rls.sql` after W11, then re-run the schema introspection to confirm every table reports RLS enabled.
 
@@ -1407,5 +1407,6 @@ _Appended by each wave as it merges. W12 harvests these, then deletes this file.
   measured while you were not doing anything.
 
 **Founder's manual steps still outstanding:**
-- Nothing new. `docs/sql/w1-hk-uuid.sql` from W1 is still unpasted, and until it
-  runs no imported bout reaches the server.
+- **None.** The founder applied both `docs/sql/w1-hk-uuid.sql` and
+  `docs/sql/w1-stress-events.sql` on 2026-09-15 and the files are deleted — W12
+  no longer has them to clean up, and `docs/sql/` is empty again.
