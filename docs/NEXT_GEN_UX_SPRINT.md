@@ -1289,3 +1289,123 @@ _Appended by each wave as it merges. W12 harvests these, then deletes this file.
 - Paste `docs/sql/w1-hk-uuid.sql` into the Supabase SQL editor. Nothing in this
   repo can apply it, and until it runs no imported bout reaches the server.
 
+
+---
+
+### W2 Wave Record — shipped 2026-09-15 as 3.11.0
+
+**Drift from the plan, on purpose:**
+- **The hero numeral is `.display`, not `.hero`.** The brief asks for both
+  "`SleepHeroCell` — full-width, `.hero` numeral" (item 2) and "One `.hero` per
+  screen is the token rule; Score keeps it" (item 4), and Pulse cannot have
+  both. `OnyxType.hero`'s own header says "at most one per screen — a second
+  hero is two screens in a trench coat", and item 4 is this wave REMOVING the
+  strip's second one. Adding one back 80 pt lower would have undone the rule in
+  the diff that enforces it. The night still leads the VITALS — full width,
+  against a grid of `.secondary` cells — and the screen's one hero stays the
+  Score, which is what the type scale calls "the one figure a screen is about".
+- **`VitalHero.promote` takes z values, not series.** A1 says the input is "the
+  `zSignal` the readiness engine already produces", so the rule takes
+  `[VitalReading(id, upIsGood, z)]` and a second entry point,
+  `VitalHero.reading(id:upIsGood:log:series:)`, is the only thing that calls
+  `Readiness.zSignal`. Two consequences, both wanted: there is exactly one
+  threshold model and this file does not contain it, and the golden fixture is
+  fourteen readable cases of z triples rather than six 49-element arrays per
+  case, which is a spec a human can check by eye.
+- **Steps, Stand and Active are not candidates.** They are activity, not
+  vitals: a quiet Sunday is a step count two SDs down and is not a reason to
+  lead a recovery screen with it. `VitalSpec.all` — the five the watch takes
+  overnight — is both the candidate list and the tie-break, which is also what
+  the brief names.
+- **`day-vitals` is now `day-hero`.** The shot photographed a disclosure that no
+  longer exists. It photographs the one state `day` cannot: a promoted vital
+  leading, with Sleep in its grid cell. `startVitalsOpen` is gone from
+  `PulseTabView` and `DayScreen`.
+- **`DepthBar` went public and gained a `cornerRadius`.** The app's hero bar is
+  the widget's stacked bar at 44 pt, and a second implementation would be a
+  second answer to "what was this night made of" — the rule `DepthArc` is
+  public for. The radius is a parameter because `height / 2` at 44 pt is a
+  22 pt curve that ate the whole of a short "awake" segment and left a grey
+  crescent; the tiles keep the capsule they were drawn with.
+- **`NowStripPulse` lost its accessibility branch entirely.** It existed because
+  the fuel sentence shared a line with two numerals and a ring. With the
+  sentence on its own line there is one question left — does the score fit
+  beside the battery pair — and that is a `ViewThatFits` measurement, not a
+  type-size setting.
+
+**Root causes that were not where the plan guessed:**
+- **F4 says the dynamic hero "needs no new math". True of the formula, false of
+  the data.** `DayModel.loadWindow` read **14** days of `daily_logs`; a
+  `zSignal` needs 49. The window now reads 49 and `block(_:)` is handed a
+  fortnight slice, so every delta on the screen is still Apple's own baseline
+  and still agrees with the Home Screen tile. The series also has to be **dense
+  — one slot per date, nil for a missing row** — because `zSignal` splits its
+  input at `count − 7`: built from the rows that happen to exist, a fortnight
+  off the wrist slides the split and the rule quietly compares last week to the
+  week before it.
+- **The `fullDay()` fixture promoted HRV on the DEFAULT shot.** It carries 49
+  days of HRV (seeded for the stress index, with a deliberate excursion to 41)
+  but only **nine** of `sleep_minutes`. The night therefore had no baseline, no
+  z and a floor of zero — and HRV's −1.05 took a slot the night could not
+  defend. The fixture now seeds 49 nights; the last nine are the short week the
+  bank was already built from and the forty behind them are ordinary. The night
+  clamps at −2 and holds its slot, and `alarmedDay()` is the seed where it does
+  not. **A preview fixture that is thin in one column is not a neutral fixture
+  — it is a claim, and this one claimed a promotion.**
+- **`Readiness.zSignal` on a numerically flat log baseline returns ±2, not
+  nil.** `sampleSd` of 42 identical values is exactly zero only while the sum is
+  exact: `50` repeated adds exactly, `ln(50)` repeated does not, and the
+  last-bit residue leaves an SD near 1e-16 that passes the `sd > 0` guard — so
+  every delta clamps. Unreachable with sensor data (42 nights of HRV agreeing
+  to the last decimal) and **not fixed here**: a guard inside `zSignal` would
+  move the battery and the stress index. It is stated in `VitalHeroTests`, and
+  the flat-baseline case is asserted on the raw path where a flat baseline is
+  exactly flat.
+- **A green `check:swift` hid a broken app target, exactly as the plan warns.**
+  Extracting `seedFullDay` out of `fullDay`'s closure lost the `@MainActor`
+  isolation the closure had inherited; four `DayModel.localInstant` calls failed
+  only in the app target.
+
+**Constraints discovered that the next wave must respect:**
+- **`DayModel` does not import `OnyxUI`, and must not start.** `VitalSpec` lives
+  in the design system and its `all` order IS the promotion tie-break, so the
+  model carries the SERIES (`Window.VitalSeries`) and `VitalsGrid.hero(_:)`
+  carries the ORDER. Anything that needs both belongs on the view side.
+- **The cell delta is the 14-day Apple baseline and the hero rule is the 49-day
+  z. They are different facts and neither may be printed as the other.** The
+  widget prints the same delta; the z is a verdict about a week and the delta is
+  a reading about a night, and they disagree in public whenever the week catches
+  up.
+- **The night keeps a door in BOTH slots.** `SleepEditSheet` is the only way to
+  the arc, the four stages and the two flags the watch cannot record. Hero, it
+  is the whole cell; demoted, it is the one grid cell with a chevron, and at
+  accessibility sizes it is a `PulseRow` rather than a `MetricRow` — the grid's
+  own fallback has no tap. W3 reorders this screen; those two are the only
+  entrances.
+- **The grid is always eight cells.** The promoted vital leaves and Sleep takes
+  its place IN the same index, so the layout does not reshuffle on the morning
+  something goes wrong.
+- `VitalsSection.body` folds `readings(_:)` and `hero(_:)` once and hands them
+  down. As computed properties they ran two and three times per body
+  evaluation — six 49-point z passes each time this row is re-realised.
+
+**Left open on purpose:**
+- **No shot reaches the grid's Sleep row at AX5 while a vital is promoted.** The
+  hero cell is most of the screen at that size and there is no scroll anchor
+  between the Now strip and the carousel. The row is `PulseRow`, which
+  `day-rows-ax5` already photographs; adding an anchor for one row was more new
+  surface than the review is worth. `day-ax5` does prove the door exists in the
+  hero slot.
+- **The promotion has no motion.** The hero changes with the day, not under a
+  finger, so there is no gesture to animate from — and a hero that slides in on
+  first paint would animate on every scroll that re-realises the row.
+- **The battery ring stays a fixed 44 pt.** It looks small beside a 60 pt
+  numeral at AX5. Scaling it grows the tile at exactly the size where the screen
+  has least room, and it was fixed before this wave too.
+- **`VitalHero` reads no fatigue, soreness or stress.** They are on the same
+  screen and all three are self-reported; the hero slot ranks things a watch
+  measured while you were not doing anything.
+
+**Founder's manual steps still outstanding:**
+- Nothing new. `docs/sql/w1-hk-uuid.sql` from W1 is still unpasted, and until it
+  runs no imported bout reaches the server.
