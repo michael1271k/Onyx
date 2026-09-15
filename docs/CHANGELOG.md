@@ -44,6 +44,46 @@ _Nothing yet._
 
 ---
 
+## [3.9.0] — 2026-09-15 · Your Two Colours
+
+### Added
+- **Settings → Appearance: pick the two colours the whole app is built from.**
+  Six presets — Ion, Ember, Moss, Rose, Gold, Sea — or your own primary and
+  secondary through the system colour picker, with a preview of the four ramps
+  the app derives from them. Primary is the training accent and also rotates
+  body, recovery and all sixteen muscle colours; secondary is nutrition's. Text,
+  ground, glass, danger, good and record gold never move. "Reset to Ion" puts
+  every colour back exactly as it shipped. Widgets and the Lock Screen card
+  recolour on their next refresh; the watch on its next context.
+- A colour too dark to read on black, or louder than the muscle palette, is
+  pulled back to the nearest one that is not — so no theme can make the app
+  unreadable.
+
+### Changed
+- **The Smart Stack turns over more easily.** A tile now takes the drag after
+  10 pt instead of 16, and commits on a quarter of a face travelled as well as
+  on a flick — so a finger that drags a face most of the way, stops to look and
+  lets go gets the face it was reaching for instead of the one it started on.
+  A drag that is more sideways than vertical is left to the dashboard under it.
+- Appearance refuses to change colours while a workout is running, and says so.
+  Applying a theme rebuilds every screen, and the live session's clock, rest
+  timer and deck position are held in memory.
+- The tab you are on now survives a colour change. It did not: picking a theme
+  answered you with the dashboard.
+
+### Fixed
+- **The water row no longer crashes the app.** One tap on the Nutrition tab, on
+  any day that already had an entry, killed the app outright — and never logged
+  the glass. The same defect was in the Pulse day's water row. Both are fixed,
+  and a test now stands behind them.
+- A widget could redraw with the previous palette after a theme change,
+  depending on whether its process happened to be running.
+- A sideways drag across a stacked tile could still turn it over on release,
+  having shown no sign of doing so.
+- A colour picked and then left by backgrounding the app is no longer lost.
+
+---
+
 ## [3.8.0] — 2026-09-15 · The Day's Three Questions
 
 ### Added
