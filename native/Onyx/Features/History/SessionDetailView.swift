@@ -74,8 +74,11 @@ struct SessionDetailView: View {
         var id: String { (records.first?.id ?? exercise) + setLabel }
     }
 
-    private var report: SessionAnalysis.Report? { page?.report }
+    /// The split's own colour — the tint of the tonnage line, and the wash
+    /// `SessionHeaderCard` bleeds behind the title.
     private var split: Color { Color.onyx.day(report?.session.dayKey) }
+
+    private var report: SessionAnalysis.Report? { page?.report }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -413,265 +416,36 @@ struct SessionDetailView: View {
 
     // MARK: - 1 · The title band
 
-    /// The split's own colour, bled behind the title and gone by the time the
-    /// tags start.
+    /// The masthead — `SessionHeaderCard`, which the Train tab draws from the
+    /// same value (A6).
     ///
-    /// ── WHY A WASH AND NOT A COLOURED CARD ──────────────────────────────────
-    /// A tinted panel makes the glass under it read as a different material and
-    /// puts a hard edge across the top of the screen — the "gradient header"
-    /// look the whole mandate exists to avoid. A 30 %→0 wash behind transparent
-    /// content says the same thing (this is a leg day) and leaves the surface
-    /// alone. The title carries the same hue at full strength, which is where
-    /// the colour is actually legible.
+    /// ── WHY IT LEFT THIS FILE ───────────────────────────────────────────────
+    /// It was 250 lines here, and the Train tab and the Pulse day each drew
+    /// their own summary of the same finished session: three cards stating the
+    /// same facts in three layouts, disagreeing about which ones mattered and
+    /// drifting apart one edit at a time. `SessionHeader` is the value they
+    /// share; everything in it is already on the page, so this is a field copy
+    /// rather than a second derivation.
+    ///
+    /// The headline stays a parameter rather than a field: it introduces the
+    /// metric grid directly below it, and there is no grid on a tab card.
     private func band(_ page: SessionAnalysis.Page) -> some View {
-        let session = page.report.session
-        let label = SessionAnalysis.dayLabel(session.dayKey, in: environment.targets?.schedule.activeProgram) ?? "Session"
-        return VStack(alignment: .leading, spacing: OnyxSpace.s) {
-            // ── ROW 1 · WHICH SESSION THIS IS ──────────────────────────────
-            // The name, and the ordinal it holds in the whole career. They are
-            // the two halves of one fact and they take the two ends of one
-            // line, which is what makes the band read as a masthead rather
-            // than as a stack of captions.
-            shoulders(.firstTextBaseline) {
-                Text(label)
-                    .onyxType(.hero)
-                    .foregroundStyle(Color.onyx.dayLabel(session.dayKey))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.75)
-            } trailing: {
-                // A session that recorded nothing carries no number rather
-                // than a zero — see `Page.careerIndex`.
-                if let index = page.careerIndex {
-                    careerNumber(index, dayKey: session.dayKey, records: page.report.prCount)
-                }
-            }
-            // ── ROW 2 · WHICH PLAN, AND WHEN ───────────────────────────────
-            // Calendar facts, both sides: what the programme called this day on
-            // the left, what the clock called it on the right.
-            shoulders(.top) {
-                planTags(page)
-            } trailing: {
-                Text(stamp(page))
-                    .onyxType(.caption).onyxNumeral()
-                    .foregroundStyle(Color.onyx.textSecondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            // ── ROW 3 · WHAT IT TRAINED ────────────────────────────────────
-            muscleRow(page)
-            // ── ROW 4 · THE ONE SENTENCE ────────────────────────────────────
-            // Under the three rows rather than under the title: those three are
-            // the session's IDENTITY and they read as a block, and this is the
-            // first line on the page that expresses an opinion. It closes the
-            // band immediately above the metric grid it introduces.
-            //
-            // Absent whenever it would be noise (`Page.headline` lists the
-            // three conditions). It is the only prose on the page and it is
-            // here because the reader's first question about a finished session
-            // is not "how much" — the grid below answers that — but "was that
-            // good". Set as an aside rather than as a heading: italic, one step
-            // down, secondary ink, so it reads as a quiet remark beside the
-            // numbers rather than as another label competing with them.
-            if let headline = page.headline(label) {
-                Text(headline)
-                    .onyxType(.secondary)
-                    .italic()
-                    .foregroundStyle(Color.onyx.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(OnyxSpace.l)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(alignment: .top) {
-            LinearGradient(
-                colors: [split.opacity(0.22), .clear],
-                startPoint: .top, endPoint: .bottom
-            )
-            .frame(height: 72)
-        }
-        .onyxGlass(.tile)
-        .accessibilityElement(children: .contain)
+        // `page.program` — the deck that OWNED the session's date — and not the
+        // environment's ACTIVE program, which is whichever plan is selected
+        // now. They are the same deck for a session logged this block and they
+        // are not for an older one, and the shot proved it: the Train tab
+        // (which resolves through the loader, on the session's own date) read
+        // `Upper A` while this page read `Cb A` — the tidied day KEY, which is
+        // what `dayLabel` falls back to when the program handed to it does not
+        // know the day. One session, two names, on two screens the reader moves
+        // between with a tap.
+        let label = SessionAnalysis.dayLabel(page.report.session.dayKey, in: page.program) ?? "Session"
+        return SessionHeaderCard(
+            header: SessionHeader(page: page, label: label),
+            headline: page.headline(label)
+        )
     }
 
-    /// When the session happened — `Sat 13 Sep · 18:20`.
-    ///
-    /// The career ordinal used to lead this string. It is a fact about WHICH
-    /// session, not about when, so it moved to the end of row 1 beside the name
-    /// it belongs to; what is left here is the clock, and the clock has the
-    /// right-hand end of row 2 to itself.
-    private func stamp(_ page: SessionAnalysis.Page) -> String {
-        let session = page.report.session
-        var parts: [String] = []
-        if let date = LogicalDay.date(fromISO: session.date) {
-            parts.append(date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
-        }
-        if let started = session.startedAt {
-            parts.append(started.formatted(date: .omitted, time: .shortened))
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    /// Two things at the two ends of one line — until the type size says a line
-    /// cannot hold two of anything.
-    ///
-    /// ── WHY THE BREAK IS A BRANCH AND NOT A `ViewThatFits` ──────────────────
-    /// `ViewThatFits` cannot stack a flexible child (memory: `w1b-week-detail`)
-    /// and a `Spacer` cannot wrap — which is how the ledger header once had its
-    /// chips and its prescription dividing a 375 pt line four ways. At the
-    /// accessibility sizes there is no arrangement of two long strings that
-    /// fits across, so the second one takes its own line and nothing is
-    /// measured at all.
-    @ViewBuilder
-    private func shoulders(
-        _ alignment: VerticalAlignment,
-        @ViewBuilder leading: () -> some View,
-        @ViewBuilder trailing: () -> some View
-    ) -> some View {
-        if typeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                leading()
-                trailing()
-            }
-        } else {
-            HStack(alignment: alignment, spacing: OnyxSpace.s) {
-                leading()
-                Spacer(minLength: OnyxSpace.xs)
-                trailing()
-            }
-        }
-    }
-
-    /// The session's place in the whole career — `#45` — and, when it produced
-    /// a record, the one colour in this app that says so.
-    ///
-    /// ── WHY GOLD HERE DOES NOT SPEND GOLD ───────────────────────────────────
-    /// `Color.onyx.record` means "personal record" app-wide and is the only
-    /// fifth hue §3.2 allows, so it is never decoration. This is not
-    /// decoration: the number turns gold on exactly the condition the trophy
-    /// turns gold on one screen down — `prCount > 0` — so the masthead states
-    /// the same fact the ledger proves, and a session with no records keeps the
-    /// split's own colour and says nothing.
-    ///
-    /// ── AND WHY THE GLOW IS AFFORDABLE HERE AND NOWHERE ELSE ────────────────
-    /// A `.shadow` is an offscreen pass per frame, which is why the gold on a
-    /// set badge is on the GLYPH and never on the row: the ledger recycles its
-    /// rows under a scrolling thumb at 120 Hz. This band is drawn once, at the
-    /// top of the page, inside a single `List` row that is never reused — so
-    /// the one place a soft bloom costs nothing is the one place a whole
-    /// session's achievement is being named.
-    private func careerNumber(_ index: Int, dayKey: String?, records: Int) -> some View {
-        let earned = records > 0
-        let tint = earned ? Color.onyx.record : Color.onyx.dayLabel(dayKey)
-        return Text("#\(index)")
-            .onyxType(.display).onyxNumeral().fontWeight(.semibold)
-            .foregroundStyle(tint)
-            .lineLimit(1)
-            .shadow(color: earned ? Color.onyx.record.opacity(0.5) : .clear,
-                    radius: earned ? 7 : 0)
-            .accessibilityLabel(earned ? "Session \(index), set records" : "Session \(index)")
-    }
-
-    /// Plan · phase week · lever, each resolved for the session's OWN date —
-    /// and then what the session actually TRAINED.
-    ///
-    /// ── THE MUSCLE CAPSULES ARE DERIVED, NEVER DECLARED ─────────────────────
-    /// The band named the plan, the phase and the lever: three facts about the
-    /// calendar, and none about the workout. So a Legs & Core B session that
-    /// held a Side Plank and a Hanging Knee Raise carried no Abs/core tag —
-    /// not because the credit was missing (`report.muscles` had it, and the
-    /// Muscle focus card 300 pt below drew it), but because nothing up here
-    /// ever asked.
-    ///
-    /// The list is `report.muscles`, which is `MuscleCredit.weightedSets` over
-    /// the rows that were actually logged, already dropped to `sets > 0` and
-    /// already sorted by share. So the tags follow the SETS: swap an exercise,
-    /// cut a movement, add a plank — the band changes with it, and there is no
-    /// second table anywhere mapping a `day_key` to a list of muscle names that
-    /// could fall out of step with what was performed.
-    ///
-    /// ── AND WHY NOTHING IS TRUNCATED ────────────────────────────────────────
-    /// A "top four" here is how the Abs/core tag went missing in the first
-    /// place: core work is genuine and is almost always the SMALLEST share of a
-    /// session, so any cap drops exactly the tag this fixes. `FlowRow` wraps,
-    /// the capsules are `micro`, and a six-muscle leg day is two lines.
-    /// The programme's own words for this day — plan, phase week, lever —
-    /// each resolved for the session's OWN date.
-    ///
-    /// ── ROW 2 IS CALENDAR, ROW 3 IS ANATOMY ─────────────────────────────────
-    /// These used to share one stack with the muscle capsules, which put two
-    /// unrelated vocabularies in one block: `Hypertrophy · Cut W7 · Lever 2`
-    /// is what the plan CALLED this day, and `Quads · Glutes` is what the body
-    /// DID. A reader scanning for either had to read both. They are two rows
-    /// now, and each has a right-hand shoulder of its own.
-    private func planTags(_ page: SessionAnalysis.Page) -> some View {
-        // Wrapping, not an `HStack`: at AX5 three capsules on one line become
-        // three vertical blobs one letter wide.
-        FlowRow(spacing: OnyxSpace.xs) {
-            tag(page.planLabel, .train)
-            if let week = page.week {
-                // `.short` is already "Cut W7" — the number is in it.
-                tag(week.short, .fuel)
-            }
-            if page.maintenance {
-                tag("Maintenance", .recover)
-            } else if let lever = page.lever {
-                tag(lever.label, .fuel)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    /// What the session was FOR, biggest share of the work first.
-    ///
-    /// ── PRIMARIES ONLY, AND WHY THE CAP WAS THE WRONG TOOL ──────────────────
-    /// A "top four" here is how the Abs/core tag went missing: core work is
-    /// genuine and is almost always the SMALLEST share of a session, so any cap
-    /// drops exactly the tag that fixes. The fix is not a bigger cap, it is
-    /// asking a different question — a flat capsule row carries no share, so
-    /// assistance printed here looked exactly like the muscles the session was
-    /// FOR, and an upper day read `Chest · Lats · Triceps · Biceps · Front
-    /// delts · Rear delts · Abs`, seven capsules over two lines, of which two
-    /// were the point. The Muscle focus card below still draws every one of
-    /// them, with its share, where a small number can say "this came along".
-    ///
-    /// ── AND WHY NOTHING IS SORTED HERE ──────────────────────────────────────
-    /// `primaryOrder` arrives ranked by raw working sets with tonnage breaking
-    /// the ties, built in the loader off the main actor (see its own note). A
-    /// `body` that sorted would be re-sorting on every redraw of a `List` row
-    /// that the scroll view recycles.
-    private func muscleRow(_ page: SessionAnalysis.Page) -> some View {
-        FlowRow(spacing: OnyxSpace.xs) {
-            ForEach(page.report.primaryOrder, id: \.self) { muscle in
-                // The muscle's OWN hue (W3): sixteen muscles, one colour each,
-                // so the band, the ramp, the legend and the atlas figure all
-                // call one muscle by one colour — and a tag keeps its colour
-                // when the session's ranking changes underneath it.
-                muscleTag(muscle, Color.onyx.muscle(muscle))
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    /// A muscle capsule. Named rather than numbered: the share is the Muscle
-    /// focus card's job, and a capsule carrying "Quads 6.5" would put the
-    /// session's longest number in its smallest type.
-    private func muscleTag(_ muscle: LandmarkMuscle, _ tint: Color) -> some View {
-        Text(muscle.displayName)
-            .onyxType(.micro)
-            .foregroundStyle(tint)
-            .padding(.horizontal, OnyxSpace.s)
-            .padding(.vertical, 3)
-            .background(tint.opacity(0.16), in: .capsule)
-    }
-
-    private func tag(_ text: String, _ domain: OnyxDomain) -> some View {
-        Text(text)
-            .onyxType(.micro)
-            .foregroundStyle(domain.accent)
-            .padding(.horizontal, OnyxSpace.s)
-            .padding(.vertical, 3)
-            .background(domain.accent.opacity(0.16), in: .capsule)
-    }
 
     // MARK: - 2 · The metric grid
 

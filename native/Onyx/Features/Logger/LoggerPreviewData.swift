@@ -1,5 +1,6 @@
 import Foundation
 import OnyxCore
+import OnyxData
 
 /// Real numbers, so the design is reviewed against real density.
 ///
@@ -46,6 +47,81 @@ extension LoggerModel {
         model.fill("Single Arm Cable Crossover", [(7.5, 15, 8)])
         if resting, let next = model.currentSet?.exercise { model.startRest(for: next) }
         return model
+    }
+
+    /// The same Upper B, with ONE previous session of this day behind it and a
+    /// finished treadmill bout on the front.
+    ///
+    /// ── WHY A STORE, ON A SCREEN THAT DRAWS NO ROWS ─────────────────────────
+    /// Without one `SessionSeed` falls to the PROGRAM tier — `wk1Kg` at the rep
+    /// floor, a load chosen in July — so `Top lifts` has nothing to compare
+    /// against and the arrows it exists to draw are unreachable in a
+    /// screenshot. The catalogue has to carry the treadmill too, or the deck
+    /// opens without its bout (`catalogueHasWarmupCardio`) and the cardio dot —
+    /// the one dot on the timeline that could never fill before W3 — cannot be
+    /// photographed either.
+    ///
+    /// The previous loads are deliberately BELOW today's on the pulldown (47 →
+    /// 49.5) and above them on the row (45 → 42.5), so one lift rises and
+    /// another falls in the same photograph.
+    static func previewUpperBWithHistory() -> (model: LoggerModel, store: AppDatabase) {
+        let store = try! AppDatabase.inMemory(deviceId: "preview-logger")
+        let userId = PreviewCatalogue.userId
+        let previous: [(name: String, kg: Double, reps: Int, rpe: Double)] = [
+            ("Chest Press", 40, 11, 9),
+            ("Neutral-Grip Lat Pulldown", 47, 11, 9),
+            ("Seated Cable Row (Wide Grip)", 45, 10, 9),
+            ("Single Arm Cable Crossover", 7.5, 14, 8),
+        ]
+        let date = LogicalDay.iso(Date().addingTimeInterval(-7 * 24 * 3600))
+        try? store.seedRows { db in
+            try Exercise(id: "pv-cardio", name: WarmupCardio.name).insert(db)
+            for (i, set) in previous.enumerated() {
+                try Exercise(id: "pv-\(i)", name: set.name).insert(db)
+            }
+            let start = LogicalDay.date(fromISO: date)!.addingTimeInterval(17 * 3600)
+            try WorkoutSession(
+                id: "pv-session", userId: userId, dayKey: "cb_b", date: date, startedAt: start,
+                endedAt: start.addingTimeInterval(58 * 60), durationMin: 58
+            ).insert(db)
+            for (i, set) in previous.enumerated() {
+                try WorkoutSet(
+                    id: "pv-session-\(i)", sessionId: "pv-session", exerciseId: "pv-\(i)",
+                    setIndex: i + 1, weightKg: set.kg, reps: set.reps,
+                    est1rmKg: Epley.oneRepMax(weight: set.kg, reps: Double(set.reps)),
+                    rpe: set.rpe, foldOrder: i
+                ).insert(db)
+            }
+        }
+
+        let model = LoggerModel(
+            day: PlanTemplates.day("onyx5", "cb_b"),
+            phase: .cut,
+            store: store,
+            userId: userId,
+            startedAt: Date().addingTimeInterval(-22 * 60)
+        )
+        model.fill("Chest Press", [(40, 12, 9), (40, 10, 9), (40, 10, 9.5)])
+        model.fill("Neutral-Grip Lat Pulldown", [(47, 12, 8.5), (49.5, 11, 9.5)])
+        model.fill("Seated Cable Row (Wide Grip)", [(42.5, 12, 9), (42.5, 10, 10)])
+        model.fill("Single Arm Cable Crossover", [(7.5, 15, 8)])
+        // The bout, done — `dotProgress`'s cardio branch, and the only thing
+        // that makes the treadmill's dot anything but empty.
+        if let bout = model.exercises.first(where: { $0.rows.allSatisfy { $0.isCardio } }),
+           let row = bout.rows.first, !row.isDone {
+            model.toggleDone(row, in: bout)
+        }
+        model.stopRest()
+        // The SAME store, handed back: `LiveStatsView` reads the previous
+        // session's sets through `environment.database`, and a fixture that
+        // seeded only the model's own store would photograph a card with no
+        // arrows on it while the deck behind it had a history.
+        //
+        // The STORE and not an `AppEnvironment`: the harness wraps it in one,
+        // and a test that wants to check the seed should not have to start an
+        // app environment — a second one in a unit-test process brings a
+        // Supabase client and its listeners with it.
+        return (model, store)
     }
 
     /// Tick a run of sets on one movement, exactly as the UI would.

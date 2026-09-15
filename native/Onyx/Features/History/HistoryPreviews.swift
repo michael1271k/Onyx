@@ -95,6 +95,15 @@ enum HistoryPreviews {
                 WorkoutTabView(seededDay: PlanTemplates.program("onyx5")?.day(key: "cb_a"), seededToday: "2026-09-03")
             }
             .environment(environment())
+        case "train-done":
+            // The day AFTER it was logged — `2026-09-02` is the Wednesday the
+            // `train` shot's plan card offers to reopen. It is the only state
+            // the Train tab draws `SessionHeaderCard` in, and the state a tab
+            // spends the rest of every training day in.
+            NavigationStack {
+                WorkoutTabView(seededDay: PlanTemplates.program("onyx5")?.day(key: "cb_a"), seededToday: "2026-09-02")
+            }
+            .environment(environment())
         case "train-empty":
             // A REST day: no session card, no footer CTA, and the cardio card
             // sits where the deck would be — which is the only way to

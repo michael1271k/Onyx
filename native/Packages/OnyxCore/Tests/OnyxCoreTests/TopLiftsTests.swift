@@ -117,4 +117,87 @@ struct TopLiftsTests {
         let oneRM = groups[0].lifts.first { $0.role == .oneRM }
         #expect(abs((oneRM?.figure ?? .nan) - expected) < 1e-6)
     }
+
+    // MARK: - The bar the arrows are drawn against
+
+    private func seedSet(
+        _ session: String, _ exercise: String, kg: Double, reps: Int,
+        rpe: Double? = nil, setType: String? = nil
+    ) -> SeedSet {
+        SeedSet(
+            sessionId: session, exerciseName: exercise, order: 1,
+            weightKg: kg, reps: reps, rpe: rpe, setType: setType
+        )
+    }
+
+    private func seedSession(_ id: String, _ date: String) -> SeedSession {
+        SeedSession(id: id, dayKey: "cb_b", date: date, startedAt: "\(date)T17:00:00Z", maintenance: false)
+    }
+
+    /// The reason `previousBests` exists at all rather than reading the deck's
+    /// own `SessionSeed`: a seeded row is the PROPOSAL, bumped to the ladder's
+    /// suggested load at the rep floor with its remembered rating dropped. This
+    /// asserts the bar is the SET THAT WAS LIFTED — 100 × 12 at RPE 9 — and not
+    /// anything derived from what the ladder wants next.
+    @Test("the bar is last session's own numbers, all three roles")
+    func previousBestsReadTheSessionThatHappened() {
+        let bests = TopLifts.previousBests(
+            sessions: [seedSession("s1", "2026-09-08")],
+            sets: [
+                seedSet("s1", "Chest Press", kg: 90, reps: 12, rpe: 8),
+                seedSet("s1", "Chest Press", kg: 100, reps: 12, rpe: 9),
+            ]
+        )
+        let best = bests["Chest Press"]
+        #expect(best?.kg == 100)
+        #expect(best?.rpeKg == 900)
+        // 100 × (1 + 12/30) = 140.
+        #expect(abs((best?.e1rm ?? .nan) - 140) < 1e-6)
+
+        // And it is the bar `group` actually draws against: 102.5 today is UP.
+        let groups = TopLifts.group([set("Chest Press", kg: 102.5, reps: 12, rpe: 9)], previous: bests)
+        #expect(groups[0].lifts.first { $0.role == .heaviest }?.delta == .up)
+    }
+
+    @Test("the newest session that LIFTED a movement wins it, warm-ups aside")
+    func previousBestsWalkBackPastASessionThatOnlyWarmedUp() {
+        let bests = TopLifts.previousBests(
+            // Newest first, as `sessionsForSeed` returns them.
+            sessions: [seedSession("s2", "2026-09-15"), seedSession("s1", "2026-09-08")],
+            sets: [
+                // Last Tuesday you set up, warmed up and stopped.
+                seedSet("s2", "Chest Press", kg: 40, reps: 10, setType: "warmup"),
+                seedSet("s1", "Chest Press", kg: 100, reps: 12, rpe: 9),
+                // A movement only the older session holds is still answered.
+                seedSet("s1", "Preacher Curl", kg: 20, reps: 12, rpe: 8),
+            ]
+        )
+        #expect(bests["Chest Press"]?.kg == 100)
+        #expect(bests["Preacher Curl"]?.kg == 20)
+        // A movement nobody has lifted has no bar, which draws no arrow.
+        #expect(bests["Face Pull"] == nil)
+    }
+
+    @Test("an unrated previous session leaves Hardest without a bar, not with a zero")
+    func previousBestsRpeKgIsNilWhenNothingWasRated() {
+        let bests = TopLifts.previousBests(
+            sessions: [seedSession("s1", "2026-09-08")],
+            sets: [seedSet("s1", "Chest Press", kg: 100, reps: 12)]
+        )
+        #expect(bests["Chest Press"]?.rpeKg == nil)
+        #expect(bests["Chest Press"]?.kg == 100)
+        let groups = TopLifts.group([set("Chest Press", kg: 100, reps: 12, rpe: 9)], previous: bests)
+        #expect(groups[0].lifts.first { $0.role == .hardest }?.delta == nil)
+        #expect(groups[0].lifts.first { $0.role == .heaviest }?.delta == .flat)
+    }
+
+    @Test("the bar is keyed canonically, so an alias spelling still finds it")
+    func previousBestsKeyIsCanonical() {
+        let bests = TopLifts.previousBests(
+            sessions: [seedSession("s1", "2026-09-08")],
+            sets: [seedSet("s1", "Lat Pulldown (Cable)", kg: 65, reps: 11, rpe: 8)]
+        )
+        #expect(bests[ExerciseAliases.canonicalName("Lat Pulldown (Cable)")]?.kg == 65)
+    }
+
 }

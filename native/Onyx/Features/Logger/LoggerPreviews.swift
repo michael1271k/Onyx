@@ -1,6 +1,7 @@
 #if DEBUG
 import SwiftUI
 import OnyxCore
+import OnyxData
 import OnyxUI
 
 /// Seeded logger screens for `scripts/native-shot.sh`.
@@ -11,6 +12,23 @@ import OnyxUI
 /// `LoggerPreviewData` — 49.5 kg, 42.5 kg, 13.75 kg, an RPE of 9.5 — which is
 /// what exposes a four-character load beside a two-character rep count.
 enum LoggerPreviews {
+
+    /// An environment over a fixture's own store — the harness needs one
+    /// because `LiveStatsView` reads the previous session through it, and
+    /// `AppEnvironment.preview` holds a different (shared) database.
+    ///
+    /// The client points at a URL that does not resolve, exactly as the preview
+    /// environment's does: a shot must never reach the network.
+    @MainActor
+    static func environment(over store: AppDatabase) -> AppEnvironment {
+        AppEnvironment(
+            database: store,
+            supabase: OnyxSupabase.makeClient(config: SupabaseConfig(
+                url: URL(string: "https://preview.invalid")!,
+                anonKey: "preview"
+            ))
+        )
+    }
 
     @MainActor @ViewBuilder
     static func view(_ screen: String) -> some View {
@@ -230,10 +248,26 @@ enum LoggerPreviews {
             // reason the first is: an empty Live Stats page is five cards of
             // empty states, which photographs the fallbacks and calls it the
             // design.
+            let stats = LoggerModel.previewUpperBWithHistory()
             NavigationStack {
-                LiveLoggerView(model: .previewUpperB(logged: true), face: .stats)
+                LiveLoggerView(model: stats.model, face: .stats)
             }
-            .environment(AppEnvironment.preview)
+            .environment(LoggerPreviews.environment(over: stats.store))
+            .preferredColorScheme(.dark)
+        case "logger-lifts":
+            // The Top Lifts card and the timeline under it, which are two
+            // screens below the fold on the stats face — the one shot that can
+            // review a lift GROUP, its arrows and its flame, and a cardio bout
+            // whose dot is filled. `LiveStatsView` directly rather than through
+            // the logger: the flag is the view's, and the hero and the face
+            // switcher are two hundred points between a reviewer and the card.
+            let lifting = LoggerModel.previewUpperBWithHistory()
+            LiveStatsView(
+                model: lifting.model, clock: lifting.model, prs: lifting.model,
+                onMuscleFocus: {}, startAtLifts: true
+            )
+            .onyxScreen(.train)
+            .environment(LoggerPreviews.environment(over: lifting.store))
             .preferredColorScheme(.dark)
         case "logger-paused":
             // A stopped clock — the one state on this screen where the hero's

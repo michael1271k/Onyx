@@ -94,6 +94,56 @@ public enum TopLifts {
         return .flat
     }
 
+    /// The bar the deltas are drawn against: for each movement, the newest
+    /// qualifying session that actually LIFTED it, folded to one figure per
+    /// role. Keyed by `ExerciseAliases.canonicalName`, which is what the caller
+    /// must key `Set.exercise` with.
+    ///
+    /// ── WHY NOT THE DECK'S OWN SEED, WHICH IS ALREADY IN MEMORY ─────────────
+    /// A `SeedRow` is a PROPOSAL and not a memory. `SessionSeedBuilder
+    /// .workingRows` rewrites every working row to the progression ladder's
+    /// suggested load at the rep floor whenever a movement is `.ready`, and
+    /// `RpeMemory.resolveSeededRpe` drops the remembered rating when it does.
+    /// Drawing the arrow against that bar points it DOWN on a session where you
+    /// beat last week by a kilo and merely missed the suggestion, and leaves
+    /// Hardest with no bar at all on exactly the lifts the ladder just raised —
+    /// which are the lifts a block exists to move. These rows are what was
+    /// lifted.
+    ///
+    /// `sessions` newest first, as `sessionsForSeed` returns them. The first
+    /// session that logged a WORKING set of a movement wins it: a session you
+    /// warmed up for and abandoned is not evidence, which is the same walk
+    /// `SessionSeedBuilder.seed` makes for its history tier.
+    ///
+    /// Pairs are NOT collapsed, because the candidate side does not collapse
+    /// them either — a unilateral set is two candidates to `group`, and a bar
+    /// folded to last session's weaker side would draw `▲` on an arm that did
+    /// the same weight.
+    public static func previousBests(sessions: [SeedSession], sets: [SeedSet]) -> [String: Best] {
+        var bySession: [String: [String: [SeedSet]]] = [:]
+        for set in sets {
+            let key = ExerciseAliases.canonicalName(set.exerciseName)
+            bySession[set.sessionId, default: [:]][key, default: []].append(set)
+        }
+        var out: [String: Best] = [:]
+        for session in sessions {
+            for (name, raw) in bySession[session.id] ?? [:] where out[name] == nil {
+                // The same eligibility `group` applies to today's candidates:
+                // a working set with a load and reps on it.
+                let working = raw.filter {
+                    SetTags.isWorkingSet($0.setType) && $0.weightKg > 0 && $0.reps > 0
+                }
+                guard !working.isEmpty else { continue }
+                out[name] = Best(
+                    kg: working.map(\.weightKg).max(),
+                    rpeKg: working.compactMap { set in set.rpe.map { $0 * set.weightKg } }.max(),
+                    e1rm: working.compactMap { Epley.oneRepMax(weight: $0.weightKg, reps: Double($0.reps)) }.max()
+                )
+            }
+        }
+        return out
+    }
+
     public static func group(_ sets: [Set], previous: [String: Best]) -> [Group] {
         // Only sets with positive load and positive reps are eligible for any role.
         let eligible = sets.filter { $0.kg > 0 && $0.reps > 0 }

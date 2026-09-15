@@ -63,6 +63,14 @@ struct WorkoutTabView: View {
     /// 1:30:00 — the hour of pause gone, from the number this whole wave exists
     /// to make true. Wave E4 folds it into `LoggerModel`, which is kept here
     /// already, and this property goes with the stand-in.
+
+    /// The masthead for the session logged today, when there is one.
+    ///
+    /// Loaded rather than derived: `careerIndex` is a position in the whole
+    /// record and the muscle capsules are a fold over the session's own sets,
+    /// neither of which is on `WorkoutWeek.State`. Nil until it arrives, and
+    /// the four numbers the state DOES carry are drawn in the meantime.
+    @State private var doneHeader: SessionHeader?
     @State private var showPhase = false
     @State private var loggingCardio = false
     /// The swap sheet. §5.2 item 3 puts rest and swap on the session card,
@@ -263,6 +271,19 @@ struct WorkoutTabView: View {
                 )
             }
             await week?.refresh()
+        }
+        // Keyed on the id, so finishing a session loads its masthead and
+        // opening the tab on a rest day clears the last one rather than leaving
+        // yesterday's card under today's date.
+        .task(id: doneSessionId) {
+            guard let id = doneSessionId else {
+                doneHeader = nil
+                return
+            }
+            let database = environment.database, userId = environment.userIdString
+            doneHeader = await Task.detached(priority: .userInitiated) {
+                SessionAnalysis.headers(database: database, userId: userId, sessionIds: [id])[id]
+            }.value
         }
         .onChange(of: storedPhase) { _, next in
             week?.setPhase(ProgramPhase(rawValue: next) ?? .cut)
@@ -488,36 +509,64 @@ struct WorkoutTabView: View {
 
     // MARK: - Today's session
 
+    /// The finished session on this tab, or nil when today has not been logged.
+    private var doneSessionId: String? {
+        if case let .done(id, _, _, _, _) = state { return id }
+        return nil
+    }
+
     @ViewBuilder
     private func sessionCard(_ day: ProgramDay) -> some View {
         if case let .done(id, sets, volumeKg, minutes, prCount) = state {
-            // ── LOGGED: THE TILE COLLAPSES ──────────────────────────────────
-            // A finished day does not need its prescription read back to it.
-            // What it needs is the four numbers it produced and a way into the
-            // page that explains them.
+            // ── LOGGED: THE SAME MASTHEAD THE SESSION PAGE OPENS WITH ───────
+            // A finished day does not need its prescription read back to it,
+            // and it does not need a THIRD layout for facts the session page
+            // and the Pulse day already state: this card, the summary page's
+            // band and Pulse's workout card were three renderings of one
+            // session that drifted apart one edit at a time. `SessionHeaderCard`
+            // is the one of them that survives (A6) — so the card you tap and
+            // the page it opens are the same card, and the transition is the
+            // page arriving under a header that never moved.
+            //
+            // The four numbers ride in as `totals`: the page drops them because
+            // its metric grid is the next thing down, and this card is the only
+            // place they are said at all.
+            let summary = doneSummary(sets: sets, volumeKg: volumeKg, minutes: minutes, prCount: prCount)
             NavigationLink { SessionDetailView(sessionId: id) } label: {
-                VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                    HStack(spacing: OnyxSpace.s) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(Color.onyx.good)
-                        Text(day.label)
-                            .onyxDisplay()
-                            .foregroundStyle(Color.onyx.dayLabel(day.key))
-                        Spacer(minLength: OnyxSpace.s)
-                        Image(systemName: "chevron.right")
-                            .onyxType(.caption)
-                            .foregroundStyle(Color.onyx.textTertiary)
+                if let header = doneHeader, header.id == id {
+                    SessionHeaderCard(header: header, totals: summary)
+                } else {
+                    // The header is a database read; these two facts are on the
+                    // state already. A card that drew nothing until the read
+                    // landed would blink on every open of the tab.
+                    VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+                        HStack(spacing: OnyxSpace.s) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(Color.onyx.good)
+                            Text(day.label)
+                                .onyxDisplay()
+                                .foregroundStyle(Color.onyx.dayLabel(day.key))
+                            Spacer(minLength: OnyxSpace.s)
+                        }
+                        Text(summary)
+                            .onyxType(.secondary).onyxNumeral()
+                            .foregroundStyle(Color.onyx.textSecondary)
                     }
-                    Text(doneSummary(sets: sets, volumeKg: volumeKg, minutes: minutes, prCount: prCount))
-                        .onyxType(.secondary).onyxNumeral()
-                        .foregroundStyle(Color.onyx.textSecondary)
+                    .padding(OnyxSpace.l)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onyxGlass(.tile)
                 }
-                .padding(OnyxSpace.m)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .onyxGlass(.tile)
             }
             .buttonStyle(.plain)
             .onyxPress(scale: 0.98)
+            // ── ONE BUTTON, NOT A CONTAINER OF FOUR LABELS ──────────────────
+            // The card is a whole `NavigationLink` here, and its rows would
+            // otherwise be exposed as four separate elements — a title, a
+            // number, a tag row and a muscle row — none of which is the thing
+            // a VoiceOver reader double-taps. On the session page the same card
+            // is a static row and its parts are read in order, which is why the
+            // grouping is decided by the caller and not by the card.
+            .accessibilityElement(children: .combine)
             .accessibilityHint("Opens the session summary")
         } else {
             planCard(day)

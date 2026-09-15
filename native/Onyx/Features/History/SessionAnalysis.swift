@@ -383,21 +383,7 @@ enum SessionAnalysis {
         // actually logged: the working sets it was the point of, and the
         // tonnage behind them. See `Report.primaryOrder` for why the count is
         // raw and why the tie-break is load.
-        var rawSets: [LandmarkMuscle: Double] = [:]
-        var rawLoad: [LandmarkMuscle: Double] = [:]
-        for report in exercises {
-            for muscle in MuscleMap.landmarks(MuscleMap.resolveMovers(report.canonical).primary) {
-                rawSets[muscle, default: 0] += report.detail.workingSets
-                rawLoad[muscle, default: 0] += report.detail.volumeKg
-            }
-        }
-        let primaryOrder = rawSets.keys.sorted { a, b in
-            let (setsA, setsB) = (rawSets[a] ?? 0, rawSets[b] ?? 0)
-            if setsA != setsB { return setsA > setsB }
-            let (loadA, loadB) = (rawLoad[a] ?? 0, rawLoad[b] ?? 0)
-            if loadA != loadB { return loadA > loadB }
-            return a.rawValue < b.rawValue
-        }
+        let primaryOrder = primaryLandmarks(groups)
 
         // ── NO MULTI-SERIES TRAIL, AND NO HIGHLIGHTS LIST ───────────────────
         // Wave 7 drew a six-series est-1RM chart at the bottom of this report
@@ -613,6 +599,63 @@ enum SessionAnalysis {
             n += 1
         }
         return n
+    }
+
+    /// The landmarks a session was FOR, ranked — raw working sets, tonnage
+    /// breaking the ties, the muscle's own name breaking those.
+    ///
+    /// ── WHY IT IS NOT `muscles`, WHICH IS RIGHT ABOVE IT ────────────────────
+    /// `Report.muscles` is `MuscleCredit.weightedSets`: a share, where an
+    /// assistance role earns a fraction of a set. That is the right question
+    /// for the distribution chart and the wrong one for a capsule row, which
+    /// carries no number — printed flat, a 0.5-set assistance credit looks
+    /// exactly like the muscle the session was built around. This counts whole
+    /// working sets per PRIMARY mover, which is the ranking a reader means by
+    /// "what did that session train".
+    ///
+    /// One implementation, two callers: the session page's report and the
+    /// batched `headers` loader. A second fold is how the Train card and the
+    /// session page would come to rank the same workout differently.
+    static func primaryLandmarks(_ groups: [Group]) -> [LandmarkMuscle] {
+        var rawSets: [LandmarkMuscle: Double] = [:]
+        var rawLoad: [LandmarkMuscle: Double] = [:]
+        for g in groups {
+            let canonical = displayName(id: g.exerciseId, stored: g.name)
+            let working = g.sets.filter { SetTags.isWorkingSet($0.setType) }
+            // Both figures exactly as `report` builds them: the set count folds
+            // a unilateral pair once (`SessionDetail.toRows`), and the tonnage
+            // is every non-ghost row including warm-ups (`SessionVolume`'s own
+            // rule — "a ghost weighs nothing; a warm-up still counts").
+            let sets = Double(SessionDetail.toRows(working.map(detailSet)).count)
+            let load = SessionVolume.sessionVolumeKg(g.sets.map(volumeSet))
+            for muscle in MuscleMap.landmarks(MuscleMap.resolveMovers(canonical).primary) {
+                rawSets[muscle, default: 0] += sets
+                rawLoad[muscle, default: 0] += load
+            }
+        }
+        return rawSets.keys.sorted { a, b in
+            let (setsA, setsB) = (rawSets[a] ?? 0, rawSets[b] ?? 0)
+            if setsA != setsB { return setsA > setsB }
+            let (loadA, loadB) = (rawLoad[a] ?? 0, rawLoad[b] ?? 0)
+            if loadA != loadB { return loadA > loadB }
+            return a.rawValue < b.rawValue
+        }
+    }
+
+    /// When the session happened — `Sat 13 Sep · 18:20`.
+    ///
+    /// The career ordinal used to lead this string. It is a fact about WHICH
+    /// session, not about when, so it sits at the end of the title row beside
+    /// the name it belongs to; what is left here is the clock.
+    static func stamp(date: String, startedAt: Date?) -> String {
+        var parts: [String] = []
+        if let day = LogicalDay.date(fromISO: date) {
+            parts.append(day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
+        }
+        if let startedAt {
+            parts.append(startedAt.formatted(date: .omitted, time: .shortened))
+        }
+        return parts.joined(separator: " · ")
     }
 
     static func detailSet(_ r: HistorySetRow) -> DetailSet {
