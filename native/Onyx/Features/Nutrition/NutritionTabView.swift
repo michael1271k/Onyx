@@ -566,9 +566,10 @@ private struct WaterRow: View {
                 .foregroundStyle(Color.onyx.water)
                 .accessibilityHidden(true)
             Text(figures)
-                .onyxType(.secondary)
+                .onyxType(model.isAwaitingHealthWater ? .caption : .secondary)
                 .onyxNumeral()
-                .foregroundStyle(Color.onyx.textPrimary)
+                .foregroundStyle(model.isAwaitingHealthWater
+                                 ? Color.onyx.textSecondary : Color.onyx.textPrimary)
                 .layoutPriority(1)
             TargetBar(value: model.waterMl, target: model.waterGoalMl,
                       tint: Color.onyx.water, over: Color.onyx.water)
@@ -620,14 +621,12 @@ private struct WaterRow: View {
         glasses += 1
     }
 
-    private var figures: String {
-        let amount = model.waterMl.map { "\(NutritionFormat.litres($0))" } ?? "—"
-        guard let goal = model.waterGoalMl else { return "\(amount) L" }
-        return "\(amount) / \(NutritionFormat.litres(goal)) L"
-    }
+    private var figures: String { model.waterFigures }
 
     private var spoken: String {
-        guard let ml = model.waterMl else { return "nothing logged" }
+        guard let ml = model.waterMl else {
+            return model.isAwaitingHealthWater ? "waiting for Apple Health" : "nothing logged"
+        }
         guard let goal = model.waterGoalMl else { return "\(NutritionFormat.litres(ml)) litres, no goal" }
         return "\(NutritionFormat.litres(ml)) of \(NutritionFormat.litres(goal)) litres"
     }

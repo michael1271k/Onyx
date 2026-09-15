@@ -964,6 +964,7 @@ public struct CardioLogRow: Codable, FetchableRecord, PersistableRecord, Sendabl
     public var sessionId: String?
     public var inclinePct: Double?
     public var elevationM: Double?
+    public var hkUuid: String?
 
     public enum CodingKeys: String, CodingKey {
         case id
@@ -982,6 +983,7 @@ public struct CardioLogRow: Codable, FetchableRecord, PersistableRecord, Sendabl
         case sessionId = "session_id"
         case inclinePct = "incline_pct"
         case elevationM = "elevation_m"
+        case hkUuid = "hk_uuid"
     }
 
     public init(
@@ -1000,7 +1002,8 @@ public struct CardioLogRow: Codable, FetchableRecord, PersistableRecord, Sendabl
         effort: Double? = nil,
         sessionId: String? = nil,
         inclinePct: Double? = nil,
-        elevationM: Double? = nil
+        elevationM: Double? = nil,
+        hkUuid: String? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -1018,6 +1021,7 @@ public struct CardioLogRow: Codable, FetchableRecord, PersistableRecord, Sendabl
         self.sessionId = sessionId
         self.inclinePct = inclinePct
         self.elevationM = elevationM
+        self.hkUuid = hkUuid
     }
 }
 
@@ -2062,6 +2066,7 @@ extension AppDatabase {
                 t.column("session_id", .text)
                 t.column("incline_pct", .double)
                 t.column("elevation_m", .double)
+                t.column("hk_uuid", .text)
             }
             try db.create(table: "personal_records") { t in
                 t.column("user_id", .text).notNull()

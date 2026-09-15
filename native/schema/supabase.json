@@ -166,7 +166,7 @@
         "id"
       ],
       "window": "date",
-      "cols": "id:uuid,user_id:uuid,date:date,kind:text,distance_m:numeric?,duration_min:numeric?,kcal:numeric?,from_healthkit:bool?,created_at:timestamptz?,active_kcal:numeric?,total_kcal:numeric?,avg_hr:numeric?,effort:numeric?,session_id:uuid?,incline_pct:numeric?,elevation_m:numeric?"
+      "cols": "id:uuid,user_id:uuid,date:date,kind:text,distance_m:numeric?,duration_min:numeric?,kcal:numeric?,from_healthkit:bool?,created_at:timestamptz?,active_kcal:numeric?,total_kcal:numeric?,avg_hr:numeric?,effort:numeric?,session_id:uuid?,incline_pct:numeric?,elevation_m:numeric?,hk_uuid:text?"
     },
     "personal_records": {
       "group": "training",

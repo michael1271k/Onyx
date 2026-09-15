@@ -250,6 +250,7 @@ public struct HealthKitReader: HealthReading {
             .doubleValue(for: .meter())
 
         return WorkoutSample(
+            uuid: workout.uuid,
             start: workout.startDate,
             end: workout.endDate,
             isLifting: liftingTypes.contains(workout.workoutActivityType),

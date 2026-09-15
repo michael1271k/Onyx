@@ -42,14 +42,17 @@ public enum CardioImport {
         public let kind: String
         public let durationMin: Double?
         /// For an IMPORTED row this is the bout's own start — see
-        /// `matchingRow(for:kind:start:durationMin:date:in:)` for why the column
-        /// carries two meanings and how they are told apart.
+        /// `matchingRow(hkUuid:kind:start:durationMin:date:in:)` for why the
+        /// column carries two meanings and how they are told apart.
         public let createdAt: Date?
         public let fromHealthkit: Bool
+        /// `HKWorkout.uuid`, on a row imported after W1. Nil on a hand-typed
+        /// row and on every row imported before the column existed.
+        public let hkUuid: String?
 
         public init(
             id: String, date: String, kind: String, durationMin: Double?,
-            createdAt: Date?, fromHealthkit: Bool
+            createdAt: Date?, fromHealthkit: Bool, hkUuid: String? = nil
         ) {
             self.id = id
             self.date = date
@@ -57,6 +60,7 @@ public enum CardioImport {
             self.durationMin = durationMin
             self.createdAt = createdAt
             self.fromHealthkit = fromHealthkit
+            self.hkUuid = hkUuid
         }
     }
 
@@ -89,18 +93,41 @@ public enum CardioImport {
     /// duplicate every time they type a bout up before Health syncs it. A
     /// `started_at` column retires this whole branch.
     ///
+    /// ── AND ABOVE BOTH OF THEM, THE KEY (W1) ───────────────────────────────
+    /// `HKWorkout.uuid` is the identity Apple already assigns every bout, and
+    /// once a row carries it the question "is this the walk you already have"
+    /// stops being a guess. It is tried FIRST and, when it hits, wins outright:
+    /// a uuid equality cannot be wrong, where both rules below are heuristics
+    /// over a table with no start column.
+    ///
+    /// It is deliberately NOT gated on `kind`. A bout whose activity type this
+    /// build maps differently than the build that imported it is still the same
+    /// physical bout, and re-inserting it under a new kind is exactly the
+    /// duplicate this branch exists to prevent. `date` is not checked either,
+    /// because the caller already scopes `existing` to one day — see
+    /// `ingestCardio`, which now files a bout under the day it STARTED in.
+    ///
     /// Nil `durationMin` on either side never matches: unknown is not equal.
     public static func matchingRow(
+        hkUuid: String? = nil,
         kind: String,
         start: Date,
         durationMin: Double?,
         date: String,
         in existing: [Existing]
     ) -> Existing? {
+        // The key first. Nil never matches nil: a hand-typed row has no uuid
+        // and neither does a pre-migration import, and treating two absences as
+        // an equality would collapse every unkeyed bout on the day into one.
+        if let hkUuid, let keyed = existing.first(where: { $0.hkUuid == hkUuid }) {
+            return keyed
+        }
+
         let sameBout = existing.filter { $0.date == date && $0.kind == kind }
 
-        // The precise rule first: an imported row can be matched on its start,
-        // and the closest one wins so a day of hourly walks maps one-to-one.
+        // Then the precise HEURISTIC: an imported row can be matched on its
+        // start, and the closest one wins so a day of hourly walks maps
+        // one-to-one. This is the branch a pre-migration row still lands in.
         let imported = sameBout
             .filter(\.fromHealthkit)
             .compactMap { row -> (Existing, TimeInterval)? in

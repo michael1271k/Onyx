@@ -87,7 +87,26 @@ public extension HealthSync {
         // `isLifting` is excluded for the same reason the sheet excludes it: a
         // strength session is a `workout_sessions` row with its own sets, and
         // filing it as cardio would double-count its energy against the day.
-        let bouts = found.filter { !$0.isLifting && $0.cardioKind != nil }
+        //
+        // ── AND THE BOUT BELONGS TO THE DAY IT STARTED IN (W1) ───────────────
+        // `reader.workouts` deliberately has no `.strictStartDate`, so a walk
+        // from 23:40 to 00:20 OVERLAPS two days and is returned by both of this
+        // pass's queries. It used to be filed under each of them: two rows, two
+        // dates, one physical walk — the duplicate no same-day rule can see,
+        // and the one the new `(user_id, hk_uuid)` unique index would reject on
+        // push, jamming the row in the outbox forever.
+        //
+        // The window is already computed above, so the day a bout belongs to is
+        // the day its START falls in. That is the same instant `created_at`
+        // already claims for an imported row, so the row and its date now agree.
+        //
+        // ponytail: a bout that started before the two-day window and ran into
+        // it is no longer imported. It was only ever imported under the wrong
+        // date, and `syncCardioBouts` scans two days — a bout that started on
+        // the third is out of scope by the same rule as every other.
+        let bouts = found.filter {
+            !$0.isLifting && $0.cardioKind != nil && $0.start >= start && $0.start < end
+        }
         if bouts.isEmpty { return CardioIngestReport() }
 
         var stored = try database.cardioRows(userId: userId, date: dateISO)
@@ -95,7 +114,15 @@ public extension HealthSync {
 
         for bout in bouts {
             guard let kind = bout.cardioKind else { continue }
+            // LOWERCASED, every time it is rendered. `UUID.uuidString` is
+            // uppercase and Postgres renders a uuid lowercase; SQLite compares
+            // TEXT byte for byte. A key written one way and pulled back the
+            // other stops matching itself, and the duplicate returns — which is
+            // the whole defect, wearing a different hat. `UserIdCasingTests`
+            // greps the tree for exactly this.
+            let key = bout.uuid.uuidString.lowercased()
             let match = CardioImport.matchingRow(
+                hkUuid: key,
                 kind: kind, start: bout.start, durationMin: bout.durationMin,
                 date: dateISO, in: stored.map(CardioImport.Existing.init)
             )
@@ -133,7 +160,10 @@ public extension HealthSync {
                     distanceM: incoming.distanceM, durationMin: incoming.durationMin,
                     fromHealthkit: true, createdAt: bout.start,
                     activeKcal: incoming.activeKcal, totalKcal: incoming.totalKcal,
-                    avgHr: incoming.avgHr, elevationM: incoming.elevationM
+                    avgHr: incoming.avgHr, elevationM: incoming.elevationM,
+                    // The key, from now on. Every later pass matches this row
+                    // outright instead of guessing at its start.
+                    hkUuid: key
                 )
                 try Task.checkCancellation()
                 try database.addCardio(row)
@@ -145,16 +175,32 @@ public extension HealthSync {
             guard let index = stored.firstIndex(where: { $0.id == match.id }) else { continue }
             let before = CardioImport.Fields(stored[index])
             let after = CardioImport.merge(stored: before, incoming: incoming)
+
+            // ── THE ROW THE WINDOW FOUND GETS THE KEY (W1) ──────────────────
+            // A row imported before `hk_uuid` existed, or typed by hand, was
+            // matched by the five-minute window. Stamping the bout's uuid on it
+            // retires that guess for this row forever — the next pass matches it
+            // outright. Only ever onto a BLANK: two bouts can fuzzy-match one
+            // hand-typed row, and letting the second overwrite the first's key
+            // would rewrite the row on every launch for the rest of the day.
+            let adoptsKey = stored[index].hkUuid == nil
+
             // A write that changes nothing is a row version, an outbox item and
             // a push for no reason. Most launches land here.
-            if after == before { continue }
+            if after == before && !adoptsKey { continue }
 
             var row = stored[index]
             row.apply(after)
+            if adoptsKey { row.hkUuid = key }
             try Task.checkCancellation()
             try database.addCardio(row)
             stored[index] = row
-            out.filled += 1
+            // ── AND ADOPTING IT IS NOT NEWS ─────────────────────────────────
+            // `filled` is what the toast says out loud: "a bout you logged
+            // gained its heart rate and ascent". A key nobody can see on a
+            // screen gained nothing a person would recognise, so a pass that
+            // only stamped uuids reports an EMPTY report and puts up no toast.
+            if after != before { out.filled += 1 }
         }
 
         return out
@@ -197,7 +243,8 @@ extension CardioImport.Existing {
     init(_ row: CardioLogRow) {
         self.init(
             id: row.id, date: row.date, kind: row.kind, durationMin: row.durationMin,
-            createdAt: row.createdAt, fromHealthkit: row.fromHealthkit ?? false
+            createdAt: row.createdAt, fromHealthkit: row.fromHealthkit ?? false,
+            hkUuid: row.hkUuid
         )
     }
 }

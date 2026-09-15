@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import OnyxCore
 import Testing
 @testable import OnyxData
 
@@ -64,6 +65,64 @@ struct DayEditingTests {
         #expect(day?.waterMl == 2750)
         #expect(try deleteRefs(db) == [RowDeleteRef(table: "water_intake", key: ["id": "hk-1"])])
 
+        try db.clearWaterOverride(userId: user, date: date)
+        #expect(try db.writer.read { try WaterIntakeRow.fetchCount($0) } == 0)
+        #expect(try db.writer.read { try DailyLogRow.fetchOne($0) }?.waterMl == nil)
+        let dayRef = try db.pendingOutbox()
+            .filter { $0.kind == SyncKind.rowUpsert }
+            .map { try OnyxJSON.decoder.decode(RowRef.self, from: $0.payload) }
+            .first { $0.table == "daily_logs" }
+        #expect(dayRef?.nulls == ["water_ml"])
+    }
+
+    @Test("clearing the override keeps the glasses and Apple's own row")
+    func clearingKeepsWhatWasMeasured() throws {
+        // ── THE OTHER HALF OF `— / 3.0 L` (W1) ──────────────────────────────
+        // This used to delete the WHOLE ledger and nil `daily_logs.water_ml`,
+        // so a day handed back to Apple Health read as untracked until the next
+        // successful ingest — and `DailyLogIngest` returns at
+        // `guard !payload.isEmpty` when HealthKit has nothing to say, so on a
+        // phone where the water read is denied "until then" is never.
+        //
+        // The one-way door is the `manual-water-` sentinel. That is all this
+        // button has to open.
+        let db = try store()
+        try db.writer.write { conn in
+            var synced = WaterIntakeRow(
+                id: "hk-1", userId: user, hkUuid: "hk-uuid-1", loggedAt: Date(),
+                date: date, amountMl: 500, createdAt: Date()
+            )
+            try synced.save(conn)
+        }
+        try db.addWaterGlass(userId: user, date: date, ml: 250)
+        try db.writer.write { conn in
+            var manual = WaterIntakeRow(
+                id: "man-1", userId: user, hkUuid: ManualEntry.waterSentinel(date),
+                loggedAt: Date(), date: date, amountMl: 2000, createdAt: Date()
+            )
+            try manual.save(conn)
+        }
+
+        try db.clearWaterOverride(userId: user, date: date)
+
+        let left = try db.writer.read { try WaterIntakeRow.order(Column("id")).fetchAll($0) }
+        #expect(left.map(\.id) == ["hk-1"] || left.map(\.amountMl).reduce(0, +) == 750,
+                "Apple's row and the glass survive: \(left.map(\.id))")
+        #expect(left.count == 2)
+        // And the projection is re-derived from what is left, by the rule
+        // `WaterTruth` reads it back with — so the two stores cannot disagree.
+        let day = try db.writer.read { try DailyLogRow.fetchOne($0) }
+        #expect(day?.waterMl == 750)
+        #expect(WaterTruth.ml(log: day?.waterMl, ledger: left.map(\.amountMl)) == 750)
+    }
+
+    @Test("clearing the last thing on the day still clears the column, on both sides")
+    func clearingAnEmptyDayStillNils() throws {
+        // The override was the only water there was, so nil IS the answer — and
+        // `water_ml` has to be NAMED in `clearing` or the server's copy is
+        // merged over rather than cleared.
+        let db = try store()
+        try db.setWaterOverride(userId: user, date: date, ml: 2000)
         try db.clearWaterOverride(userId: user, date: date)
         #expect(try db.writer.read { try WaterIntakeRow.fetchCount($0) } == 0)
         #expect(try db.writer.read { try DailyLogRow.fetchOne($0) }?.waterMl == nil)

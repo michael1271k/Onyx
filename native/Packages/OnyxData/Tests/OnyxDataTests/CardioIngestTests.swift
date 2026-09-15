@@ -39,10 +39,12 @@ struct CardioIngestTests {
     /// A bout on `today` starting at `hour`, `minutes` long.
     private func bout(
         hour: Int, minutes: Double, kind: String = CardioImport.walk,
+        uuid: UUID = UUID(),
         distanceM: Double? = 4200, activeKcal: Double? = 210, avgHr: Double? = 112, elevationM: Double? = 86
     ) -> WorkoutSample {
         let start = calendar.date(from: DateComponents(year: 2026, month: 9, day: 4, hour: hour))!
         return WorkoutSample(
+            uuid: uuid,
             start: start, end: start.addingTimeInterval(minutes * 60), isLifting: false,
             cardioKind: kind, distanceM: distanceM, activeKcal: activeKcal,
             avgHr: avgHr, elevationM: elevationM
@@ -206,6 +208,124 @@ struct CardioIngestTests {
         #expect(try rows(db).count == 2)
     }
 
+    // MARK: - The key (W1)
+
+    @Test("the same HKWorkout ingested five times is one row")
+    func theKeyEndsTheDuplicate() async throws {
+        let db = try store()
+        let id = UUID()
+        // Five passes over a bout whose `created_at` DID NOT SURVIVE. This is
+        // the shape that produced 23 copies of one walk: the precise branch
+        // skips a row with no start, the fuzzy branch only looks at hand-typed
+        // rows, so before the key every pass inserted.
+        for pass in 0..<5 {
+            let report = try await ingest(db, Wrist(bouts: [bout(hour: 7, minutes: 50, uuid: id)]))
+            #expect(report.inserted == (pass == 0 ? 1 : 0))
+            // And the start is wiped after each pass, so no later pass can be
+            // rescued by the window.
+            try await db.writer.write { conn in
+                try conn.execute(sql: "UPDATE cardio_logs SET created_at = NULL")
+            }
+        }
+        #expect(try rows(db).count == 1)
+    }
+
+    @Test("a pre-migration row matches by window and gains the key")
+    func adoptsTheKey() async throws {
+        let db = try store()
+        // Imported before `hk_uuid` existed: right provenance, right start, no
+        // key. The window is what finds it, and finding it is what retires the
+        // window for this row.
+        try db.addCardio(CardioLogRow(
+            id: "c1", userId: user, date: today, kind: CardioImport.walk,
+            distanceM: 4200, durationMin: 50, kcal: 210, fromHealthkit: true,
+            createdAt: calendar.date(from: DateComponents(year: 2026, month: 9, day: 4, hour: 7)),
+            activeKcal: 210, totalKcal: 270, avgHr: 112, elevationM: 86
+        ))
+
+        let id = UUID()
+        let report = try await ingest(db, Wrist(bouts: [bout(hour: 7, minutes: 50, uuid: id)]))
+        // Nothing INSERTED and nothing FILLED: Health could add no figure this
+        // row did not already have, and stamping a key nobody can see on a
+        // screen is not news the toast may claim.
+        #expect(report.isEmpty)
+
+        let row = try #require(rows(db).first)
+        #expect(row.id == "c1")
+        #expect(row.hkUuid == id.uuidString.lowercased())
+    }
+
+    @Test("a hand-typed bout three minutes off still matches by window, and is not re-flagged")
+    func handTypedStillMatchesByWindow() async throws {
+        let db = try store()
+        // Typed at 21:00 for a walk done at 07:00 — `created_at` on this row is
+        // an insertion instant, so only the fuzzy duration rule can see it.
+        // Three minutes of difference in the duration, well inside the window.
+        try db.addCardio(CardioLogRow(
+            id: "c1", userId: user, date: today, kind: CardioImport.walk,
+            distanceM: 5000, durationMin: 47, kcal: 300,
+            createdAt: calendar.date(from: DateComponents(year: 2026, month: 9, day: 4, hour: 21)),
+            activeKcal: 300
+        ))
+
+        let id = UUID()
+        let report = try await ingest(db, Wrist(bouts: [bout(hour: 7, minutes: 50, uuid: id)]))
+        #expect(report == CardioIngestReport(inserted: 0, filled: 1))
+
+        let row = try #require(rows(db).first)
+        #expect(row.id == "c1")
+        // The typed figures stand and the provenance is untouched — the row is
+        // still one a person wrote, and the export must keep printing 21:00.
+        #expect(row.distanceM == 5000)
+        #expect(row.durationMin == 47)
+        #expect(row.fromHealthkit != true)
+        // But it carries the key now, so the next pass matches it outright.
+        #expect(row.hkUuid == id.uuidString.lowercased())
+        #expect(try await ingest(db, Wrist(bouts: [bout(hour: 7, minutes: 50, uuid: id)])).isEmpty)
+        #expect(try rows(db).count == 1)
+    }
+
+    @Test("a second bout never steals a key the first one stamped")
+    func theKeyIsStampedOnce() async throws {
+        let db = try store()
+        // One hand-typed 50-minute walk and TWO Health bouts of the same
+        // length. Both fuzzy-match the same row; if the second overwrote the
+        // first's key the row would be rewritten — and toasted — on every
+        // launch for the rest of the day.
+        try db.addCardio(CardioLogRow(
+            id: "c1", userId: user, date: today, kind: CardioImport.walk,
+            distanceM: 5000, durationMin: 50, kcal: 300,
+            createdAt: calendar.date(from: DateComponents(year: 2026, month: 9, day: 4, hour: 21)),
+            activeKcal: 300, totalKcal: 400, avgHr: 130, elevationM: 40
+        ))
+        let first = UUID()
+        let reader = Wrist(bouts: [
+            bout(hour: 7, minutes: 50, uuid: first),
+            bout(hour: 17, minutes: 50, uuid: UUID()),
+        ])
+        _ = try await ingest(db, reader)
+        let keyed = try rows(db).first { $0.id == "c1" }
+        #expect(keyed?.hkUuid == first.uuidString.lowercased())
+        // And a second pass writes nothing at all.
+        #expect(try await ingest(db, reader).isEmpty)
+    }
+
+    @Test("a bout that started on the previous day is not filed under this one")
+    func theDayIsTheDayItStartedIn() async throws {
+        let db = try store()
+        // 23:40 on the 3rd, running to 00:20 on the 4th. `reader.workouts` has
+        // no `.strictStartDate`, so this bout is returned by BOTH days' queries
+        // — and used to be inserted under both, two rows for one walk, on two
+        // dates no same-day rule can compare.
+        let start = calendar.date(from: DateComponents(year: 2026, month: 9, day: 3, hour: 23, minute: 40))!
+        let overnight = WorkoutSample(
+            uuid: UUID(), start: start, end: start.addingTimeInterval(40 * 60),
+            isLifting: false, cardioKind: CardioImport.walk, distanceM: 3000, activeKcal: 150
+        )
+        #expect(try await ingest(db, Wrist(bouts: [overnight])).isEmpty)
+        #expect(try rows(db).isEmpty)
+    }
+
     // MARK: - The store being unavailable
 
     @Test("no Health store is an empty report, never a throw")
@@ -264,5 +384,117 @@ struct CardioMergeTests {
             incoming: CardioImport.Fields(elevationM: 86)
         )
         #expect(merged.elevationM == 0)
+    }
+}
+
+@Suite("One physical bout is one row: the v27 collapse")
+struct CardioDuplicateSweepTests {
+
+    private let user = "u1"
+    private let day = "2026-09-04"
+    private let start = Date(timeIntervalSince1970: 1_788_508_800)
+
+    private func row(
+        _ id: String, kind: String = CardioImport.walk, createdAt: Date?,
+        durationMin: Double? = 50, distanceM: Double? = 4200,
+        avgHr: Double? = nil, totalKcal: Double? = nil, userId: String = "u1"
+    ) -> CardioLogRow {
+        CardioLogRow(
+            id: id, userId: userId, date: "2026-09-04", kind: kind,
+            distanceM: distanceM, durationMin: durationMin, fromHealthkit: true,
+            createdAt: createdAt, totalKcal: totalKcal, avgHr: avgHr
+        )
+    }
+
+    private func sweep(_ rows: [CardioLogRow]) throws -> AppDatabase {
+        let db = try AppDatabase.inMemory(deviceId: "sweep")
+        try db.writer.write { conn in
+            for var r in rows { try r.insert(conn) }
+            try AppDatabase.collapseCardioDuplicates(conn)
+        }
+        return db
+    }
+
+    private func ids(_ db: AppDatabase) throws -> [String] {
+        try db.writer.read { try CardioLogRow.order(Column("id")).fetchAll($0).map(\.id) }
+    }
+
+    @Test("twenty-three copies of one walk collapse to one")
+    func collapsesTheExportAnomaly() throws {
+        // The shape `WeeklyExportBuilder` found on a Friday and has deduped at
+        // render time ever since. Identical on every field the key reads.
+        let db = try sweep((0..<23).map { row("c\($0)", createdAt: start) })
+        #expect(try ids(db) == ["c0"])
+    }
+
+    @Test("the richest row survives, not the first")
+    func keepsTheMostMeasured() throws {
+        // The duplicates are NOT identical: an early import holds the heart
+        // rate, a later pass gained a total energy. Keeping the emptiest would
+        // lose a measurement nothing can recover.
+        let db = try sweep([
+            row("a", createdAt: start),
+            row("b", createdAt: start, avgHr: 112, totalKcal: 270),
+            row("c", createdAt: start, avgHr: 112),
+        ])
+        #expect(try ids(db) == ["b"])
+    }
+
+    @Test("a tie breaks on the lowest id — the same way the SQL file breaks it")
+    func tiesBreakDeterministically() throws {
+        // `docs/sql/w1-hk-uuid.sql` runs the identical collapse server-side for
+        // rows no device will open again. Two rules that disagree about the
+        // survivor delete each other's keeper.
+        let db = try sweep([
+            row("b2", createdAt: start, avgHr: 112),
+            row("a1", createdAt: start, avgHr: 112),
+        ])
+        #expect(try ids(db) == ["a1"])
+    }
+
+    @Test("the losers are deleted THROUGH the outbox, or they come straight back")
+    func queuesTheServerDeletes() throws {
+        // `cardio_logs` pulls on a date window. A row removed locally and left
+        // on the server returns on the next sync, and the migration looks like
+        // it never ran.
+        let db = try sweep([row("a", createdAt: start), row("b", createdAt: start)])
+        let deletes = try db.pendingOutbox()
+            .filter { $0.kind == SyncKind.rowDelete }
+            .map { try OnyxJSON.decoder.decode(RowDeleteRef.self, from: $0.payload) }
+        #expect(deletes == [RowDeleteRef(table: "cardio_logs", key: ["id": "b"])])
+    }
+
+    @Test("a row with no start is never collapsed")
+    func nullStartsAreLeftAlone() throws {
+        // `created_at` is nullable with no default, and a key built from three
+        // absences is the same key for every such row — a Monday cycle and a
+        // Friday swim would fold into one another. The export skips them for
+        // the same reason and says so in its own comment.
+        let db = try sweep([
+            row("a", kind: CardioImport.cycling, createdAt: nil, durationMin: nil, distanceM: nil),
+            row("b", kind: CardioImport.cycling, createdAt: nil, durationMin: nil, distanceM: nil),
+        ])
+        #expect(try ids(db) == ["a", "b"])
+    }
+
+    @Test("two genuinely different bouts survive, and two users never collide")
+    func keepsWhatIsNotADuplicate() throws {
+        let db = try sweep([
+            row("a", createdAt: start),
+            row("b", createdAt: start.addingTimeInterval(3600)),
+            row("c", kind: CardioImport.run, createdAt: start),
+            row("d", createdAt: start, distanceM: 9000),
+            // Same bout key, different account. One store holds one user today,
+            // but the key carries `user_id` so it cannot start mattering later.
+            row("e", createdAt: start, userId: "u2"),
+        ])
+        #expect(try ids(db) == ["a", "b", "c", "d", "e"])
+    }
+
+    @Test("running it twice changes nothing the second time")
+    func isIdempotent() throws {
+        let db = try sweep([row("a", createdAt: start), row("b", createdAt: start)])
+        try db.writer.write { try AppDatabase.collapseCardioDuplicates($0) }
+        #expect(try ids(db) == ["a"])
     }
 }

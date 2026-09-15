@@ -91,6 +91,10 @@ struct CardioLogSheet: View {
     /// `from_healthkit` and `created_at` both read (`CardioImport` states why
     /// `created_at` doubles as the start on an imported row).
     @State private var importedStart: Date?
+    /// `HKWorkout.uuid` of the bout `take` filled the form from, so Save can
+    /// stamp the key on the row it writes. Cleared with the rest of the import
+    /// state when nothing was taken.
+    @State private var importedUuid: String?
 
     /// Nothing from Health, and nothing typed yet.
     private var isEmpty: Bool { didRead && available.isEmpty && !canSave }
@@ -298,6 +302,9 @@ struct CardioLogSheet: View {
         elevation = bout.elevationM.map { $0.rounded() }
         taken = bout.start
         importedStart = bout.start
+        // Lowercased at the render: `UUID.uuidString` is uppercase, Postgres
+        // renders a uuid lowercase, and SQLite compares TEXT byte for byte.
+        importedUuid = bout.uuid.uuidString.lowercased()
 
         // Resting is additive to active and never a replacement: a nil read
         // leaves total nil rather than quietly equal to active, because "we
@@ -329,6 +336,7 @@ struct CardioLogSheet: View {
             .filter { $0.cardioKind != nil }
             .filter { bout in
                 CardioImport.matchingRow(
+                    hkUuid: bout.uuid.uuidString.lowercased(),
                     kind: bout.cardioKind ?? "", start: bout.start,
                     durationMin: bout.durationMin, date: date, in: rows
                 ) == nil
@@ -348,6 +356,7 @@ struct CardioLogSheet: View {
         // can see what is already on it.
         let match = start.flatMap {
             CardioImport.matchingRow(
+                hkUuid: importedUuid,
                 kind: kind, start: $0, durationMin: minutes, date: date, in: rows
             )
         }
@@ -362,7 +371,14 @@ struct CardioLogSheet: View {
             // strictly the better value. `CardioImport` states the whole trick.
             fromHealthkit: start != nil, createdAt: start ?? Date(),
             activeKcal: kcal, totalKcal: totalKcal, avgHr: avgHr,
-            effort: effort.map(Double.init), inclinePct: incline, elevationM: elevation
+            effort: effort.map(Double.init), inclinePct: incline, elevationM: elevation,
+            // Only when this form was filled from a bout. A hand-typed row must
+            // stay unkeyed: `hk_uuid` means "Apple's bout number", and a row
+            // that carries one the automatic ingest never wrote would make the
+            // exact-match branch answer for a bout it has not seen. It is also
+            // the column the partial unique index is built on, and two typed
+            // rows sharing a borrowed key would collide on push.
+            hkUuid: match?.hkUuid ?? importedUuid
         )
         if onSave(row) { dismiss() }
     }
@@ -373,7 +389,8 @@ extension CardioImport.Existing {
     init(_ row: CardioLogRow) {
         self.init(
             id: row.id, date: row.date, kind: row.kind, durationMin: row.durationMin,
-            createdAt: row.createdAt, fromHealthkit: row.fromHealthkit ?? false
+            createdAt: row.createdAt, fromHealthkit: row.fromHealthkit ?? false,
+            hkUuid: row.hkUuid
         )
     }
 }
