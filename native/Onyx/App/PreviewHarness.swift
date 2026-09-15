@@ -359,10 +359,13 @@ enum PreviewHarness {
         // it. The flag is published directly rather than by starting a session,
         // because the shot is of the REFUSAL, not of the workout.
         case "appearance", "appearance-locked":
-            let themed = AppEnvironment.preview
-            let _ = themed.publishSessionLive(screen.hasSuffix("locked"))
             NavigationStack { AppearanceView() }
-                .environment(themed)
+                .environment(AppEnvironment.preview)
+                // In `.task` and not inline: `AppEnvironment.preview` is a
+                // shared observable, and writing it while the ViewBuilder runs
+                // is a mutation during a view update — of the one property the
+                // screen below reads.
+                .task { AppEnvironment.preview.publishSessionLive(screen.hasSuffix("locked")) }
         case "sync-status":
             NavigationStack { SyncStatusView(seeded: .preview) }.environment(AppEnvironment.preview)
         // The same screen with every fault it can name — a table behind the

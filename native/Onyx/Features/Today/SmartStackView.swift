@@ -289,11 +289,14 @@ struct SmartStackView: View {
         .onChange(of: held) { _, on in
             if on {
                 paging = slot.id
-                // Cleared on the way IN, never on the way out. A drag that is
-                // cancelled leaves `origin` behind, and clearing it on the way
-                // out would race `onEnded`, which still needs it — so the next
-                // drag discards it instead.
-                origin = nil
+                // `origin` used to be cleared HERE, on the way in, to discard
+                // one a cancelled drag had left behind. It cannot be: this is a
+                // view update, so it runs one pass AFTER `onChanged` has already
+                // set the origin for this gesture — making the SECOND event past
+                // the threshold the takeover point and throwing away a frame of
+                // travel (~16 pt at a fast flick) from both the offset and the
+                // commit distance. `startedAt` now owns that job, inside
+                // `onChanged`, where the touch is identified rather than guessed.
             } else {
                 if paging == slot.id { paging = nil }
                 if drag != 0 {
@@ -380,6 +383,22 @@ struct SmartStackView: View {
             }
             .onEnded { value in
                 defer { origin = nil; startedAt = nil }
+                // ── THE GESTURE ONLY ENDS IF IT EVER BEGAN ──────────────────
+                // `onChanged` refuses a drag the axis test does not claim, and
+                // `origin` is set there and nowhere else — so a nil `origin` is
+                // exactly "this drag was never the stack's". Without this, a
+                // refused drag fell through to `step` measuring from ZERO and
+                // paged the tile with no preceding motion at all: 70 pt across
+                // and 45 pt down on a small tile — the shape `TodayModelTests`
+                // asserts is NOT the stack's — draws nothing, then flips a face
+                // on release. `hold` widened that window (a quarter of a face,
+                // no throw required) and the lower `takeover` lets more drags
+                // reach here, so it has to be closed at the top.
+                //
+                // It also stops a refused drag touching `touchedAt`, which
+                // would hold the auto-rotation off for a period the user never
+                // asked for.
+                guard origin != nil else { return }
                 // `predictedEndTranslation` is the system's own momentum
                 // projection — the same rule the logger's hero uses
                 // (`LoggerHero.swift:568`) rather than a deceleration constant

@@ -31,6 +31,7 @@ import OnyxUI
 /// deck cursor would be, mid-session. The section says so and refuses.
 struct AppearanceView: View {
     @Environment(AppEnvironment.self) private var environment
+    @Environment(\.scenePhase) private var scenePhase
 
     /// What the controls edit. Seeded from the live theme, never written back
     /// to it until `commit` — see the note above.
@@ -84,6 +85,10 @@ struct AppearanceView: View {
         .navigationTitle("Appearance")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear(perform: commit)
+        // iOS never calls `onDisappear` on a process it jettisons, so a pick
+        // made and then backgrounded would be lost without this. `commit` is
+        // guarded and idempotent, so the two paths cannot double-write.
+        .onChange(of: scenePhase) { _, phase in if phase != .active { commit() } }
     }
 
     // MARK: - The presets
@@ -119,6 +124,11 @@ struct AppearanceView: View {
         }
         .padding(.vertical, OnyxSpace.xs)
         .allowsHitTesting(!locked)
+        // `allowsHitTesting` stops a finger, not the rotor: without this a
+        // locked screen would still let VoiceOver activate a chip and move the
+        // selection ring to a theme that is never written — the one thing a
+        // locked Appearance screen has to get right.
+        .accessibilityRespondsToUserInteraction(!locked)
     }
 
     /// One preset.
@@ -243,7 +253,11 @@ struct AppearanceView: View {
     /// which is why nothing here reads the draft back afterwards: the view is
     /// already on its way out and the next appearance seeds from `current`.
     private func commit() {
-        guard !locked, draft != OnyxTheme.current.spec else { return }
+        // `normalised()` on BOTH sides: `current.spec` is always normalised, so
+        // comparing a raw draft against it says "changed" for any pick the
+        // contrast guard moved — and then spends a widget reload and a watch
+        // push writing a blob that is byte-identical to the one already there.
+        guard !locked, draft.normalised() != OnyxTheme.current.spec else { return }
         OnyxTheme.save(draft, to: UserDefaults(suiteName: AppDatabase.appGroupID) ?? .standard)
         environment.themeDidChange()
     }
