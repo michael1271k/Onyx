@@ -191,14 +191,42 @@ final class DayModel {
 
     // MARK: - The fortnight
 
+    /// The 49 days behind each overnight reading, oldest → newest, ONE SLOT
+    /// PER DATE — a day with no row is a nil in place, never a gap.
+    ///
+    /// ── WHY DENSE, AND WHY 49 ───────────────────────────────────────────────
+    /// `Readiness.zSignal` splits its input at `count − 7`: the last seven
+    /// entries are the rolling window and everything before them the baseline.
+    /// A series built from the rows that HAPPEN to exist would slide that split
+    /// by however many days the watch missed, so a fortnight off the wrist
+    /// would quietly compare last week against the week before it. 49 is
+    /// `Readiness.constants.historyDays` — the 7-day roll plus its 42-day
+    /// baseline — and it is the ONLY thing this window reads over that range.
+    /// Every delta on the screen is still the fortnight (`baselineDays`).
+    struct VitalSeries: Sendable, Equatable {
+        var hrv: [Double?] = []
+        var restingBpm: [Double?] = []
+        var wristTemp: [Double?] = []
+        var bloodOxygen: [Double?] = []
+        var respiratory: [Double?] = []
+        /// `daily_logs.sleep_minutes`, not the `sleep_sessions` row: the night
+        /// the hero cell DRAWS is the session, and the night it is RANKED by is
+        /// the same series every other vital is ranked by.
+        var sleepMinutes: [Double?] = []
+    }
+
     /// Everything Pulse needs that is a WINDOW rather than a day: the vitals
     /// against their own fortnight baseline, the activity trends behind them,
-    /// and the day's stored score.
+    /// the series the hero rule ranks them by, and the day's stored score.
     struct Window: Sendable, Equatable {
         var vitals = OnyxSnapshot.Vitals()
         var steps: VitalBlock?
         var standHours: VitalBlock?
         var activeKcal: VitalBlock?
+        /// What the hero rule reads. Folded in `VitalsGrid.hero(_:)`, which is
+        /// where `VitalSpec` lives — the model does not import the design
+        /// system, and the tie-break is that file's list order.
+        var series = VitalSeries()
         var score: DailyScoreRow?
         /// The day's FINISHED sessions, newest first. Here rather than on a
         /// stream of its own because it moves for exactly the same reasons the
@@ -290,12 +318,19 @@ final class DayModel {
     /// track boundary for a `dailyLogsStream(from:to:)`, this goes through the
     /// public `read` door on the same schedule the streams fire on: once per
     /// date change, and again whenever the day's own row yields, which is what
-    /// a HealthKit sync or a manual edit produces. Fourteen indexed rows.
+    /// a HealthKit sync or a manual edit produces. Forty-nine indexed rows.
+    ///
+    /// ── WHY IT READS 49 DAYS AND STILL SHOWS A FORTNIGHT (W2) ───────────────
+    /// The hero rule needs `Readiness.zSignal`, which is a 7-day roll against
+    /// the 42 days before it. The DELTAS are unchanged: `block(_:)` is handed
+    /// the last fourteen rows and nothing else, because Apple's own baseline is
+    /// a fortnight and the chip here and the chip on the Home Screen have to be
+    /// the same number or one of them is lying.
     // ponytail: a `ValueObservation` over the range would repaint without the
     // nudge below; it belongs in OnyxData, which this wave may not edit.
     func loadWindow() {
         let to = date
-        let from = ISODate.addDays(to, -(Self.baselineDays - 1)) ?? to
+        let from = ISODate.addDays(to, -(Readiness.constants.historyDays - 1)) ?? to
         let database = database
         let userId = userId
         Task { [weak self] in
@@ -395,11 +430,27 @@ final class DayModel {
                 )
             }
 
+        // The fortnight, out of the 49 days the hero rule needs. `>=` on ISO
+        // strings is the same comparison the query made.
+        let baselineFrom = ISODate.addDays(to, -(baselineDays - 1)) ?? to
+        let fortnight = logs.filter { $0.date >= baselineFrom }
+
         func block(_ pick: (DailyLogRow) -> Double?) -> VitalBlock {
             WidgetDerive.vitalBlock(
-                logs.map { DatedValue(date: $0.date, value: pick($0)) },
+                fortnight.map { DatedValue(date: $0.date, value: pick($0)) },
                 todayISO: to, trendLimit: trendDays
             )
+        }
+
+        // One slot per date, oldest → newest. `uniquingKeysWith` cannot fire —
+        // `daily_logs` is unique on (user, date) — and stating an answer is
+        // cheaper than a crash if that ever stops being true.
+        let byDate = Dictionary(logs.map { ($0.date, $0) }, uniquingKeysWith: { first, _ in first })
+        let dates = (0..<Readiness.constants.historyDays)
+            .reversed()
+            .map { ISODate.addDays(to, -$0) ?? to }
+        func series(_ pick: @escaping (DailyLogRow) -> Double?) -> [Double?] {
+            dates.map { byDate[$0].flatMap(pick) }
         }
         func vital(_ pick: (DailyLogRow) -> Double?) -> OnyxSnapshot.Vital {
             let b = block(pick)
@@ -433,6 +484,14 @@ final class DayModel {
             steps: block { $0.steps.map(Double.init) },
             standHours: block { $0.standHours.map(Double.init) },
             activeKcal: block { $0.activeEnergy },
+            series: VitalSeries(
+                hrv: series { $0.hrvMs },
+                restingBpm: series { $0.avgRestHeartRate.map(Double.init) },
+                wristTemp: series { $0.wristTempDelta },
+                bloodOxygen: series { $0.bloodOxygen },
+                respiratory: series { $0.respiratoryRate },
+                sleepMinutes: series { $0.sleepMinutes.map(Double.init) }
+            ),
             score: score,
             sessions: sessions,
             stress: stress,

@@ -29,31 +29,20 @@ struct PulseTabView: View {
     /// off-screen by definition, and `simctl` can film a simulator but cannot
     /// swipe one.
     var startAtPage: PulsePage?
-    /// Harness only: open with the vitals grid down. It is a disclosure, so its
-    /// open state exists only after a tap nobody can make in a screenshot.
-    var startVitalsOpen = false
-
     @State private var resolved: DayModel?
 
     init() {}
 
-    init(seeded: DayModel, startAtRows: Bool = false,
-         startAtPage: PulsePage? = nil, startVitalsOpen: Bool = false) {
+    init(seeded: DayModel, startAtRows: Bool = false, startAtPage: PulsePage? = nil) {
         self.seeded = seeded
         self.startAtRows = startAtRows
         self.startAtPage = startAtPage
-        self.startVitalsOpen = startVitalsOpen
     }
 
     var body: some View {
         Group {
             if let resolved {
-                DayScreen(
-                    model: resolved,
-                    startAtRows: startAtRows,
-                    startAtPage: startAtPage,
-                    startVitalsOpen: startVitalsOpen
-                )
+                DayScreen(model: resolved, startAtRows: startAtRows, startAtPage: startAtPage)
             } else {
                 ProgressView().controlSize(.large)
             }
@@ -76,7 +65,6 @@ struct DayScreen: View {
     /// Harness only — see `PulseTabView.startAtRows`.
     var startAtRows = false
     var startAtPage: PulsePage?
-    var startVitalsOpen = false
 
     @State private var showCalendar = false
     @State private var ratingFatigue = false
@@ -97,8 +85,6 @@ struct DayScreen: View {
     /// all. Optional because that is the only shape the modifier takes, and
     /// SwiftUI writes nil back while a scroll is between pages.
     @State private var page: PulsePage? = .fatigue
-    /// Whether the vitals grid is open under the chip row.
-    @State private var vitalsExpanded = false
     /// The session the Workout summary card was tapped on. `item:` rather than
     /// `isPresented:` because a day can hold two sessions and each card has to
     /// push its own.
@@ -176,13 +162,13 @@ struct DayScreen: View {
 
             NowStripPulse(model: model, date: title).plainRow()
 
-            // ── THE MEASUREMENTS, COMPRESSED TO ONE LINE ────────────────────
-            // The night's tile and the nine-cell vitals grid were 360 pt of
-            // permanently-open reference directly under the strip — the two
-            // things on this screen that something ELSE measured, sitting above
-            // the three it asks you. A chip row says the same readings in 44 pt
-            // and the grid is one tap behind it (`VitalsChipRow`).
-            VitalsChipRow(model: model, expanded: $vitalsExpanded) { editingSleep = true }
+            // ── THE MEASUREMENTS: ONE LEAD AND EIGHT SIDEKICKS (W2) ─────────
+            // These nine were a horizontal scroller of 104 pt chips with the
+            // grid behind a disclosure — ~1,010 pt of content in a 375 pt
+            // window, eight of the nine reachable only by swiping. Now the
+            // night leads at full width and the eight sit under it, and an
+            // alarming vital takes the lead from the night (`VitalsSection`).
+            VitalsSection(model: model) { editingSleep = true }
 
             // ── AND THEN THE THREE IT ASKS YOU ──────────────────────────────
             // Fatigue, the stress log and soreness were three 44 pt rows at the
@@ -375,7 +361,7 @@ struct DayScreen: View {
             sessionHeaders = loaded
         }
         .task {
-            guard startAtPage != nil || startVitalsOpen || startAtRows else { return }
+            guard startAtPage != nil || startAtRows else { return }
             // ── THE WAIT IS NOT OPTIONAL, FOR EITHER OPENING ────────────────
             // The same 400 ms the ledger shot needs (Wave 2.8): a `List` picks
             // its anchor at first layout, which happens while it is still
@@ -404,7 +390,6 @@ struct DayScreen: View {
                 try? await Task.sleep(for: .milliseconds(300))
                 page = startAtPage
             }
-            if startVitalsOpen { vitalsExpanded = true }
             guard startAtRows else { return }
             scroller.scrollTo(Self.rowsAnchor, anchor: .top)
         }
@@ -444,7 +429,8 @@ struct DayScreen: View {
 
 // MARK: - Now strip
 
-/// Score, battery and the day's fuel in one line.
+/// The day, the score, the battery and what has been eaten — the four facts a
+/// recovery screen opens with, in three lines.
 ///
 /// ── WHY THE MACROS ARE NOT DRAWN HERE ───────────────────────────────────────
 /// §5.7 is explicit: no macro gauges on Pulse. Three gauges of protein, carbs
@@ -458,7 +444,6 @@ private struct NowStripPulse: View {
     let date: String
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.dynamicTypeSize) private var typeSize
 
     private var battery: Int? { model.battery }
 
@@ -478,64 +463,81 @@ private struct NowStripPulse: View {
         .accessibilityHidden(true)
     }
 
-    /// A numeral over its name. Two of these — the day's score and the battery
-    /// — because they answer different questions and the ring is a shape, not a
-    /// reading you can put a decimal on.
-    private func reading(_ value: Int?, _ label: String, tint: Color) -> some View {
+    /// A numeral over its name.
+    ///
+    /// ── ONE `.hero` PER SCREEN, AND IT IS THE SCORE (W2) ────────────────────
+    /// This drew the score AND the battery at `.hero`, which is the one thing
+    /// `OnyxType.hero` forbids in as many words: "at most one per screen — a
+    /// second hero is two screens in a trench coat". Two 28 pt numerals plus a
+    /// ring left the fuel sentence a right-aligned tail in whatever width was
+    /// left, breaking to two lines and dropping the water figure to an ellipsis.
+    ///
+    /// The score is the figure this screen is ABOUT and keeps the hero. The
+    /// battery is a gauge with a number beside it — the ring is the reading and
+    /// the numeral is its label — so it is `.display`, and it stays legible
+    /// beside its own ring rather than competing with the score across the tile.
+    private func reading(_ value: Int?, _ label: String, tint: Color, role: OnyxType) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(value.map { "\($0)" } ?? "—")
-                .onyxHero().onyxNumeral()
-                .contentTransition(.numericText())
+                .onyxType(role).onyxNumeral()
                 .foregroundStyle(tint)
                 .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Text(label).onyxMicro()
         }
     }
 
     private var scoreReading: some View {
-        reading(model.score, "SCORE", tint: Color.onyx.textPrimary)
+        reading(model.score, "SCORE", tint: Color.onyx.textPrimary, role: .hero)
     }
 
-    private var batteryReading: some View {
-        reading(battery, "BATTERY", tint: Color.onyx.battery(battery))
+    /// The ring and its number, as one thing. They are a single reading drawn
+    /// twice — an arc for the shape of it and a numeral for the value — and
+    /// anything between them reads as two.
+    private var batteryPair: some View {
+        HStack(spacing: OnyxSpace.s) {
+            ring
+            reading(battery, "BATTERY", tint: Color.onyx.battery(battery), role: .display)
+        }
     }
 
+    /// ── THE FUEL LINE GETS ITS OWN LINE (W2) ────────────────────────────────
+    /// It was `Spacer()` then a right-aligned sentence in the gutter beside two
+    /// hero numerals: two lines of 13 pt type squeezed into ~120 pt, centred on
+    /// nothing, and the first thing to truncate at any size above default. It is
+    /// a SENTENCE — it reads left to right from the same margin as the date
+    /// above it — and on its own line it has the tile's whole width, which is
+    /// the width it needed all along.
     @ViewBuilder
     private var fuel: some View {
         Text(model.fuelLine ?? "Nothing logged yet")
             .onyxType(.caption).onyxNumeral()
             .foregroundStyle(model.fuelLine == nil ? Color.onyx.textTertiary : Color.onyx.textSecondary)
-            // At AX5 the sentence is six words a line; capping it at two cost
-            // the water figure to an ellipsis. On one line of shipping type two
-            // is the whole string.
-            .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
-            .multilineTextAlignment(typeSize.isAccessibilitySize ? .leading : .trailing)
+            .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
     }
 
+    /// ── ONE LAYOUT, NOT TWO (W2) ───────────────────────────────────────────
+    /// The AX5 branch existed because the fuel sentence shared a line with two
+    /// numerals and a ring; with the sentence on its own line there is one
+    /// thing left to measure — whether the score and the battery pair fit
+    /// beside each other — and that is a measurement, not a type-size setting.
+    /// `ViewThatFits` asks the question every other card on this screen asks.
     var body: some View {
-        Group {
-            // At AX5 two numerals, a ring and a sentence cannot share a line —
-            // the fuel line broke into five and pushed the ring off the tile.
-            if typeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: OnyxSpace.s) {
-                    Text(date).onyxMicro()
-                    HStack(spacing: OnyxSpace.m) { ring; scoreReading; Spacer(minLength: 0) }
-                    batteryReading
-                    fuel
+        VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+            Text(date).onyxMicro()
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: OnyxSpace.m) {
+                    scoreReading
+                    Spacer(minLength: OnyxSpace.s)
+                    batteryPair
                 }
-            } else {
-                VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                    Text(date).onyxMicro()
-                    HStack(spacing: OnyxSpace.m) {
-                        ring
-                        scoreReading
-                        batteryReading
-                        Spacer(minLength: OnyxSpace.s)
-                        fuel
-                    }
+                VStack(alignment: .leading, spacing: OnyxSpace.s) {
+                    scoreReading
+                    batteryPair
                 }
             }
+            fuel
         }
         .padding(OnyxSpace.m)
         .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)

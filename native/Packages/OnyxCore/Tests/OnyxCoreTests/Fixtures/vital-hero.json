@@ -1,0 +1,165 @@
+{
+  "module": "scoring/vitalHero",
+  "fn": "promote",
+  "note": "W2 of the next-gen UX sprint. Hand-computed: there is no generator and no TypeScript original — this rule is Swift-first. Sleep holds the hero slot unless a vital's zSignal crosses ±1 in its own BAD direction AND its |z| exceeds the night's own |z|. Ties break by the order the readings arrive in, which the caller fixes as VitalSpec.all. A nil z is no opinion and can never be promoted. `expected.hero` is \"Sleep\" for .sleep and the reading's id for .vital.",
+  "cases": [
+    {
+      "name": "everything in band — the night leads",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": 0 },
+          { "id": "Resting HR", "upIsGood": false, "z": 0.4 },
+          { "id": "Wrist temp", "upIsGood": false, "z": 0 },
+          { "id": "Blood O₂", "upIsGood": true, "z": -0.6 },
+          { "id": "Respiratory", "upIsGood": false, "z": 0.9 }
+        ],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": -0.3 }
+      },
+      "expected": { "hero": "Sleep" }
+    },
+    {
+      "name": "HRV at −1.4 takes it",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": -1.4 },
+          { "id": "Resting HR", "upIsGood": false, "z": 0.5 },
+          { "id": "Wrist temp", "upIsGood": false, "z": 0.2 },
+          { "id": "Blood O₂", "upIsGood": true, "z": 0 },
+          { "id": "Respiratory", "upIsGood": false, "z": 0.3 }
+        ],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": -0.2 }
+      },
+      "expected": { "hero": "HRV" }
+    },
+    {
+      "name": "the same magnitude the GOOD way is not an alarm",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": 1.8 },
+          { "id": "Resting HR", "upIsGood": false, "z": -1.9 }
+        ],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": 0.1 }
+      },
+      "expected": { "hero": "Sleep" }
+    },
+    {
+      "name": "resting HR ABOVE its normal is the alarm",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": -0.2 },
+          { "id": "Resting HR", "upIsGood": false, "z": 1.5 }
+        ],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": 0.4 }
+      },
+      "expected": { "hero": "Resting HR" }
+    },
+    {
+      "name": "two alarming vitals — the larger magnitude wins, whatever the order",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": -1.2 },
+          { "id": "Resting HR", "upIsGood": false, "z": 1.1 },
+          { "id": "Respiratory", "upIsGood": false, "z": 1.9 }
+        ],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": 0 }
+      },
+      "expected": { "hero": "Respiratory" }
+    },
+    {
+      "name": "an equal pair breaks by VitalSpec.all order",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": -1.5 },
+          { "id": "Wrist temp", "upIsGood": false, "z": 1.5 }
+        ],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": 0 }
+      },
+      "expected": { "hero": "HRV" }
+    },
+    {
+      "name": "the clamp makes equal pairs common — order still decides",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": -2 },
+          { "id": "Resting HR", "upIsGood": false, "z": 2 }
+        ],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": -1.1 }
+      },
+      "expected": { "hero": "HRV" }
+    },
+    {
+      "name": "a reading with no baseline can never be promoted",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": null },
+          { "id": "Resting HR", "upIsGood": false, "z": null },
+          { "id": "Wrist temp", "upIsGood": false, "z": null }
+        ],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": null }
+      },
+      "expected": { "hero": "Sleep" }
+    },
+    {
+      "name": "a nil z beside a real alarm does not block it",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": null },
+          { "id": "Resting HR", "upIsGood": false, "z": 1.3 }
+        ],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": null }
+      },
+      "expected": { "hero": "Resting HR" }
+    },
+    {
+      "name": "exactly ±1 is inside the band — the crossing is strict",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": -1 },
+          { "id": "Resting HR", "upIsGood": false, "z": 1 }
+        ],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": 0 }
+      },
+      "expected": { "hero": "Sleep" }
+    },
+    {
+      "name": "a night further out than the vital keeps its own slot",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": -1.4 },
+          { "id": "Resting HR", "upIsGood": false, "z": 1.2 }
+        ],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": -1.8 }
+      },
+      "expected": { "hero": "Sleep" }
+    },
+    {
+      "name": "and the floor is |z| — a remarkable night in the GOOD direction holds it too",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": -1.4 },
+          { "id": "Resting HR", "upIsGood": false, "z": 1.2 }
+        ],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": 1.9 }
+      },
+      "expected": { "hero": "Sleep" }
+    },
+    {
+      "name": "no night at all is a floor of zero, not a veto",
+      "input": {
+        "readings": [
+          { "id": "HRV", "upIsGood": true, "z": -1.1 }
+        ],
+        "sleep": null
+      },
+      "expected": { "hero": "HRV" }
+    },
+    {
+      "name": "an empty vitals list is always the night",
+      "input": {
+        "readings": [],
+        "sleep": { "id": "Sleep", "upIsGood": true, "z": -1.9 }
+      },
+      "expected": { "hero": "Sleep" }
+    }
+  ]
+}

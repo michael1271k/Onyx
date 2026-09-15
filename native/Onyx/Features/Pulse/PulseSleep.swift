@@ -8,10 +8,10 @@ import OnyxData
 // permanently under the Now strip. Every part of it survives somewhere the
 // night is actually the subject: the arc, the four stages and the two flags the
 // watch cannot record are `SleepEditSheet`, which draws the same `DepthArc` at
-// the same size and is what the night's chip opens; the duration and the goal
-// delta are the chip's own two lines (`VitalsChipRow.goalText`). What went is
-// the 168 pt a reading you glance at was holding above the three readings you
-// are asked for.
+// the same size and is what the night's cell opens; the duration, the stage bar
+// and the bank are `SleepHeroCell` below. What went is the 168 pt a reading you
+// glance at was holding above the three readings you are asked for — the hero
+// cell says the same four facts in about half of it (W2).
 //
 // `SleepStageList` stays — `SleepEditSheet` previews an edit through it.
 
@@ -131,5 +131,175 @@ struct SleepStageList: View {
     private func share(_ minutes: Int?) -> String {
         guard let minutes, staged > 0 else { return "—" }
         return "\(Int((Double(minutes) / Double(staged) * 100).rounded()))%"
+    }
+}
+
+// MARK: - The hero cell
+
+/// The night, leading the vitals: one numeral, the stage bar, the bank, and a
+/// door into `SleepEditSheet`.
+///
+/// ── WHY THE NIGHT AND NOT A SCROLLER (W2) ───────────────────────────────────
+/// The nine readings were a `ScrollView(.horizontal)` of 104 pt chips —
+/// ~1,010 pt of content in a 375 pt window, eight of the nine reachable only by
+/// swiping a row nobody swipes. What a reader wants from this block is "is
+/// anything off", and the answer is one reading large enough to be read from
+/// the top of the screen plus eight small enough to be scanned in one glance.
+/// So the block has a lead and eight sidekicks (`VitalsGrid`), and the lead is
+/// the night — the reading the other eight are context for.
+///
+/// ── AND WHY THE NUMERAL IS `.display` AND NOT `.hero` ───────────────────────
+/// `OnyxType.hero` is documented "at most one per screen — a second hero is two
+/// screens in a trench coat", and this same wave is REMOVING the strip's second
+/// one (battery). Adding one back 80 pt lower would undo the rule in the diff
+/// that enforces it. The Now strip's Score keeps the screen's single `.hero`;
+/// this leads the VITALS, which it does at `.display` against a grid whose
+/// cells are `.secondary`.
+///
+/// ── THE BAR IS 44 pt BECAUSE IT IS ALSO THE TARGET ──────────────────────────
+/// The whole cell is one button, and the bar is the part of it a thumb aims at.
+/// 44 pt is the minimum target and, at that height, `DepthBar`'s four segments
+/// are readable as proportions rather than as a hairline — which is what makes
+/// it worth drawing at all instead of printing four percentages.
+struct SleepHeroCell: View {
+    let model: DayModel
+    let action: () -> Void
+
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var night: SleepSessionRow? { model.night }
+
+    /// A row with a zero duration is a night nobody recorded — the same guard
+    /// `goalText` made when this was a chip.
+    private var minutes: Int? {
+        guard let value = night?.durationMin, value > 0 else { return nil }
+        return value
+    }
+
+    private var goalMin: Int { Int((model.sleepGoalHours * 60).rounded()) }
+
+    /// "+22m" / "−1h 20m" / "goal met". Nil for a night with no reading, where
+    /// a gap against the goal would be a gap from nothing.
+    private var goalText: String? {
+        guard let minutes else { return nil }
+        let gap = minutes - goalMin
+        if abs(gap) <= 5 { return "goal met" }
+        return "\(gap > 0 ? "+" : "−")\(DayFormat.minutes(abs(gap)))"
+    }
+
+    private var goalMet: Bool { (minutes ?? goalMin) - goalMin >= -5 }
+
+    /// Deep · REM · Core · Awake. A stage with no reading is ABSENT, not zero —
+    /// `DepthBar` draws an empty track for a night synced as a duration alone,
+    /// which is a different fact from a night of pure core sleep.
+    private var segments: [(OnyxSleepStage, Int)] {
+        guard let night else { return [] }
+        return [
+            (OnyxSleepStage.deep, night.deepMin ?? 0),
+            (.rem, night.remMin ?? 0),
+            (.core, night.coreMin ?? 0),
+            (.awake, night.awakeMin ?? 0),
+        ].filter { $0.1 > 0 }
+    }
+
+    /// The bank, in one line. `sleepDebt` is nil under three nights of data,
+    /// and that is a sentence rather than a blank: the line is the only place
+    /// this screen says the night is read against a fortnight and not a goal.
+    private var debtLine: String {
+        guard let debt = model.sleepDebt else { return "Not enough nights to bank a debt yet" }
+        guard debt.debtHours > 0 else { return "No debt over \(debt.nights) nights" }
+        let hours = OnyxSnapshot.fixed(debt.debtHours, decimals: 1) ?? "\(debt.debtHours)"
+        return "\(hours) h of debt over \(debt.nights) nights"
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+                header
+                reading
+                DepthBar(segments: segments, height: 44, cornerRadius: OnyxSpace.m)
+                Text(debtLine)
+                    .onyxType(.caption)
+                    .foregroundStyle(Color.onyx.textTertiary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(OnyxSpace.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onyxGlass(.tile)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onyxPress(scale: 0.98)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Sleep, \(spoken). \(debtLine).")
+        .accessibilityHint("Opens the night")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private var header: some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(Color.onyx.accent(.recover))
+                .frame(width: 4, height: 4)
+                .accessibilityHidden(true)
+            Text("Sleep").onyxMicro()
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .onyxType(.micro).fontWeight(.bold)
+                .foregroundStyle(Color.onyx.textTertiary)
+        }
+    }
+
+    /// ── `ViewThatFits`, NOT A TYPE-SIZE THRESHOLD ───────────────────────────
+    /// "6h 40m" at `.display` beside "−1h 20m" at `.caption` is two figures on
+    /// one line, and at AX5 that is more type than a phone is wide however the
+    /// cell is laid out. The same measurement `SleepStageList.row` makes: the
+    /// duration keeps its line and the gap takes the next.
+    private var reading: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
+                duration
+                gap
+                Spacer(minLength: 0)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                duration
+                gap
+            }
+        }
+    }
+
+    private var duration: some View {
+        Text(DayFormat.minutes(minutes))
+            .onyxDisplay().fontWeight(.semibold).onyxNumeral()
+            .foregroundStyle(Color.onyx.textPrimary)
+            .contentTransition(.numericText())
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+    }
+
+    @ViewBuilder
+    private var gap: some View {
+        if let goalText {
+            Text(goalText)
+                .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
+                .foregroundStyle(goalMet ? Color.onyx.good : Color.onyx.danger)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        } else {
+            Text("No night recorded")
+                .onyxType(.caption)
+                .foregroundStyle(Color.onyx.textTertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+    }
+
+    /// `DayFormat.minutes` prints an em dash for a night nobody recorded, and a
+    /// reader hears an em dash as silence — the rule the sleep chip stated.
+    private var spoken: String {
+        guard let minutes else { return "no reading" }
+        return "\(DayFormat.minutes(minutes))\(goalText.map { ", \($0)" } ?? "")"
     }
 }

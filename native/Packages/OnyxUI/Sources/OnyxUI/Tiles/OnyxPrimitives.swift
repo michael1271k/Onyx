@@ -289,15 +289,36 @@ struct LedgerRow: View {
 /// are durations, not a timeline, and drawing them as a hypnogram would claim an
 /// ordering within the night that HealthKit's aggregate simply does not carry.
 /// Segments are sorted deep → awake because the RAMP orders, not the night.
-struct DepthBar: View {
+///
+/// Public since W2: Pulse's sleep hero draws the same bar at 44 pt, and a
+/// second stacked bar in the app would be a second answer to "what was this
+/// night made of" — the rule `DepthArc` is public for.
+public struct DepthBar: View {
   /// `(stage, minutes)` — a stage with no reading is absent, not zero.
   let segments: [(OnyxSleepStage, Int)]
   var height: CGFloat = 12
   var monochrome = false
+  /// Nil is `height / 2` — a capsule, which is right for the 12 pt tile bars
+  /// this was written for. At 44 pt a 22 pt radius eats the whole of a short
+  /// last segment and leaves a crescent where "awake" should be, so the app's
+  /// hero bar spells a radius instead of inheriting one from its own height.
+  var cornerRadius: CGFloat?
+
+  public init(
+    segments: [(OnyxSleepStage, Int)], height: CGFloat = 12,
+    monochrome: Bool = false, cornerRadius: CGFloat? = nil
+  ) {
+    self.segments = segments
+    self.height = height
+    self.monochrome = monochrome
+    self.cornerRadius = cornerRadius
+  }
+
+  private var radius: CGFloat { cornerRadius ?? height / 2 }
 
   private var total: Int { segments.reduce(0) { $0 + $1.1 } }
 
-  var body: some View {
+  public var body: some View {
     GeometryReader { geo in
       if total > 0 {
         HStack(spacing: 1) {
@@ -309,11 +330,11 @@ struct DepthBar: View {
             }
           }
         }
-        .clipShape(RoundedRectangle(cornerRadius: height / 2, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
       } else {
         // No stage breakdown is a real state — a night synced as a duration with
         // no stages at all. An empty track says so; four zero-width bars do not.
-        RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
           .fill(Color.onyx.hairline)
       }
     }

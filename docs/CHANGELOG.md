@@ -44,6 +44,39 @@ _Nothing yet._
 
 ---
 
+## [3.11.0] — 2026-09-15 · The Night Leads
+
+### Added
+- **Pulse · a dynamic hero vital.** The night now leads the vitals block at full
+  width — the duration, a 44 pt stage bar, the sleep bank, and the same tap into
+  the sleep window it always had. When a vital has gone far enough wrong it takes
+  that slot instead and the night drops into the grid, keeping its own door.
+  "Far enough wrong" is the readiness engine's own verdict and no new one: a
+  seven-day rolling mean against the forty-two days before it, dead-banded at
+  half a standard deviation, and it has to cross a full SD in the direction that
+  is bad **for that reading** — a resting heart rate above your normal, an HRV
+  below it. The dead band is why the lead does not change every morning.
+
+### Changed
+- **Pulse · the vitals stop being a horizontal scroller.** Nine chips in a
+  sideways strip — about 1,010 pt of content in a 375 pt window, eight of the
+  nine reachable only by swiping — are now one lead and eight cells that are all
+  on screen at once. Nothing is behind a swipe and nothing is behind a
+  disclosure. At accessibility sizes the eight are still rows, and the night is
+  still a row you can open.
+- **Pulse · the Now strip.** The day's fuel was a right-aligned tail squeezed
+  beside two 28 pt numerals, breaking to two lines and truncating first at any
+  size above default. It now has its own full-width line. The score keeps the
+  screen's one hero numeral and the battery sits at display size beside its own
+  ring, which is the rule the type scale has always stated.
+
+### Fixed
+- **Pulse · the sleep bank is on the screen again.** The decayed sleep debt and
+  the nights behind it were readable nowhere on Pulse after the sleep tile left;
+  they are the hero cell's last line.
+
+---
+
 ## [3.10.1] — 2026-09-15 · Apple Health Tells The Truth
 
 ### Fixed
