@@ -44,6 +44,63 @@ _Nothing yet._
 
 ---
 
+## [3.8.0] — 2026-09-15 · The Day's Three Questions
+
+### Added
+- **Pulse asks three questions on a pager.** Fatigue, stress and soreness were
+  three tiles stacked down a screen you had to scroll to answer, and the third
+  one lived below the fold on every phone. They are three pages of one carousel
+  now, each carrying its own control, and the day reads in order: the Now strip,
+  the vitals chips, the three questions, the scale and the stack, the stress
+  index, then the session you did. The whole day fits a phone.
+- **Stress is a log, not a number.** The old Head tile held one reading per slot
+  and quietly overwrote it, so a morning you logged at 06:12 disappeared when
+  you logged again at 07:40. Every reading is kept: the card draws the day as a
+  strip of clock-stamped capsules — the most recent three, with "+N earlier"
+  standing where the older ones are — and the full-day sheet carries the tags,
+  the notes and a swipe to delete. A reading can be backdated to any minute of
+  the day that has already happened. The weekly export prints each one with its
+  clock, so two readings in one slot both survive the round trip.
+- **A vitals chip row.** The night's sleep and eight readings are one 44 pt
+  scroller where a 168 pt sleep tile and an always-open 192 pt grid used to sit.
+  Sleep leads it and opens the edit sheet; the rest expand the full grid.
+- **Pulse draws `SessionHeaderCard`.** The Pulse door, the Train done card and
+  the session page are finally one card — with the career number, the plan and
+  phase tags, the clock and the muscles trained. (3.7.0 joined the first two.)
+
+### Changed
+- **Pulse prints tonnage the way the rest of the app does.** It alone used the
+  formatter that always writes a tenth, so the session Train called "13,005 kg"
+  read "13,005.0 kg" one tab over.
+- **"Head" is gone from every surface.** The tile is the Stress index, the card
+  is the Stress log, and the Quick Log spoke is `stress`.
+- **Screenshots are no longer committed.** 220 phone screens had reached
+  144 MiB, turned over on every layout edit, and were read by nothing in
+  `npm run check`. `scripts/native-shot.sh` still renders any of them offline in
+  a couple of minutes; git history keeps every one ever committed.
+
+### Fixed
+- **A session card could be stranded on its placeholder for good.** The
+  career-wide masthead load was not a cancellation point, so stepping days
+  faster than it completed left the card that was mid-flight showing a
+  placeholder until the screen was rebuilt.
+- **A stress reading begun before a slot boundary saved into the next one.** The
+  sheet re-derived "now" on every keystroke, so a reading started at 17:58 under
+  "Files under midday" saved as evening.
+- **Six accessibility-size defects found in the shot loop** — a truncated verb
+  on each carousel page, `"Okay Before t…"` on the fatigue reading, `"Wak… Pre
+  Post"` on its slot row, a soreness capsule cut by the card's own edge, a
+  carousel that showed page one while its dots said page two, and a chip row
+  whose one-row collapse took the night's only door off the screen.
+
+### Removed
+- `SleepTile` (280 lines), `FatigueSummaryRow`, `SorenessRow`,
+  `WorkoutSummaryCard` and `HeadSheet` — nothing constructs them after the
+  reorder. Every part of the sleep tile survives in the edit sheet the night's
+  chip opens, or in the chip's own two lines.
+
+---
+
 ## [3.7.0] — 2026-09-15 · One Session, One Header
 
 ### Added
