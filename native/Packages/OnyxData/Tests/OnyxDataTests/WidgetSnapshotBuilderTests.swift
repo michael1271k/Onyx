@@ -187,7 +187,7 @@ struct WidgetSnapshotBuilderTests {
         let e1rm = try #require(s.e1rm?.first)
         #expect(e1rm.exercise == "Back Squat")
         #expect(e1rm.trend?.count == 3)
-        #expect(e1rm.kg == (Epley.oneRepMax(weight: 105, reps: 5)! * 10).rounded() / 10)
+        #expect(e1rm.kg == (OneRepMax.estimate(weight: 105, reps: 5)! * 10).rounded() / 10)
         #expect(s.records?.first?.exercise == "Back Squat")
         #expect(s.volumeTrend?.count == 2)
 

@@ -570,7 +570,7 @@ enum SessionAnalysis {
             prior.map {
                 BaselineSetRow(
                     key: $0.exerciseId, weightKg: $0.weightKg, reps: Double($0.reps), est1rm: $0.est1rmKg,
-                    setType: $0.setType, repFloor: floor($0.exerciseId), pairId: $0.pairId, side: $0.lr
+                    setType: $0.setType, pairId: $0.pairId, side: $0.lr
                 )
             },
             isTimed: { TimedExercise.isTimed(name($0)) },
@@ -580,7 +580,7 @@ enum SessionAnalysis {
             g.sets.map { s in
                 PrCandidateSet(
                     key: s.exerciseId, weightKg: s.weightKg, reps: Double(s.reps), setType: s.setType,
-                    timed: TimedExercise.isTimed(name(s.exerciseId)), repFloor: floor(s.exerciseId),
+                    timed: TimedExercise.isTimed(name(s.exerciseId)),
                     pairId: s.pairId, side: s.lr, date: date, exerciseName: name(s.exerciseId), setNumber: s.setIndex
                 )
             }

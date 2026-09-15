@@ -342,7 +342,7 @@ struct WeeklyExportBuilderTests {
              {"weightKg": 0, "reps": 15, "failure": false, "warmup": false, "ghost": false, "dropset": false}]}
          ],
          "prs": [
-           {"name": "Leg Press", "weightKg": 75, "reps": 12, "axes": ["weight", "e1rm"], "volumeKg": 900, "e1rmKg": 105},
+           {"name": "Leg Press", "weightKg": 75, "reps": 12, "axes": ["weight", "e1rm"], "volumeKg": 900, "e1rmKg": 108},
            {"name": "Reverse Crunch", "weightKg": 0, "reps": 17, "axes": ["reps"], "volumeKg": 0}
          ]},
         {"date": "2026-08-25", "startedAt": "2026-08-25T18:00:00Z", "sessionNumber": 3,

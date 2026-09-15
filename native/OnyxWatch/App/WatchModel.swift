@@ -324,7 +324,7 @@ final class WatchModel {
                 // The Crown moves a load in kilograms; the estimate is the one
                 // derivation the phone also does at tick time, so a watch-logged
                 // set carries the same `est_1rm_kg` a phone-logged one would.
-                est1rmKg: Epley.oneRepMax(weight: load, reps: Double(reps)),
+                est1rmKg: OneRepMax.estimate(weight: load, reps: Double(reps)),
                 exerciseOrder: cursor.movement.order
             )
             let event = try store.appendSet(sessionId: id, snapshot)

@@ -11,14 +11,52 @@ import Testing
 struct SeriesGoldenTests {
     struct TrendIn: Decodable { let sessions: [[TrendSetRow]]; let timed: Bool; let ceiling: Double? }
 
+    /// ── THE LOADED SERIES' VALUES ARE EXEMPT; ITS SHAPE IS NOT ──────────────
+    /// `points` and `best` are estimated 1RMs when the movement carries load,
+    /// and those moved with the formula (Brzycki, 2026-09-15). What this vector
+    /// pins that has NOT moved is everything around them: how many points a
+    /// session list produces, the oldest-to-newest order, the pair collapse
+    /// behind each mean, the tonnage and its delta, the top set, the ceiling
+    /// count, the progression verdict, and the `timed` / `byReps` branches —
+    /// where `points` are seconds and reps and are not estimates at all, so
+    /// they stay compared in full.
+    private func withoutEstimates(_ t: ExerciseTrend?) -> ExerciseTrend? {
+        guard var out = t, !out.timed, !out.byReps else { return t }
+        out.points = out.points.map { _ in 0 }
+        out.best = 0
+        // `pctChange` is a ratio BETWEEN two points, so it survives a change of
+        // units only if the formula is linear in the load — Brzycki is, but the
+        // rep term differs, so two sessions at different rep counts move it.
+        out.pctChange = nil
+        return out
+    }
+
     @Test("exerciseTrend matches on every session shape")
     func trendMatches() throws {
         let fixture = try GoldenFixture<TrendIn, ExerciseTrend?>.load("e1rm-series")
         #expect(fixture.cases.count >= 15)
         for c in fixture.cases {
             let actual = E1rmSeries.build(c.input.sessions, timed: c.input.timed, ceiling: c.input.ceiling)
-            #expect(actual == c.expected, "exerciseTrend — \(c.name)")
+            #expect(
+                withoutEstimates(actual) == withoutEstimates(c.expected),
+                "exerciseTrend — \(c.name)"
+            )
+            // The series is still the same LENGTH and still exists or does not.
+            #expect(actual?.points.count == c.expected?.points.count, "point count — \(c.name)")
         }
+    }
+
+    @Test("a loaded series is built from the Brzycki estimate, computed by hand")
+    func loadedSeriesUsesTheCurrentFormula() {
+        // The independent half of the exemption above: one session of
+        // 100 kg × 5 has a mean headline of 100 × 36/32 = 112.5, and the series
+        // rounds to one decimal.
+        let trend = E1rmSeries.build(
+            [[TrendSetRow(weightKg: 100, reps: 5)]],
+            timed: false, ceiling: nil
+        )
+        #expect(trend?.points == [112.5])
+        #expect(trend?.best == 112.5)
     }
 
     struct ChipIn: Decodable { let sets: [WorkingSet]; let ceiling: Double? }

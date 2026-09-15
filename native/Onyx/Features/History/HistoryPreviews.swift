@@ -309,7 +309,7 @@ enum HistoryPreviews {
                 try WorkoutSet(
                     id: "\(id)-\(set.0)-\(i)", sessionId: id, exerciseId: set.0, setIndex: i + 1,
                     weightKg: set.1, reps: set.2,
-                    est1rmKg: Epley.oneRepMax(weight: set.1, reps: Double(set.2)), rpe: 7, foldOrder: i
+                    est1rmKg: OneRepMax.estimate(weight: set.1, reps: Double(set.2)), rpe: 7, foldOrder: i
                 ).insert(db)
             }
         }
@@ -343,7 +343,7 @@ enum HistoryPreviews {
                           "ex-row": 3, "ex-raise": 4, "ex-hkr": 5]
             func set(_ ex: String, _ i: Int, _ w: Double, _ r: Int, type: String = "normal", side: String? = nil, pair: String? = nil, rpe: Double? = nil) throws {
                 try WorkoutSet(id: "\(id)-\(ex)-\(i)\(side ?? "")", sessionId: id, exerciseId: ex, setIndex: i, weightKg: w, reps: r,
-                               setType: type, side: side, pairId: pair, est1rmKg: Epley.oneRepMax(weight: w, reps: Double(r)), rpe: rpe,
+                               setType: type, side: side, pairId: pair, est1rmKg: OneRepMax.estimate(weight: w, reps: Double(r)), rpe: rpe,
                                exerciseOrder: placed[ex], foldOrder: order).insert(db)
                 order += 1
             }
@@ -413,7 +413,7 @@ enum HistoryPreviews {
                            endedAt: pplStart.addingTimeInterval(52 * 60), durationMin: 52, sessionRpe: 7).insert(db)
         for (i, (w, r)) in [(32.0, 12), (32.0, 11), (32.0, 10)].enumerated() {
             try WorkoutSet(id: "\(ppl)-incline-\(i)", sessionId: ppl, exerciseId: "ex-incline", setIndex: i + 1,
-                           weightKg: w, reps: r, est1rmKg: Epley.oneRepMax(weight: w, reps: Double(r)), rpe: 7, foldOrder: i).insert(db)
+                           weightKg: w, reps: r, est1rmKg: OneRepMax.estimate(weight: w, reps: Double(r)), rpe: 7, foldOrder: i).insert(db)
         }
 
         // One leg day, so the list has a second colour and Hack Squat a ledger.
@@ -423,7 +423,7 @@ enum HistoryPreviews {
                            endedAt: start.addingTimeInterval(58 * 60), durationMin: 58, sessionRpe: 8).insert(db)
         for (i, (w, r)) in [(60.0, 12), (60.0, 11), (60.0, 10)].enumerated() {
             try WorkoutSet(id: "\(legs)-hack-\(i)", sessionId: legs, exerciseId: "ex-hack", setIndex: i + 1, weightKg: w, reps: r,
-                           est1rmKg: Epley.oneRepMax(weight: w, reps: Double(r)), rpe: 8, foldOrder: i).insert(db)
+                           est1rmKg: OneRepMax.estimate(weight: w, reps: Double(r)), rpe: 8, foldOrder: i).insert(db)
         }
 
         // The record book as the save path would have filed it.

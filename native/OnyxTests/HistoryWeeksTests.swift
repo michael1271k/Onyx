@@ -302,7 +302,7 @@ struct HistoryWeeksTests {
                 try WorkoutSet(
                     id: "\(id)-\(index)", sessionId: id, exerciseId: "ex-1", setIndex: index + 1,
                     weightKg: weight, reps: 10,
-                    est1rmKg: Epley.oneRepMax(weight: weight, reps: 10), foldOrder: index
+                    est1rmKg: OneRepMax.estimate(weight: weight, reps: 10), foldOrder: index
                 ).insert(db)
             }
         }

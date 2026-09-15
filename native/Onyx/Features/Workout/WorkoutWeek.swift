@@ -780,9 +780,9 @@ final class WorkoutWeek {
                 let movement = WeeklyWrap.Movement(
                     name: name, dayKey: session.dayKey ?? "",
                     weightKg: best.weightKg, reps: best.reps,
-                    e1rm: Epley.oneRepMax(weight: best.weightKg, reps: best.reps),
+                    e1rm: OneRepMax.estimate(weight: best.weightKg, reps: best.reps),
                     previousE1rm: previous?.top(for: name).flatMap {
-                        Epley.oneRepMax(weight: $0.weightKg, reps: $0.reps)
+                        OneRepMax.estimate(weight: $0.weightKg, reps: $0.reps)
                     }
                 )
                 // A movement trained twice on one split in a week keeps its

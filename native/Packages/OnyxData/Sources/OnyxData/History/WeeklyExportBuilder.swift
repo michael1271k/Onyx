@@ -997,7 +997,7 @@ public struct WeeklyExportBuilder: Sendable {
                     "axes": Self.axisOrder.filter { axes.contains($0) }.map(\.rawValue),
                     "volumeKg": j(creditByRow[r.id] ?? nil),
                     // `||` on the stored estimate: unloaded work stores 0.
-                    "e1rmKg": j(r.est1rmKg.flatMap { $0 > 0 ? $0 : nil } ?? Epley.oneRepMax(weight: r.weightKg, reps: Double(r.reps))),
+                    "e1rmKg": j(r.est1rmKg.flatMap { $0 > 0 ? $0 : nil } ?? OneRepMax.estimate(weight: r.weightKg, reps: Double(r.reps))),
                 ]
             }
 

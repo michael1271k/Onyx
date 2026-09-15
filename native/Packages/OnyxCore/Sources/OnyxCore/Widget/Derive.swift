@@ -279,7 +279,7 @@ public enum WidgetDerive {
         for s in sets {
             guard SetTags.isWorkingSet(s.setType) else { continue }
             let stored: Double? = (s.est1rmKg ?? 0) > 0 ? s.est1rmKg : nil
-            let est = stored ?? Epley.oneRepMax(weight: s.weightKg ?? 0, reps: s.reps ?? 0)
+            let est = stored ?? OneRepMax.estimate(weight: s.weightKg ?? 0, reps: s.reps ?? 0)
             guard let e = est, e > 0 else { continue }
             if byExercise[s.exercise] == nil { order.append(s.exercise); byExercise[s.exercise] = [:] }
             byExercise[s.exercise]![s.day] = Swift.max(byExercise[s.exercise]![s.day] ?? 0, e)

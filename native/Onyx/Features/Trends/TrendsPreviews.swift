@@ -55,7 +55,7 @@ enum TrendsPreviews {
                                         id: newOnyxID(), sessionId: sessionId, exerciseId: exerciseIds[name]!,
                                         setIndex: index, weightKg: set == 0 ? load * 0.6 : load, reps: reps,
                                         setType: set == 0 ? "warmup" : "normal", side: side, pairId: pairId,
-                                        est1rmKg: Epley.oneRepMax(weight: set == 0 ? load * 0.6 : load, reps: Double(reps)),
+                                        est1rmKg: OneRepMax.estimate(weight: set == 0 ? load * 0.6 : load, reps: Double(reps)),
                                         foldOrder: index
                                     ).insert(db)
                                     index += 1

@@ -42,7 +42,7 @@ struct SessionEditModeTests {
                 try WorkoutSet(
                     id: "set-\(index + 1)", sessionId: Self.sessionId, exerciseId: "ex-chest-press",
                     setIndex: index + 1, weightKg: 40, reps: reps, setType: "normal",
-                    est1rmKg: Epley.oneRepMax(weight: 40, reps: Double(reps)),
+                    est1rmKg: OneRepMax.estimate(weight: 40, reps: Double(reps)),
                     // `exercise_order` as the WEB writes it — dense from 0,
                     // which `buildCommitPayload` has always done, and 2 is where
                     // `Chest Press` sits in Upper A.

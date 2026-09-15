@@ -33,18 +33,16 @@ public struct BaselineSetRow: Codable, Sendable {
     public var est1rm: Double?
     /// Warm-ups and drop sets set no bar, exactly as they win no record.
     public var setType: String?
-    /// Floor of the programmed rep window — gates whether this row sets the e1RM bar.
-    public var repFloor: Double?
     /// Unilateral pairing: L and R of ONE physical set share a `pairId`.
     public var pairId: String?
     public var side: String?
 
     public init(
         key: String, weightKg: Double?, reps: Double?, est1rm: Double? = nil, setType: String? = nil,
-        repFloor: Double? = nil, pairId: String? = nil, side: String? = nil
+        pairId: String? = nil, side: String? = nil
     ) {
         self.key = key; self.weightKg = weightKg; self.reps = reps; self.est1rm = est1rm
-        self.setType = setType; self.repFloor = repFloor; self.pairId = pairId; self.side = side
+        self.setType = setType; self.pairId = pairId; self.side = side
     }
 }
 
@@ -55,8 +53,6 @@ public struct PrCandidateSet: Codable, Sendable {
     public var reps: Double
     public var setType: String?
     public var timed: Bool
-    /// Floor of the programmed rep window, when there is one. Gates the e1RM axis.
-    public var repFloor: Double?
     public var pairId: String?
     public var side: String?
     /// The session date and the set's place in it — carried for the ledger row.
@@ -66,11 +62,11 @@ public struct PrCandidateSet: Codable, Sendable {
 
     public init(
         key: String, weightKg: Double, reps: Double, setType: String? = nil, timed: Bool = false,
-        repFloor: Double? = nil, pairId: String? = nil, side: String? = nil,
+        pairId: String? = nil, side: String? = nil,
         date: String? = nil, exerciseName: String? = nil, setNumber: Int? = nil
     ) {
         self.key = key; self.weightKg = weightKg; self.reps = reps; self.setType = setType; self.timed = timed
-        self.repFloor = repFloor; self.pairId = pairId; self.side = side
+        self.pairId = pairId; self.side = side
         self.date = date; self.exerciseName = exerciseName; self.setNumber = setNumber
     }
 }
@@ -203,14 +199,25 @@ private struct OrderedBests {
 public enum PrEngine {
     // MARK: - Rules
 
-    /// Is this set's rep count a fair basis for an estimated 1RM? ONE-SIDED, on
-    /// the floor only: going below the programmed window is a strength test
-    /// where Epley extrapolates hardest; going above the ceiling is the rep
-    /// progression working as designed. Unprogrammed: reps ≥ 5.
-    public static func e1rmEligible(_ reps: Double, floor: Double?) -> Bool {
-        if let floor { return reps >= floor }
-        return reps >= 5
-    }
+    // ── THERE IS NO REP-WINDOW GATE ON THE e1RM AXIS ANY MORE ───────────────
+    //
+    // `e1rmEligible(reps, floor:)` lived here. It refused the e1RM axis to any
+    // set below the PROGRAMMED rep floor, on the reasoning that going under the
+    // window is a strength test where the formula extrapolates hardest.
+    //
+    // What it actually did was hide records. Hammer Curl is programmed 10–12;
+    // a top set of 25 kg × 8 is the hardest single the movement has ever seen
+    // and the deck awarded it Heaviest and nothing else, while every other app
+    // looking at the same two sets reported a best estimated 1RM as well. The
+    // rule was invisible, unexplained on screen, and produced a number that
+    // disagreed with the whole rest of the industry — decision, 2026-09-15.
+    //
+    // Where the formula genuinely stops meaning anything is at the TOP, and
+    // that bound now lives with the formula (`OneRepMax.maxReps`) rather than
+    // with the prescription, because it is a property of the arithmetic and
+    // not of the programme.
+    //
+    // `repFloor` went with it from both row types: it fed nothing else.
 
     /// Warm-ups and drop sets are never a top-set record, and a GHOST counts
     /// toward nothing at all — excluded on both sides of the ledger.
@@ -309,11 +316,13 @@ public enum PrEngine {
             guard let reps = r.reps else { continue }
             bestRepsAtWeight.bump(loadKey(r.key, w), reps)
             if let vol = credits[i] { bestSetVolume.bump(r.key, vol) }
-            if e1rmEligible(reps, floor: r.repFloor) {
-                let stored = r.est1rm ?? 0
-                let e = stored != 0 ? stored : Epley.oneRepMax(weight: w, reps: reps)
-                if let e { bestE1rm.bump(r.key, e) }
-            }
+            // Every loaded row sets the e1RM bar it could win. Symmetric with
+            // `detectSetPrs` below — a row that CAN win an axis must be able to
+            // raise its bar, or the first set after the rule changed would win
+            // a record against a history that was never allowed to compete.
+            let stored = r.est1rm ?? 0
+            let e = stored != 0 ? stored : OneRepMax.estimate(weight: w, reps: reps)
+            if let e { bestE1rm.bump(r.key, e) }
         }
 
         // The asserted floor, folded in last: `bump` is a max, so a key ends at
@@ -387,10 +396,9 @@ public enum PrEngine {
 
         if let vol = volumeKg, let bv = idx.bestSetVolume[set.key], vol > bv { axes.append(.volume) }
 
-        if e1rmEligible(set.reps, floor: set.repFloor) {
-            if let e1rm = Epley.oneRepMax(weight: set.weightKg, reps: set.reps), let be = idx.bestE1rm[set.key], e1rm > be {
-                axes.append(.e1rm)
-            }
+        if let e1rm = OneRepMax.estimate(weight: set.weightKg, reps: set.reps),
+           let be = idx.bestE1rm[set.key], e1rm > be {
+            axes.append(.e1rm)
         }
         return axes
     }
@@ -405,7 +413,7 @@ public enum PrEngine {
         bump(&idx.bestRepsAtWeight, loadKey(set.key, set.weightKg), set.reps)
         if let vol = volumeKg { bump(&idx.bestSetVolume, set.key, vol) }
         // Symmetric with detection: a set that cannot WIN the e1RM axis must not raise its bar.
-        if e1rmEligible(set.reps, floor: set.repFloor), let e = Epley.oneRepMax(weight: set.weightKg, reps: set.reps) {
+        if let e = OneRepMax.estimate(weight: set.weightKg, reps: set.reps) {
             bump(&idx.bestE1rm, set.key, e)
         }
     }
@@ -489,7 +497,7 @@ public enum PrEngine {
         for (i, s) in sets.enumerated() {
             let axes = detectSetPrs(s, idx, volumeKg: credits[i])
             // No load, no one-rep max to estimate — nil, never 0.
-            let est1rm = s.timed ? nil : Epley.oneRepMax(weight: s.weightKg, reps: s.reps)
+            let est1rm = s.timed ? nil : OneRepMax.estimate(weight: s.weightKg, reps: s.reps)
             // READ THE BEATEN BASELINE BEFORE ABSORBING.
             let records = beatenBaselines(s, idx, axes, volumeKg: credits[i], est1rm: est1rm)
             absorbSet(s, &idx, volumeKg: credits[i])

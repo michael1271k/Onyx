@@ -23,12 +23,17 @@ struct TopLiftsTests {
 
     @Test("two exercises: A wins hardest+heaviest, B wins 1RM — A first, B second with one lift")
     func twoExercisesOrderedByFirstRoleWon() {
-        // Squat: highest rpe×kg and highest kg, but a low-rep set keeps its
-        // Epley e1RM modest. Deadlift: low rpe×kg and low kg, but a high-rep
-        // set gives it the higher e1RM — the axes really do disagree.
+        // Squat: highest rpe×kg and highest kg, but a single keeps its e1RM at
+        // the load itself (Brzycki is `36/36` at one rep). Deadlift: low rpe×kg
+        // and low kg, but twelve reps put its estimate at 90 × 36/25 = 129.6 —
+        // the axes really do disagree.
+        //
+        // Twelve and not thirty: thirty reps is past `OneRepMax.maxReps`, so
+        // the Deadlift would carry no estimate at all and this test would be
+        // asserting the ceiling rather than the disagreement it is for.
         let sets = [
             set("Squat", kg: 100, reps: 1, rpe: 10),
-            set("Deadlift", kg: 90, reps: 30, rpe: 1),
+            set("Deadlift", kg: 90, reps: 12, rpe: 1),
         ]
         let groups = TopLifts.group(sets, previous: [:])
         #expect(groups.count == 2)
@@ -105,14 +110,14 @@ struct TopLiftsTests {
         #expect(heaviest?.set.reps == 6)
     }
 
-    @Test("the Epley figure equals the app's existing estimated1RM formula for 100 kg x 5 reps")
-    func epleyFigureMatchesApp() {
-        // Epley's own definition (Training/Epley.swift): weight × (1 + reps/30),
-        // then jsRound1 (Math.round(x*10)/10 — round-half-up to one decimal).
-        // 100 × (1 + 5/30) = 116.6666… → 116.7. Computed as a literal here, NOT
-        // by calling `Epley.oneRepMax` — this test must be able to fail if that
-        // formula itself regresses.
-        let expected = 116.7
+    @Test("the e1RM figure equals the app's own estimate for 100 kg x 5 reps")
+    func oneRepMaxFigureMatchesApp() {
+        // Brzycki's own definition (Training/OneRepMax.swift): weight × 36 /
+        // (37 − reps), then jsRound2 (Math.round(x*100)/100 — round-half-up to
+        // two decimals). 100 × 36/32 = 112.5 exactly. Computed as a literal
+        // here, NOT by calling `OneRepMax.estimate` — this test must be able to
+        // fail if that formula itself regresses.
+        let expected = 112.5
         let groups = TopLifts.group([set("Bench Press", kg: 100, reps: 5, rpe: 9)], previous: [:])
         let oneRM = groups[0].lifts.first { $0.role == .oneRM }
         #expect(abs((oneRM?.figure ?? .nan) - expected) < 1e-6)
@@ -151,8 +156,8 @@ struct TopLiftsTests {
         let best = bests["Chest Press"]
         #expect(best?.kg == 100)
         #expect(best?.rpeKg == 900)
-        // 100 × (1 + 12/30) = 140.
-        #expect(abs((best?.e1rm ?? .nan) - 140) < 1e-6)
+        // 100 × 36/25 = 144.
+        #expect(abs((best?.e1rm ?? .nan) - 144) < 1e-6)
 
         // And it is the bar `group` actually draws against: 102.5 today is UP.
         let groups = TopLifts.group([set("Chest Press", kg: 102.5, reps: 12, rpe: 9)], previous: bests)

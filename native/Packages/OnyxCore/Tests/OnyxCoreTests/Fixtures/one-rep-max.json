@@ -1,7 +1,7 @@
 {
-  "module": "utils/epley",
-  "fn": "epley1RM",
-  "note": "null means \"no estimate exists\", never 0. Every caller null-checks.",
+  "module": "training/oneRepMax",
+  "fn": "estimate",
+  "note": "Brzycki: weight x 36 / (37 - reps), rounded to two decimals. null means \"no estimate exists\", never 0 - every caller null-checks. null for unloaded or non-finite work, for reps below 1, and above OneRepMax.maxReps (16), where the formula stops meaning anything long before its singularity at 37.",
   "cases": [
     {
       "name": "w=0 r=1",
@@ -233,7 +233,7 @@
         "weight": 0.5,
         "reps": 2
       },
-      "expected": 0.5
+      "expected": 0.51
     },
     {
       "name": "w=0.5 r=3",
@@ -241,7 +241,7 @@
         "weight": 0.5,
         "reps": 3
       },
-      "expected": 0.6
+      "expected": 0.53
     },
     {
       "name": "w=0.5 r=5",
@@ -249,7 +249,7 @@
         "weight": 0.5,
         "reps": 5
       },
-      "expected": 0.6
+      "expected": 0.56
     },
     {
       "name": "w=0.5 r=8",
@@ -257,7 +257,7 @@
         "weight": 0.5,
         "reps": 8
       },
-      "expected": 0.6
+      "expected": 0.62
     },
     {
       "name": "w=0.5 r=12",
@@ -265,7 +265,7 @@
         "weight": 0.5,
         "reps": 12
       },
-      "expected": 0.7
+      "expected": 0.72
     },
     {
       "name": "w=0.5 r=17",
@@ -273,7 +273,7 @@
         "weight": 0.5,
         "reps": 17
       },
-      "expected": 0.8
+      "expected": null
     },
     {
       "name": "w=0.5 r=30",
@@ -281,7 +281,7 @@
         "weight": 0.5,
         "reps": 30
       },
-      "expected": 1
+      "expected": null
     },
     {
       "name": "w=0.5 r=100",
@@ -289,7 +289,7 @@
         "weight": 0.5,
         "reps": 100
       },
-      "expected": 2.2
+      "expected": null
     },
     {
       "name": "w=1 r=1",
@@ -297,7 +297,7 @@
         "weight": 1,
         "reps": 1
       },
-      "expected": 1
+      "expected": 1.0
     },
     {
       "name": "w=1 r=2",
@@ -305,7 +305,7 @@
         "weight": 1,
         "reps": 2
       },
-      "expected": 1.1
+      "expected": 1.03
     },
     {
       "name": "w=1 r=3",
@@ -313,7 +313,7 @@
         "weight": 1,
         "reps": 3
       },
-      "expected": 1.1
+      "expected": 1.06
     },
     {
       "name": "w=1 r=5",
@@ -321,7 +321,7 @@
         "weight": 1,
         "reps": 5
       },
-      "expected": 1.2
+      "expected": 1.13
     },
     {
       "name": "w=1 r=8",
@@ -329,7 +329,7 @@
         "weight": 1,
         "reps": 8
       },
-      "expected": 1.3
+      "expected": 1.24
     },
     {
       "name": "w=1 r=12",
@@ -337,7 +337,7 @@
         "weight": 1,
         "reps": 12
       },
-      "expected": 1.4
+      "expected": 1.44
     },
     {
       "name": "w=1 r=17",
@@ -345,7 +345,7 @@
         "weight": 1,
         "reps": 17
       },
-      "expected": 1.6
+      "expected": null
     },
     {
       "name": "w=1 r=30",
@@ -353,7 +353,7 @@
         "weight": 1,
         "reps": 30
       },
-      "expected": 2
+      "expected": null
     },
     {
       "name": "w=1 r=100",
@@ -361,7 +361,7 @@
         "weight": 1,
         "reps": 100
       },
-      "expected": 4.3
+      "expected": null
     },
     {
       "name": "w=20 r=1",
@@ -369,7 +369,7 @@
         "weight": 20,
         "reps": 1
       },
-      "expected": 20
+      "expected": 20.0
     },
     {
       "name": "w=20 r=2",
@@ -377,7 +377,7 @@
         "weight": 20,
         "reps": 2
       },
-      "expected": 21.3
+      "expected": 20.57
     },
     {
       "name": "w=20 r=3",
@@ -385,7 +385,7 @@
         "weight": 20,
         "reps": 3
       },
-      "expected": 22
+      "expected": 21.18
     },
     {
       "name": "w=20 r=5",
@@ -393,7 +393,7 @@
         "weight": 20,
         "reps": 5
       },
-      "expected": 23.3
+      "expected": 22.5
     },
     {
       "name": "w=20 r=8",
@@ -401,7 +401,7 @@
         "weight": 20,
         "reps": 8
       },
-      "expected": 25.3
+      "expected": 24.83
     },
     {
       "name": "w=20 r=12",
@@ -409,7 +409,7 @@
         "weight": 20,
         "reps": 12
       },
-      "expected": 28
+      "expected": 28.8
     },
     {
       "name": "w=20 r=17",
@@ -417,7 +417,7 @@
         "weight": 20,
         "reps": 17
       },
-      "expected": 31.3
+      "expected": null
     },
     {
       "name": "w=20 r=30",
@@ -425,7 +425,7 @@
         "weight": 20,
         "reps": 30
       },
-      "expected": 40
+      "expected": null
     },
     {
       "name": "w=20 r=100",
@@ -433,7 +433,7 @@
         "weight": 20,
         "reps": 100
       },
-      "expected": 86.7
+      "expected": null
     },
     {
       "name": "w=60 r=1",
@@ -441,7 +441,7 @@
         "weight": 60,
         "reps": 1
       },
-      "expected": 60
+      "expected": 60.0
     },
     {
       "name": "w=60 r=2",
@@ -449,7 +449,7 @@
         "weight": 60,
         "reps": 2
       },
-      "expected": 64
+      "expected": 61.71
     },
     {
       "name": "w=60 r=3",
@@ -457,7 +457,7 @@
         "weight": 60,
         "reps": 3
       },
-      "expected": 66
+      "expected": 63.53
     },
     {
       "name": "w=60 r=5",
@@ -465,7 +465,7 @@
         "weight": 60,
         "reps": 5
       },
-      "expected": 70
+      "expected": 67.5
     },
     {
       "name": "w=60 r=8",
@@ -473,7 +473,7 @@
         "weight": 60,
         "reps": 8
       },
-      "expected": 76
+      "expected": 74.48
     },
     {
       "name": "w=60 r=12",
@@ -481,7 +481,7 @@
         "weight": 60,
         "reps": 12
       },
-      "expected": 84
+      "expected": 86.4
     },
     {
       "name": "w=60 r=17",
@@ -489,7 +489,7 @@
         "weight": 60,
         "reps": 17
       },
-      "expected": 94
+      "expected": null
     },
     {
       "name": "w=60 r=30",
@@ -497,7 +497,7 @@
         "weight": 60,
         "reps": 30
       },
-      "expected": 120
+      "expected": null
     },
     {
       "name": "w=60 r=100",
@@ -505,7 +505,7 @@
         "weight": 60,
         "reps": 100
       },
-      "expected": 260
+      "expected": null
     },
     {
       "name": "w=82.5 r=1",
@@ -521,7 +521,7 @@
         "weight": 82.5,
         "reps": 2
       },
-      "expected": 88
+      "expected": 84.86
     },
     {
       "name": "w=82.5 r=3",
@@ -529,7 +529,7 @@
         "weight": 82.5,
         "reps": 3
       },
-      "expected": 90.8
+      "expected": 87.35
     },
     {
       "name": "w=82.5 r=5",
@@ -537,7 +537,7 @@
         "weight": 82.5,
         "reps": 5
       },
-      "expected": 96.3
+      "expected": 92.81
     },
     {
       "name": "w=82.5 r=8",
@@ -545,7 +545,7 @@
         "weight": 82.5,
         "reps": 8
       },
-      "expected": 104.5
+      "expected": 102.41
     },
     {
       "name": "w=82.5 r=12",
@@ -553,7 +553,7 @@
         "weight": 82.5,
         "reps": 12
       },
-      "expected": 115.5
+      "expected": 118.8
     },
     {
       "name": "w=82.5 r=17",
@@ -561,7 +561,7 @@
         "weight": 82.5,
         "reps": 17
       },
-      "expected": 129.3
+      "expected": null
     },
     {
       "name": "w=82.5 r=30",
@@ -569,7 +569,7 @@
         "weight": 82.5,
         "reps": 30
       },
-      "expected": 165
+      "expected": null
     },
     {
       "name": "w=82.5 r=100",
@@ -577,7 +577,7 @@
         "weight": 82.5,
         "reps": 100
       },
-      "expected": 357.5
+      "expected": null
     },
     {
       "name": "w=100 r=1",
@@ -585,7 +585,7 @@
         "weight": 100,
         "reps": 1
       },
-      "expected": 100
+      "expected": 100.0
     },
     {
       "name": "w=100 r=2",
@@ -593,7 +593,7 @@
         "weight": 100,
         "reps": 2
       },
-      "expected": 106.7
+      "expected": 102.86
     },
     {
       "name": "w=100 r=3",
@@ -601,7 +601,7 @@
         "weight": 100,
         "reps": 3
       },
-      "expected": 110
+      "expected": 105.88
     },
     {
       "name": "w=100 r=5",
@@ -609,7 +609,7 @@
         "weight": 100,
         "reps": 5
       },
-      "expected": 116.7
+      "expected": 112.5
     },
     {
       "name": "w=100 r=8",
@@ -617,7 +617,7 @@
         "weight": 100,
         "reps": 8
       },
-      "expected": 126.7
+      "expected": 124.14
     },
     {
       "name": "w=100 r=12",
@@ -625,7 +625,7 @@
         "weight": 100,
         "reps": 12
       },
-      "expected": 140
+      "expected": 144.0
     },
     {
       "name": "w=100 r=17",
@@ -633,7 +633,7 @@
         "weight": 100,
         "reps": 17
       },
-      "expected": 156.7
+      "expected": null
     },
     {
       "name": "w=100 r=30",
@@ -641,7 +641,7 @@
         "weight": 100,
         "reps": 30
       },
-      "expected": 200
+      "expected": null
     },
     {
       "name": "w=100 r=100",
@@ -649,7 +649,7 @@
         "weight": 100,
         "reps": 100
       },
-      "expected": 433.3
+      "expected": null
     },
     {
       "name": "w=142.5 r=1",
@@ -665,7 +665,7 @@
         "weight": 142.5,
         "reps": 2
       },
-      "expected": 152
+      "expected": 146.57
     },
     {
       "name": "w=142.5 r=3",
@@ -673,7 +673,7 @@
         "weight": 142.5,
         "reps": 3
       },
-      "expected": 156.8
+      "expected": 150.88
     },
     {
       "name": "w=142.5 r=5",
@@ -681,7 +681,7 @@
         "weight": 142.5,
         "reps": 5
       },
-      "expected": 166.3
+      "expected": 160.31
     },
     {
       "name": "w=142.5 r=8",
@@ -689,7 +689,7 @@
         "weight": 142.5,
         "reps": 8
       },
-      "expected": 180.5
+      "expected": 176.9
     },
     {
       "name": "w=142.5 r=12",
@@ -697,7 +697,7 @@
         "weight": 142.5,
         "reps": 12
       },
-      "expected": 199.5
+      "expected": 205.2
     },
     {
       "name": "w=142.5 r=17",
@@ -705,7 +705,7 @@
         "weight": 142.5,
         "reps": 17
       },
-      "expected": 223.3
+      "expected": null
     },
     {
       "name": "w=142.5 r=30",
@@ -713,7 +713,7 @@
         "weight": 142.5,
         "reps": 30
       },
-      "expected": 285
+      "expected": null
     },
     {
       "name": "w=142.5 r=100",
@@ -721,7 +721,7 @@
         "weight": 142.5,
         "reps": 100
       },
-      "expected": 617.5
+      "expected": null
     },
     {
       "name": "w=1000 r=1",
@@ -729,7 +729,7 @@
         "weight": 1000,
         "reps": 1
       },
-      "expected": 1000
+      "expected": 1000.0
     },
     {
       "name": "w=1000 r=2",
@@ -737,7 +737,7 @@
         "weight": 1000,
         "reps": 2
       },
-      "expected": 1066.7
+      "expected": 1028.57
     },
     {
       "name": "w=1000 r=3",
@@ -745,7 +745,7 @@
         "weight": 1000,
         "reps": 3
       },
-      "expected": 1100
+      "expected": 1058.82
     },
     {
       "name": "w=1000 r=5",
@@ -753,7 +753,7 @@
         "weight": 1000,
         "reps": 5
       },
-      "expected": 1166.7
+      "expected": 1125.0
     },
     {
       "name": "w=1000 r=8",
@@ -761,7 +761,7 @@
         "weight": 1000,
         "reps": 8
       },
-      "expected": 1266.7
+      "expected": 1241.38
     },
     {
       "name": "w=1000 r=12",
@@ -769,7 +769,7 @@
         "weight": 1000,
         "reps": 12
       },
-      "expected": 1400
+      "expected": 1440.0
     },
     {
       "name": "w=1000 r=17",
@@ -777,7 +777,7 @@
         "weight": 1000,
         "reps": 17
       },
-      "expected": 1566.7
+      "expected": null
     },
     {
       "name": "w=1000 r=30",
@@ -785,7 +785,7 @@
         "weight": 1000,
         "reps": 30
       },
-      "expected": 2000
+      "expected": null
     },
     {
       "name": "w=1000 r=100",
@@ -793,10 +793,10 @@
         "weight": 1000,
         "reps": 100
       },
-      "expected": 4333.3
+      "expected": null
     },
     {
-      "name": "regression: Reverse Crunch 0 kg × 17 has no 1RM to estimate",
+      "name": "regression: Reverse Crunch 0 kg \u00d7 17 has no 1RM to estimate",
       "input": {
         "weight": 0,
         "reps": 17
@@ -818,6 +818,86 @@
         "reps": 5
       },
       "expected": null
+    },
+    {
+      "name": "w=25 r=16 - the ceiling, still answered",
+      "input": {
+        "weight": 25,
+        "reps": 16
+      },
+      "expected": 42.86
+    },
+    {
+      "name": "w=25 r=17 - one past the ceiling",
+      "input": {
+        "weight": 25,
+        "reps": 17
+      },
+      "expected": null
+    },
+    {
+      "name": "w=25 r=36 - one before the singularity",
+      "input": {
+        "weight": 25,
+        "reps": 36
+      },
+      "expected": null
+    },
+    {
+      "name": "w=25 r=37 - the singularity itself",
+      "input": {
+        "weight": 25,
+        "reps": 37
+      },
+      "expected": null
+    },
+    {
+      "name": "w=25 r=40 - past the singularity, where the formula goes negative",
+      "input": {
+        "weight": 25,
+        "reps": 40
+      },
+      "expected": null
+    },
+    {
+      "name": "w=25 r=0 - a set of no reps is not a set",
+      "input": {
+        "weight": 25,
+        "reps": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "w=24 r=9 - 30.86, the figure the founder compared against",
+      "input": {
+        "weight": 24,
+        "reps": 9
+      },
+      "expected": 30.86
+    },
+    {
+      "name": "w=25 r=8 - Hammer Curl's top set",
+      "input": {
+        "weight": 25,
+        "reps": 8
+      },
+      "expected": 31.03
+    },
+    {
+      "name": "w=20 r=10 - Hammer Curl's opener",
+      "input": {
+        "weight": 20,
+        "reps": 10
+      },
+      "expected": 26.67
+    },
+    {
+      "name": "w=142.5 r=1 - a single is its own one-rep max",
+      "input": {
+        "weight": 142.5,
+        "reps": 1
+      },
+      "expected": 142.5
     }
   ]
 }

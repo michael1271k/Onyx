@@ -1209,13 +1209,33 @@ private struct SetRowView: View {
     private var content: some View {
         HStack(spacing: SetColumn.gap) {
             badge
-            // ── ONE VALUE LINE, OR TWO INSIDE THE SAME BOX ─────────────────
-            // `valueSplit` is the only case that draws two, and it draws them
-            // here — INSIDE the box, under one badge — rather than as two
-            // boxes. The badge, the tick and the trophy stay single because
-            // the set is single; what differs is the numbers, so the numbers
-            // are what gets a second line.
-            if layout == .valueSplit {
+            // ── A PAIR IS TWO SUB-LINES IN ONE BOX. ALWAYS ─────────────────
+            // Drawn here — INSIDE the box, under one badge — and never as two
+            // boxes. The badge, the tick and the trophy stay single because the
+            // SET is single; what belongs to an arm is the numbers, so the
+            // numbers are what gets a line each.
+            //
+            // ── AND WHY THE TEST IS `rows.count`, NOT `layout` ─────────────
+            // It was `layout == .valueSplit` — draw two lines only once the
+            // sides DISAGREE — and that is the same dead end `SetPairLayout`
+            // documents for the effort column, one axis over and with no way
+            // out. `valueLine(rows, …)` hands BOTH rows to every stepper and
+            // field on it, which is right for a set moving together and means
+            // there is no gesture anywhere on this screen that can move one
+            // arm: type 12 in the left arm's field and the right arm's row
+            // takes 12 as well, so the sides stay equal, so `layout` stays
+            // `.effortSplit`, so one line is drawn. `.valueSplit` was
+            // reachable only from a state the UI could not produce — the exact
+            // shape of the 2026-09-11 bug, which was fixed for the rating and
+            // left standing for the load.
+            //
+            // So a split set is VISIBLY split from the moment it is split, and
+            // each arm owns its own controls. Two identical lines is the price,
+            // and it is the smaller half of the trade: `SetPairLayout` still
+            // decides what the pair MEANS — VoiceOver reads it, and "left and
+            // right differ" is still tested on the values rather than on the
+            // layout.
+            if rows.count > 1 {
                 VStack(spacing: OnyxSpace.xs) {
                     ForEach(rows) { side in
                         valueLine([side], tag: side.sideLabel)
@@ -1244,12 +1264,23 @@ private struct SetRowView: View {
         // tall (§3.1 allows exactly that, and only that).
         if typeSize.isAccessibilitySize {
             HStack(spacing: SetColumn.gap) {
-                sideTag(tag)
                 // THE EFFORT COMES DOWN HERE TOO. It is a word now, and the
                 // widest of them — "Challenging" — cannot share a line with an
                 // AX5 load and its two steppers. A third line costs this row
                 // 30 pt at a size where it is already 120 tall.
                 VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+                    // ── AND THE SIDE LETTER TAKES A LINE OF ITS OWN ────────
+                    // It used to sit BESIDE this stack, in a `SetColumn.side`
+                    // frame — a fixed 14 pt. A micro glyph at AX5 is several
+                    // times that, so the letter overflowed its frame and
+                    // printed straight through the weight stepper's minus: the
+                    // `R` came out looking like an `F`. Nothing clipped and
+                    // nothing truncated, so no layout gate could see it.
+                    //
+                    // Only at accessibility sizes. At every ordinary size the
+                    // tag belongs on the line it labels, where it costs 14 pt
+                    // of a row that has none to spare.
+                    sideTag(tag, fixedWidth: false)
                     if isCardio {
                         durationField(targets)
                         distanceField(targets)
@@ -1296,13 +1327,16 @@ private struct SetRowView: View {
     ///
     /// Tertiary ink and a micro role: it labels a line rather than announcing
     /// one, and the badge beside it is already carrying the set's identity.
+    /// - Parameter fixedWidth: keep the `SetColumn.side` track. False at
+    ///   accessibility sizes, where the glyph is wider than the track and would
+    ///   print through whatever is beside it.
     @ViewBuilder
-    private func sideTag(_ tag: String?) -> some View {
+    private func sideTag(_ tag: String?, fixedWidth: Bool = true) -> some View {
         if let tag {
             Text(tag)
                 .onyxType(.micro).fontWeight(.bold)
                 .foregroundStyle(Color.onyx.textTertiary)
-                .frame(width: SetColumn.side)
+                .frame(width: fixedWidth ? SetColumn.side : nil, alignment: .leading)
                 .accessibilityHidden(true)
         }
     }
@@ -1738,28 +1772,16 @@ private struct SetRowView: View {
     /// this scale IS: an ordered ramp where the neighbours matter. Picking
     /// "Hard" when you meant "Very Hard" is a one-notch mistake and the menu
     /// made it look like any other. See `EffortPickerSheet`.
-    /// ── AND WHY A PAIR'S TWO RATINGS FIT IN ONE COLUMN ──────────────────────
-    /// Two arms usually move the same load for the same reps and one of them
-    /// is harder. That is a difference in ONE number, and drawing it as two
-    /// value lines repeats `12 kg × 10` in order to say `9` instead of `8`. So
-    /// the effort splits on its own, compactly, inside the track it already
-    /// owns: `L 8 · R 9`, each half its own target. See `SetPairLayout`.
+    /// ── THE `L 8 · R 9` LINE IS GONE, AND SO IS THE REASON FOR IT ───────────
+    /// A pair used to draw ONE value line, so the two ratings had to share the
+    /// effort track: `L 8 · R 9`, compact, inside the column it already owned.
+    /// A pair now draws one sub-line per arm (see `content`), so each rating
+    /// sits on its own arm's line where it belongs and the shared-track case
+    /// cannot be reached — `effort` is only ever handed one row when there is
+    /// more than one.
     @ViewBuilder
     private func effort(_ targets: [LoggerModel.SetRow]) -> some View {
-        if targets.count > 1 && layout == .effortSplit {
-            HStack(spacing: 2) {
-                ForEach(targets) { side in
-                    if side.id != targets.first?.id {
-                        Text("·")
-                            .onyxType(.micro)
-                            .foregroundStyle(Color.onyx.textTertiary)
-                            .accessibilityHidden(true)
-                    }
-                    compactEffort(side, showsTag: true)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: typeSize.isAccessibilitySize ? .leading : .trailing)
-        } else if targets.count == 1 && rows.count > 1 {
+        if targets.count == 1 && rows.count > 1 {
             // A sub-line of a split pair. The word does not fit beside two
             // number groups and an `L`, and the number does — see
             // `SetColumn.side`, which is paid for out of exactly this.

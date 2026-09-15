@@ -94,7 +94,7 @@ public enum E1rmSeries {
             if byReps { return s.reps }
             // TS `est || Epley`: 0 AND NaN are falsy there, so both fall through.
             if let est = s.est, est != 0, !est.isNaN { return est }
-            return Epley.oneRepMax(weight: s.weightKg, reps: s.reps) ?? 0
+            return OneRepMax.estimate(weight: s.weightKg, reps: s.reps) ?? 0
         }
         func bestOf(_ sets: [TrendSetRow]) -> Double { sets.reduce(0) { Swift.max($0, headline($1)) } }
         func meanOf(_ sets: [TrendSetRow]) -> Double {

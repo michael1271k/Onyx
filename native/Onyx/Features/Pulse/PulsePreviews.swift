@@ -247,7 +247,7 @@ enum PulsePreviews {
                         id: newOnyxID(), sessionId: sessionId, exerciseId: exerciseId,
                         setIndex: index, weightKg: load, reps: lift.reps,
                         setType: set == 0 ? "warmup" : "normal", side: nil, pairId: nil,
-                        est1rmKg: Epley.oneRepMax(weight: load, reps: Double(lift.reps)),
+                        est1rmKg: OneRepMax.estimate(weight: load, reps: Double(lift.reps)),
                         foldOrder: index
                     ).insert(db)
                     index += 1
