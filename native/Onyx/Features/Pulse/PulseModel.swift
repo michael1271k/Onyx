@@ -890,9 +890,21 @@ final class DayModel {
     /// date's water without saying so. A one-tap control must never be the
     /// second kind (`NutritionModel.addWater` carries the same note, and the
     /// same scar).
+    ///
+    /// ── AND THE LOCAL IS LOAD-BEARING ───────────────────────────────────────
+    /// This read `log?.waterMl = (log?.waterMl ?? 0) + ml` and was the same
+    /// crash as `NutritionModel.addWater`, verbatim: `log` is a stored property
+    /// of an `@Observable` class, so `a?.b = rhs` opens an exclusive `_modify`
+    /// on it before evaluating the right-hand side — it must, because the
+    /// assignment has to short-circuit when the optional is nil — and the
+    /// right-hand side then reads the same property. Swift's dynamic
+    /// exclusivity checking traps: "Fatal access conflict detected", on the
+    /// first tap of any day that already has a `daily_logs` row. Reading into a
+    /// local closes the access before the write opens one.
     @discardableResult
     func addWaterGlass(_ ml: Double = 250) -> Bool {
-        log?.waterMl = (log?.waterMl ?? 0) + ml
+        let total = (log?.waterMl ?? 0) + ml
+        log?.waterMl = total
         return write { [database, userId, date] in
             try database.addWaterGlass(userId: userId, date: date, ml: ml)
         }

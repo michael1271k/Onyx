@@ -138,6 +138,22 @@ public final class AppEnvironment {
     private(set) var progressionAlerts: [ProgressionQueue.Alert] = []
     private(set) var progressionDayKey: String?
 
+    /// Which tab is showing, as `SignedInTabs.Tab.rawValue`. Empty means
+    /// "whatever the shell opens on".
+    ///
+    /// ── WHY THE SHELL DOES NOT OWN ITS OWN SELECTION ────────────────────────
+    /// It did, as `@State`, and that put it UNDER `OnyxApp`'s `.id(themeJSON)`
+    /// — so committing a theme dropped the user on the launch tab. Picking a
+    /// colour in Settings and being answered with the dashboard reads as the
+    /// app restarting, and it made the Appearance screen a way of DELAYING that
+    /// eviction by one tap rather than avoiding it.
+    ///
+    /// This object is `@State` on the `App` struct itself, which is above the
+    /// `.id`, so it is the one place in the app where a value survives a theme
+    /// change. A raw `String` rather than the enum because `Tab` belongs to the
+    /// shell and nothing here should have an opinion about which tabs exist.
+    var selectedTab: String = ""
+
     /// Whether the Train tab is holding a live `LoggerModel` right now.
     ///
     /// ── WHY SETTINGS OF ALL SCREENS NEEDS TO KNOW ───────────────────────────

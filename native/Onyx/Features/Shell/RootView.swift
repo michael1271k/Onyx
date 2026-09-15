@@ -38,10 +38,18 @@ struct RootView: View {
 }
 
 private struct SignedInTabs: View {
-    enum Tab: Hashable { case today, train, fuel, body, you }
+    enum Tab: String, Hashable { case today, train, fuel, body, you }
 
     @Environment(AppEnvironment.self) private var environment
-    @State private var selection: Tab = Self.initialTab
+    /// Held on `AppEnvironment` rather than here — see `selectedTab` there.
+    /// `@State` would be discarded by the theme rebuild, which is how a colour
+    /// change used to dump the user on the dashboard.
+    private var selection: Binding<Tab> {
+        Binding(
+            get: { Tab(rawValue: environment.selectedTab) ?? Self.initialTab },
+            set: { environment.selectedTab = $0.rawValue }
+        )
+    }
     /// 0…1. The mesh behind every screen dims with it (§W5.2).
     @State private var battery: Double = 1
 
@@ -60,12 +68,12 @@ private struct SignedInTabs: View {
     }
 
     var body: some View {
-        TabView(selection: $selection) {
+        TabView(selection: selection) {
             SwiftUI.Tab("Today", systemImage: "square.grid.2x2", value: Tab.today) {
                 NavigationStack {
                     TodayTabView(
-                        onOpenTrain: { selection = .train },
-                        onOpenPulse: { selection = .body }
+                        onOpenTrain: { selection.wrappedValue = .train },
+                        onOpenPulse: { selection.wrappedValue = .body }
                     )
                 }
             }
@@ -110,7 +118,7 @@ private struct SignedInTabs: View {
         .onOpenURL { url in
             guard let path = DeepLink.safePath(url.absoluteString),
                   let destination = DeepLink.destination(forPath: path) else { return }
-            selection = Self.tab(for: destination)
+            selection.wrappedValue = Self.tab(for: destination)
         }
         // The first-launch backfill (§7.2). A cover, not a replacement of the
         // tabs: they mount underneath, observe the store, and are already
