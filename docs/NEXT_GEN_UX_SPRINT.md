@@ -1204,3 +1204,88 @@ Whole-sprint acceptance, on a device:
 ## Wave Records
 
 _Appended by each wave as it merges. W12 harvests these, then deletes this file._
+
+---
+
+### W1 Wave Record — shipped 2026-09-15 as 3.10.1
+
+**Drift from the plan, on purpose:**
+- **Two migrations, not one.** `v26.healthWorkoutUuid` adds the column;
+  `v27.collapseCardioDuplicates` runs the sweep. Each is independently guarded,
+  which is the v18/v19 precedent, and a sweep that fails cannot leave the column
+  half-added.
+- **The sweep pushes its deletions.** The plan said "a one-time local sweep".
+  `cardio_logs` pulls on a date window, so a row deleted locally and left on the
+  server returns on the next sync and the migration looks like it never ran.
+  Every loser goes out through `enqueueRowDelete`.
+- **`docs/sql/w1-hk-uuid.sql` collapses server-side too, under the SAME rule**
+  (most non-null figures, ties by lowest `id`). The plan's "backfill from
+  `created_at` where unambiguous" cannot mean backfilling `hk_uuid` — a uuid
+  belongs to a HealthKit sample on a device and no historic row records which
+  bout it came from. What `created_at` can recover is the duplicates, for the
+  rows no device will ever open again. The two rules are written twice on
+  purpose and must agree, or they delete each other's survivor.
+- **The water render moved onto `NutritionModel`** as `waterFigures`. `WaterRow`
+  is a `private struct` inside `NutritionTabView.swift` and nothing could assert
+  on it — which is exactly why the `—` had no test to fail when it stopped being
+  true. The brief asked for that test; this is what made it possible.
+- **`WaterRowTests` does not run `observe()`.** It is the `.task` body: it awaits
+  its streams and never returns, so a ledger value cannot be asserted
+  synchronously at that layer. The ledger branch is asserted where its inputs
+  are controllable — `WaterTruthTests` (pure) and `WidgetWaterTruthTests` (a
+  snapshot over a seeded store) — and the store half of `clearWaterOverride`
+  moved to `DayEditingTests`, where the database is directly readable. All three
+  read the same four shapes.
+
+**Root causes that were not where the plan guessed:**
+- **`UUID.uuidString` is UPPERCASE and Postgres renders a uuid lowercase.**
+  `UserIdCasingTests` greps the whole tree for a render that is not
+  `.lowercased()` on the spot, and it failed on the first run. Left alone, a key
+  written uppercase and pulled back lowercase would have stopped matching itself
+  after one round trip — the duplicate returning by a new route, with the unique
+  index making the re-insert an outbox jam instead of a visible row. Every
+  render is now lowercased inline, which is also what the guard test demands.
+- **A bout that crosses midnight was filed under BOTH days.**
+  `reader.workouts` deliberately has no `.strictStartDate`, so a 23:40 walk is
+  returned by both of the pass's two queries. No same-day rule can see that
+  duplicate — and the new `(user_id, hk_uuid)` unique index would have REJECTED
+  the second push forever. `ingestCardio` now files a bout under the day its
+  start falls in, which is the day `created_at` already claims.
+- **`clearWaterOverride` was destroying more than the override.** The plan said
+  it "deletes the ledger and nils the flat column"; what makes the day
+  unrecoverable is that `DailyLogIngest` returns at `guard !payload.isEmpty`, so
+  nothing mints the row back when HealthKit has nothing to say. The one-way door
+  is only the `manual-water-` sentinel, so only that is deleted now; Apple's own
+  row and the tapped glasses survive and the projection is re-derived from them.
+
+**Constraints discovered that the next wave must respect:**
+- `OnyxCore` cannot see `OnyxData`, so `WaterTruth.ml(log:ledger:)` takes plain
+  `Double`s. Any future rule shared between the tab and a tile has to be shaped
+  the same way.
+- The key is written the moment the founder walks anywhere, so between this
+  build and the paste every imported bout's push is rejected for an unknown
+  column. Per-row, retried under `SyncBackoff`, self-clearing — the
+  `v24.stressEvents` precedent. It is why the SQL is first in the handover.
+- `WeeklyExportBuilder`'s render-time dedupe is **left in place**. It is a cheap
+  net and its anomaly counter is how a regression would announce itself. W12
+  should not remove it without a reason.
+- A bout that started before the two-day window and ran into it is no longer
+  imported. It was only ever imported under the wrong date; `syncCardioBouts`
+  scans two days and the third is out of scope by the same rule as every other.
+
+**Left open on purpose:**
+- No `HKAnchoredObjectQuery`. The uuid key makes the re-read idempotent, so the
+  anchor would buy a smaller read and a new piece of state to keep correct. The
+  ceiling is noted where it matters; it is not the defect.
+- `hk_uuid` is looked up within the day's rows, not store-wide. That is only
+  sound because a bout is now filed by its start; a future wave that widens the
+  ingest window must widen the lookup with it.
+- The "pending or denied" distinction is not read from HealthKit — no
+  authorization state is exposed anywhere in the app. `isAwaitingHealthWater` is
+  "nothing in either store, inside the window the sync scans", which is true of
+  both and needs no new plumbing.
+
+**Founder's manual steps still outstanding:**
+- Paste `docs/sql/w1-hk-uuid.sql` into the Supabase SQL editor. Nothing in this
+  repo can apply it, and until it runs no imported bout reaches the server.
+
