@@ -164,6 +164,21 @@ private struct SettingsForm: View {
             }
 
             Section {
+                // A door and not the controls themselves: applying a theme
+                // re-ids the app root, which would throw the user out of this
+                // screen mid-tap. `AppearanceView` says why in full.
+                NavigationLink {
+                    AppearanceView()
+                } label: {
+                    LabeledContent("Appearance", value: themeName)
+                }
+            } header: {
+                OnyxSectionHeader("Appearance", .train)
+            } footer: {
+                Text("Two colours, and the palette the rest of the app is derived from them. Presets, or pick your own.")
+            }
+
+            Section {
                 Toggle("Track effort (RPE)", isOn: trackRpe)
                 Toggle("Warm-up calculator", isOn: $warmupCalculator)
             } header: {
@@ -294,6 +309,17 @@ private struct SettingsForm: View {
     private var userId: String {
         if case let .signedIn(id) = environment.auth { return OnyxJSON.canonicalUserID(id) }
         return ""
+    }
+
+    /// The preset the live theme matches, or `Custom`.
+    ///
+    /// Derived rather than stored: the spec IS the theme, and a name kept
+    /// beside it would be a second fact to keep true across a hand-edited
+    /// defaults blob. Presets are written as their normalised hexes, so a
+    /// stored spec compares equal to the preset it came from.
+    private var themeName: String {
+        let spec = OnyxTheme.current.spec
+        return OnyxTheme.presets.first { $0.spec == spec }?.name ?? "Custom"
     }
 
     /// `5 days · 37 movements`, or the empty state a blank plan starts in.

@@ -51,6 +51,15 @@ public struct OnyxTheme: Sendable {
         self.muscle = muscle
     }
 
+    /// The ramp a domain takes under THIS theme rather than under `current`.
+    ///
+    /// `OnyxDomain.start` and `.end` read the global, which is the right answer
+    /// for every view in the app and the wrong one for the single screen that
+    /// draws a theme the user has not committed yet.
+    public func ramp(_ domain: OnyxDomain) -> (start: Color, end: Color) {
+        (start[domain] ?? .clear, end[domain] ?? .clear)
+    }
+
     /// The theme every static token reads.
     ///
     /// What is guaranteed, exactly:
@@ -117,4 +126,54 @@ public struct OnyxTheme: Sendable {
         ("Gold",  OnyxThemeSpec(primary: 0xDDB04A, secondary: 0x7B6BE1)),
         ("Sea",   OnyxThemeSpec(primary: 0x4FB6E8, secondary: 0xE8A04F)),
     ]
+}
+
+// MARK: - The editor's bridge
+
+/// `Color` ↔ 8-bit sRGB hex, for the one screen that edits a theme.
+///
+/// It lives HERE and not beside the Appearance screen because `Color(hex:)` is
+/// a spelling `TokenDisciplineTests` fails anywhere but the three token files —
+/// which is the right rule and this is the one legitimate exception to it: a
+/// colour picker deals in `Color` and the spec stores `UInt32`, so something has
+/// to convert, once, where the palette already lives.
+public extension Color {
+
+    /// The inverse of `Color(hex:)`.
+    ///
+    /// ── THE TWO WAYS THIS GOES WRONG ────────────────────────────────────────
+    /// `Color.Resolved` is EXTENDED-RANGE sRGB, and its `red`/`green`/`blue` are
+    /// already gamma-ENCODED — `linearRed` and friends are the linear ones, and
+    /// quantising those instead turns Ion (`0x6B78F0`) into `0x2530DE`: not a
+    /// subtle shift, a different, darker colour. So: the encoded components,
+    /// clamped before the multiply (the system picker's wheel can hand back a
+    /// Display P3 colour whose sRGB components fall outside 0…1), and ROUNDED
+    /// rather than truncated — measured, truncation loses 63 of the 256 levels
+    /// to a one-LSB error after a round trip, which is a swatch that refuses to
+    /// settle on the colour you picked. Same order as `OKLCHConvert.hex(from:)`.
+    var onyxHex: UInt32 {
+        let c = resolve(in: EnvironmentValues())
+        func level(_ v: Float) -> UInt32 { UInt32((min(max(v, 0), 1) * 255).rounded()) }
+        return (level(c.red) << 16) | (level(c.green) << 8) | level(c.blue)
+    }
+}
+
+public extension OnyxTheme {
+
+    /// The binding a `ColorPicker` takes, over a hex the caller owns.
+    ///
+    /// The picker writes on EVERY frame of a drag (UIKit's
+    /// `didSelect:continuously:`) and SwiftUI surfaces no end-of-edit signal, so
+    /// what this is bound to must be a draft — never the store. Persisting per
+    /// frame would re-id the app root (`OnyxApp.swift`) sixty times a second and
+    /// tear down the very view presenting the picker.
+    static func picked(_ hex: Binding<UInt32>) -> Binding<Color> {
+        Binding(get: { Color(hex: hex.wrappedValue) }, set: { hex.wrappedValue = $0.onyxHex })
+    }
+
+    /// The two stops a preset swatch draws — the accents themselves, not the
+    /// ramp they generate, because those are what the picker below edits.
+    static func swatch(_ spec: OnyxThemeSpec) -> (primary: Color, secondary: Color) {
+        (Color(hex: spec.primary), Color(hex: spec.secondary))
+    }
 }

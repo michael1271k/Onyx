@@ -94,7 +94,15 @@ shoot() {
   # W4 run of twelve screens came out shifted by one that way, and a shifted
   # set is worse than a missing one: every PNG looks plausible.
   sleep 1
-  xcrun simctl launch "$UDID" "$BUNDLE_ID" --onyx-screen "$screen" >/dev/null
+  # `SHOT_THEME` photographs a screen under a theme: a preset by name
+  # (`SHOT_THEME=Ember`) or a custom pair of hexes (`SHOT_THEME=E0645A,4FD1C5`).
+  # It is a launch argument, so it dies with the process and cannot leave the
+  # simulator's container holding a colour the next run would inherit.
+  if [ -n "${SHOT_THEME:-}" ]; then
+    xcrun simctl launch "$UDID" "$BUNDLE_ID" --onyx-screen "$screen" --onyx-theme "$SHOT_THEME" >/dev/null
+  else
+    xcrun simctl launch "$UDID" "$BUNDLE_ID" --onyx-screen "$screen" >/dev/null
+  fi
   # The launch returns as soon as the process exists; the first frame is a
   # few hundred ms later. Shooting too early photographs the launch screen —
   # or, on the first launch after an install, a black window: 3.5 s was enough
@@ -111,7 +119,7 @@ read -ra SCREENS <<< "$SCREEN"
 if [ "$SCREEN" = "all" ]; then
   # Keep in step with `PreviewHarness.Screen` — the harness is the authority and
   # an unknown name there renders a visible error rather than failing silently.
-  SCREENS=(signin backfill today today-edit today-sheet today-sheet-vitals today-sheet-steps today-sheet-muscle today-sheet-records today-weighin today-board train train-done train-empty mini-player logger logger-stats logger-lifts logger-paused logger-finish logger-timer set-row set-row-split set-row-cardio set-row-records set-options effort-picker day day-rows day-past day-session day-empty day-stress day-soreness day-vitals sleep-edit stress stress-log stress-day fatigue quick-log scale scale-first day-swap doms stack stack-add fuel fuel-over fuel-empty nutrients macro-edit you levers sync-status sync-doctor plan body volume library exercise reports report report-edit history history-week session session-ledger session-records exercise-history trends trends-empty body-trends body-trends-empty body-trends-stress widgets)
+  SCREENS=(signin backfill today today-edit today-sheet today-sheet-vitals today-sheet-steps today-sheet-muscle today-sheet-records today-weighin today-board train train-done train-empty mini-player logger logger-stats logger-lifts logger-paused logger-finish logger-timer set-row set-row-split set-row-cardio set-row-records set-options effort-picker day day-rows day-past day-session day-empty day-stress day-soreness day-vitals sleep-edit stress stress-log stress-day fatigue quick-log scale scale-first day-swap doms stack stack-add fuel fuel-over fuel-empty nutrients macro-edit you levers sync-status sync-doctor plan body volume library exercise reports report report-edit history history-week session session-ledger session-records exercise-history trends trends-empty body-trends body-trends-empty body-trends-stress appearance appearance-locked widgets)
 fi
 
 # `widgets` is a contact sheet of every tile; the harness pages it because a

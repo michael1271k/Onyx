@@ -45,10 +45,22 @@ import OnyxUI
 ///    every stacked tile a dead patch you cannot scroll the dashboard by. That
 ///    is not a guess; it is what a 300 pt body figure did to the atlas sheet
 ///    (`AtlasSheet.swift:257`).
-///  · `takeover` (16 pt) is what keeps the parent's short drags. Under it the
+///  · `takeover` (10 pt) is what keeps the parent's short drags. Under it the
 ///    dashboard scrolls and this view has not started; over it the stack claims
-///    the finger. 16 and not 10, so a press that becomes a drag has already
-///    failed `LongPressGesture`'s slop and the tap and the menu stay reachable.
+///    the finger. It was 16, chosen so that a press which becomes a drag had
+///    already failed `LongPressGesture`'s slop (10 pt, and the same 10 for
+///    `UILongPressGestureRecognizer.allowableMovement`, which is what
+///    `.contextMenu` runs on) — the ordering held by arithmetic. At 10 the two
+///    are a tie rather than a guarantee, and that is affordable because the
+///    drag is `.simultaneousGesture`: it does not FAIL the tile's tap or its
+///    menu, both of which live on `TileFrame` above this view. What the six
+///    points bought was stiffness — the finger spent them scrolling the grid
+///    before the faces moved at all.
+///  · Which makes the AXIS the real gate, not the distance. `minimumDistance`
+///    measures the translation VECTOR, so at 10 pt a sideways drag reaches the
+///    gesture too; `takes(_:)` is what refuses it. Latching the grid's scroll
+///    off for a drag that then moves nothing is a dead screen with no feedback
+///    on it, and that is the failure a lower threshold would otherwise buy.
 ///  · Simultaneous alone would page the stack AND scroll the grid — the atlas
 ///    solves that with an axis lock, which needs two axes and there is only one
 ///    here. So the takeover LATCHES: `paging` switches the parent's scroll off
@@ -95,10 +107,14 @@ struct SmartStackView: View {
     @State private var touchedAt = Date.distantPast
     @State private var byClock = false
     @State private var drag: CGFloat = 0
-    /// The translation at the moment of takeover. The 16 pt the finger already
+    /// The translation at the moment of takeover. The 10 pt the finger already
     /// spent scrolling the grid are not spent again on the faces, so nothing
     /// jumps at the handover.
     @State private var origin: CGFloat?
+    /// Which gesture the `origin` above belongs to — the touch-down point,
+    /// which is unique per drag in practice and, unlike the latch, is known
+    /// inside `onChanged` itself rather than one view update later.
+    @State private var startedAt: CGPoint?
     /// `@GestureState` because it CANNOT be allowed to stick. A drag cancelled
     /// out from under the view — a system edge swipe, a call arriving — never
     /// calls `onEnded`, and a plain `@State` latch that missed its reset would
@@ -113,11 +129,55 @@ struct SmartStackView: View {
     /// A tile never turns over in the blink the grid came back in.
     static let grace: TimeInterval = 2
     /// How far the finger travels before the stack takes the drag from the
-    /// dashboard. See the header for why it is this and not less.
-    static let takeover: CGFloat = 16
-    /// Past this much of a face — or heading past it, once the throw is
-    /// projected — the swipe commits to the next one.
+    /// dashboard. See the header for why it is this and not more.
+    static let takeover: CGFloat = 10
+    /// How much more vertical than sideways a drag has to be to be this view's.
+    /// 1.5 rather than 1.0 so the diagonal a thumb actually draws on a tile at
+    /// the edge of the grid still pages, while a drag that is mostly across the
+    /// screen is left to whatever is under it.
+    static let axis: CGFloat = 1.5
+    /// Heading past this much of a face once the throw is projected, the swipe
+    /// commits to the next one.
     static let commit: CGFloat = 1.0 / 3.0
+    /// Past this much of a face with the throw spent, it commits anyway.
+    ///
+    /// At release with no velocity left `predictedEndTranslation` IS
+    /// `translation`, so the projection above is the only rule and it asks for a
+    /// third of the tile. That is the stiffness: a finger that drags a face
+    /// most of the way, stops to look, and lifts, gets the face it started on
+    /// back. This is the rule for that finger, and it is the only case it
+    /// changes — with any real velocity the projection is the larger of the two
+    /// and fires first.
+    static let hold: CGFloat = 0.25
+
+    /// Which face the swipe committed to, relative to the one up: -1, 0 or +1.
+    ///
+    /// Both measurements are in FINGER units, from the takeover point rather
+    /// than from the resisted `drag` — the throw is judged by what the hand did,
+    /// not by how much of it the rubber band gave back.
+    static func step(travelled: CGFloat, projected: CGFloat, over h: CGFloat) -> Int {
+        // The throw, OR a drag that went far enough and stopped (see `hold`).
+        // The sign test is not decoration: the DIRECTION comes from the
+        // projection, so a face pulled a quarter of the way down and then
+        // flicked up at the moment of release would satisfy the distance rule
+        // downwards and page upwards — the tile sliding away from the finger's
+        // own offset, which is a worse failure than the stiffness this rule
+        // exists to fix.
+        let far = abs(projected) > h * commit
+            || (abs(travelled) > h * hold && travelled * projected > 0)
+        guard far else { return 0 }
+        return projected < 0 ? 1 : -1
+    }
+
+    /// Is this drag the stack's? Far enough, and meaningfully more vertical
+    /// than it is sideways.
+    ///
+    /// One predicate because the test is made TWICE — in `.updating` and in
+    /// `.onChanged` — and two spellings of it drifting apart is a stack that
+    /// latches the grid's scroll off and then does not move.
+    static func takes(_ translation: CGSize) -> Bool {
+        abs(translation.height) >= takeover && abs(translation.height) > abs(translation.width) * axis
+    }
 
     /// A deterministic offset per slot — the id's Java hash, as the web did,
     /// so the phase survives a remount and is the same on every device.
@@ -284,10 +344,22 @@ struct SmartStackView: View {
         // back inside the threshold must not hand the scroll back mid-drag.
         DragGesture(minimumDistance: Self.takeover)
             .updating($held) { value, held, _ in
-                held = held || abs(value.translation.height) >= Self.takeover
+                held = held || Self.takes(value.translation)
             }
             .onChanged { value in
-                guard abs(value.translation.height) >= Self.takeover else { return }
+                // `origin` is cleared on the way IN by `onChange(of: held)` —
+                // which is a view update, so it runs AFTER this closure has
+                // already read it on the first event of a gesture. A CANCELLED
+                // drag leaves one behind (`onEnded`'s `defer` never runs), and
+                // the next drag's first frame then measures from a point in the
+                // last one: a page-sized jump, snapped back the frame after.
+                // The touch-down point says whose `origin` this is, which is a
+                // fact the closure holds rather than one it has to be told.
+                if startedAt != value.startLocation {
+                    startedAt = value.startLocation
+                    origin = nil
+                }
+                guard Self.takes(value.translation) else { return }
                 let from = origin ?? value.translation.height
                 if origin == nil { origin = from }
                 touchedAt = .now
@@ -304,22 +376,23 @@ struct SmartStackView: View {
                 let down = face > 0 ? h : 0
                 let up = face < slot.items.count - 1 ? -h : 0
                 let inside = min(max(d, up), down)
-                drag = inside + Self.resisted(d - inside, over: h * 0.4)
+                drag = inside + Self.resisted(d - inside, over: h * 0.6)
             }
             .onEnded { value in
-                defer { origin = nil }
+                defer { origin = nil; startedAt = nil }
                 // `predictedEndTranslation` is the system's own momentum
                 // projection — the same rule the logger's hero uses
                 // (`LoggerHero.swift:568`) rather than a deceleration constant
                 // re-derived here. Distance alone refuses a fast short flick,
-                // which is how a thumb actually turns a small tile over.
-                //
-                //
-                // Measured in FINGER units, from `origin` rather than from the
-                // resisted `drag`: the throw is judged by what the hand did, not
-                // by how much of it the rubber band gave back.
-                let projected = value.predictedEndTranslation.height - (origin ?? 0)
-                let step = abs(projected) > h * Self.commit ? (projected < 0 ? 1 : -1) : 0
+                // which is how a thumb actually turns a small tile over; the
+                // projection alone refuses a slow drag that stopped, which is
+                // how one reads a tile before turning it. `step` takes both.
+                let from = origin ?? 0
+                let step = Self.step(
+                    travelled: value.translation.height - from,
+                    projected: value.predictedEndTranslation.height - from,
+                    over: h
+                )
                 // Load-bearing, not belt-and-braces: a hard throw past the last
                 // face projects well past the commit threshold, and this clamp
                 // is the only thing that stops it stepping off the end.

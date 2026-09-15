@@ -288,6 +288,14 @@ struct WorkoutTabView: View {
         .onChange(of: storedPhase) { _, next in
             week?.setPhase(ProgramPhase(rawValue: next) ?? .cut)
         }
+        // The one place that knows whether a session is live IS the one holding
+        // it. Settings reads the published flag and refuses a theme write while
+        // it is up — see `AppEnvironment.isSessionLive`. `initial: true` so a
+        // tab rebuilt with no model (a relaunch, or a theme write that already
+        // happened) lowers the flag rather than leaving the last value up.
+        .onChange(of: session != nil, initial: true) { _, live in
+            environment.publishSessionLive(live)
+        }
         // §3.4: `.success` on session finished.
         .sensoryFeedback(.success, trigger: finishes)
     }

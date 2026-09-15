@@ -426,8 +426,31 @@ final class NutritionModel {
     ///
     /// A glass is its own row in the ledger now, and the ingest adds the glasses
     /// to what Apple reports. See `AppDatabase.addWaterGlass`.
+    ///
+    /// ── THE LOCAL IS THE FIX, AND IT IS NOT A STYLE POINT ───────────────────
+    /// This line was `dailyLog?.waterMl = (waterMl ?? 0) + ml`, and it killed
+    /// the app on the FIRST tap of any day that already had a `daily_logs` row:
+    ///
+    ///     Simultaneous accesses to 0x…, but modification requires exclusive
+    ///     access. Previous access (a modification) started at
+    ///     NutritionModel.dailyLog.modify … Fatal access conflict detected.
+    ///
+    /// `dailyLog` is a stored property of an `@Observable` class, so it has a
+    /// `_modify` accessor — and `a?.b = rhs` has to OPEN that exclusive access
+    /// before evaluating `rhs`, because the assignment must short-circuit when
+    /// `a` is nil. The right-hand side then called `waterMl`, whose getter
+    /// reads `dailyLog` — a read inside an open exclusive modification, which
+    /// Swift's dynamic exclusivity checking traps. Not a race: no second tap, no
+    /// sheet, no concurrency. On an EMPTY day it survived one tap, because the
+    /// optional chain short-circuited before the read — and died on the tap
+    /// after the row was minted, which is what identified the mechanism.
+    ///
+    /// Reading first closes the access before the write opens one. Note the two
+    /// siblings below are safe for the same reason and by accident: `setWater`
+    /// assigns a local and `clearWater` a literal, so neither reads itself.
     func addWater(_ ml: Double = NutritionModel.glassMl) {
-        dailyLog?.waterMl = (waterMl ?? 0) + ml
+        let total = (waterMl ?? 0) + ml
+        dailyLog?.waterMl = total
         write { try database.addWaterGlass(userId: userId, date: date, ml: ml) }
     }
 

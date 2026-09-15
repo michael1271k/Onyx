@@ -89,6 +89,42 @@ struct TodayModelTests {
         }
     }
 
+    @Test("a drag is the stack's only when it is far enough AND more vertical than sideways")
+    func takesTheDrag() {
+        // Under the threshold, whatever the axis.
+        #expect(!SmartStackView.takes(CGSize(width: 0, height: 9)))
+        // Over it, and vertical.
+        #expect(SmartStackView.takes(CGSize(width: 0, height: -12)))
+        // The diagonal a thumb draws still pages: 30 down, 10 across.
+        #expect(SmartStackView.takes(CGSize(width: 10, height: 30)))
+        // Mostly sideways does not, however long it is — `minimumDistance`
+        // measures the VECTOR, so this drag reaches the gesture and has to be
+        // refused here or the grid's scroll latches off for nothing.
+        #expect(!SmartStackView.takes(CGSize(width: 60, height: 40)))
+        // Exactly on the axis ratio is not enough (strictly greater).
+        #expect(!SmartStackView.takes(CGSize(width: 20, height: 30)))
+    }
+
+    @Test("the swipe commits on the throw, or on a drag that went far enough and stopped")
+    func commitRule() {
+        let h: CGFloat = 160
+        // A short flick: too little travel, but projected well past a third.
+        #expect(SmartStackView.step(travelled: -14, projected: -90, over: h) == 1)
+        // A slow drag that stopped: no throw left, a quarter of the face gone.
+        // This is the case `hold` exists for — under the projection rule alone
+        // (at rest, projected == travelled) it would snap back.
+        #expect(SmartStackView.step(travelled: -44, projected: -44, over: h) == 1)
+        #expect(SmartStackView.step(travelled: 44, projected: 44, over: h) == -1)
+        // A nudge stays put.
+        #expect(SmartStackView.step(travelled: -20, projected: -22, over: h) == 0)
+        // Pulled down a quarter, flicked up at the moment of release: the two
+        // rules disagree in SIGN, so the distance rule is refused and the page
+        // does not slide away from the offset the finger is looking at.
+        #expect(SmartStackView.step(travelled: 44, projected: -30, over: h) == 0)
+        // …but a real throw the other way still wins on its own.
+        #expect(SmartStackView.step(travelled: 44, projected: -80, over: h) == 1)
+    }
+
     /// The band's asymptote is its `dimension`: pull forever and it gives back
     /// exactly that much and no more. A zero dimension used to be 0/0.
     @Test("the rubber band saturates at its dimension and never returns NaN")

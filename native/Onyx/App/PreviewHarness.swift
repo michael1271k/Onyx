@@ -2,6 +2,7 @@
 import SwiftUI
 import OnyxCore
 import OnyxData
+import OnyxUI
 
 /// One screen, seeded, for `scripts/native-shot.sh`.
 ///
@@ -222,8 +223,39 @@ enum PreviewHarness {
         return model
     }
 
+    /// The theme a shot was asked for, applied before anything draws.
+    ///
+    /// ── WHY A LAUNCH ARGUMENT AND NOT THE DEFAULTS SUITE ────────────────────
+    /// The honest way to theme the app is to write the App Group suite, which
+    /// is what Settings does — and doing that from a shot would leave the
+    /// simulator's container holding the last theme photographed, so the NEXT
+    /// run's "default" shot would come out in whatever colour the previous one
+    /// picked. A launch argument dies with the process.
+    ///
+    /// `--onyx-theme Ember` names a preset; `--onyx-theme 6B78F0,E3A650` gives
+    /// the two hexes directly, which is how a CUSTOM pair is photographed
+    /// without adding it to `OnyxTheme.presets`. Anything unrecognised leaves
+    /// the default in place, so a typo photographs the default rather than
+    /// failing the run.
+    @MainActor
+    static func applyRequestedTheme() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "--onyx-theme"),
+              arguments.index(after: flag) < arguments.endIndex
+        else { return }
+        let value = arguments[arguments.index(after: flag)]
+        if let preset = OnyxTheme.presets.first(where: { $0.name.lowercased() == value.lowercased() }) {
+            OnyxTheme.set(preset.spec)
+            return
+        }
+        let hexes = value.split(separator: ",").compactMap { UInt32($0, radix: 16) }
+        guard hexes.count == 2 else { return }
+        OnyxTheme.set(OnyxThemeSpec(primary: hexes[0], secondary: hexes[1]))
+    }
+
     @MainActor @ViewBuilder
     static func view(_ screen: String) -> some View {
+        let _ = applyRequestedTheme()
         let model = sharedSettingsModel
         switch screen {
         case "signin":
@@ -321,6 +353,16 @@ enum PreviewHarness {
             // Ready-to-progress box are both reads over the ledger, so an empty
             // database photographs the empty states rather than the screen.
             HistoryPreviews.view(screen)
+        // ── APPEARANCE, AND THE LOCK ────────────────────────────────────────
+        // The locked variant is the seam this screen exists to respect: a theme
+        // write re-ids the app root and would take a live `LoggerModel` with
+        // it. The flag is published directly rather than by starting a session,
+        // because the shot is of the REFUSAL, not of the workout.
+        case "appearance", "appearance-locked":
+            let themed = AppEnvironment.preview
+            let _ = themed.publishSessionLive(screen.hasSuffix("locked"))
+            NavigationStack { AppearanceView() }
+                .environment(themed)
         case "sync-status":
             NavigationStack { SyncStatusView(seeded: .preview) }.environment(AppEnvironment.preview)
         // The same screen with every fault it can name — a table behind the

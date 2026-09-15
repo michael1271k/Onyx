@@ -138,6 +138,23 @@ public final class AppEnvironment {
     private(set) var progressionAlerts: [ProgressionQueue.Alert] = []
     private(set) var progressionDayKey: String?
 
+    /// Whether the Train tab is holding a live `LoggerModel` right now.
+    ///
+    /// ── WHY SETTINGS OF ALL SCREENS NEEDS TO KNOW ───────────────────────────
+    /// A theme write changes `@AppStorage(OnyxTheme.key)`, which is what
+    /// `OnyxApp.swift`'s `.id(themeJSON)` hangs off — and re-identifying the
+    /// root throws away every `@State` under it, including the session the
+    /// Train tab keeps at `WorkoutTabView.swift:44`. No SET would be lost (they
+    /// are in the event log the moment they are logged), but the clock, the rest
+    /// timer, the deck cursor and the Live Activity's link to this model all go,
+    /// and the Mini Player falls back to "Resume workout" mid-workout. So the
+    /// Appearance section refuses to write while this is true.
+    ///
+    /// Published rather than computed, for the same reason `progressionAlerts`
+    /// is: the fact lives in the view that owns the model, and re-deriving it
+    /// here would be a second copy of a rule that has bitten this app before.
+    private(set) var isSessionLive = false
+
     /// Bumped when a rescore cascade COMPLETES — never per day, never per
     /// commit.
     ///
@@ -212,6 +229,24 @@ public final class AppEnvironment {
     func publishProgression(_ alerts: [ProgressionQueue.Alert], for dayKey: String?) {
         progressionAlerts = alerts
         progressionDayKey = dayKey
+    }
+
+    /// The Train tab, saying whether it is holding a live session. See
+    /// `isSessionLive`.
+    func publishSessionLive(_ live: Bool) { isSessionLive = live }
+
+    /// The theme changed: tell the two processes that do not share this one's
+    /// memory.
+    ///
+    /// Called AFTER `OnyxTheme.save`, both of them: the widget extension reads
+    /// the App Group defaults the save has just written, and the watch bridge
+    /// attaches `OnyxTheme.current.spec`, which the save is what sets.
+    /// `reloadAllTimelines()` needs no entitlement and is a no-op with no
+    /// widgets installed, so it is called unguarded; `pushWatchContext` is a
+    /// no-op signed out.
+    func themeDidChange() {
+        WidgetCenter.shared.reloadAllTimelines()
+        if case .signedIn(let userID) = auth { pushWatchContext(userID: userID) }
     }
 
     #if DEBUG

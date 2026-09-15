@@ -19,12 +19,21 @@ import OnyxUI
 /// the web-shell extension used, so a re-install keeps what the user placed.
 @main
 struct OnyxWidgets: WidgetBundle {
-    /// The theme, once per extension launch.
+    /// The theme, on a cold extension launch.
     ///
-    /// NOT per timeline entry: WidgetKit rebuilds a provider for every refresh
-    /// and the palette is a `UserDefaults` read plus sixteen OKLCH rotations —
-    /// paying that on every entry would be the same colours computed dozens of
-    /// times an hour in an extension with a 30 MB memory budget.
+    /// ── AND AGAIN PER TIMELINE, WHICH THIS USED TO ARGUE AGAINST (W5) ───────
+    /// The argument was cost: the palette is a `UserDefaults` read plus sixteen
+    /// OKLCH rotations, and paying it per entry would be the same colours
+    /// computed dozens of times an hour in an extension with a 30 MB budget.
+    /// The premise is wrong in the only case that matters. `reloadAllTimelines`
+    /// re-runs the PROVIDER, not this initialiser, and WidgetKit reuses a live
+    /// extension process — so a theme picked in Settings reached a widget that
+    /// was cold and missed one that happened to be warm, which reads as the
+    /// feature working intermittently. `OnyxProvider` therefore loads per
+    /// timeline too, and the cost is not the one above: `OnyxTheme.set` returns
+    /// at `guard current.spec != spec` without rebuilding anything, so a
+    /// reload in a warm process costs a string read, a two-field JSON decode
+    /// and an `==`.
     ///
     /// `assumeIsolated` because a `WidgetBundle` init runs on the main actor
     /// but is not annotated as doing so, and `load` is `@MainActor`. Nothing is

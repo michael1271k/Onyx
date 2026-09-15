@@ -82,7 +82,21 @@ struct OnyxIntentProvider<Configuration: WidgetConfigurationIntent & OnyxScoped>
   func placeholder(in context: TimelineProviderContext) -> OnyxEntry { .placeholder() }
 
   func snapshot(for configuration: Configuration, in context: TimelineProviderContext) async -> OnyxEntry {
-    entry(for: configuration)
+    await Self.theme()
+    return entry(for: configuration)
+  }
+
+  /// Re-read the theme the app persisted to the App Group.
+  ///
+  /// The bundle's `init` cannot be relied on for this: `reloadAllTimelines()`
+  /// re-runs the provider, and WidgetKit may serve it from an extension process
+  /// that is already running — one whose `OnyxTheme.current` is the palette
+  /// from before the user picked a new one. Nearly free in that case; see the
+  /// note on `OnyxWidgets.init`.
+  private static func theme() async {
+    await MainActor.run {
+      OnyxTheme.load(UserDefaults(suiteName: AppDatabase.appGroupID) ?? .standard)
+    }
   }
 
   /// ── THE TIMELINE IS A SAFETY NET, NOT THE REFRESH ──────────────────────────
@@ -92,6 +106,7 @@ struct OnyxIntentProvider<Configuration: WidgetConfigurationIntent & OnyxScoped>
   /// changes WITHOUT a write — the battery decaying with hours awake — and it
   /// spends the 40–70 daily refresh grant where the day is (`WidgetCadence`).
   func timeline(for configuration: Configuration, in context: TimelineProviderContext) async -> Timeline<OnyxEntry> {
+    await Self.theme()
     let entry = entry(for: configuration)
     return Timeline(entries: [entry], policy: .after(WidgetCadence.nextRefresh(ok: entry.tile.snapshot != nil)))
   }
