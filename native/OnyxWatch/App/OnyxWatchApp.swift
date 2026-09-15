@@ -47,7 +47,39 @@ struct OnyxWatchApp: App {
                     // DEBUG only, environment only, and it does exactly what
                     // the Start button does rather than a special path.
                     if ProcessInfo.processInfo.environment["ONYX_WATCH_AUTOSTART"] == "1" {
+                        // ── AND THE CONTEXT IT NEEDS TO HAVE ANY EFFECT ─────
+                        // `beginSession` needs a `day`, `day` comes from the
+                        // schedule, and the schedule only ever arrives over
+                        // WatchConnectivity. On a simulator with no paired
+                        // phone there is none, so this hook has silently done
+                        // nothing since it was written: the shot came back as
+                        // "Open Onyx on your iPhone" — a real screen, and not
+                        // the one anybody was trying to review.
+                        //
+                        // Seeded through the SAME cache the phone writes, so
+                        // the app underneath is running its ordinary path: a
+                        // stored context, `resolveDay`, then the Start button's
+                        // own call. The day is pinned with an `overrides` entry
+                        // rather than a layout, so the shot does not depend on
+                        // which weekday it happens to run on — the same reason
+                        // `PreviewHarness` takes a `seededDay`.
+                        // ALWAYS, not `if context == nil`. The first run of this
+                        // hook photographed "Rest day": the simulator still had
+                        // a context cached by an earlier wave, whose overrides
+                        // were keyed to that day's date, so today fell through
+                        // to a weekday layout the seed does not carry. A shot
+                        // that depends on what a simulator happens to be
+                        // holding is a shot that reviews the wrong screen.
+                        model.seedDebugContext()
                         model.beginSession()
+                    }
+                    // `ONYX_WATCH_SCREEN=rest` puts the rest cover up, the way
+                    // `--onyx-screen` picks a face on the phone. `RestView` is
+                    // reachable no other way on a simulator: it is presented by
+                    // a pulse from the phone, or by committing a set, and a
+                    // watch simulator can do neither.
+                    if ProcessInfo.processInfo.environment["ONYX_WATCH_SCREEN"] == "rest" {
+                        model.seedDebugRest()
                     }
                     #endif
                 }

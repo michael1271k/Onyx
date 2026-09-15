@@ -127,13 +127,13 @@
     },
     "stress_logs": {
       "group": "daily",
-      "conflict": "user_id,date,slot",
+      "conflict": "id",
       "pk": [
         "id"
       ],
       "window": "date",
       "since": 2,
-      "cols": "id:uuid,user_id:uuid,date:date,slot:text,level:int2,tags:_text,note:text?,created_at:timestamptz,updated_at:timestamptz"
+      "cols": "id:uuid,user_id:uuid,date:date,slot:text,level:int2,tags:_text,note:text?,created_at:timestamptz,updated_at:timestamptz,logged_at:timestamptz?"
     },
     "doms_logs": {
       "group": "daily",

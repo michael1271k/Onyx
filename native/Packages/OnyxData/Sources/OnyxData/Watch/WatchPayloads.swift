@@ -39,11 +39,23 @@ public struct WatchContext: Codable, Sendable, Equatable {
     /// ISO `yyyy-MM-dd`, as the phone resolved it — `LogicalDay`, not midnight.
     public var today: String
     public var schedule: ScheduleContext
+    /// The palette the phone is wearing, so the wrist matches without a second
+    /// place to set it.
+    ///
+    /// OPTIONAL AND LAST, and that is the whole payload-versioning story: the
+    /// synthesised `Codable` reads it with `decodeIfPresent`, so an old phone's
+    /// context (no key) decodes on a new watch as nil — the watch reads nil as
+    /// the default theme — and a new phone's context decodes on an old watch,
+    /// which ignores the key it does not know. Neither side throws, and neither
+    /// side stops receiving the context, which is the failure this file exists
+    /// to prevent.
+    public var theme: OnyxThemeSpec?
 
-    public init(userId: String, today: String, schedule: ScheduleContext) {
+    public init(userId: String, today: String, schedule: ScheduleContext, theme: OnyxThemeSpec? = nil) {
         self.userId = userId
         self.today = today
         self.schedule = schedule
+        self.theme = theme
     }
 }
 
@@ -70,10 +82,83 @@ public struct RestPulse: Codable, Sendable, Equatable, Identifiable {
     /// The movement it follows — the watch prints "Next: …" under the clock.
     public var exercise: String?
 
-    public init(sessionId: String, endsAt: Date, duration: TimeInterval, exercise: String? = nil) {
+    // ── THE FOUR BELOW ARE OPTIONAL AND LAST, WHICH IS THE WHOLE ────────────
+    // ── PAYLOAD-VERSIONING STORY — THE SAME ONE `WatchContext.theme` TELLS ──
+    // The synthesised `Codable` reads an optional with `decodeIfPresent` and
+    // writes it with `encodeIfPresent`. So an OLD phone's pulse — none of these
+    // keys on the wire — decodes on a NEW watch with all four nil, and a NEW
+    // phone's pulse decodes on an OLD watch, because a keyed container ignores
+    // every key nobody asked it for. Neither side throws and neither side stops
+    // seeing the rest clock, which is the failure this file exists to prevent.
+    //
+    // OPTIONAL is the load-bearing half, and not only for old builds: the watch
+    // fills none of these when IT starts a rest (`WatchModel.startRest`), and
+    // "not sent" has to stay distinguishable from a value. A non-optional
+    // `loadKg = 0` would say ZERO KILOS — which is a real bodyweight set —
+    // where nil says "this device did not tell you". The day one of them stops
+    // being optional is the day every pulse from an older phone throws
+    // `keyNotFound` and the rest cover silently stops appearing on the wrist.
+    //
+    // LAST is the cheap half, and it is about Swift and not JSON: the keys are
+    // names and the encoder sorts them, so declaration order is invisible on
+    // the wire. It is the `init` that cares — four trailing parameters
+    // defaulted to nil are what let every existing caller keep spelling
+    // `RestPulse(sessionId:endsAt:duration:exercise:)` untouched.
+
+    /// What was just lifted, in kilograms — so the wrist can read the set back
+    /// without waking the phone.
+    ///
+    /// Nil twice over: a bodyweight set has no load, and a build that predates
+    /// this field sends nothing. Both mean "print no number", so one nil serves.
+    public var loadKg: Double?
+    /// How many reps that set was.
+    public var reps: Int?
+    /// The effort logged against it, on the ten-point scale with half rungs
+    /// that `Effort.ladder` scrubs — `Double` and not `Int`, because 8.5 is a
+    /// rung and 8 is a different one.
+    ///
+    /// Nil is NOT RATED, which is the outcome of doing nothing on the rest
+    /// screen and a legitimate state rather than a missing value to paper over.
+    public var rpe: Double?
+    /// The instant the session's elapsed clock counts UP from, pauses already
+    /// subtracted.
+    ///
+    /// ── WHY IT IS AN ORIGIN AND NOT `session.startedAt` ─────────────────────
+    /// Same field, same name and same reason as
+    /// `OnyxWorkoutAttributes.ContentState.timerOrigin` and
+    /// `PauseControlling.timerOrigin`: a session paused for eleven minutes is
+    /// eleven minutes younger than the wall clock says, and `started_at` on the
+    /// row is the wall clock. Sending the MOVED origin is what lets the watch
+    /// draw `Text(_:style:.timer)` — ticked by the system, costing nothing
+    /// while the wrist is down — and still read the same number as the phone's
+    /// hero. An elapsed-seconds payload would arrive stale and drift further
+    /// every time the watch slept, which is the argument `endsAt` above already
+    /// makes for the rest clock.
+    ///
+    /// The watch cannot derive this: it may have joined the session late, come
+    /// back from a sleep, or never have been the device that started it. Nil
+    /// from a phone that predates the field — the wrist then shows no session
+    /// timer until the phone updates, which is a missing reading rather than a
+    /// wrong one.
+    public var timerOrigin: Date?
+
+    public init(
+        sessionId: String,
+        endsAt: Date,
+        duration: TimeInterval,
+        exercise: String? = nil,
+        loadKg: Double? = nil,
+        reps: Int? = nil,
+        rpe: Double? = nil,
+        timerOrigin: Date? = nil
+    ) {
         self.sessionId = sessionId
         self.endsAt = endsAt
         self.duration = duration
         self.exercise = exercise
+        self.loadKg = loadKg
+        self.reps = reps
+        self.rpe = rpe
+        self.timerOrigin = timerOrigin
     }
 }

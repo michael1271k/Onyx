@@ -64,15 +64,19 @@ struct OnyxWorkoutAttributes: ActivityAttributes {
         /// Records claimed in THIS session. Zero renders as NOTHING: a permanent
         /// gold zero is how gold stops meaning a personal record.
         var prsThisSession: Int
-        /// The movement you are resting BEFORE, and what it asks for.
+        /// The movement you are resting BEFORE, and what it asks for — set
+        /// ONLY at a movement boundary, nil the rest of the time.
         ///
-        /// ── WHY THE CARD CHANGES SUBJECT WHILE RESTING ──────────────────────
-        /// The set you just finished is the one fact you already know — you
-        /// were standing over it thirty seconds ago. What you cannot see from
-        /// the rack is what is next and what it cost last time, which is the
-        /// decision the rest period exists for. So while `restEndsAt` is set
-        /// the card names the NEXT lift; the moment rest ends it goes back to
-        /// the set in front of you.
+        /// ── WHY THE CARD ONLY CHANGES SUBJECT AT A BOUNDARY ─────────────────
+        /// While `restEndsAt` is set the card headlines this name instead of
+        /// `exercise`: what you cannot see from the rack is the lift you are
+        /// walking to and what it cost last time, which is the decision the
+        /// rest period exists for. But everything UNDER that headline — `load`,
+        /// `setLabel`, `lastTime`, `lastRpe` — is the upcoming SET, so the name
+        /// may only change when the set changes lift. Resting between set 2 and
+        /// set 3 of a squat this is therefore nil and the card stays on
+        /// `exercise`; resting after the squat's last set it is the next lift,
+        /// whose first set is what the numbers already describe.
         ///
         /// ── AND WHY ALL THREE ARE OPTIONAL ──────────────────────────────────
         /// The same reason `timerOrigin` is, and it is not a style choice: a
@@ -82,10 +86,6 @@ struct OnyxWorkoutAttributes: ActivityAttributes {
         /// would fail that decode, `Activity.activities` would not hand the
         /// card back, and the next launch would request a second card beside an
         /// orphan nothing can end.
-        ///
-        /// They are also nil on the LAST set of the session, which has no next
-        /// lift — the card falls back to the current set, which is correct
-        /// rather than a placeholder.
         var nextExercise: String?
         /// What that lift cost last time, as a rating: "RPE 9". Nil when the
         /// movement is new, or when the previous set was never rated.

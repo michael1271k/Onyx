@@ -36,6 +36,22 @@
       }
     },
     {
+      "name": "holiday",
+      "input": {
+        "mode": "holiday"
+      },
+      "expected": {
+        "meta": {
+          "label": "Holiday",
+          "desc": "A day off the plan — graded on protein",
+          "dayLabel": "Holiday"
+        },
+        "isRange": false,
+        "scoring": "normal",
+        "suspendsSteps": false
+      }
+    },
+    {
       "name": "refeed",
       "input": {
         "mode": "refeed"

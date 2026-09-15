@@ -137,12 +137,19 @@ enum WidgetPreviews {
                 setsDone: 9,
                 setsPlanned: 22,
                 prsThisSession: prs,
-                // The lift you are resting BEFORE, and what it cost last time.
-                // Both are seeded so the resting card's NEXT state is
-                // photographable — `WorkoutCurrentSet` draws them only while
-                // `restEndsAt` is set, so the working and paused cards below
-                // are unaffected by carrying them.
-                nextExercise: "Seated Cable Row (Wide Grip)",
+                // ── A DIFFERENT LIFT FROM `exercise`, AND THAT IS THE POINT ──
+                // This used to be the same string as `exercise` above, because
+                // that is what the producer sent: "NEXT" was a chip in front of
+                // the movement you were already doing (F3). The wire carries a
+                // real next-in-deck now, and a fixture that still echoed the
+                // current lift would photograph a card that looked correct
+                // while proving nothing — the one state this whole change
+                // exists to make true would be invisible in the shot.
+                //
+                // Seeded on every state because `WorkoutCurrentSet` only draws
+                // it while `restEndsAt` is set, so the working and paused cards
+                // below are unaffected by carrying it.
+                nextExercise: "Single Arm Cable Crossover",
                 lastRpe: "RPE 8.5",
                 restEndsAt: rest,
                 // 45 minutes in, which is what a session looks like. Off
@@ -153,6 +160,11 @@ enum WidgetPreviews {
                 isPaused: paused,
                 elapsed: paused ? "45:00" : "",
                 primaryMuscle: "upper_back",
+                // The prescription the countdown is running through — the
+                // denominator the bar was missing. Without it every shot of
+                // this page photographs the fallback (`now...endsAt`) and
+                // reviews the bug rather than the fix. 97 s left of 150.
+                restTotalSec: rest == nil ? nil : 150,
                 dayKey: "arms"
             )
         }
@@ -169,6 +181,119 @@ enum WidgetPreviews {
             ("paused", state(rpe: "RPE 8", paused: true)),
         ]
     }()
+
+    /// The expanded island's four regions, laid out as its configuration lays
+    /// them: mark and elapsed leading, sets trailing, and the whole set plus
+    /// the rest controls across the bottom.
+    ///
+    /// 340 pt is the expanded region's usable width on a Pro — the number that
+    /// matters, because the trailing column of `WorkoutCurrentSet` and the four
+    /// controls of `WorkoutRestBand` are competing for it.
+    private static func islandExpanded(_ state: OnyxWorkoutAttributes.ContentState) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                OnyxMark(size: 12, tint: Color.onyx.day(state.dayKey), opacity: 1)
+                WorkoutElapsed(state: state, startedAt: Date().addingTimeInterval(-45 * 60))
+                Spacer(minLength: 8)
+                // Mirrors the real `.trailing` region, which carries the muscle
+                // tag since W2 — it used to print `9/22` twelve points above
+                // `WorkoutTotals`' own "9/22 sets".
+                WorkoutMuscleTag(token: state.primaryMuscle)
+            }
+            WorkoutTotals(state: state)
+            WorkoutCurrentSet(state: state)
+            if let countdown = restCountdown(state.restEndsAt, total: state.restTotalSec) {
+                WorkoutRestBand(countdown: countdown, state: state, showsSkip: false)
+            }
+        }
+        .padding(10)
+        .frame(width: 340, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 22).fill(Color.black)
+        }
+    }
+
+    /// The compact pair, at the width the system actually gives them.
+    private static func islandCompact(_ state: OnyxWorkoutAttributes.ContentState) -> some View {
+        HStack(spacing: 4) {
+            OnyxMark(size: 14, tint: Color.onyx.day(state.dayKey), opacity: 1)
+            Spacer(minLength: 12)
+            Group {
+                if let countdown = restCountdown(state.restEndsAt, total: state.restTotalSec) {
+                    Text(timerInterval: countdown, countsDown: true)
+                        .monospacedDigit()
+                        .frame(minWidth: 44, maxWidth: 44, alignment: .trailing)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .foregroundStyle(
+                            WorkoutMuscleTag.tint(state.primaryMuscle)
+                                ?? Color.onyx.day(state.dayKey)
+                        )
+                } else {
+                    Text(state.load.replacingOccurrences(of: " kg ", with: ""))
+                        .foregroundStyle(Color.onyx.day(state.dayKey))
+                }
+            }
+            .font(OnyxWidgetType.figure(12))
+        }
+        .padding(.horizontal, 10)
+        .frame(width: 170, height: 36)
+        .background { Capsule().fill(Color.black) }
+    }
+
+    /// The island's two expanded states, its compact pair, and the wrist card.
+    private static var islandPage: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // ── THE ISLAND, STOOD IN FOR ─────────────────────────────────────
+            // `DynamicIslandExpandedRegion` can only be built inside a
+            // `DynamicIsland` builder inside an `ActivityConfiguration`, so the
+            // real regions cannot be instantiated here any more than an
+            // `ActivityViewContext` can. What CAN be: the pieces they are made
+            // of, which are the same `Shared/` views taking the same plain
+            // state — `WorkoutElapsed`, `WorkoutTotals`, `WorkoutCurrentSet`,
+            // `WorkoutRestBand`, arranged as `OnyxWidgets.swift` arranges them.
+            //
+            // A stand-in and not the thing, so it can drift from the real
+            // configuration — but it is the only way this surface's LAYOUT gets
+            // reviewed as a picture at all, and the alternative was reviewing
+            // it by reading it, which is how the card kept a `Text("ONYX")`
+            // through a rename.
+            ForEach(["resting", "working"], id: \.self) { name in
+                if let state = activityStates.first(where: { $0.0 == name })?.1 {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("activity-island-expanded-\(name)")
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Color.onyx.textTertiary)
+                        islandExpanded(state)
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text("activity-island-compact")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color.onyx.textTertiary)
+                HStack(spacing: 6) {
+                    islandCompact(activityStates[1].1)
+                    islandCompact(activityStates[0].1)
+                }
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text("activity-watch")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color.onyx.textTertiary)
+                WorkoutWatchCard(title: "Delts & Arms", state: activityStates[1].1)
+                    .frame(width: 176, alignment: .leading)
+                    .padding(8)
+                    .background {
+                        RoundedRectangle(cornerRadius: OnyxCorner.tile)
+                            .fill(Color.onyx.textPrimary.opacity(0.08))
+                    }
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.onyx.base)
+    }
 
     private static var activityPage: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -202,18 +327,6 @@ enum WidgetPreviews {
                     }
                 }
             }
-            VStack(alignment: .leading, spacing: 0) {
-                Text("activity-watch")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Color.onyx.textTertiary)
-                WorkoutWatchCard(title: "Delts & Arms", state: activityStates[1].1)
-                    .frame(width: 176, alignment: .leading)
-                    .padding(8)
-                    .background {
-                        RoundedRectangle(cornerRadius: OnyxCorner.tile)
-                            .fill(Color.onyx.textPrimary.opacity(0.08))
-                    }
-            }
         }
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -226,6 +339,16 @@ enum WidgetPreviews {
     static func view(_ screen: String) -> some View {
         if screen == "widgets-activity" {
             activityPage
+        // ── TWO PAGES, BECAUSE ONE SCROLLED OFF THE TOP ─────────────────────
+        // Adding the island's two expanded states and its compact pair took the
+        // activity sheet past a screen, and a page taller than the display
+        // photographs its middle: the first Lock Screen card was cut by the
+        // status bar and the watch card fell off the bottom. Three lock cards
+        // on one page, the island and the wrist on the other.
+        } else if screen == "widgets-island" {
+            islandPage
+        } else if screen == "widgets-nudge" {
+            ActivityNudgeHarness()
         } else {
         let page = Int(screen.dropFirst("widgets-".count))
         if let page, pages.indices.contains(page) {
@@ -270,6 +393,106 @@ enum WidgetPreviews {
 private extension WidgetFamily {
     var isAccessory: Bool {
         self == .accessoryCircular || self == .accessoryRectangular || self == .accessoryInline
+    }
+}
+
+/// The +15 s gate, as something a camera can watch.
+///
+/// ── WHY THE CARD'S OWN BUTTON CANNOT BE FILMED ──────────────────────────────
+/// `WorkoutRestBand`'s nudges are `Button(intent: RestNudgeIntent(…))`, and a
+/// `LiveActivityIntent` is performed by the system against a running activity —
+/// there is no activity in the screenshot harness, so the buttons are inert
+/// there. That is correct for the card and useless for a recording.
+///
+/// So this screen holds the state itself and applies the SAME two lines the
+/// intent's own fallback applies (`RestSkipIntent.swift`): the deadline moves,
+/// and the total moves with it. That pairing is the entire fix — the bar's
+/// origin is `endsAt − total`, so moving both leaves the origin still and the
+/// fill drops to `elapsed / (total + 15)` instead of snapping back to full.
+///
+/// The reading under the bar is the fill as a percentage, computed the way
+/// `ProgressView(timerInterval:)` computes it, so the recording shows a NUMBER
+/// falling rather than asking a reviewer to judge a gradient.
+struct ActivityNudgeHarness: View {
+
+    @State private var endsAt = Date().addingTimeInterval(75)
+    @State private var totalSec = 150
+
+    private var state: OnyxWorkoutAttributes.ContentState {
+        var next = WidgetPreviews.activityStates[1].1
+        next.restEndsAt = endsAt
+        next.restTotalSec = totalSec
+        return next
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: OnyxSpace.m) {
+            Text("activity-nudge — press +15 s and watch the fill FALL")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Color.onyx.textTertiary)
+
+            WorkoutLockCard(
+                title: "Delts & Arms",
+                startedAt: Date().addingTimeInterval(-45 * 60),
+                state: state
+            )
+            .frame(width: 360, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: OnyxCorner.tile)
+                    .fill(Color.onyx.textPrimary.opacity(0.08))
+            }
+
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let range = restCountdown(endsAt, total: totalSec)
+                let fill = range.map { r -> Double in
+                    let span = r.upperBound.timeIntervalSince(r.lowerBound)
+                    return span > 0 ? context.date.timeIntervalSince(r.lowerBound) / span : 0
+                } ?? 0
+                Text("fill \(Int((fill * 100).rounded())) %  ·  total \(totalSec) s")
+                    .onyxType(.display).onyxNumeral()
+                    .foregroundStyle(Color.onyx.textPrimary)
+            }
+
+            HStack(spacing: OnyxSpace.m) {
+                nudge(-15)
+                nudge(15)
+            }
+        }
+        .padding(OnyxSpace.l)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onyxScreen(.train)
+        // ── IT PRESSES ITS OWN BUTTON, BECAUSE A RECORDING NEEDS IT TO ──────
+        // `simctl` can install, launch and film a simulator; it cannot tap one.
+        // So the screen performs the same two nudges a reviewer would, five
+        // seconds apart, and the fill reading underneath is what the camera is
+        // actually there for: 54 % → 49 % → 45 %, falling each time. The bug
+        // this replaces made it read 0 % on every press, because the bar's
+        // origin was `now` and pressing restarted the span.
+        .task {
+            for _ in 0..<2 {
+                try? await Task.sleep(for: .seconds(5))
+                apply(15)
+            }
+        }
+    }
+
+    /// The intent's fallback, verbatim: deadline and total, together. Moving
+    /// BOTH is the fix — the bar's origin is `endsAt − total`, so a nudge that
+    /// moved only the deadline slid the origin forward and reset the fill.
+    private func apply(_ seconds: Int) {
+        let next = endsAt.addingTimeInterval(TimeInterval(seconds))
+        guard next > Date() else { return }
+        endsAt = next
+        totalSec = max(0, totalSec + seconds)
+    }
+
+    private func nudge(_ seconds: Int) -> some View {
+        Button("\(seconds > 0 ? "+" : "")\(seconds) s") { apply(seconds) }
+        .onyxType(.body).fontWeight(.semibold)
+        .foregroundStyle(Color.onyx.textPrimary)
+        .padding(.horizontal, OnyxSpace.l)
+        .frame(minHeight: 44)
+        .background(OnyxDomain.train.ramp, in: Capsule())
     }
 }
 #endif

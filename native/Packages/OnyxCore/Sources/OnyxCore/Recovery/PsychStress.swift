@@ -11,13 +11,14 @@ import Foundation
 /// (D6, `Stress.breakdown`), where the two are averaged over whichever
 /// answered. It is NOT a battery input, and it moves no score.
 ///
-/// ── ONE ROW PER TIME OF DAY, DERIVED FROM THE CLOCK ─────────────────────────
-/// The table's key is `(user_id, date, slot)` and `StressInputsBuilder` takes
-/// the MEAN of the day's rows, so a day can hold more than one answer. What it
-/// must not hold is a slot the user had to choose: "which part of the day is
-/// this about" is a question about the clock, and the clock already knows.
-/// Three buckets, picked for you, named on the sheet so an answer is never
-/// filed somewhere surprising.
+/// ── AN EVENT LOG; THE SLOT IS DERIVED FROM THE EVENT'S TIME ─────────────────
+/// Since Live UX W1 (decision A5) `stress_logs` is an event log: any number of
+/// rows a day, each stamped `logged_at` with when it was felt, backdating
+/// allowed. `StressInputsBuilder` takes the MEAN of the day's rows and does not
+/// care how many there are. The three buckets stay because scoring, sorting
+/// and the export's legacy rows still name them — but a slot is never chosen:
+/// "which part of the day is this about" is a question about the time, and
+/// the time already knows (`forMinutes`).
 public enum StressSlot: String, Codable, Sendable, CaseIterable {
     case morning, midday, evening
 
@@ -33,6 +34,14 @@ public enum StressSlot: String, Codable, Sendable, CaseIterable {
     public static let middayFromMinutes = 12 * 60
     public static let eveningFromMinutes = 18 * 60
 
+    /// Which bucket a minute of the day falls in — the one rule every slot on
+    /// a stored row is derived from.
+    public static func forMinutes(_ minutesSinceMidnight: Int) -> StressSlot {
+        if minutesSinceMidnight < middayFromMinutes { return .morning }
+        if minutesSinceMidnight < eveningFromMinutes { return .midday }
+        return .evening
+    }
+
     /// Which bucket a reading taken NOW belongs to.
     ///
     /// A day that has already happened files under `evening`: the day ended,
@@ -41,9 +50,17 @@ public enum StressSlot: String, Codable, Sendable, CaseIterable {
     /// `.future` folds onto the same answer rather than inventing a fourth.
     public static func forClock(_ clock: DayClock) -> StressSlot {
         guard let minutes = clock.nowMinutes else { return .evening }
-        if minutes < middayFromMinutes { return .morning }
-        if minutes < eveningFromMinutes { return .midday }
-        return .evening
+        return forMinutes(minutes)
+    }
+
+    /// The bucket's lower boundary in minutes since midnight — where a legacy
+    /// row without a time sorts (`PsychStress.sorted`).
+    public var startMinutes: Int {
+        switch self {
+        case .morning: 0
+        case .midday:  Self.middayFromMinutes
+        case .evening: Self.eveningFromMinutes
+        }
     }
 }
 
@@ -88,16 +105,21 @@ public enum StressTag: String, Codable, Sendable, CaseIterable {
 }
 
 /// One `stress_logs` row, as a screen reads it.
+///
+/// `id` is the ROW's id: two events can share a slot now, so the slot is no
+/// longer an identity. `loggedAt` is nil on a row written before W1.
 public struct StressReading: Codable, Equatable, Sendable, Identifiable {
+    public var id: String
     public var slot: StressSlot
+    public var loggedAt: Date?
     public var level: Int
     public var tags: [StressTag]
     public var note: String?
 
-    public var id: String { slot.rawValue }
-
-    public init(slot: StressSlot, level: Int, tags: [StressTag] = [], note: String? = nil) {
+    public init(id: String, slot: StressSlot, loggedAt: Date? = nil, level: Int, tags: [StressTag] = [], note: String? = nil) {
+        self.id = id
         self.slot = slot
+        self.loggedAt = loggedAt
         self.level = level
         self.tags = tags
         self.note = note
@@ -138,15 +160,34 @@ public enum PsychStress {
         levels.first { $0.value == value }
     }
 
-    /// The day's LATEST reading, in slot order — what the row states. The mean
-    /// is the index's business; a row that said "3.0" when you answered Relaxed
-    /// this morning and Swamped tonight would describe neither moment
+    /// Minutes since local midnight.
+    public static func minuteOfDay(_ date: Date, calendar: Calendar = .current) -> Int {
+        let c = calendar.dateComponents([.hour, .minute], from: date)
+        return (c.hour ?? 0) * 60 + (c.minute ?? 0)
+    }
+
+    /// One day's readings in the order the day happened.
+    ///
+    /// ── THE RULE ────────────────────────────────────────────────────────────
+    /// Sort key = `loggedAt ?? slotStart`, both as minutes of the day: a timed
+    /// event sorts by its time, a legacy row without one sorts at its slot's
+    /// lower boundary. So a legacy `evening` row (18:00) comes after a 14:32
+    /// event and before a 19:05 one — which is the most a row that only knows
+    /// its bucket can claim. Stable, so two rows with one key keep stored order.
+    public static func sorted(_ readings: [StressReading], calendar: Calendar = .current) -> [StressReading] {
+        readings.sorted { a, b in key(a, calendar) < key(b, calendar) }
+    }
+
+    private static func key(_ r: StressReading, _ calendar: Calendar) -> Int {
+        r.loggedAt.map { minuteOfDay($0, calendar: calendar) } ?? r.slot.startMinutes
+    }
+
+    /// The day's LATEST reading — what the row states. The mean is the
+    /// index's business; a row that said "3.0" when you answered Relaxed this
+    /// morning and Swamped tonight would describe neither moment
     /// (`Fatigue.latest` makes the same choice for the same reason).
-    public static func latest(_ readings: [StressReading]) -> StressReading? {
-        for slot in StressSlot.allCases.reversed() {
-            if let hit = readings.first(where: { $0.slot == slot }) { return hit }
-        }
-        return nil
+    public static func latest(_ readings: [StressReading], calendar: Calendar = .current) -> StressReading? {
+        sorted(readings, calendar: calendar).last
     }
 
     /// Parse a stored tag array, dropping anything this build does not know. A

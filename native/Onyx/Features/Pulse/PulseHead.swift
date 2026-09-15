@@ -31,7 +31,7 @@ struct HeadSummaryRow: View {
     /// about a different thing and a reader should not have to parse two.
     private var detail: String {
         guard let latest else { return "Not rated · 0 of \(StressSlot.allCases.count)" }
-        return "\(latest.slot.label) · \(readings.count) of \(StressSlot.allCases.count)"
+        return "\(latest.slot.label) · \(Set(readings.map(\.slot)).count) of \(StressSlot.allCases.count)"
     }
 
     var body: some View {
@@ -96,12 +96,14 @@ struct HeadSummaryRow: View {
 /// each optional.
 ///
 /// ── AND WHY THE TIME OF DAY IS NOT A CONTROL ────────────────────────────────
-/// The server key is `(user_id, date, slot)` and the index reads the MEAN of
-/// the day's rows, so the day can hold three answers. Which one you are writing
-/// is a question about the clock, and the clock knows — a picker there would be
-/// a control whose only correct setting is the one it already has. It is stated
-/// as the section header instead, so an answer is never filed somewhere
-/// surprising.
+/// The server key is `id` and a day holds any number of events — stress is a
+/// log, not three buckets. The slot is derived from the event's time at write,
+/// not stored as a choice, so which one you are writing is a question about
+/// the clock, and the clock knows — a picker there would be a control whose
+/// only correct setting is the one it already has. It is stated as the
+/// section header instead (`model.stressSlot`, `forClock(now)`), so an answer
+/// is never filed somewhere surprising. That header word matches the stored
+/// slot only because the sheet always opens on today's model.
 struct HeadSheet: View {
     let model: DayModel
 
@@ -110,7 +112,6 @@ struct HeadSheet: View {
     @State private var level: Int?
     @State private var tags: Set<StressTag> = []
     @State private var note = ""
-    @State private var loaded = false
     /// The chip grid's column minimum, scaled — see `tagSection`.
     @ScaledMetric(relativeTo: .footnote) private var chipWidth: CGFloat = 96
 
@@ -132,39 +133,12 @@ struct HeadSheet: View {
                 if !model.stressReadings.isEmpty { todaySection }
                 tagSection
                 noteSection
-                if existing != nil { clearSection }
+                if model.stressLatest != nil { clearSection }
             }
         }
-        // ── LOAD THE BUCKET'S OWN ANSWER, ONCE, WHENEVER IT ARRIVES ─────────
-        // Without this a second visit to the same bucket writes a fresh reading
-        // over the one already there and silently drops its tags and its note.
-        //
-        // It cannot be `onAppear` alone: the readings come off a GRDB stream and
-        // `onAppear` fires before its first yield, so a sheet opened from a
-        // screen whose streams are still starting (Quick Log builds its model on
-        // the tap) showed an answered bucket as blank. `onChange` catches the
-        // row when it lands — and both paths refuse to touch anything the user
-        // has already typed.
-        .onAppear(perform: adopt)
-        .onChange(of: existing) { _, _ in adopt() }
+        // The sheet opens BLANK: stress is an event log (W1, A5) and every
+        // Save is a new event, so nothing stored is pre-filled for editing.
     }
-
-    /// Take the stored answer, but never over the top of one being written.
-    ///
-    /// FIELD BY FIELD, because `setStress` writes the whole row: a reader who
-    /// tapped a word before the stream yielded would otherwise Save a level
-    /// over a bucket that already held tags and a note, and take both with it.
-    /// Each field is adopted only while it is still untouched, so a tap costs
-    /// the level and nothing else.
-    private func adopt() {
-        guard !loaded, let existing else { return }
-        loaded = true
-        if level == nil { level = existing.level }
-        if tags.isEmpty { tags = Set(existing.tags) }
-        if note.isEmpty { note = existing.note ?? "" }
-    }
-
-    private var existing: StressReading? { model.stressReading(slot) }
 
     // MARK: The five words
 
@@ -296,8 +270,8 @@ struct HeadSheet: View {
 
     private var clearSection: some View {
         Section {
-            Button("Clear this reading", role: .destructive) {
-                if model.setStress(slot, level: nil) { dismiss() }
+            Button("Remove the last entry", role: .destructive) {
+                if let latest = model.stressLatest, model.deleteStress(id: latest.id) { dismiss() }
             }
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         }
@@ -305,7 +279,7 @@ struct HeadSheet: View {
 
     private func save() {
         guard let level else { return }
-        if model.setStress(slot, level: level, tags: StressTag.sorted(tags), note: note) {
+        if model.logStress(at: Date(), level: level, tags: StressTag.sorted(tags), note: note) {
             dismiss()
         }
     }

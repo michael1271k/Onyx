@@ -613,6 +613,33 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     var recordCount: Int { prsThisSession }
     var physicalSets: Int { exercises.reduce(0) { $0 + $1.physicalSets } }
 
+    /// What the Live Stats timeline draws for one exercise: dots done over dots
+    /// planned.
+    ///
+    /// Lifting: today's rule — working sets over the larger of the plan's sets
+    /// and the prescribed physical rows, so a set you added yourself grows the
+    /// denominator instead of overflowing it.
+    ///
+    /// ── WHY A CARDIO BOUT NEEDS ITS OWN BRANCH ──────────────────────────────
+    /// The opening bout is minted `kind: .warmup` on purpose: that is what
+    /// keeps it out of `workingSets`, out of tonnage and out of the PR engine.
+    /// The lifting numerator is `workingSets`, so a bout you HAVE done read 0
+    /// done out of 1 planned forever — the one row on the timeline that could
+    /// never be filled. An exercise whose every non-ghost row is cardio is
+    /// therefore counted in ROWS TICKED, which changes nothing anybody else
+    /// reads.
+    func dotProgress(for exercise: ExerciseState) -> (done: Int, planned: Int) {
+        let live = exercise.rows.filter { $0.kind != .ghost }
+        if !live.isEmpty, live.allSatisfy(\.isCardio) {
+            return (live.filter(\.isDone).count, max(1, live.count))
+        }
+        let prescribed = live.filter { $0.kind != .warmup }
+        return (
+            exercise.workingSets,
+            max(exercise.plan.sets(for: phase), Self.physical(prescribed))
+        )
+    }
+
     /// How many SETS a list of rows is, once a set can be two rows.
     ///
     /// Each `pairId` once, every unpaired row once — the same rule as
@@ -669,6 +696,47 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             return (exercise, row, at + 1, groups.count)
         }
         return nil
+    }
+
+    /// The movement AFTER the one you are standing in front of, in deck order,
+    /// skipping anything already finished. Nil on the last movement.
+    ///
+    /// ── WHY THE CARD USED TO NAME THE LIFT YOU WERE ALREADY DOING ───────────
+    /// `LiveActivityController` sent `currentSet`'s own exercise as BOTH
+    /// `exercise` and `nextExercise`, on the reasoning that the cursor is the
+    /// first unticked row and so is already what you are walking back to. That
+    /// is true of the set and false of the movement: resting between set 2 and
+    /// set 3 of a press, "NEXT" said press. Named off `currentSet` here too, so
+    /// the two fields can never disagree about which one is current.
+    var nextExercise: ExerciseState? {
+        guard let current = currentSet?.exercise,
+              let at = exercises.firstIndex(where: { $0.id == current.id })
+        else { return nil }
+        return exercises[(at + 1)...].first { exercise in
+            exercise.rows.contains { !$0.isDone && $0.kind != .ghost }
+        }
+    }
+
+    /// The movement to HEADLINE while resting, and only at a movement boundary:
+    /// the lift you are about to start, when the rest you are in is the last
+    /// one of the previous lift. Nil mid-exercise and nil when not resting.
+    ///
+    /// ── WHY THE CARD CANNOT JUST DRAW `nextExercise` ────────────────────────
+    /// The Live Activity's load, `lastTime` and `lastRpe` all come from
+    /// `currentSet.row` — the set you are about to perform. `nextExercise` is
+    /// the movement AFTER that set's movement, so resting between set 2 and set
+    /// 3 of a squat the card would headline "NEXT · Bench" above the squat's
+    /// weight and the squat's "Set 3 of 4": one card, two different lifts. The
+    /// subject only changes when the SET does, which is exactly when the
+    /// movement being rested from (`restingExercise`, stamped by `startRest`)
+    /// is no longer the movement the cursor is on.
+    var restBoundaryExercise: ExerciseState? {
+        guard restEndsAt != nil,
+              let resting = restingExercise,
+              let current = currentSet?.exercise,
+              current.name != resting
+        else { return nil }
+        return current
     }
 
     // MARK: - Init

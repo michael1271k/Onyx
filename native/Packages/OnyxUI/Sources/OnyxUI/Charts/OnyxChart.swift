@@ -155,14 +155,17 @@ public extension Color.onyx {
     /// Re-measured on black after the v2 re-key, because deriving from the
     /// tokens is not on its own a guarantee: worst adjacent pair ΔE76 29.9, all
     /// six ≥ 5.4:1. Re-measure if a domain stop moves.
-    static let series: [Color] = [
+    ///
+    /// Computed so it follows `OnyxTheme.current`; a stored static would
+    /// capture the theme at first read.
+    static var series: [Color] { [
         OnyxDomain.train.start,
         OnyxDomain.body.start,
         OnyxDomain.fuel.start,
         OnyxDomain.recover.start,
         OnyxDomain.train.end,
         OnyxDomain.fuel.end,
-    ]
+    ] }
 
     /// Series `index`, or the neutral past the sixth: a seventh series is a
     /// chart that should have been two, and it does not get a colour that

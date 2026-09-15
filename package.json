@@ -1,10 +1,10 @@
 {
   "name": "onyx",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "private": true,
   "description": "Onyx, the native iOS/watchOS app. This package holds the code generators and the version single source of truth; the app itself is under native/.",
   "scripts": {
-    "check": "npm run version:check && npm run check:types && npm run check:atlas && npm run check:mirror && npm run check:doms",
+    "check": "npm run version:check && npm run check:types && npm run check:atlas && npm run check:mirror && npm run check:doms && npm run swift:ui",
     "check:swift": "bash scripts/check-swift.sh",
     "atlas": "node scripts/gen-atlas-swift.mjs",
     "check:atlas": "node scripts/gen-atlas-swift.mjs --check",
@@ -15,6 +15,7 @@
     "report:bundle": "node scripts/gen-report-bundle.mjs",
     "swift:core": "swift test --package-path native/Packages/OnyxCore --scratch-path \"$HOME/Library/Caches/onyx-swift/OnyxCore\"",
     "swift:data": "swift test --package-path native/Packages/OnyxData --scratch-path \"$HOME/Library/Caches/onyx-swift/OnyxData\"",
+    "swift:ui": "bash scripts/swift-ui-test.sh",
     "version:sync": "node scripts/sync-version.mjs",
     "version:check": "node scripts/sync-version.mjs --check",
     "native:gen": "npm run version:sync && cd native && xcodegen generate",

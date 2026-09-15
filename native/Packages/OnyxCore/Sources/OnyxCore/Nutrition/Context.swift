@@ -11,12 +11,12 @@ import Foundation
 // range is stamped into the day column as it is written, so a RECOMPUTE of a
 // past day is stable — the day carries its own context.
 //
-// Event, Refeed and Social are one-day statements; Travel, Illness and
-// Emergency are ranges. Same enum, same column, different persistence.
+// Event, Holiday, Refeed and Social are one-day statements; Travel, Illness
+// and Emergency are ranges. Same enum, same column, different persistence.
 // ─────────────────────────────────────────────────────────────────────────────
 
 public enum ContextMode: String, Codable, Sendable, CaseIterable {
-    case normal, event, refeed, social, travel, illness, emergency
+    case normal, event, holiday, refeed, social, travel, illness, emergency
 }
 
 /// The four the SCORER understands.
@@ -48,6 +48,7 @@ public enum Context {
     public static let meta: [ContextMode: ContextMeta] = [
         .normal:    ContextMeta(label: "Normal",    desc: "Standard scoring and targets",            dayLabel: nil),
         .event:     ContextMeta(label: "Event",     desc: "A planned meal out — graded on protein",  dayLabel: "Event"),
+        .holiday:   ContextMeta(label: "Holiday",   desc: "A day off the plan — graded on protein",  dayLabel: "Holiday"),
         .refeed:    ContextMeta(label: "Refeed",    desc: "A deliberate surplus day",                dayLabel: "Refeed"),
         .social:    ContextMeta(label: "Social",    desc: "Unplanned, and not a lapse",              dayLabel: "Social"),
         .travel:    ContextMeta(label: "Travel",    desc: "Relaxed penalties until you end it",      dayLabel: "Travel"),

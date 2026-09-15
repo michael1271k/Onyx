@@ -999,7 +999,7 @@ public enum WeeklyExport {
             L.append("doms " + input.doms.map { "\($0.date) \(domsName($0)) \(n($0.severity))" }.joined(separator: sep))
         }
         if let stress = input.stress, !stress.isEmpty {
-            L.append("stress " + stress.map { "\($0.date) \($0.slot) \(n($0.level))" }.joined(separator: sep))
+            L.append("stress " + stress.map { "\($0.date) \($0.time ?? $0.slot) \(n($0.level))" }.joined(separator: sep))
         }
 
         // ── 3 · BODY COMPOSITION ──────────────────────────────────────────────
@@ -1098,7 +1098,7 @@ public enum WeeklyExport {
             let domsCells = input.doms.filter { $0.date == day.date }
                 .map { "\(domsName($0)) \(n($0.severity))" }
             let stressCells = (input.stress ?? []).filter { $0.date == day.date }
-                .map { "\($0.slot) \(n($0.level))" }
+                .map { "\($0.time ?? $0.slot) \(n($0.level))" }
             let skipped = (day.supplementsSkipped ?? []) + (day.supplementsSkippedUnplanned ?? [])
             let flags = [
                 day.nutritionEstimated ? "estimate" : nil,

@@ -444,4 +444,143 @@ struct LoggerModelTests {
         #expect(model.sessionId == nil)
         #expect(model.startedAt == opened)
     }
+
+    // MARK: - Timeline dots and the next movement (D6)
+
+    /// A deck of three plain lifts, A prescribed twice. Named rather than taken
+    /// from a template because the assertion is about ORDER and about a lift
+    /// finishing, and a real deck's set counts move with the program.
+    private func abcDeck() -> LoggerModel {
+        let day = ProgramDay(
+            key: "test-abc", label: "ABC", accent: 0x808080, weekday: 1,
+            exercises: [
+                ProgramExercise("A", sets: 2, wk1Kg: 20, reps: "8\u{2013}12", restSec: 90),
+                ProgramExercise("B", sets: 1, wk1Kg: 20, reps: "8\u{2013}12", restSec: 90),
+                ProgramExercise("C", sets: 1, wk1Kg: 20, reps: "8\u{2013}12", restSec: 90)
+            ]
+        )
+        return LoggerModel(day: day, phase: .bulk)
+    }
+
+    /// The opening bout. Every deck built without a store opens with one
+    /// (`withWarmupCardio`), and it is the only exercise in the app whose rows
+    /// are all cardio.
+    private func bout(_ model: LoggerModel) -> LoggerModel.ExerciseState? {
+        model.exercises.first { $0.rows.allSatisfy(\.isCardio) && !$0.rows.isEmpty }
+    }
+
+    @Test("a ticked cardio bout fills its dot")
+    func cardioDotFillsOnTick() throws {
+        let model = armsBulk()
+        let cardio = try #require(bout(model))
+
+        #expect(model.dotProgress(for: cardio).done == 0)
+        #expect(model.dotProgress(for: cardio).planned == 1,
+                "one bout is one dot, never zero")
+
+        model.toggleDone(cardio.rows[0], in: cardio)
+
+        #expect(model.dotProgress(for: cardio).done == 1)
+        #expect(model.dotProgress(for: cardio).planned == 1)
+    }
+
+    /// The invariant the Live Activity audits: the bout is a warm-up and a
+    /// warm-up is not work.
+    @Test("ticking the bout leaves working sets, tonnage and the PR engine alone")
+    func cardioTickIsNotAWorkingSet() throws {
+        let model = armsBulk()
+        let cardio = try #require(bout(model))
+        let volume = model.totalVolumeKg
+        let records = model.recordCount
+
+        model.toggleDone(cardio.rows[0], in: cardio)
+
+        #expect(cardio.workingSets == 0)
+        #expect(model.completedSets == 0)
+        #expect(model.totalVolumeKg == volume)
+        #expect(model.recordCount == records)
+    }
+
+    @Test("a lifting exercise keeps the timeline's own arithmetic")
+    func liftingDotProgressIsTodaysRule() throws {
+        let model = armsBulk()
+        let lift = try #require(model.exercises.first { $0.name == "Single Arm Lateral Raise" })
+        log(model, "Single Arm Lateral Raise", sets: 2)
+
+        let prescribed = lift.rows.filter { $0.kind != .warmup && $0.kind != .ghost }
+        let expected = max(lift.plan.sets(for: model.phase), LoggerModel.physical(prescribed))
+        let read = model.dotProgress(for: lift)
+
+        #expect(read.done == lift.workingSets)
+        #expect(read.planned == expected)
+    }
+
+    @Test("nextExercise is the movement after the current one, in deck order")
+    func nextExerciseFollowsTheDeck() throws {
+        let model = abcDeck()
+        let cardio = try #require(bout(model))
+        // The bout is the deck's opener, so clear it first: until it is ticked
+        // the CURRENT movement is the treadmill, not A.
+        model.toggleDone(cardio.rows[0], in: cardio)
+
+        let a = try #require(model.exercises.first { $0.name == "A" })
+        model.toggleDone(a.rows[0], in: a)
+        #expect(model.currentSet?.exercise.name == "A", "A still has a second set")
+        #expect(model.nextExercise?.name == "B")
+
+        model.toggleDone(a.rows[1], in: a)
+        // A is finished, so the cursor has moved to B and the movement AFTER
+        // the current one is C. (The brief's table says "still B"; that reads
+        // the CURRENT movement, which is what this property exists to stop
+        // saying — see the report.)
+        #expect(model.currentSet?.exercise.name == "B")
+        #expect(model.nextExercise?.name == "C")
+
+        let b = try #require(model.exercises.first { $0.name == "B" })
+        model.toggleDone(b.rows[0], in: b)
+        #expect(model.currentSet?.exercise.name == "C", "on the last movement's last set")
+        #expect(model.nextExercise == nil, "nothing follows C")
+    }
+
+    @Test("nextExercise skips a movement that is already finished")
+    func nextExerciseSkipsFinishedWork() throws {
+        let model = abcDeck()
+        let cardio = try #require(bout(model))
+        model.toggleDone(cardio.rows[0], in: cardio)
+
+        let b = try #require(model.exercises.first { $0.name == "B" })
+        model.toggleDone(b.rows[0], in: b)
+
+        #expect(model.currentSet?.exercise.name == "A")
+        #expect(model.nextExercise?.name == "C", "B has nothing left to do")
+    }
+
+    /// What the Live Activity actually sends as `nextExercise`. The card's
+    /// load, set label and `lastTime` are all the UPCOMING set, so the headline
+    /// may only change lift when that set does.
+    @Test("the card changes subject at a movement boundary and nowhere else")
+    func restBoundaryNamesTheLiftYouAreWalkingTo() throws {
+        let model = abcDeck()
+        let cardio = try #require(bout(model))
+        model.toggleDone(cardio.rows[0], in: cardio)
+        model.stopRest()
+
+        #expect(model.restBoundaryExercise == nil, "not resting")
+
+        let a = try #require(model.exercises.first { $0.name == "A" })
+        model.toggleDone(a.rows[0], in: a)
+        #expect(model.restEndsAt != nil, "A prescribes rest")
+        #expect(model.restBoundaryExercise == nil,
+                "mid-exercise the card stays on A, whose load it is showing")
+        // The model's own `nextExercise` is unchanged by any of this — the Mini
+        // Player wants the following MOVEMENT, boundary or not.
+        #expect(model.nextExercise?.name == "B")
+
+        model.toggleDone(a.rows[1], in: a)
+        #expect(model.restBoundaryExercise?.name == "B",
+                "A is finished, so the numbers under the headline are B's first set")
+
+        model.stopRest()
+        #expect(model.restBoundaryExercise == nil, "rest over, back to the set in front of you")
+    }
 }

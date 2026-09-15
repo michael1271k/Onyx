@@ -344,7 +344,13 @@ struct LiveLoggerView: View {
                 // Validated HERE, where it is still optional:
                 // `Text(timerInterval:)` traps on a range whose end is behind
                 // its start, and the deadline outlives this view.
-                restCountdown: restCountdown(model.restEndsAt),
+                // `total:` is the prescription this rest is counting through,
+                // so the range has a fixed lower bound rather than one rebased
+                // to `now` on every redraw — see `restCountdown`. The capsule
+                // draws digits rather than a bar, so this changes nothing it
+                // shows today; it is here so the one helper is called the same
+                // way on every surface and a bar added here later is right.
+                restCountdown: restCountdown(model.restEndsAt, total: Int(model.restDuration)),
                 onSkipRest: { withAnimation(OnyxMotion.drawer) { model.stopRest() } },
                 onAdjustRest: { model.adjustRest(by: $0) }
             )
@@ -737,11 +743,32 @@ struct LiveLoggerView: View {
     private func mirrorRestToWatch() {
         guard let bridge = environment?.watchBridge, let sessionId = model.sessionId else { return }
         guard let endsAt = model.restEndsAt else { return bridge.send(rest: nil) }
+        // ── THE SET THAT EARNED THE REST, AND THE SESSION'S OWN CLOCK ───────
+        // The watch draws `load × reps · RPE` under the countdown and a session
+        // timer in its toolbar, and it can derive neither. It holds the fold,
+        // so `sets.last` looks like an answer for the first — but the fold is
+        // only populated for a session this watch ADOPTED, and the rest cover
+        // presents from this pulse whether or not it ever did. The elapsed
+        // clock it cannot get at all: `started_at` on the row is wall time, and
+        // a session paused for eleven minutes is eleven minutes younger.
+        //
+        // Both are cheap to send and neither has a second source, so they ride
+        // along. Every one of them is optional on the far side: an older watch
+        // ignores the keys, and an older phone sends none of them.
+        let done = model.exercises
+            .first { $0.name == model.restingExercise }?
+            .rows.last { $0.isDone }
         bridge.send(rest: RestPulse(
             sessionId: sessionId,
             endsAt: endsAt,
             duration: model.restDuration,
-            exercise: model.restingExercise
+            exercise: model.restingExercise,
+            loadKg: done?.weightKg,
+            reps: done?.reps,
+            rpe: done?.rpe,
+            // `timerOrigin`, never `startedAt` — pauses are already folded into
+            // it, so the wrist counts the same seconds the hero does.
+            timerOrigin: model.timerOrigin
         ))
     }
 }

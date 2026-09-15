@@ -106,7 +106,7 @@ read -ra SCREENS <<< "$SCREEN"
 if [ "$SCREEN" = "all" ]; then
   # Keep in step with `PreviewHarness.Screen` — the harness is the authority and
   # an unknown name there renders a visible error rather than failing silently.
-  SCREENS=(signin backfill today today-edit today-sheet today-sheet-vitals today-sheet-steps today-sheet-muscle today-sheet-records today-weighin today-board train train-empty logger logger-stats logger-paused logger-finish logger-timer set-row set-row-split set-row-cardio set-row-records set-options effort-picker day day-rows day-past day-session day-empty sleep-edit stress fatigue head quick-log scale scale-first day-swap doms stack stack-add fuel fuel-over fuel-empty nutrients macro-edit you levers sync-status sync-doctor plan body volume library exercise reports report report-edit history history-week session session-ledger session-records exercise-history trends trends-empty body-trends body-trends-empty body-trends-stress widgets)
+  SCREENS=(signin backfill today today-edit today-sheet today-sheet-vitals today-sheet-steps today-sheet-muscle today-sheet-records today-weighin today-board train train-empty mini-player logger logger-stats logger-paused logger-finish logger-timer set-row set-row-split set-row-cardio set-row-records set-options effort-picker day day-rows day-past day-session day-empty sleep-edit stress fatigue head quick-log scale scale-first day-swap doms stack stack-add fuel fuel-over fuel-empty nutrients macro-edit you levers sync-status sync-doctor plan body volume library exercise reports report report-edit history history-week session session-ledger session-records exercise-history trends trends-empty body-trends body-trends-empty body-trends-stress widgets)
 fi
 
 # `widgets` is a contact sheet of every tile; the harness pages it because a
@@ -117,7 +117,10 @@ fi
 if [ "$SCREEN" = "widgets" ] || [ "$SCREEN" = "all" ]; then
   SCREENS=("${SCREENS[@]/widgets}")
   for i in $(seq 0 23); do SCREENS+=("widgets-$i"); done
-  SCREENS+=("widgets-activity")
+  # Two pages since W2: the three Lock Screen cards, then the Dynamic Island's
+  # expanded and compact faces plus the Smart Stack card. One page was taller
+  # than the display and photographed its own middle.
+  SCREENS+=("widgets-activity" "widgets-island")
 fi
 
 for s in "${SCREENS[@]}"; do

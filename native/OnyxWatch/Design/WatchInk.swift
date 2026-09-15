@@ -53,6 +53,19 @@ enum WatchInk {
     /// The one background. See the type header.
     static let ground = Color.onyx.base
 
+    /// The split's colour. A FUNCTION, not a `let`, for the reason the header
+    /// gives about themes: a stored property freezes at first read, and the
+    /// day tint has to follow whatever theme the phone last sent.
+    ///
+    /// ── AND IT WRAPS `dayLabel`, NOT `day` ──────────────────────────────────
+    /// `Color.onyx.day` answers `textTertiary` — white at 40 % — for a key it
+    /// does not recognise, which is a RING colour on the phone and rules itself
+    /// out on this device: the header above spends three paragraphs on why
+    /// there is no third ink level here, and 40 % on a 40 mm case in gym light
+    /// "is not a colour, it is an absence". `dayLabel` is the same table with
+    /// the one promise this needs — that it never answers tertiary.
+    static func day(_ key: String?) -> Color { Color.onyx.dayLabel(key) }
+
     /// A filled control that is not the tick — the RPE rungs, the deck rows.
     /// Flat, because a material over black costs a blur pass to arrive here.
     static let fill = Color.white.opacity(0.10)
@@ -105,6 +118,19 @@ private struct LuminanceDim: ViewModifier {
 enum WatchType {
     /// The one number the screen is about.
     static let hero = Font.system(.largeTitle, design: .rounded, weight: .semibold)
+    /// A headline figure on a screen that also has to hold a control.
+    ///
+    /// ── WHY THE SCALE GREW A STEP ───────────────────────────────────────────
+    /// The rest countdown was `hero`, and on a 40 mm case `hero` plus the set
+    /// line plus a navigation bar left the RPE ladder clipped in half by the
+    /// fold — the one control that screen exists to offer. The step below
+    /// `hero` was `value` (`.title3`), which is what the REPS are set in, so
+    /// the countdown would have stopped outranking the things around it.
+    ///
+    /// `.title` is the system style between them, so this stays what the file
+    /// promises: the roles ARE text styles, and a screen still may not spell a
+    /// size.
+    static let figure = Font.system(.title, design: .rounded, weight: .semibold)
     /// The second number — reps, or the rest clock's own digits.
     static let value = Font.system(.title3, design: .rounded, weight: .semibold)
     /// Movement names.

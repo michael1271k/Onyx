@@ -44,6 +44,59 @@ _Nothing yet._
 
 ---
 
+## [3.5.0] — 2026-09-14 · The Engines Under the Live UX Sprint
+
+The first of six waves. On the default theme nothing is recoloured and no
+layout changes — this release is the maths and the seams the next waves draw
+on. Three small things do move, all forced by the rewiring; they are listed
+under Changed.
+
+### Added
+- **A theme engine, waiting for its switch.** Every colour the app draws now
+  resolves through one runtime theme (`OnyxTheme`): primary and secondary hues,
+  with the four domains, the 16 muscle colours, the macro rails, the chart
+  series and the day colours derived from them by hue rotation in OKLCH. The
+  default theme reproduces today's palette bit for bit. Six presets are
+  defined; the Appearance screen that picks one lands in wave 5. Widgets read
+  the same spec at launch; the watch receives it with the next context send
+  (sign-in, midnight, a plan change).
+- **Stress is an event log.** `stress_logs` gains `logged_at`; a day can hold
+  any number of entries, each with a time, instead of one per slot. The weekly
+  export prints an event as `14:32 3` (older rows keep `evening 3`). The Stress
+  index is unchanged: it was already the mean of the day's entries. The founder
+  pastes `docs/sql/w1-stress-events.sql` before logging the first event.
+- **Holiday** as a one-day context, next to Event, in the day's target sheet.
+- **Top Lifts engine** (`TopLifts.group`): one block per movement with its
+  Hardest, Heaviest and 1RM, an arrow against the last time you did it, and a
+  record flag. The Live Stats screen switches to it in wave 3.
+- **Timeline dots engine** (`dotProgress`): a ticked cardio bout counts for its
+  dot without ever entering working sets, tonnage or the PR engine.
+- **Token discipline is a gate again.** `npm run check` runs the OnyxUI tests
+  (`npm run swift:ui`), which fail on any raw colour literal outside the token
+  table. The check now needs a bootable iPhone simulator and takes about two
+  minutes longer.
+- **A rest range with a denominator.** `restCountdown` takes the rest total, so
+  a countdown bar can be built as elapsed over total. No surface passes the
+  total yet — the Live Activity bar still behaves as in 3.4.0 until wave 2
+  wires it.
+
+### Fixed
+- **"Next" on the Lock Screen and Dynamic Island names the next movement** —
+  only at a movement boundary, so the name and the load under it always agree.
+  Between sets of the same movement the card keeps the current lift and its
+  set count.
+
+### Changed
+- **The Head sheet opens blank and logs a fresh entry** each time it is saved;
+  "Clear this reading" became "Remove the last entry" and removes the day's
+  latest event. Its summary line counts the slots answered, not the rows. The
+  Stress card and sheet are redesigned in wave 4.
+- **Holiday** appears in the exception-reason menu of the day's target sheet.
+- Wave branches are `onyx/sprint-live-ux-w<N>`; the integration branch is
+  `onyx/sprint-live-ux`.
+
+---
+
 ## [3.4.0] — 2026-09-14 · The Clock Survives, the Trophy Has to Earn It
 
 ### Fixed

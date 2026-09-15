@@ -12,7 +12,8 @@ import OnyxCore
 /// of fixed semantic hues — and every screen reads it.
 ///
 /// The Live Logger was its last reader and Wave 2.4 re-skinned it, so the file
-/// is gone. the web app's `tests/native-token-discipline.test.ts` keeps it gone.
+/// is gone. `OnyxUITests/TokenDisciplineTests.swift` (run by `npm run swift:ui`
+/// inside `npm run check`) keeps it gone.
 ///
 /// ── WHAT CHANGED IN TOKENS v2 (Phase 2 §3.2) ────────────────────────────────
 /// Every accent came down two steps. The v1 palette was Ion `#7C5CFF` and Tide
@@ -24,9 +25,15 @@ import OnyxCore
 ///
 /// ── THE RULE THIS FILE MAKES ENFORCEABLE ────────────────────────────────────
 /// No raw hex in any view. Hexes live here, views name meanings, and
-/// the web app's `tests/native-token-discipline.test.ts` fails the build if a `0x` or a
+/// `OnyxUITests/TokenDisciplineTests.swift` fails the build if a `0x` or a
 /// `Color(red:` appears under `Features/`. A token you cannot name is a token
 /// you have not designed yet.
+///
+/// Two files may hold a hex: this one (the DEFAULT palette, `defaultDomainHex`
+/// and `defaultMuscleHex`) and `OnyxTheme.swift` (the preset table). The
+/// domain stops and the sixteen muscles are read through `OnyxTheme.current`,
+/// so a theme change reaches every static `Color.onyx.*` call site without an
+/// Environment and without a call-site edit.
 
 // MARK: - Domains
 
@@ -49,25 +56,24 @@ public enum OnyxDomain: String, CaseIterable, Sendable {
     /// Lunar — sleep, readiness, fatigue, DOMS. Lavender → mist.
     case recover
 
+    /// The eight stops as designed — the DEFAULT theme. `OnyxTheme` derives
+    /// every other theme from these by hue rotation, so a number here is the
+    /// palette's origin, not merely its first value.
+    public static let defaultDomainHex: [OnyxDomain: (start: UInt32, end: UInt32)] = [
+        .train:   (start: 0x6B78F0, end: 0x4FB6E8),
+        .fuel:    (start: 0xE3A650, end: 0xE07A7A),
+        .body:    (start: 0x46B39D, end: 0x2E9AA6),
+        .recover: (start: 0xA79FD6, end: 0xC9D3EE),
+    ]
+
     /// The mesh's first stop. Also the accent when only one colour will do.
-    public var start: Color {
-        switch self {
-        case .train:   Color(hex: 0x6B78F0)
-        case .fuel:    Color(hex: 0xE3A650)
-        case .body:    Color(hex: 0x46B39D)
-        case .recover: Color(hex: 0xA79FD6)
-        }
-    }
+    ///
+    /// Read through `OnyxTheme.current`: the dictionaries are total over the
+    /// enum, so the `!` is a programming error, never data.
+    public var start: Color { OnyxTheme.current.start[self]! }
 
     /// The mesh's second stop.
-    public var end: Color {
-        switch self {
-        case .train:   Color(hex: 0x4FB6E8)
-        case .fuel:    Color(hex: 0xE07A7A)
-        case .body:    Color(hex: 0x2E9AA6)
-        case .recover: Color(hex: 0xC9D3EE)
-        }
-    }
+    public var end: Color { OnyxTheme.current.end[self]! }
 
     /// What a `Section` header, a `Gauge` tint or a selected row is coloured.
     ///
@@ -139,7 +145,7 @@ extension Color {
         /// ── WHY THIS IS A TOKEN AND NOT A `Color(hex:)` IN THE VIEW ─────────
         /// It reads like a violation of the one native design rule and is not:
         /// nothing is being SPELLED OUT, a stored value is being decoded. But
-        /// `native-token-discipline` scans text, not intent, so the call site
+        /// `TokenDisciplineTests` scans text, not intent, so the call site
         /// was indistinguishable in review from a designer-invented hex — which
         /// is exactly the confusion the rule exists to prevent.
         ///
@@ -207,20 +213,24 @@ extension Color {
         // Nutrition and teal in a widget is two facts the reader has to hold.
         // Three of the four are domain stops rather than new hues, so the macro
         // rails still read as Solar and Lunar rather than as a fifth palette.
+        //
+        // Computed, not stored: a Swift static is lazy and would capture the
+        // theme at first read, so a `let` here is a macro rail that ignores the
+        // theme switch every other token follows.
 
         /// Coral — Solar's far stop.
-        public static let protein = OnyxDomain.fuel.end
+        public static var protein: Color { OnyxDomain.fuel.end }
         /// Honey — Solar's near stop.
-        public static let carbs = OnyxDomain.fuel.start
+        public static var carbs: Color { OnyxDomain.fuel.start }
         /// Lavender — Lunar's near stop.
-        public static let fat = OnyxDomain.recover.start
+        public static var fat: Color { OnyxDomain.recover.start }
         /// Sapphire. The one macro-adjacent hue that is not on a domain mesh,
         /// because water is not a macro and must not be mistaken for one.
         public static let water = Color(hex: 0x5AA9E6)
         /// Calories are the Atwater SUM of the three macros, so they take the
         /// domain the three sit on rather than a colour of their own. Use
         /// `OnyxDomain.fuel.ramp` where the fill is a gradient.
-        public static let calories = OnyxDomain.fuel.accent
+        public static var calories: Color { OnyxDomain.fuel.accent }
 
         /// The colour of a ROUTINE DAY — what tints a calendar ring, a session
         /// chip and the This-week panel — keyed onto the domains by what the day
@@ -315,7 +325,7 @@ extension Color {
         /// the way through `OnyxCore` for exactly that reason. Rendering it
         /// would put an arbitrary hue on a screen whose palette is a
         /// measurement (see the muscle landmarks), and a `Features/` file that
-        /// spelled the hex would fail `native-token-discipline`. So it is
+        /// spelled the hex would fail `TokenDisciplineTests`. So it is
         /// MAPPED, here, where the tokens live.
         ///
         /// Never `record` and never `danger`: gold means a personal record
@@ -449,25 +459,30 @@ extension Color {
         /// parameters were not merely unused: keeping them would have left the
         /// call site claiming a ramp the function no longer performs.
         public static func muscle(_ muscle: LandmarkMuscle) -> Color {
-            switch muscle {
-            case .chest:      Color(hex: 0xF66D64)
-            case .lats:       Color(hex: 0x00D4CE)
-            case .upperBack:  Color(hex: 0x00B6B0)
-            case .lowerBack:  Color(hex: 0x009894)
-            case .frontDelts: Color(hex: 0xFF9F46)
-            case .sideDelts:  Color(hex: 0xE68100)
-            case .rearDelts:  Color(hex: 0xC26C00)
-            case .biceps:     Color(hex: 0x998BFF)
-            case .triceps:    Color(hex: 0x0EA6FF)
-            case .forearms:   Color(hex: 0xB49F00)
-            case .quads:      Color(hex: 0x8AE171)
-            case .hamstrings: Color(hex: 0x76CC5C)
-            case .glutes:     Color(hex: 0x61B647)
-            case .adductors:  Color(hex: 0x4DA230)
-            case .calves:     Color(hex: 0x388D15)
-            case .absCore:    Color(hex: 0xE66DB6)
-            }
+            OnyxTheme.current.muscle[muscle]!
         }
+
+        /// The sixteen as measured — the DEFAULT theme's muscle palette, in
+        /// `LandmarkMuscle` declaration order. `OnyxTheme` rotates all sixteen
+        /// by the train accent's hue offset, so the family ramps hold.
+        public static let defaultMuscleHex: [LandmarkMuscle: UInt32] = [
+            .chest:      0xF66D64,
+            .lats:       0x00D4CE,
+            .upperBack:  0x00B6B0,
+            .lowerBack:  0x009894,
+            .frontDelts: 0xFF9F46,
+            .sideDelts:  0xE68100,
+            .rearDelts:  0xC26C00,
+            .biceps:     0x998BFF,
+            .triceps:    0x0EA6FF,
+            .forearms:   0xB49F00,
+            .quads:      0x8AE171,
+            .hamstrings: 0x76CC5C,
+            .glutes:     0x61B647,
+            .adductors:  0x4DA230,
+            .calves:     0x388D15,
+            .absCore:    0xE66DB6,
+        ]
     }
 }
 

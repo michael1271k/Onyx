@@ -39,7 +39,64 @@ struct RootView: View {
         // itself at zero, which is what makes "not rated" the outcome of doing
         // nothing.
         .fullScreenCover(item: Binding(get: { model.rest }, set: { if $0 == nil { model.stopRest() } })) { pulse in
-            RestView(pulse: pulse)
+            // ── THE COVER NEEDS ITS OWN STACK, AND THAT IS NOT DECORATION ────
+            // The `NavigationStack` above wraps the ROOT, not the cover, so a
+            // `.toolbar` inside `RestView` had nothing to attach to and drew
+            // nothing at all — no warning, no diagnostic, just a missing timer.
+            // The rest screen carries the session clock in the same corner
+            // `SetView` does, and it has to be the same corner on both or the
+            // reading appears and disappears as rest starts and ends, which
+            // reads as a glitch rather than as a state.
+            NavigationStack { RestView(pulse: pulse) }
+                .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+/// How long this session has been running, for the top-right of both screens.
+///
+/// ── WHY IT IS `h:mm` AND NOT A COUNTDOWN TEXT ───────────────────────────────
+/// `Text(_:style:.timer)` and `Text(timerInterval:)` are ticked by the system,
+/// which is exactly what a wrist wants — but both print seconds and neither can
+/// be told not to. The 40 mm bar is 162 pt and `SetView` has already spent it:
+/// "Set 1 of 4" takes ~62 and the deck link ~20, leaving about 50. "44:32" fits
+/// that; "1:04:32" does not, and a six-hour session is a real reading in this
+/// app's own history. A bar that re-lays itself out at the hour mark, mid-set,
+/// is the layout this device punishes hardest.
+///
+/// So: hours and minutes, four characters, one redraw a minute — which is what
+/// the always-on state wants anyway. The seconds are on the phone's hero at
+/// 34 pt for anyone who wants them.
+///
+/// ── AND WHY IT DIMS ITSELF ──────────────────────────────────────────────────
+/// A toolbar item is not inside the content that `.dimmedWhenLuminanceReduced`
+/// is applied to, so without its own call this is a small, static, tinted
+/// string held in one fixed corner at full brightness for an hour — the
+/// textbook burn-in case on an OLED panel.
+struct WatchSessionTimer: View {
+
+    @Environment(WatchModel.self) private var model
+
+    var body: some View {
+        if let startedAt = model.sessionStartedAt {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                Text(
+                    Duration.seconds(max(0, context.date.timeIntervalSince(startedAt)))
+                        .formatted(.time(pattern: .hourMinute))
+                )
+                .font(WatchType.label)
+                // Required, and not for the usual reason: a proportional string
+                // in a toolbar re-measures the bar on every tick, which re-lays
+                // the title beside it, forever.
+                .monospacedDigit()
+                // 36 and not 44: `h:mm` is four characters and monospaced, so
+                // the box only grows at ten hours. The 44 it started at was
+                // enough of the 40 mm bar to truncate `SetView`'s title.
+                .frame(minWidth: 36, alignment: .trailing)
+                .foregroundStyle(WatchInk.day(model.day?.key))
+                .dimmedWhenLuminanceReduced()
+                .accessibilityLabel("Total workout time")
+            }
         }
     }
 }

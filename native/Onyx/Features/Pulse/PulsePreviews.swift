@@ -64,8 +64,10 @@ enum PulsePreviews {
             // Two of the three buckets, with tags on one and a note on neither:
             // the Head row draws the LATEST word and the sheet's "today so far"
             // line needs a day that is partly answered to say anything at all.
-            try db.setStress(userId: userId, date: date, slot: .morning, level: 2, tags: [.work])
-            try db.setStress(userId: userId, date: date, slot: .midday, level: 4, tags: [.work, .money], note: "Deadline moved to Friday.")
+            try db.logStress(userId: userId, date: date, loggedAt: DayModel.localInstant(date, hhmm: "08:30") ?? Date(),
+                             level: 2, tags: [.work])
+            try db.logStress(userId: userId, date: date, loggedAt: DayModel.localInstant(date, hhmm: "13:10") ?? Date(),
+                             level: 4, tags: [.work, .money], note: "Deadline moved to Friday.")
             try db.setDoms(userId: userId, date: date, muscleGroup: "Quads", severity: 2)
             try db.setDoms(userId: userId, date: date, muscleGroup: "Chest", severity: 1)
             try db.setSupplementSkipped(

@@ -576,14 +576,12 @@ final class DayModel {
 
     // MARK: - Head — the typed stress reading (decision 3)
 
-    /// The day's own answers, earliest bucket first. A row whose slot this
-    /// build does not know is dropped rather than drawn under a blank heading.
+    /// The day's own events in the order the day happened
+    /// (`PsychStress.sorted`: a timed event by its time, a legacy row at its
+    /// slot's start). A row whose slot this build does not know is dropped
+    /// rather than drawn under a blank heading.
     var stressReadings: [StressReading] {
-        // In the order the DAY happens, which is `allCases` — sorting on the raw
-        // value is alphabetical and puts evening first.
-        let order = Dictionary(uniqueKeysWithValues: StressSlot.allCases.enumerated().map { ($1, $0) })
-        return stressRows.compactMap(AppDatabase.reading)
-            .sorted { (order[$0.slot] ?? 0) < (order[$1.slot] ?? 0) }
+        PsychStress.sorted(stressRows.compactMap(AppDatabase.reading))
     }
 
     /// The bucket a reading taken NOW belongs to — never a choice the user
@@ -594,8 +592,8 @@ final class DayModel {
     /// the index's business (`StressInputsBuilder`).
     var stressLatest: StressReading? { PsychStress.latest(stressReadings) }
 
-    /// The answer already sitting in a bucket, so the sheet edits rather than
-    /// duplicates.
+    /// The first event in a bucket — what the legacy sheet shows under its
+    /// slot header until the Stress UI wave replaces it.
     func stressReading(_ slot: StressSlot) -> StressReading? {
         stressReadings.first { $0.slot == slot }
     }
@@ -731,29 +729,42 @@ final class DayModel {
         }
     }
 
-    /// Write (or clear) one bucket's stress reading. Returns whether it landed,
-    /// so the sheet closes on success and keeps the typing on failure.
+    /// Log one stress event at `loggedAt` on the model's day. Returns whether
+    /// it landed, so the sheet closes on success and keeps the typing on
+    /// failure.
     ///
-    /// Optimistic like every other writer here — but the optimism is a full row
-    /// rather than a field, because the sheet commits level, tags and note
-    /// together and a half-applied echo would draw a reading nobody entered.
+    /// The write is synchronous, so the echo is the stored row itself rather
+    /// than an optimistic stand-in: it is appended under its real id the
+    /// moment the write returns, and the stream replaces it in place.
     @discardableResult
-    func setStress(_ slot: StressSlot, level: Int?, tags: [StressTag] = [], note: String? = nil) -> Bool {
-        stressRows.removeAll { $0.slot == slot.rawValue }
-        if let level {
+    func logStress(at loggedAt: Date, level: Int, tags: [StressTag] = [], note: String? = nil) -> Bool {
+        var id: String?
+        let landed = write { [database, userId, date] in
+            id = try database.logStress(userId: userId, date: date, loggedAt: loggedAt, level: level, tags: tags, note: note)
+        }
+        if let id {
             let trimmed = (note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             stressRows.append(StressLogRow(
-                id: "local", userId: userId, date: date, slot: slot.rawValue, level: level,
+                id: id, userId: userId, date: date,
+                slot: StressSlot.forMinutes(PsychStress.minuteOfDay(loggedAt)).rawValue, level: level,
                 tags: JSONText(raw: "[" + StressTag.sorted(tags).map { "\"\($0.rawValue)\"" }.joined(separator: ",") + "]"),
                 note: trimmed.isEmpty ? nil : trimmed,
-                createdAt: Date(), updatedAt: Date()
+                createdAt: Date(), updatedAt: Date(), loggedAt: loggedAt
             ))
-        }
-        let landed = write { [database, userId, date] in
-            try database.setStress(userId: userId, date: date, slot: slot, level: level, tags: tags, note: note)
         }
         // The index is a read over the day's rows, so a new reading only shows
         // up on the tile and in the breakdown once the window is rebuilt.
+        if landed { loadWindow() }
+        return landed
+    }
+
+    /// Remove one stress event. Optimistic like the other writers here.
+    @discardableResult
+    func deleteStress(id: String) -> Bool {
+        stressRows.removeAll { $0.id == id }
+        let landed = write { [database, userId] in
+            try database.deleteStress(userId: userId, id: id)
+        }
         if landed { loadWindow() }
         return landed
     }
