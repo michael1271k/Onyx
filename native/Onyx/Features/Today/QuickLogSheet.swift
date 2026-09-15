@@ -38,7 +38,7 @@ struct QuickLogSheet: View {
     /// all five — five `isPresented` flags on one view is five ways for two
     /// sheets to try to present at once.
     private enum Destination: String, Identifiable {
-        case weighIn, fatigue, head, cardio, note
+        case weighIn, fatigue, stress, cardio, note
         var id: String { rawValue }
     }
 
@@ -89,7 +89,7 @@ struct QuickLogSheet: View {
             switch destination {
             case .weighIn: InBodyEntryView(model: model)
             case .fatigue: FatigueSheet(model: model)
-            case .head:    HeadSheet(model: model)
+            case .stress:  StressLogSheet(model: model)
             case .note:    DayNoteSheet(model: model)
             case .cardio:
                 CardioLogSheet(
@@ -114,8 +114,8 @@ struct QuickLogSheet: View {
             Spoke(id: "fatigue", symbol: "battery.50", title: "Fatigue", detail: fatigueDetail, domain: .recover) {
                 opening = .fatigue
             },
-            Spoke(id: "head", symbol: "brain.head.profile", title: "Head", detail: headDetail, domain: .recover) {
-                opening = .head
+            Spoke(id: "stress", symbol: "brain.head.profile", title: "Stress", detail: stressDetail, domain: .recover) {
+                opening = .stress
             },
             Spoke(id: "cardio", symbol: "figure.run", title: "Cardio", detail: cardioDetail, domain: .train) {
                 opening = .cardio
@@ -161,7 +161,11 @@ struct QuickLogSheet: View {
         Fatigue.latest(model.fatigue).flatMap { Fatigue.level($0.level)?.label } ?? "—"
     }
 
-    private var headDetail: String {
+    /// The LATEST reading, never the day's mean — the same choice the stress
+    /// log card makes, for the same reason: a spoke that said "3.0" on a day
+    /// you answered Relaxed at breakfast and Swamped at midnight would describe
+    /// neither moment.
+    private var stressDetail: String {
         model.stressLatest.flatMap { PsychStress.level($0.level)?.label } ?? "—"
     }
 
@@ -315,7 +319,7 @@ struct DayNoteSheet: View {
                 }
             }
         }
-        // ── THE SAME HAZARD `HeadSheet` DOCUMENTS ───────────────────────────
+        // ── THE SAME HAZARD `StressLogSheet` DOCUMENTS ──────────────────────
         // The day's row arrives on a stream, and Quick Log builds its model on
         // the tap — so `onAppear` can fire before the first yield, the editor
         // would open blank over an existing note, and Save would clear

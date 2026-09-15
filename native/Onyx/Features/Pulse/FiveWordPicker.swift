@@ -5,8 +5,9 @@ import OnyxCore
 /// One row of five words, one tap (founder decision 6).
 ///
 /// ── ONE CONTROL, BECAUSE THERE IS ONE QUESTION ──────────────────────────────
-/// Fatigue asks what the body could do and Head asks what is on your mind, but
-/// both are a 1–5 self-report on the same neutral 3, and D6 folds the two into
+/// Fatigue asks what the body could do and the stress log asks what is on your
+/// mind, and the two answer differently on the same day — but both are a 1–5
+/// self-report on the same neutral 3, and D6 folds the two into
 /// ONE term of the Stress index. Two controls for that is two places for the
 /// hit target, the selected state and the VoiceOver traits to drift apart —
 /// and the reader would have to learn the answer shape twice on one screen.

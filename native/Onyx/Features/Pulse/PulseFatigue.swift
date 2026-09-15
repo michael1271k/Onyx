@@ -2,86 +2,6 @@ import SwiftUI
 import OnyxUI
 import OnyxCore
 
-/// How tired you said you were, in one row.
-///
-/// ── WHY THE CHIPS MOVED INTO A SHEET ────────────────────────────────────────
-/// The tile this replaces drew three slots × five words = fifteen 44 pt chips,
-/// a definition sentence under each slot and a cost line — four hundred points
-/// of a permanently-open form for a reading taken once or twice a day. The row
-/// states the ANSWER (the latest word, which slot it came from, how many of the
-/// day's slots are in) and the form opens on a tap, which is what a form that
-/// is used twice a day should do.
-struct FatigueSummaryRow: View {
-    let model: DayModel
-    let onOpen: () -> Void
-
-    private var day: FatigueDay { model.fatigue }
-    private var slots: [FatigueSlot] { model.fatigueSlots }
-    private var latest: FatigueReading? { Fatigue.latest(day) }
-    private var logged: Int { slots.filter { day[$0] != nil }.count }
-
-    /// "Before training · 2 of 3", or the invitation when nothing is logged.
-    private var detail: String {
-        guard let latest else { return "Not rated · 0 of \(slots.count)" }
-        return "\(latest.slot.label) · \(logged) of \(slots.count)"
-    }
-
-    var body: some View {
-        PulseRow(
-            symbol: "battery.50",
-            title: "Fatigue",
-            detail: detail,
-            tint: Color.onyx.fatigue(latest?.level),
-            spoken: latest.map { "\(Fatigue.level($0.level)?.label ?? ""), \(detail)\(costSpoken)" } ?? detail,
-            action: onOpen
-        ) {
-            HStack(spacing: OnyxSpace.s) {
-                if let level = latest?.level, let word = Fatigue.level(level)?.label {
-                    Text(word)
-                        .onyxType(.body).fontWeight(.semibold)
-                        .foregroundStyle(Color.onyx.fatigue(level))
-                        .lineLimit(1)
-                }
-                cost
-                dots
-            }
-        }
-    }
-
-    /// One dot per slot the day HAS — three on a training day, three on a rest
-    /// day, and they are not the same three (`Fatigue.slotsForDay`).
-    private var dots: some View {
-        HStack(spacing: OnyxSpace.xs) {
-            ForEach(slots, id: \.self) { slot in
-                Circle()
-                    .fill(day[slot] != nil ? Color.onyx.fatigue(day[slot]) : .clear)
-                    .strokeBorder(day[slot] != nil ? .clear : Color.onyx.textTertiary, lineWidth: 1)
-                    .frame(width: 7, height: 7)
-            }
-        }
-        .accessibilityHidden(true)
-    }
-
-    /// What the session cost, `post` − `pre`. Absent on a rest day and on a
-    /// training day missing either end — a delta against an unrated slot looks
-    /// like a measurement and is not one.
-    @ViewBuilder
-    private var cost: some View {
-        if let delta = Fatigue.delta(day) {
-            Text("\(delta >= 0 ? "+" : "")\(delta)")
-                .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
-                .foregroundStyle(delta > 1 ? Color.onyx.record : Color.onyx.textSecondary)
-                .padding(.horizontal, OnyxSpace.s)
-                .padding(.vertical, 2)
-                .background(Capsule().fill(Color.onyx.hairline))
-        }
-    }
-
-    private var costSpoken: String {
-        Fatigue.delta(day).map { ", session cost \($0 >= 0 ? "+" : "")\($0)" } ?? ""
-    }
-}
-
 /// One slot, five words, one tap (founder decision 6, D9).
 ///
 /// ── WHAT WAS HERE, AND WHY IT WENT ──────────────────────────────────────────
@@ -96,8 +16,8 @@ struct FatigueSummaryRow: View {
 /// then the rest of the sheet is the five words, at the size of something you
 /// hit without looking. One tap writes and closes.
 ///
-/// The session cost left with the pickers: `FatigueSummaryRow` already prints
-/// the delta on the row this sheet opens from, and a sheet that repeats the row
+/// The session cost left with the pickers: `FatigueCard` already prints the
+/// delta on the card this sheet opens from, and a sheet that repeats the thing
 /// that opened it is a sheet you read twice to learn nothing.
 struct FatigueSheet: View {
     let model: DayModel

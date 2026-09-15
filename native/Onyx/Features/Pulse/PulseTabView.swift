@@ -25,20 +25,35 @@ struct PulseTabView: View {
     /// Harness only: which section to open scrolled to. Half this screen is
     /// below the fold and a single shot cannot reach it.
     var startAtRows = false
+    /// Harness only: which carousel page to open on. Two of the three pages are
+    /// off-screen by definition, and `simctl` can film a simulator but cannot
+    /// swipe one.
+    var startAtPage: PulsePage?
+    /// Harness only: open with the vitals grid down. It is a disclosure, so its
+    /// open state exists only after a tap nobody can make in a screenshot.
+    var startVitalsOpen = false
 
     @State private var resolved: DayModel?
 
     init() {}
 
-    init(seeded: DayModel, startAtRows: Bool = false) {
+    init(seeded: DayModel, startAtRows: Bool = false,
+         startAtPage: PulsePage? = nil, startVitalsOpen: Bool = false) {
         self.seeded = seeded
         self.startAtRows = startAtRows
+        self.startAtPage = startAtPage
+        self.startVitalsOpen = startVitalsOpen
     }
 
     var body: some View {
         Group {
             if let resolved {
-                DayScreen(model: resolved, startAtRows: startAtRows)
+                DayScreen(
+                    model: resolved,
+                    startAtRows: startAtRows,
+                    startAtPage: startAtPage,
+                    startVitalsOpen: startVitalsOpen
+                )
             } else {
                 ProgressView().controlSize(.large)
             }
@@ -60,17 +75,41 @@ struct DayScreen: View {
     let model: DayModel
     /// Harness only — see `PulseTabView.startAtRows`.
     var startAtRows = false
+    var startAtPage: PulsePage?
+    var startVitalsOpen = false
 
     @State private var showCalendar = false
     @State private var ratingFatigue = false
-    @State private var ratingHead = false
+    @State private var loggingStress = false
+    @State private var browsingStress = false
     @State private var entering = false
     @State private var showStack = false
     @State private var showSoreness = false
+    @State private var editingSleep = false
+    /// Which carousel page is showing.
+    ///
+    /// ── WHY IT LIVES HERE AND NOT IN `PulseCarousel` ────────────────────────
+    /// The carousel is one `List` row, and a row scrolled out of the window and
+    /// back is re-hosted with its inner scroll view at offset zero — the reader
+    /// who was on Soreness comes back to Fatigue. `.scrollPosition(id:)` is a
+    /// two-way binding and re-applies its value on that relayout, so the
+    /// selection has to outlive the row for the offset to be recoverable at
+    /// all. Optional because that is the only shape the modifier takes, and
+    /// SwiftUI writes nil back while a scroll is between pages.
+    @State private var page: PulsePage? = .fatigue
+    /// Whether the vitals grid is open under the chip row.
+    @State private var vitalsExpanded = false
     /// The session the Workout summary card was tapped on. `item:` rather than
     /// `isPresented:` because a day can hold two sessions and each card has to
     /// push its own.
     @State private var openSession: DayModel.WorkoutSummary?
+    /// The masthead for each session on this date, by id.
+    ///
+    /// A career-wide read (`SessionAnalysis.headers` walks the whole ledger to
+    /// place each session in the record), so it is NOT on the day-window path
+    /// that runs on every date step — it is its own detached task keyed on the
+    /// ids, exactly as the Train tab's done card loads the same value.
+    @State private var sessionHeaders: [String: SessionHeader] = [:]
     /// How far the list has been pulled up, in points, clamped to the wash's
     /// own height. Zero at the top and 1 once the header band has scrolled
     /// away — see `muscleWash`.
@@ -136,48 +175,64 @@ struct DayScreen: View {
             }
 
             NowStripPulse(model: model, date: title).plainRow()
-            SleepTile(model: model).plainRow()
-            // Under Sleep, not above it: two of the index's four terms are the
-            // night above — its fragmentation and how hard it was to fall into
-            // — and a reading placed above the thing it is partly made of asks
-            // to be read as a cause of it.
-            StressTile(model: model).plainRow()
 
+            // ── THE MEASUREMENTS, COMPRESSED TO ONE LINE ────────────────────
+            // The night's tile and the nine-cell vitals grid were 360 pt of
+            // permanently-open reference directly under the strip — the two
+            // things on this screen that something ELSE measured, sitting above
+            // the three it asks you. A chip row says the same readings in 44 pt
+            // and the grid is one tap behind it (`VitalsChipRow`).
+            VitalsChipRow(model: model, expanded: $vitalsExpanded) { editingSleep = true }
+
+            // ── AND THEN THE THREE IT ASKS YOU ──────────────────────────────
+            // Fatigue, the stress log and soreness were three 44 pt rows at the
+            // BOTTOM of this screen, under a body map and five doors. They are
+            // the only things on Pulse that cannot be answered by a watch, and
+            // a row has no room for the answer AND the control. One page each,
+            // swiped between, with the verb on the card's face.
+            PulseCarousel(
+                model: model,
+                page: $page,
+                onFatigue: { ratingFatigue = true },
+                onLogStress: { loggingStress = true },
+                onBrowseStress: { browsingStress = true },
+                onSoreness: { showSoreness = true }
+            )
+            .plainRow(edgeToEdge: true)
+            .id(Self.carouselAnchor)
+
+            // ── WHY THESE TWO ARE ONE SECTION ───────────────────────────────
+            // What you weigh and what you took: two 44 pt rows that each state
+            // an answer and open a sheet, and neither is a question this screen
+            // asks — the scale is a device reading you transcribe and the stack
+            // is a list you maintain. The scale leads (§W11): what you weigh is
+            // the reading the other is context for.
             Section {
-                VitalsGrid(model: model)
-            } header: {
-                OnyxSectionHeader("Vitals", .body)
+                ScaleRow(model: model) { entering = true }
+                StackRow(model: model) { showStack = true }
             }
+            .id(Self.rowsAnchor)
+
+            // Under the log, not above it: the index's `self` term is built
+            // from the readings on the card above, and a number placed above
+            // the thing it is partly made of asks to be read as a cause of it.
+            StressTile(model: model).plainRow()
 
             // Whatever was trained on this date, and the door to the page that
             // reads it properly. §W11 asks for it on a PAST day; it is drawn
             // whenever the day HAS a finished session, because a card that
             // appears at midnight for the session you finished at six is a
             // worse rule than one that appears when the session does.
-            ForEach(model.window.sessions) { session in
-                WorkoutSummaryCard(session: session) { openSession = session }.plainRow()
-            }
-
-            // ── WHY THESE FOUR ARE ONE SECTION ──────────────────────────────
-            // Four 44 pt rows that each state an answer and open a sheet. They
-            // were three sections and a 300 pt tile between them, which is
-            // most of why this screen ran to four phone-heights.
             //
-            // The scale leads (§W11): what you weigh is the reading the other
-            // three are context for, and it was under a body map you had to
-            // scroll past to reach it.
-            Section {
-                ScaleRow(model: model) { entering = true }
-                FatigueSummaryRow(model: model) { ratingFatigue = true }
-                // Body, then mind. D6 folds the two self-reports into ONE term
-                // of the Stress index, so they are neighbours rather than a row
-                // apart — and the reader who answers one is one row from the
-                // other.
-                HeadSummaryRow(model: model) { ratingHead = true }
-                SorenessRow(model: model) { showSoreness = true }
-                StackRow(model: model) { showStack = true }
+            // Last on the screen, on purpose (founder decision 7): Pulse
+            // answers "how am I", and what caused it is the footnote to that,
+            // not its headline.
+            ForEach(model.window.sessions) { session in
+                PulseSessionCard(session: session, header: sessionHeaders[session.id]) {
+                    openSession = session
+                }
+                .plainRow()
             }
-            .id(Self.rowsAnchor)
         }
         .listStyle(.plain)
         // ── THE DAY'S OWN COLOUR, BEHIND THE TOP OF THE LIST ────────────────
@@ -254,9 +309,18 @@ struct DayScreen: View {
                     .padding(OnyxSpace.s)
             }
         }
+        // ── EVERY SHEET IS PRESENTED FROM HERE, INCLUDING THE CARDS' ────────
+        // The carousel's three cards live inside a `List` row, which is
+        // re-hosted when it scrolls out of the window. A `.sheet` declared on a
+        // card would be torn down with it — the sheet dismisses itself the
+        // first time the list scrolls far enough, mid-typing. So the cards take
+        // closures and the screen owns the presentation, which is the rule this
+        // file already followed for the four rows they replace.
         .sheet(isPresented: $ratingFatigue) { FatigueSheet(model: model) }
-        .sheet(isPresented: $ratingHead) { HeadSheet(model: model) }
+        .sheet(isPresented: $loggingStress) { StressLogSheet(model: model) }
+        .sheet(isPresented: $browsingStress) { StressLogListSheet(model: model) }
         .sheet(isPresented: $showSoreness) { SorenessSheet(model: model) }
+        .sheet(isPresented: $editingSleep) { SleepEditSheet(model: model) }
         .navigationDestination(item: $openSession) { SessionDetailView(sessionId: $0.id) }
         .sheet(isPresented: $entering) { InBodyEntryView(model: model) }
         // Today's banner switched to this tab and asked for the form.
@@ -284,20 +348,79 @@ struct DayScreen: View {
         // a parent that rebuilds its `DayModel` inline (History, the calendar
         // jump) hands the new one a running observer too.
         .task(id: ObjectIdentifier(model)) { await model.observe() }
+        // The mastheads. Keyed on the ids so stepping to a day with the same
+        // sessions costs nothing, and detached because `headers` replays every
+        // set ever logged to place each session in the career — the same read,
+        // made the same way, as the Train tab's done card.
+        .task(id: model.window.sessions.map(\.id)) {
+            let ids = model.window.sessions.map(\.id)
+            guard !ids.isEmpty else {
+                sessionHeaders = [:]
+                return
+            }
+            let database = model.database, userId = model.userId
+            let loaded = await Task.detached(priority: .userInitiated) {
+                SessionAnalysis.headers(database: database, userId: userId, sessionIds: ids)
+            }.value
+            // ── THE GUARD IS NOT DEFENSIVE, IT IS THE WHOLE RACE ────────────
+            // `await someTask.value` on a non-throwing Task is NOT a
+            // cancellation point: when `.task(id:)` tears this body down
+            // because the date stepped, the old body still resumes and still
+            // assigns. The walk is the whole career and its cost varies with
+            // the day, so stepping A → B while A is slow leaves `sessionHeaders`
+            // holding A's dictionary — and B's card falls to its placeholder
+            // and NEVER recovers, because `.task(id:)` will not fire again
+            // until the ids change.
+            guard !Task.isCancelled else { return }
+            sessionHeaders = loaded
+        }
         .task {
-            guard startAtRows else { return }
+            guard startAtPage != nil || startVitalsOpen || startAtRows else { return }
+            // ── THE WAIT IS NOT OPTIONAL, FOR EITHER OPENING ────────────────
             // The same 400 ms the ledger shot needs (Wave 2.8): a `List` picks
             // its anchor at first layout, which happens while it is still
             // empty, so the scroll has to wait for the rows to exist.
+            //
+            // `.scrollPosition(id:)` has the same rule and fails WORSE: written
+            // before the carousel's children have laid out, the binding keeps
+            // the new page — so the dots move — and the scroll view never
+            // applies it. The first shot of page two was page one with page
+            // two's dot lit, which reviews as a broken pager and is in fact a
+            // harness writing too early.
             try? await Task.sleep(for: .milliseconds(400))
+            // `startAtPage` writes the SAME binding a swipe writes, so the shot
+            // photographs the real paging path rather than a second code path
+            // that only runs in a screenshot.
+            if let startAtPage {
+                // ── SCROLL FIRST, THEN PAGE ─────────────────────────────────
+                // At an accessibility size the carousel starts well below the
+                // fold, so its row is not realised yet and `.scrollPosition`
+                // has nothing to apply the page to — the binding takes the
+                // value, the pager does not move, and the shot is page one with
+                // page two's dot lit. The same failure the 400 ms above exists
+                // for, one layer down: bring the row on screen, let it lay out,
+                // then ask it to page.
+                scroller.scrollTo(Self.carouselAnchor, anchor: .top)
+                try? await Task.sleep(for: .milliseconds(300))
+                page = startAtPage
+            }
+            if startVitalsOpen { vitalsExpanded = true }
+            guard startAtRows else { return }
             scroller.scrollTo(Self.rowsAnchor, anchor: .top)
         }
     }
 
-    /// The anchor the harness scrolls to: the four-row section, which is the
-    /// half of the screen that sits below the fold on a phone. The vitals above
-    /// it are `VitalsGrid`, which the default `day` shot already photographs.
+    /// The anchor the harness scrolls to: the scale-and-stack section, which is
+    /// where the bottom half of the screen starts. Everything under it — the
+    /// stress index and the session card — is below the fold on a phone, and
+    /// everything above it is what the default `day` shot already photographs.
     private static let rowsAnchor = "pulse.rows"
+
+    /// The carousel row. At an accessibility size the Now strip alone is most
+    /// of the screen, so the three cards are below the fold by definition and a
+    /// shot of "page two at AX5" photographs the strip — which is how the time
+    /// strip's own accessibility layout went unreviewed for a round.
+    private static let carouselAnchor = "pulse.carousel"
 
 
     /// "Thu 3 Sept" — a date, formatted; never the ISO string. It rides in the

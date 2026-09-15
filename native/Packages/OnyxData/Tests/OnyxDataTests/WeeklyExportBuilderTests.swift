@@ -628,6 +628,46 @@ struct WeeklyExportBuilderV5Tests {
         #expect(day.contains("stress morning 2, 14:32 3, evening 4"))
     }
 
+    /// The wave's own gate: the screen now lets you log as many readings a day
+    /// as you feel like, and two of them in one bucket is the case the old
+    /// unique key made impossible. The export has to carry both — a week that
+    /// silently dropped the second is a week that disagrees with the card the
+    /// reader just looked at, and with the day mean the index was built from.
+    @Test("two events in one slot both print, in the order the day happened")
+    func twoEventsInOneSlotBothPrint() throws {
+        let db = try seeded()
+        try db.writer.write { conn in
+            // 06:12 and 07:40 Jerusalem — both `morning`, and under the dropped
+            // `(user_id, date, slot)` unique the second would have deleted the
+            // first on write.
+            try StressLogRow(id: "st-a", userId: user, date: "2026-08-24", slot: "morning", level: 2,
+                             tags: JSONText(raw: "[]"), note: nil,
+                             createdAt: iso("2026-08-24T03:12:00Z"), updatedAt: iso("2026-08-24T03:12:00Z"),
+                             loggedAt: iso("2026-08-24T03:12:00Z")).insert(conn)
+            try StressLogRow(id: "st-b", userId: user, date: "2026-08-24", slot: "morning", level: 4,
+                             tags: JSONText(raw: "[]"), note: nil,
+                             createdAt: iso("2026-08-24T04:40:00Z"), updatedAt: iso("2026-08-24T04:40:00Z"),
+                             loggedAt: iso("2026-08-24T04:40:00Z")).insert(conn)
+            // A third in a different bucket, so the ordering claim is about the
+            // CLOCK and not merely about insertion order.
+            try StressLogRow(id: "st-c", userId: user, date: "2026-08-24", slot: "evening", level: 3,
+                             tags: JSONText(raw: "[]"), note: nil,
+                             createdAt: iso("2026-08-24T17:05:00Z"), updatedAt: iso("2026-08-24T17:05:00Z"),
+                             loggedAt: iso("2026-08-24T17:05:00Z")).insert(conn)
+        }
+        let got = try WeeklyExportBuilder(database: db, userId: user, timeZone: TimeZone(identifier: "Asia/Jerusalem")!)
+            .input(weekStart: weekStart, today: weekStart)
+        // Two rows, one slot, two distinct times — not one row, and not a mean.
+        #expect(got.stress?.map(\.time) == ["06:12", "07:40", "20:05"])
+        #expect(got.stress?.map(\.slot) == ["morning", "morning", "evening"])
+        #expect(got.stress?.map(\.level) == [2, 4, 3])
+
+        let md = WeeklyExport.build(got)
+        #expect(md.contains("stress 2026-08-24 06:12 2 · 2026-08-24 07:40 4 · 2026-08-24 20:05 3"))
+        let day = try #require(md.split(separator: "\n").first { $0.hasPrefix("2026-08-24 · ") })
+        #expect(day.contains("stress 06:12 2, 07:40 4, 20:05 3"))
+    }
+
     @Test("a clockless bout is never a duplicate of another clockless bout")
     func clocklessCardioIsNotDeduped() throws {
         let got = try built("UTC")

@@ -22,7 +22,12 @@ import OnyxData
 @Observable
 final class DayModel {
 
-    private let database: AppDatabase
+    /// Internal rather than private: `DayScreen` loads the session mastheads
+    /// (`SessionAnalysis.headers`) off THIS store, not off `AppEnvironment`'s.
+    /// They are the same object in the tab, and are NOT in a preview or in a
+    /// day History pushed — where reading the environment's store returned no
+    /// sessions at all and every card drew its placeholder forever.
+    let database: AppDatabase
     let userId: String
 
     /// The selected logical day, ISO. Never later than today.
@@ -574,7 +579,7 @@ final class DayModel {
     /// Term by term, for the breakdown sheet.
     var stressBreakdown: Stress.Breakdown? { window.stressBreakdown }
 
-    // MARK: - Head — the typed stress reading (decision 3)
+    // MARK: - The stress log — the typed reading (decision 1)
 
     /// The day's own events in the order the day happened
     /// (`PsychStress.sorted`: a timed event by its time, a legacy row at its
@@ -584,19 +589,16 @@ final class DayModel {
         PsychStress.sorted(stressRows.compactMap(AppDatabase.reading))
     }
 
-    /// The bucket a reading taken NOW belongs to — never a choice the user
-    /// makes (`StressSlot.forClock`).
-    var stressSlot: StressSlot { StressSlot.forClock(clock) }
+    // ── NO `stressSlot` HERE ANY MORE ──────────────────────────────────────
+    // The legacy sheet asked the MODEL what bucket it was, because the reading
+    // it wrote had no timestamp of its own. `StressLogSheet` derives the slot
+    // from the time the reader actually picked (`StressSlot.forMinutes` over
+    // `loggedAt`), and a second "what slot is it now" accessor on the model is
+    // how the clock-vs-timestamp split this wave removed would come back.
 
     /// What the row states: the LATEST answer, not the day's mean. The mean is
     /// the index's business (`StressInputsBuilder`).
     var stressLatest: StressReading? { PsychStress.latest(stressReadings) }
-
-    /// The first event in a bucket — what the legacy sheet shows under its
-    /// slot header until the Stress UI wave replaces it.
-    func stressReading(_ slot: StressSlot) -> StressReading? {
-        stressReadings.first { $0.slot == slot }
-    }
 
     // MARK: - The now strip
 

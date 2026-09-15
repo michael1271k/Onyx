@@ -41,10 +41,11 @@ struct SleepEditSheet: View {
     @ScaledMetric(relativeTo: .title) private var arcSize: CGFloat = 96
     private var arcWidth: CGFloat { min(arcSize, 300) }
 
-    /// `SleepTile.stacked`, for the same reason and at the same threshold: a
-    /// gauge with a stage list beside it needs ~190 pt for the list, and past
+    /// A gauge with a stage list beside it needs ~190 pt for the list, and past
     /// xxLarge the names and their minutes both ellipsise — the first AX5 shot
-    /// of this card was four rows of "… … 18%".
+    /// of this card was four rows of "… … 18%". (The rule was shared with the
+    /// Sleep tile until W4; this sheet is the only surface drawing the night
+    /// now, so the threshold lives here.)
     private var stacked: Bool { typeSize >= .xxLarge }
 
     @State private var start = Date()

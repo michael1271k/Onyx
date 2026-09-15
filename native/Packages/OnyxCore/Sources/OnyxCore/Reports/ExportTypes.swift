@@ -267,7 +267,7 @@ public struct ExportFatigue: Codable, Equatable, Sendable {
     public var label: String
 }
 
-/// One `stress_logs` row — the "Head" reading, self-reported.
+/// One `stress_logs` row — one self-reported stress event.
 ///
 /// Not a second fatigue scale: `ExportFatigue` asks what the BODY could do and
 /// this asks what is on the mind, and the two answer differently on the same
@@ -389,7 +389,7 @@ public struct WeeklyExportInput: Codable, Equatable, Sendable {
     /// Flagged joints. Optional: a payload built before v2 simply has none.
     public var joints: [ExportJoint]?
     public var fatigue: [ExportFatigue]?
-    /// Self-reported psychological stress — the Head row. Optional: a payload
+    /// Self-reported psychological stress — the stress log. Optional: a payload
     /// built by a surface that does not write `stress_logs` simply has none,
     /// and the day says `no data` rather than claiming a calm week.
     public var stress: [ExportStress]?

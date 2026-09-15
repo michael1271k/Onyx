@@ -65,7 +65,7 @@ extension StressTermKey {
         switch self {
         case .auto:       "HRV and resting heart rate against your own baseline"
         case .sleep:      "How broken the night was, and whether it was hard to fall into"
-        case .selfReport: "The mean of what you said today — the fatigue slots and the Head readings"
+        case .selfReport: "The mean of what you said today — the fatigue slots and the stress log"
         case .load:       "Acute:chronic ratio and this week's strain — never negative"
         }
     }
@@ -100,7 +100,11 @@ struct StressTile: View {
     private var trace: [Double] { model.stressSeries.compactMap(\.index) }
 
     var body: some View {
-        DayTile("Stress", .recover) {
+        // "Stress index", not "Stress": the stress LOG card sits directly
+        // above this tile now, and one word on two features is a screen where
+        // neither can be read. The index is the computed number; the log is
+        // what you typed. See `PulseStressLog.swift`'s header.
+        DayTile("Stress index", .recover) {
             Button { showing = true } label: {
                 Group {
                     if typeSize.isAccessibilitySize { stacked } else { oneLine }
@@ -310,7 +314,7 @@ private struct TermRow: View {
         case .selfReport:
             // Two self-reports, averaged over whichever answered (D6). Naming
             // only the one that did is what stops "fatigue 2.0 of 5" reading as
-            // the whole term on a day the Head row also spoke.
+            // the whole term on a day the stress log also spoke.
             let t = breakdown.terms.selfReport
             return [
                 t.fatigueDayMean.map { "fatigue \(jsToFixed($0, 1)) of 5" },

@@ -61,11 +61,22 @@ enum PulsePreviews {
 
             try db.setFatigue(userId: userId, date: date, slot: FatigueSlot.waking.rawValue, level: 2)
             try db.setFatigue(userId: userId, date: date, slot: FatigueSlot.pre.rawValue, level: 3)
-            // Two of the three buckets, with tags on one and a note on neither:
-            // the Head row draws the LATEST word and the sheet's "today so far"
-            // line needs a day that is partly answered to say anything at all.
+            // ── THREE EVENTS, TWO OF THEM IN ONE SLOT ───────────────────────
+            // 08:30 and 09:12 are both `morning`, which is the whole point of
+            // the wave: under the old unique key the second of them would have
+            // deleted the first, and the day would have read "Tense" with no
+            // record that it started at "Okay". The strip has to show both, the
+            // export has to print both, and the index's day mean has to be the
+            // mean of all three — none of which a fixture with one reading per
+            // bucket can photograph.
+            //
+            // Three is also exactly the card's cap at shipping type, so the
+            // same fixture draws a full strip there and a "+1 earlier" marker
+            // at AX5, where the cap is two.
             try db.logStress(userId: userId, date: date, loggedAt: DayModel.localInstant(date, hhmm: "08:30") ?? Date(),
                              level: 2, tags: [.work])
+            try db.logStress(userId: userId, date: date, loggedAt: DayModel.localInstant(date, hhmm: "09:12") ?? Date(),
+                             level: 3, tags: [.work])
             try db.logStress(userId: userId, date: date, loggedAt: DayModel.localInstant(date, hhmm: "13:10") ?? Date(),
                              level: 4, tags: [.work, .money], note: "Deadline moved to Friday.")
             try db.setDoms(userId: userId, date: date, muscleGroup: "Quads", severity: 2)
@@ -317,10 +328,28 @@ enum PulsePreviews {
         case "day-rows":
             NavigationStack { PulseTabView(seeded: fullDay(), startAtRows: true) }
                 .environment(AppEnvironment.preview)
-        // A day with the session on it, parked on the bottom half — which is
-        // where the Workout summary card and the four rows are. The rows
-        // section is the last content on the screen, so scrolling to it clamps
-        // to the end and the card comes with it.
+        // ── THE CAROUSEL'S OTHER TWO PAGES ──────────────────────────────────
+        // A pager shows one page, and `simctl` can film a simulator but cannot
+        // swipe one (the same reason `widgets-nudge` has a self-pressing
+        // button). `startAtPage` writes the page binding a finger would write,
+        // so each of the three is photographable without a second code path.
+        case "day-stress":
+            NavigationStack { PulseTabView(seeded: pinned(fullDay()), startAtPage: .stress) }
+                .environment(AppEnvironment.preview)
+        case "day-soreness":
+            NavigationStack { PulseTabView(seeded: fullDay(), startAtPage: .soreness) }
+                .environment(AppEnvironment.preview)
+        // The chip row with the grid down. The collapsed state is what `day`
+        // photographs; this is the other half of the disclosure, and nine cells
+        // of sparkline is most of what the screen looks like when it is open.
+        case "day-vitals":
+            NavigationStack { PulseTabView(seeded: fullDay(), startVitalsOpen: true) }
+                .environment(AppEnvironment.preview)
+        // A day with the session on it, parked on the bottom half — the scale
+        // and stack rows, the stress index and the session card. Since the
+        // reorder the whole day fits a phone with room over, so this scrolls
+        // very little; it is kept because it is the only screen that draws
+        // `SessionHeaderCard` on Pulse at all.
         case "day-past":
             NavigationStack { PulseTabView(seeded: fullDay(withSession: true), startAtRows: true) }
                 .environment(AppEnvironment.preview)
@@ -374,11 +403,18 @@ enum PulsePreviews {
         case "fatigue":
             Presenting(model: pinned(fullDay())) { FatigueSheet(model: $0) }
                 .environment(AppEnvironment.preview)
-        // The typed stress reading, in the bucket 13:00 falls in — with the
-        // morning's answer already on the day, which is the state the "today so
-        // far" line exists for.
-        case "head":
-            Presenting(model: pinned(fullDay())) { HeadSheet(model: $0) }
+        // The logging sheet: five words, the time wheel defaulted to the pinned
+        // clock, the chips and the note. `pinned` so the wheel lands on the
+        // same minute every run — without it the committed PNG churns whenever
+        // the shot is taken.
+        case "stress-log":
+            Presenting(model: pinned(fullDay())) { StressLogSheet(model: $0) }
+                .environment(AppEnvironment.preview)
+        // The whole day's events as rows, which is where the tags, the note and
+        // the swipe-delete live — and the one shot in which both morning events
+        // are visible with their tags.
+        case "stress-day":
+            Presenting(model: pinned(fullDay())) { StressLogListSheet(model: $0) }
                 .environment(AppEnvironment.preview)
         // The ring behind the dashboard mark. Over Pulse rather than over
         // Today: the sheet needs a `DayModel` with its streams running, and
@@ -496,6 +532,9 @@ enum PulsePreviews {
 #Preview("Pulse — sleep edit") { PulsePreviews.view("sleep-edit") }
 #Preview("Pulse — stress") { PulsePreviews.view("stress") }
 #Preview("Pulse — fatigue") { PulsePreviews.view("fatigue") }
-#Preview("Pulse — head") { PulsePreviews.view("head") }
+#Preview("Pulse — stress log") { PulsePreviews.view("stress-log") }
+#Preview("Pulse — stress day") { PulsePreviews.view("stress-day") }
+#Preview("Pulse — carousel") { PulsePreviews.view("day-stress") }
+#Preview("Pulse — vitals open") { PulsePreviews.view("day-vitals") }
 #Preview("Quick Log") { PulsePreviews.view("quick-log") }
 #endif

@@ -13,144 +13,96 @@ import OnyxCore
 /// every one of them. Getting there meant leaving, opening History, finding the
 /// week, finding the day, and arriving back at the same date.
 ///
-/// One card and a chevron. It states the three figures that say what kind of
-/// session it was and hands the reader to `SessionDetailView`, which replays
-/// the record book and draws the rest.
+/// ── AND WHY IT IS NOW THE SAME CARD THE OTHER TWO SCREENS DRAW (A6) ─────────
+/// This was `WorkoutSummaryCard`: a header row, a muscle wash and three
+/// capsules, which was the third independent rendering of one finished session
+/// — the Train tab's done card and the session page's own band being the other
+/// two. They stated the same facts, disagreed about which mattered, and drifted
+/// one edit at a time. `SessionHeaderCard` is the one that survives, so the
+/// door and the room are now literally the same view, and the push is the page
+/// arriving under a masthead that never moved.
 ///
-/// ── AND WHY IT IS NOT A `PulseRow` ──────────────────────────────────────────
-/// Every other door on this screen opens a SHEET about the day you are already
-/// on. This one pushes a different screen, and it carries three numbers rather
-/// than one sentence. A row shaped like the other four that behaves unlike all
-/// of them is the more expensive kind of consistency.
-struct WorkoutSummaryCard: View {
+/// What this file keeps is the part `SessionHeaderCard` does not know: the
+/// day's own three numbers, which come off `DayModel.WorkoutSummary` (already
+/// folded for this date) rather than from a second career-wide walk.
+struct PulseSessionCard: View {
     let session: DayModel.WorkoutSummary
+    /// Nil until `SessionAnalysis.headers` lands — see `DayScreen.sessionHeaders`.
+    let header: SessionHeader?
     let onOpen: () -> Void
 
-    @Environment(\.dynamicTypeSize) private var typeSize
-
-    /// The split's own colour, as the calendar ring and the session chip draw
-    /// it — a leg day is the same teal everywhere or it is decoration.
-    private var tint: Color { Color.onyx.day(session.dayKey) }
-
-    /// The session's OWN colours — its top muscles, heaviest share first.
-    ///
-    /// ── WHY THE WASH STOPPED BEING THE SPLIT'S ──────────────────────────────
-    /// The dot, the label and the chips still carry the split: that is what
-    /// says which day of the programme this was, and it has to stay stable.
-    /// The WASH is the one part of this card that was saying the same thing a
-    /// second time — every Upper B the same indigo — while the thing the
-    /// reader cannot get from the label is what the session actually trained.
-    /// Two hues, blended, is a chest-and-triceps day looking different from a
-    /// back-and-biceps day at a glance, with no new vocabulary to learn: they
-    /// are the same sixteen muscle hues the session page, the atlas and the
-    /// legend use.
-    ///
-    /// Falls back to the split when the session trained nothing the map knows
-    /// — a cardio-only day, or a movement nobody has classified.
-    private var wash: [Color] {
-        let hues = session.muscles.prefix(2).map { Color.onyx.muscle($0) }
-        return hues.isEmpty ? [tint] : Array(hues)
-    }
-
-    /// ── WHY A BUTTON AND NOT A `NavigationLink` ─────────────────────────────
-    /// A `NavigationLink` inside a `List` row draws the system disclosure at
-    /// the ROW's trailing edge — outside this card's glass, because `plainRow()`
-    /// insets the row and the card fills what is left. The first build had two
-    /// chevrons: one in the card's header where it belongs, and one floating in
-    /// the gutter beside it. The push moves to `DayScreen`, which owns the
-    /// destination for the same reason it owns every other sheet on the page.
     var body: some View {
         Button(action: onOpen) {
-            VStack(alignment: .leading, spacing: OnyxSpace.s) {
-                header
-                MetaTagRow(tags: tags)
-            }
-            .padding(OnyxSpace.l)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // The same wash the session page's ledger headers wear (§U4.6), in
-            // the split's own colour. It is the SAME card in two places — this
-            // one is the door and that one is the room — and two treatments of
-            // one object is the drift the tint tokens exist to stop.
-            .background(alignment: .top) {
-                // Two stops of the session's own muscles across the top, then
-                // out — the same 22 %→0 over 64 pt the session page's band
-                // wears, so the door and the room are painted in one language.
-                LinearGradient(
-                    stops: wash.enumerated().map { index, hue in
-                        .init(
-                            color: hue.opacity(0.22),
-                            location: wash.count > 1 ? Double(index) / Double(wash.count - 1) : 0
-                        )
-                    },
-                    startPoint: .topLeading, endPoint: .topTrailing
-                )
-                .mask {
-                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+            Group {
+                if let header, header.id == session.id {
+                    SessionHeaderCard(header: header, totals: totals)
+                } else {
+                    placeholder
                 }
-                .frame(height: 64)
             }
-            .onyxGlass(.tile)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .onyxPress(scale: 0.99)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Workout summary. \(session.label ?? "Session"), \(spoken)")
+        // ── THE CALLER DECIDES THE GROUPING ─────────────────────────────────
+        // `SessionHeaderCard` deliberately carries no
+        // `.accessibilityElement(children:)` of its own: inside a `List` row on
+        // the session page it is static content, and inside a button it has to
+        // be ONE element or a reader hears four labels where they expect one
+        // target. This is the button case.
+        .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the session.")
         .accessibilityAddTraits(.isButton)
     }
 
-    private var header: some View {
-        HStack(spacing: OnyxSpace.s) {
-            Circle()
-                .fill(tint)
-                .frame(width: 8, height: 8)
-                .accessibilityHidden(true)
-            Text(session.label ?? "Session")
-                .onyxType(.body).fontWeight(.semibold)
-                .foregroundStyle(Color.onyx.textPrimary)
-                .lineLimit(1)
-            Spacer(minLength: OnyxSpace.s)
-            Text("Workout summary")
-                .onyxMicro()
-                .lineLimit(1)
-            Image(systemName: "chevron.right")
-                .onyxType(.caption).fontWeight(.bold)
-                .foregroundStyle(Color.onyx.textTertiary)
-                .accessibilityHidden(true)
+    /// `3,108 kg · 12 sets · 2 PR · 48 min` — the same four, in the same order
+    /// and with the same separator, that the Train tab's done card passes. Two
+    /// callers of one card saying a session's numbers two ways is exactly the
+    /// drift A6 exists to end.
+    ///
+    /// ── AND WHY `OnyxFormat` RATHER THAN `Format` ───────────────────────────
+    /// `Format.volume` (OnyxCore) always keeps a tenth, which is right for the
+    /// three surfaces that state a session's weight as a CLAIM checked against
+    /// `workout_sessions.total_volume_kg`. This card is a reading, and the
+    /// card it now shares with the Train tab has always printed the reading
+    /// form — so the old Pulse card said "13,005.0 kg" for the session the
+    /// Train tab called "13,005 kg", which is the drift, one decimal wide.
+    ///
+    /// The PR count is the HEADER's, not the day window's: a record is only
+    /// knowable by replaying the whole ledger in order, which is the walk
+    /// `SessionAnalysis.headers` already made. `DayModel.WorkoutSummary` has
+    /// never carried one and still does not.
+    private var totals: String {
+        var parts = ["\(OnyxFormat.volume(session.tonnageKg)) kg", "\(session.sets) sets"]
+        if let count = header?.prCount, count > 0 { parts.append("\(count) PR") }
+        if let minutes = session.durationMin, minutes > 0 {
+            parts.append("\(Int(minutes.rounded())) min")
         }
+        return parts.joined(separator: " · ")
     }
 
-    /// Three figures, and never a fourth: PRs are a whole-ledger replay and
-    /// belong to the page this card opens (`DayModel.WorkoutSummary`).
-    ///
-    /// ── WHY CAPSULES REPLACED THE THREE-COLUMN GRID (§U4.6) ─────────────────
-    /// It was `TONNAGE / SETS / TIME` as three labelled columns, which needed
-    /// an `AnyLayout` swap at the accessibility sizes because three columns of
-    /// a caption over a numeral is three ellipses on a 375 pt phone. A capsule
-    /// carries its unit INSIDE it — "1,160 kg" needs no register label above it
-    /// — so the row wraps instead of truncating and `FlowRow` handles the
-    /// accessibility sizes without a second layout to keep in step.
-    ///
-    /// It is also the same object the session page's ledger footers are now
-    /// made of, which is the point: the door and the room say a session's
-    /// numbers the same way.
-    private var tags: [MetaTagRow.Tag] {
-        var out: [MetaTagRow.Tag] = [
-            .init("\(Format.volume(session.tonnageKg)) kg"),
-            .init("\(session.sets) sets"),
-        ]
-        if let minutes = session.durationMin, minutes > 0 {
-            out.append(.init(DayFormat.minutes(Int(minutes.rounded()))))
+    /// The header is a career-wide read. These two facts are already in the
+    /// day's window, so the card states them immediately rather than blinking
+    /// an empty box in on every open of the tab — the same stand-in the Train
+    /// tab draws for the same read.
+    private var placeholder: some View {
+        VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+            HStack(spacing: OnyxSpace.s) {
+                Circle()
+                    .fill(Color.onyx.day(session.dayKey))
+                    .frame(width: 8, height: 8)
+                Text(session.label ?? "Session")
+                    .onyxDisplay()
+                    .foregroundStyle(Color.onyx.dayLabel(session.dayKey))
+                    .lineLimit(1)
+                Spacer(minLength: OnyxSpace.s)
+            }
+            Text(totals)
+                .onyxType(.secondary).onyxNumeral()
+                .foregroundStyle(Color.onyx.textSecondary)
         }
-        return out
-    }
-
-    private var spoken: String {
-        var parts = ["\(Format.volume(session.tonnageKg)) kilograms", "\(session.sets) sets"]
-        if let minutes = session.durationMin, minutes > 0 {
-            parts.append("\(Int(minutes.rounded())) minutes")
-        }
-        return parts.joined(separator: ", ")
+        .padding(OnyxSpace.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onyxGlass(.tile)
     }
 }

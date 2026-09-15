@@ -361,8 +361,9 @@ enum PreviewHarness {
                 seededBody: nil
             )
             .environment(AppEnvironment.preview)
-        case "day", "day-rows", "day-past", "day-session", "day-empty", "scale", "scale-first", "day-swap", "doms", "stack", "stack-add",
-             "sleep-edit", "stress", "fatigue", "head", "quick-log":
+        case "day", "day-rows", "day-past", "day-session", "day-empty", "day-stress", "day-soreness", "day-vitals",
+             "scale", "scale-first", "day-swap", "doms", "stack", "stack-add",
+             "sleep-edit", "stress", "fatigue", "stress-log", "stress-day", "quick-log":
             PulsePreviews.view(screen)
         case "fuel", "fuel-over", "fuel-empty", "nutrients", "macro-edit":
             NutritionPreviews.view(screen)
