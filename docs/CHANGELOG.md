@@ -44,6 +44,57 @@ _Nothing yet._
 
 ---
 
+## [3.12.0] — 2026-09-16 · Four Squares
+
+### Added
+- **Pulse: a 2 × 2 square grid** under the carousel — Stress index, Soreness,
+  Scale and Stack, side by side. The stress index keeps its number, its band
+  word and its fortnight against your own 50; soreness says how much of you is
+  sore and opens the body map; **the scale gains a trace it never had room for**
+  — the weigh-ins across the whole window, so what you weigh now has a direction
+  as well as a value; and the stack shows the day's dose dots — counted, still
+  ahead, said no to — beside what has counted so far.
+- **Pulse: a shot of a day with two sessions** (`day-two` in the screenshot
+  harness). The session cards are the only part of this screen whose count is
+  not fixed, and nothing photographed a second one before.
+
+### Changed
+- **Pulse reads top to bottom as one argument**: how you are (the Now strip),
+  what the night did (the sleep hero and the eight vitals), **what you say**
+  (the carousel), **what was measured** (the four squares), and what you did
+  (the session cards). The stress index stays below the stress log that feeds
+  it, which is why the squares are not in the strip.
+- **The carousel is two pages, not three** — Fatigue and the stress log, each
+  keeping its verb button. Soreness had spent a whole page restating a list and
+  handing you to a sheet; it is now a square that opens the same sheet. Nothing
+  about rating a muscle changed: the severity popover has always lived on the
+  map itself.
+- **A page is ~130 pt instead of 196.** The floor was measured from three cards
+  and was 66 pt of empty glass on every one of them; it is now the height the
+  content actually needs, and the cap at the accessibility sizes came down with
+  it.
+- **Logging stress is one screen again.** The five words and the clock share a
+  section — they are one act — the tag grid packs four chips to a row instead of
+  three, and the note folds behind a disclosure that still shows what you typed.
+  Every control keeps its 44 pt.
+- At the accessibility sizes the four squares become four rows, the way the
+  vitals grid above them already did: half a phone is 171 pt wide, so a square
+  of it is 171 pt tall, and four of those stop being a compaction.
+
+### Fixed
+- **The screenshot fixture had a supplement skip with no stack behind it.** The
+  preview day has written "caffeine: skipped" since the stack tracker shipped
+  and never seeded a stack for it to land on, so the write went to a key with no
+  dose. Pulse's fixtures now seed the nine-item protocol — and a fortnight of
+  weigh-ins, for the same reason: a fixture thin in one column photographs an
+  empty square and calls it neutral.
+- **Every Pulse screenshot now has one clock.** The due/later split is a
+  question about the time of day, so an unpinned fixture counted three doses at
+  lunchtime and nine after ten; the committed PNG would have changed by the
+  hour.
+
+---
+
 ## [3.11.0] — 2026-09-15 · The Night Leads
 
 ### Added

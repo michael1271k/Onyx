@@ -227,6 +227,13 @@ final class DayModel {
         /// where `VitalSpec` lives — the model does not import the design
         /// system, and the tie-break is that file's list order.
         var series = VitalSeries()
+        /// What the scale said over the same 49 days, oldest first — the Scale
+        /// square's trace (W3). One slot per date like every other series here,
+        /// and SPARSE by nature: a weigh-in happens twice a week, so most slots
+        /// are nil and the curve is the shape of the weigh-ins rather than of
+        /// the calendar. It costs no query — the rows were already read for the
+        /// vitals.
+        var weight: [Double?] = []
         var score: DailyScoreRow?
         /// The day's FINISHED sessions, newest first. Here rather than on a
         /// stream of its own because it moves for exactly the same reasons the
@@ -492,6 +499,7 @@ final class DayModel {
                 respiratory: series { $0.respiratoryRate },
                 sleepMinutes: series { $0.sleepMinutes.map(Double.init) }
             ),
+            weight: series { $0.weightKg },
             score: score,
             sessions: sessions,
             stress: stress,
@@ -608,6 +616,11 @@ final class DayModel {
     var domsSeverity: [String: Int] {
         Dictionary(doms.map { ($0.muscleGroup, $0.severity) }, uniquingKeysWith: { _, last in last })
     }
+
+    /// The weigh-ins in the window, oldest first, with the days between them
+    /// dropped: `Sparkline` is a curve with no notion of a hole, and plotting a
+    /// nil as zero would draw a cliff to the floor on every rest day.
+    var weightTrace: [Double] { window.weight.compactMap { $0 } }
 
     /// The bank, or nil when fewer than three nights have data — too little
     /// history to be honest about debt. The window ENDS on the selected date.

@@ -12,9 +12,16 @@ import OnyxData
 // the four terms behind it.
 //
 // REPORT-ONLY (founder decision 2). The index is not a battery input and moves
-// no score, which is why the tile sits below the Now strip rather than in it —
-// and why the sheet says so in one line rather than leaving the reader to
-// wonder why a "High" day still scored 78.
+// no score, which is why it sits below the Now strip rather than in it — and
+// why the sheet says so in one line rather than leaving the reader to wonder
+// why a "High" day still scored 78.
+//
+// ── WHERE THE TILE WENT (W3) ────────────────────────────────────────────────
+// The reading is now `StressSquare`, one of the four in `PulseSquareGrid`. A
+// full-width tile for one integer, one word and a 96 pt trace was a third of
+// the compaction this screen owed, and the square holds all three. What is left
+// in this file is the ink and the term order — both read by the square and by
+// the breakdown sheet — and the sheet itself.
 // ─────────────────────────────────────────────────────────────────────────────
 
 extension StressBand {
@@ -68,121 +75,6 @@ extension StressTermKey {
         case .selfReport: "The mean of what you said today — the fatigue slots and the stress log"
         case .load:       "Acute:chronic ratio and this week's strain — never negative"
         }
-    }
-}
-
-// MARK: - The tile
-
-/// One number, its word, and the fortnight behind it (§U5.3).
-///
-/// ── WHY IT IS THIS SHORT ────────────────────────────────────────────────────
-/// §W11's budget for this screen is a screen and a half, and the index answers
-/// ONE question — how far from your own normal today sits. A tile with four
-/// term rails on it would be the breakdown sheet drawn twice, and the reader
-/// who wants the terms is one tap from them. So the tile is a reading, a word
-/// and a trace: the three things you can act on at a glance.
-struct StressTile: View {
-    let model: DayModel
-
-    @Environment(\.dynamicTypeSize) private var typeSize
-    @State private var showing = false
-
-    private var today: StressDay? { model.stress }
-    private var band: StressBand? { today?.band }
-    private var tint: Color { band?.tint ?? Color.onyx.textSecondary }
-
-    /// The readings in the fortnight, oldest first.
-    ///
-    /// A day with nothing answered is DROPPED rather than plotted: `Sparkline`
-    /// is a polyline with no notion of a hole, and a zero there would draw a
-    /// cliff to the floor of a scale whose floor is 10. Dropping shortens the
-    /// trace, which is the honest shape — the dotted baseline is still 50.
-    private var trace: [Double] { model.stressSeries.compactMap(\.index) }
-
-    var body: some View {
-        // "Stress index", not "Stress": the stress LOG card sits directly
-        // above this tile now, and one word on two features is a screen where
-        // neither can be read. The index is the computed number; the log is
-        // what you typed. See `PulseStressLog.swift`'s header.
-        DayTile("Stress index", .recover) {
-            Button { showing = true } label: {
-                Group {
-                    if typeSize.isAccessibilitySize { stacked } else { oneLine }
-                }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .onyxPress(scale: 0.99)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(spoken)
-            .accessibilityHint("Open the breakdown")
-            .accessibilityAddTraits(.isButton)
-        } trailing: {
-            Text("14 days")
-                .onyxType(.caption)
-                .foregroundStyle(Color.onyx.textSecondary)
-        }
-        .sheet(isPresented: $showing) { StressBreakdownSheet(model: model) }
-    }
-
-    private var oneLine: some View {
-        HStack(alignment: .center, spacing: OnyxSpace.m) {
-            reading
-            Spacer(minLength: OnyxSpace.s)
-            sparkline.frame(width: 96, height: 34)
-            Image(systemName: "chevron.right")
-                .onyxType(.caption).fontWeight(.bold)
-                .foregroundStyle(Color.onyx.textTertiary)
-        }
-    }
-
-    /// At AX5 a 28 pt numeral, a band word and a 96 pt trace cannot share a
-    /// line — the word alone is most of the width. Same rule as `PulseRow`.
-    private var stacked: some View {
-        VStack(alignment: .leading, spacing: OnyxSpace.s) {
-            reading
-            sparkline.frame(height: 40)
-        }
-    }
-
-    private var reading: some View {
-        HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
-            Text(today?.index.map { "\(Int($0))" } ?? "—")
-                .onyxHero()
-                .foregroundStyle(tint)
-                .lineLimit(1)
-            Text(band?.word ?? "no reading")
-                .onyxType(.secondary).fontWeight(.semibold)
-                .foregroundStyle(band == nil ? Color.onyx.textTertiary : Color.onyx.textSecondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-    }
-
-    /// The fortnight, with 50 — your own normal — as the dotted rule.
-    ///
-    /// NOT zero-based: the reachable range is 10–90 and the interesting
-    /// variation is a handful of points either side of 50, which a zero base
-    /// flattens into a straight line at four-fifths height.
-    @ViewBuilder
-    private var sparkline: some View {
-        if trace.count >= 2 {
-            Sparkline(points: trace, baseline: 50, color: tint)
-                .accessibilityHidden(true)
-        } else {
-            Text("not enough days")
-                .onyxType(.caption)
-                .foregroundStyle(Color.onyx.textTertiary)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-    }
-
-    private var spoken: String {
-        guard let today, let index = today.index else {
-            return "Stress, no reading for this day"
-        }
-        return "Stress \(Int(index)), \(today.band?.word ?? "unbanded"). 50 is your normal."
     }
 }
 
