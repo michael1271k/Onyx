@@ -1082,11 +1082,121 @@ public final class AppDatabase: Sendable {
             try Self.adoptBrzyckiEstimates(db)
         }
 
+        // ── v26 ─────────────────────────────────────────────────────────────
+        // The Health ingest gets a key (Next-Gen W1, 2026-09-15).
+        //
+        // `HKWorkout.uuid` is the identity Apple assigns every bout, and until
+        // now nothing stored it. The duplicate rule asked instead whether an
+        // existing row's `created_at` fell within five minutes of the incoming
+        // bout's start — which is a heuristic over a table with no start column,
+        // and misses outright whenever `created_at` did not survive the round
+        // trip. Every sync then re-inserted. `WeeklyExportBuilder` documents the
+        // cost in its own header: Friday exported 23 copies of one walk.
+        //
+        // NULLABLE with no default, the `sleep_inaccurate` rule (v20): a nil is
+        // what `encodeIfPresent` needs to keep the column OUT of a push body
+        // until Postgres grows it. Unlike v20, though, this column is written
+        // the moment the founder walks anywhere — so between this build landing
+        // and `docs/sql/w1-hk-uuid.sql` being pasted, an imported bout's push is
+        // REJECTED by the server for an unknown column. That failure is per-row
+        // (`outboxFailed`, retried under `SyncBackoff`) and clears itself on the
+        // first sync after the paste, exactly as `v24.stressEvents` does. It is
+        // the reason the SQL file is the first thing in the wave's handover.
+        //
+        // A fresh install gets the column from the regenerated `migrateMirrorV1`;
+        // the guard is for that.
+        migrator.registerMigration("v26.healthWorkoutUuid") { db in
+            let existing = Set(try db.columns(in: "cardio_logs").map(\.name))
+            guard !existing.contains("hk_uuid") else { return }
+            try db.alter(table: "cardio_logs") { t in
+                t.add(column: "hk_uuid", .text)
+            }
+        }
+
+        // ── v27 ─────────────────────────────────────────────────────────────
+        // And the damage the missing key already did, collapsed. Once.
+        //
+        // v26 stops NEW duplicates. It cannot touch the ones already in the
+        // store, and every one of them is still counted by every reader that
+        // sums bouts, minutes or kilocalories — the week's cardio totals, the
+        // Pulse session cards, the export (which works around it by deduping at
+        // render time and reporting the count as an anomaly). This is the same
+        // collapse, applied to the data instead of to the view.
+        migrator.registerMigration("v27.collapseCardioDuplicates") { db in
+            try Self.collapseCardioDuplicates(db)
+        }
+
         return migrator
     }
 }
 
 extension AppDatabase {
+
+    /// One physical bout is one row. Run once, by `v27`.
+    ///
+    /// ── THE KEY IS THE ONE `WeeklyExportBuilder` ALREADY COMPUTES ───────────
+    /// `date | kind | start | duration | distance` — the three things that
+    /// identify a bout physically, plus what it was and when. Two genuinely
+    /// distinct walks that agree on all five are the same walk. The export has
+    /// deduped on exactly this since it found 23 copies of one Friday walk, and
+    /// reusing its key is what makes the collapse and the workaround agree about
+    /// what a duplicate is.
+    ///
+    /// A row with NO `created_at` is never collapsed, for the export's own
+    /// reason: the column is nullable with no default, and a key built from an
+    /// absence is the same key for every such row — a Monday cycle and a Friday
+    /// swim would fold into one, and the fold would look like a duplicate
+    /// removed.
+    ///
+    /// ── WHICH ROW SURVIVES, AND WHY THE RULE IS WRITTEN TWICE ──────────────
+    /// The one carrying the most non-null figures, ties broken by the lowest
+    /// `id`. Most-non-null because the duplicates are not identical: an early
+    /// import has the heart rate, a later one may have gained a total energy,
+    /// and keeping the emptiest would lose measurements nothing can recover.
+    /// Lowest id because a tie has to break the SAME WAY here and in
+    /// `docs/sql/w1-hk-uuid.sql`, which does this collapse server-side for the
+    /// rows no device will ever open again. Two deterministic rules that agree
+    /// can both run; two that disagree delete each other's survivor.
+    ///
+    /// The losers are DELETED THROUGH THE OUTBOX, not just locally. `cardio_logs`
+    /// pulls on a date window, so a row removed here and left on the server
+    /// comes straight back on the next sync — a local-only collapse would undo
+    /// itself and look like the migration never ran.
+    static func collapseCardioDuplicates(_ db: Database) throws {
+        let rows = try CardioLogRow.order(Column("id")).fetchAll(db)
+        var seen: [String: CardioLogRow] = [:]
+        var doomed: [String] = []
+
+        func figures(_ row: CardioLogRow) -> Int {
+            [row.distanceM, row.durationMin, row.kcal, row.activeKcal,
+             row.totalKcal, row.avgHr, row.effort, row.inclinePct, row.elevationM]
+                .reduce(0) { $0 + ($1 == nil ? 0 : 1) }
+        }
+
+        for row in rows {
+            guard let started = row.createdAt else { continue }
+            let key: String = [
+                row.userId, row.date, row.kind, String(started.timeIntervalSince1970),
+                row.durationMin.map { String($0) } ?? "",
+                row.distanceM.map { String($0) } ?? "",
+            ].joined(separator: "|")
+
+            guard let kept = seen[key] else { seen[key] = row; continue }
+            // `rows` is ordered by id, so the incumbent already holds the lower
+            // one and only a strictly richer challenger takes its place.
+            if figures(row) > figures(kept) {
+                seen[key] = row
+                doomed.append(kept.id)
+            } else {
+                doomed.append(row.id)
+            }
+        }
+
+        for id in doomed {
+            _ = try CardioLogRow.deleteOne(db, key: id)
+            try enqueueRowDelete(table: CardioLogRow.databaseTableName, key: ["id": id], in: db)
+        }
+    }
 
     /// Re-derive every stored estimated 1RM, then rebuild the record ledger.
     ///

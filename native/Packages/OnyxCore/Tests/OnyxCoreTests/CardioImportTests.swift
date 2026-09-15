@@ -144,4 +144,72 @@ struct CardioImportTests {
         #expect(CardioImport.offered.count == 6)
         #expect(Set(CardioImport.offered).count == 6, "no key offered twice")
     }
+
+    // MARK: - The key (W1)
+
+    private func keyed(
+        _ id: String, uuid: String, kind: String = CardioImport.walk,
+        at start: Date? = nil, minutes: Double? = 40
+    ) -> CardioImport.Existing {
+        .init(id: id, date: day, kind: kind, durationMin: minutes,
+              createdAt: start, fromHealthkit: true, hkUuid: uuid)
+    }
+
+    @Test("the uuid wins outright, whatever the window says")
+    func keyBeatsTheWindow() {
+        // Nine hours apart and matched anyway. This is the failure the window
+        // could never catch: a row whose `created_at` did not survive the round
+        // trip, or came back shifted, is still the same physical bout.
+        let rows = [keyed("a", uuid: "HK-1", at: at(22, 0))]
+        #expect(CardioImport.matchingRow(
+            hkUuid: "HK-1", kind: CardioImport.walk, start: at(7, 12),
+            durationMin: 40, date: day, in: rows
+        )?.id == "a")
+    }
+
+    @Test("a row with no start at all is still matched by its key")
+    func keyBeatsAMissingStart() {
+        // `created_at` nil is exactly the shape that made the ingest re-insert:
+        // the precise branch skips the row and the fuzzy one only looks at
+        // hand-typed rows, so an imported row with no start matched nothing.
+        let rows = [keyed("a", uuid: "HK-1", at: nil)]
+        #expect(CardioImport.matchingRow(
+            hkUuid: "HK-1", kind: CardioImport.walk, start: at(7, 12),
+            durationMin: 40, date: day, in: rows
+        )?.id == "a")
+    }
+
+    @Test("a different kind is still the same bout when the key agrees")
+    func keyIgnoresKind() {
+        // A build that maps an activity type differently has not made a second
+        // walk happen. Re-inserting under the new kind is the duplicate.
+        let rows = [keyed("a", uuid: "HK-1", kind: CardioImport.hiit, at: at(7, 12))]
+        #expect(CardioImport.matchingRow(
+            hkUuid: "HK-1", kind: CardioImport.run, start: at(7, 12),
+            durationMin: 40, date: day, in: rows
+        )?.id == "a")
+    }
+
+    @Test("two unkeyed rows are not each other — nil never matches nil")
+    func nilKeysNeverCollide() {
+        // Both of these are pre-migration imports an hour apart. If absence
+        // counted as equality every unkeyed bout on the day would fold into one.
+        let rows = [imported("a", at: at(7, 12)), imported("b", at: at(11, 30))]
+        #expect(CardioImport.matchingRow(
+            hkUuid: nil, kind: CardioImport.walk, start: at(11, 31),
+            durationMin: 40, date: day, in: rows
+        )?.id == "b")
+    }
+
+    @Test("an unrecognised key falls through to the window, not to nil")
+    func unknownKeyFallsThrough() {
+        // The bout is new to the key but the day already holds the row it came
+        // from, imported before the column existed. The window still owns that
+        // case and must keep owning it — that row is what gets the key stamped.
+        let rows = [imported("a", at: at(7, 12))]
+        #expect(CardioImport.matchingRow(
+            hkUuid: "HK-NEW", kind: CardioImport.walk, start: at(7, 14),
+            durationMin: 40, date: day, in: rows
+        )?.id == "a")
+    }
 }

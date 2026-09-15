@@ -341,7 +341,11 @@ public struct WidgetSnapshotBuilder: Sendable {
                 )) : nil
             ),
             water: OnyxSnapshot.Water(
-                ml: water.isEmpty ? log?.waterMl : water.reduce(0) { $0 + $1.amountMl },
+                // `WaterTruth` and not the rule that used to be written out
+                // here: the Nutrition tab read `daily_logs.water_ml` alone and
+                // this line preferred the ledger, so the tab and the tile could
+                // print different litres for the same day (W1, F2).
+                ml: WaterTruth.ml(log: log?.waterMl, ledger: water.map(\.amountMl)),
                 goalMl: goals?.waterGoalMl.map(Double.init),
                 trend: wantsLifestyle ? Self.points(WidgetDerive.dailySeries(
                     rows.water.map { DatedValue(date: $0.date, value: $0.amountMl) }, limit: Self.trendDays

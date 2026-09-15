@@ -366,3 +366,51 @@ struct WidgetSnapshotBuilderTests {
         #expect(try String(contentsOf: new.appendingPathComponent("onyx.sqlite"), encoding: .utf8) == "history")
     }
 }
+
+/// The widget's half of "the tab and the tile agree".
+///
+/// `WaterTruth` is the rule; this asserts the SNAPSHOT reproduces it over the
+/// four shapes a day can be in. `WaterRowTests` asserts the same four against
+/// `NutritionModel`. The two surfaces live in modules that cannot see each
+/// other, so pinning both to the same oracle is what "they agree" can mean.
+@Suite("Water: the tile reads the one truth")
+struct WidgetWaterTruthTests {
+    private let user = "u1"
+    private let now = Date(timeIntervalSince1970: 1_788_447_600)
+    private let today = "2026-09-03"
+    private let utc = TimeZone(identifier: "UTC")!
+
+    private func snapshot(log: Double?, ledger: [Double]) throws -> Double? {
+        let db = try AppDatabase.inMemory(deviceId: "water-\(UUID().uuidString)")
+        try db.writer.write { conn in
+            if let log {
+                try DailyLogRow(
+                    id: "dl", userId: user, date: today, waterMl: log,
+                    createdAt: now, updatedAt: now,
+                    nutritionEstimated: false, sleepOnsetTrouble: false
+                ).insert(conn)
+            }
+            for (i, ml) in ledger.enumerated() {
+                try WaterIntakeRow(
+                    id: "w\(i)", userId: user, loggedAt: now, date: today,
+                    amountMl: ml, createdAt: now
+                ).insert(conn)
+            }
+        }
+        return try WidgetSnapshotBuilder(database: db, userId: user, timeZone: utc)
+            .build(scope: .full, now: now).water.ml
+    }
+
+    @Test("all four shapes, against the rule itself")
+    func agreesWithWaterTruth() throws {
+        for (log, ledger) in [
+            (500.0 as Double?, [500.0, 250, 250]),  // the ledger leads
+            (1750.0 as Double?, [] as [Double]),    // no ledger: the flat row
+            (nil as Double?, [] as [Double]),       // nothing: nil, not zero
+            (0.0 as Double?, [] as [Double]),       // a stored zero is untracked
+        ] {
+            #expect(try snapshot(log: log, ledger: ledger) == WaterTruth.ml(log: log, ledger: ledger),
+                    "log \(String(describing: log)) ledger \(ledger)")
+        }
+    }
+}

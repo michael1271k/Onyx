@@ -1,6 +1,6 @@
 {
   "name": "onyx",
-  "version": "3.10.0",
+  "version": "3.10.1",
   "private": true,
   "description": "Onyx, the native iOS/watchOS app. This package holds the code generators and the version single source of truth; the app itself is under native/.",
   "scripts": {

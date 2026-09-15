@@ -302,11 +302,46 @@ final class NutritionModel {
 
     // MARK: - Water
 
-    /// `daily_logs.water_ml`. Zero or less reads as untracked, which is what
-    /// the scorer does with it.
+    /// The day's water, by the ONE rule (`WaterTruth`).
+    ///
+    /// This read `daily_logs.water_ml` alone while `WidgetSnapshotBuilder`
+    /// preferred the `water_intake` ledger, so the tab and the tile could print
+    /// different litres for the same day and neither was wrong about what it
+    /// read. Both call the same function now.
     var waterMl: Double? {
-        guard let ml = dailyLog?.waterMl, ml > 0 else { return nil }
-        return ml
+        WaterTruth.ml(log: dailyLog?.waterMl, ledger: water.map(\.amountMl))
+    }
+
+    /// What the water row prints.
+    ///
+    /// ── THE DASH WAS A CLAIM THE ROW COULD NOT MAKE ─────────────────────────
+    /// `— / 3.0 L` says the day holds no water. On a day neither store has been
+    /// written to, what is true is that nobody has been able to ask yet: the
+    /// HealthKit read is pending, or it was denied and will stay pending. The
+    /// sentence says which, and it replaces the whole figure rather than sitting
+    /// beside it — the goal is not news while the numerator is unknown.
+    ///
+    /// On the MODEL and not in the row, because `WaterRow` is a `private struct`
+    /// inside the tab file and nothing could assert on it. That is why the dash
+    /// had no test to fail when it stopped being true (`WaterRowTests`).
+    var waterFigures: String {
+        if isAwaitingHealthWater { return "Waiting for Apple Health" }
+        let amount = waterMl.map { "\(NutritionFormat.litres($0))" } ?? "—"
+        guard let goal = waterGoalMl else { return "\(amount) L" }
+        return "\(amount) / \(NutritionFormat.litres(goal)) L"
+    }
+
+    /// Nothing in either store, on a day the automatic ingest still covers.
+    ///
+    /// The row says "Waiting for Apple Health" rather than "—" here, because
+    /// those are different claims: a dash says the day holds no water, and what
+    /// is actually true is that nobody has been able to ask yet — the read is
+    /// pending, or it was denied and will stay pending. Bounded to the window
+    /// `syncCardioBouts` and `syncRecent` actually scan (today and yesterday),
+    /// so a quiet Tuesday last March is not described as still loading.
+    var isAwaitingHealthWater: Bool {
+        guard waterMl == nil else { return false }
+        return date >= NightWindow.previousDay(LogicalDay.today())
     }
     var waterGoalMl: Double? { resolved.waterMl }
     var isWaterManual: Bool { water.contains { ManualEntry.isManualWater($0.hkUuid) } }
@@ -454,8 +489,17 @@ final class NutritionModel {
         write { try database.addWaterGlass(userId: userId, date: date, ml: ml) }
     }
 
+    /// ── NO OPTIMISTIC NIL ───────────────────────────────────────────────────
+    /// This assigned `dailyLog?.waterMl = nil` first. That is a claim the store
+    /// no longer makes: clearing the override keeps HealthKit's row and the
+    /// glasses, and re-derives the column from what is left. Blanking the
+    /// published value here would show a day emptied that was not, until the
+    /// observation landed and put the figure back — a flicker that reads as the
+    /// button having deleted more than it did.
+    ///
+    /// The other three writers on this tab patch optimistically because their
+    /// result is known before the write. This one's is not.
     func clearWater() {
-        dailyLog?.waterMl = nil
         write { try database.clearWaterOverride(userId: userId, date: date) }
     }
 }

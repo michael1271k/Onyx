@@ -86,6 +86,20 @@ public extension HealthReading {
 /// the initialiser defaults them, and a double that constructs a sample the old
 /// way still compiles and still means what it meant.
 public struct WorkoutSample: Sendable, Equatable {
+    /// `HKWorkout.uuid` — Apple's own identity for this bout.
+    ///
+    /// The one stable key this feature ever had and did not read. Without it
+    /// the ingest asks "is this the walk you already have" of a table with no
+    /// start column, and answers with a five-minute window over `created_at` —
+    /// which misses whenever `created_at` did not survive the round trip, and
+    /// re-inserts. `WeeklyExportBuilder` documents the cost in its own header:
+    /// twenty-three copies of one walk.
+    ///
+    /// Defaulted in the initialiser so the five constructors that predate it —
+    /// `NoHealth` and the test doubles — still compile and still mean what they
+    /// meant. A fresh uuid per constructed sample is the right default for a
+    /// double: two samples built separately are two bouts.
+    public var uuid: UUID
     public var start: Date
     public var end: Date
     /// Traditional or functional strength training. Decided by the reader,
@@ -109,6 +123,7 @@ public struct WorkoutSample: Sendable, Equatable {
     public var elevationM: Double?
 
     public init(
+        uuid: UUID = UUID(),
         start: Date,
         end: Date,
         isLifting: Bool,
@@ -118,6 +133,7 @@ public struct WorkoutSample: Sendable, Equatable {
         avgHr: Double? = nil,
         elevationM: Double? = nil
     ) {
+        self.uuid = uuid
         self.start = start
         self.end = end
         self.isLifting = isLifting

@@ -678,20 +678,48 @@ public extension AppDatabase {
 
     /// Hand the day back to Apple Health.
     ///
-    /// Clears BOTH stores rather than restoring the synced value — it is not
-    /// held anywhere, and inventing one would be worse than a blank day. The
-    /// next HealthKit sync repopulates it; until then the day reads untracked,
-    /// which is true. `water_ml` is named in `clearing` so the server's copy
-    /// is cleared too rather than merged over.
+    /// ── IT CLEARS THE OVERRIDE, NOT THE DAY (W1) ────────────────────────────
+    /// It used to delete the WHOLE ledger and nil `daily_logs.water_ml`, and
+    /// that is half of the `— / 3.0 L` the founder reported. The other half is
+    /// that `DailyLogIngest` returns at `guard !payload.isEmpty` when HealthKit
+    /// has nothing to say, so it never mints the row back: on a phone where the
+    /// water read is denied, "until the next sync" is forever.
+    ///
+    /// The one-way door this button exists to open is the `manual-water-<date>`
+    /// sentinel — that, and only that, is what makes `ingest` decline the date.
+    /// So that is what is deleted. HealthKit's own row and the glasses tapped on
+    /// the tab are measurements of the same day and survive; the flat column is
+    /// re-derived from whatever is left, by the same rule `WaterTruth` reads it
+    /// back with, so the projection and the ledger cannot disagree.
+    ///
+    /// `water_ml` is named in `clearing` only when nothing is left, so the
+    /// server's copy is cleared rather than merged over.
     func clearWaterOverride(userId: String, date: String, now: Date = Date()) throws {
         try writer.write { db in
-            try Self.deleteWater(db, userId: userId, date: date)
-            _ = try Self.patchDailyLog(db, userId: userId, date: date, now: now, clearing: ["water_ml"]) { $0.waterMl = nil }
+            try Self.deleteWater(db, userId: userId, date: date, onlyOverride: true)
+            let remaining = try WaterIntakeRow
+                .filter(Column("user_id") == userId && Column("date") == date)
+                .fetchAll(db)
+            let total: Double? = remaining.isEmpty
+                ? nil
+                : remaining.reduce(0) { $0 + $1.amountMl }
+            _ = try Self.patchDailyLog(
+                db, userId: userId, date: date, now: now,
+                clearing: total == nil ? ["water_ml"] : []
+            ) { $0.waterMl = total }
         }
     }
 
-    private static func deleteWater(_ db: Database, userId: String, date: String) throws {
-        for row in try WaterIntakeRow.filter(Column("user_id") == userId && Column("date") == date).fetchAll(db) {
+    /// - Parameter onlyOverride: keep HealthKit's row and the tapped glasses,
+    ///   removing just the hand-entered figure. `setWaterOverride` passes false
+    ///   — replacing the day IS its verb, and it says so in its own footer.
+    private static func deleteWater(
+        _ db: Database, userId: String, date: String, onlyOverride: Bool = false
+    ) throws {
+        let rows = try WaterIntakeRow
+            .filter(Column("user_id") == userId && Column("date") == date)
+            .fetchAll(db)
+        for row in rows where !onlyOverride || ManualEntry.isManualWater(row.hkUuid) {
             try row.delete(db)
             try enqueueRowDelete(table: WaterIntakeRow.databaseTableName, key: ["id": row.id], in: db)
         }

@@ -44,6 +44,45 @@ _Nothing yet._
 
 ---
 
+## [3.10.1] — 2026-09-15 · Apple Health Tells The Truth
+
+### Fixed
+- **Train · Apple Health import** — a walk imports **once**. Every cardio bout
+  now carries `HKWorkout.uuid`, the identity Apple already assigns it, and the
+  duplicate rule matches on that before it falls back to guessing from a start
+  time. The old rule asked whether a stored row's `created_at` fell within five
+  minutes of the incoming bout — a table with no start column, a heuristic, and
+  it missed outright whenever `created_at` did not survive the round trip. Every
+  sync then re-inserted: one Friday held twenty-three copies of one walk.
+- **Train · the bouts already duplicated** — collapsed once, on the same key the
+  weekly export has deduped at render time ever since it found them. The row
+  kept is the one carrying the most measurements, and the deletions reach the
+  server rather than coming back on the next pull. Weekly cardio totals, minutes
+  and kilocalories stop being multiplied by however many times the import ran.
+- **Train · a bout that crosses midnight** is filed under the day it STARTED in.
+  It used to be returned by both days' queries and inserted under each.
+- **The "synced from Apple Health" notice** counts only bouts the ledger had
+  never seen. A row that merely gained the new key says nothing.
+- **Nutrition · the water row** stops reading `— / 3.0 L`. The tab and the
+  widget now read one rule (`WaterTruth`): the intake ledger when it has rows,
+  the day's flat figure otherwise. They used to read two and could print
+  different litres for the same day.
+- **Nutrition · "Use Apple Health"** clears the hand-entered figure and nothing
+  else. It used to delete the whole day's ledger — Apple's own row and every
+  glass tapped on the tab — and blank the column, so the day read as untracked
+  until the next successful sync, which on a phone where the water read is
+  denied is never.
+- **Nutrition · an unmeasured day** says "Waiting for Apple Health" instead of a
+  dash, but only inside the window the sync actually scans. An old day with no
+  water keeps its dash, because that is true.
+
+### Changed
+- `cardio_logs` gains `hk_uuid`. **Paste `docs/sql/w1-hk-uuid.sql`** — until you
+  do, an imported bout's upload is rejected for an unknown column and retries in
+  the outbox. Nothing is lost while you wait; nothing new reaches the server.
+
+---
+
 ## [3.10.0] — 2026-09-15 · The Deck Tells The Truth
 
 A hotfix wave for one Delts & Arms session that crashed, came back on the
