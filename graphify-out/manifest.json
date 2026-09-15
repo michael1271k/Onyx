@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/App/PreviewHarness.swift": {
-    "mtime": 1789504025.8950949,
-    "ast_hash": "c36ab42de9b27bd738c98080eaebd631",
+    "mtime": 1789506314.5733533,
+    "ast_hash": "ee6e77b82e2eef5fab39963f13476a9d",
     "semantic_hash": ""
   },
   "native/Onyx/App/SyncCoordinating.swift": {
@@ -305,13 +305,13 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseModel.swift": {
-    "mtime": 1789504025.8953326,
-    "ast_hash": "fed73e44702ff33332b8cd3375369557",
+    "mtime": 1789506314.5738673,
+    "ast_hash": "716d4efc3c82a388737095d27527789f",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulsePreviews.swift": {
-    "mtime": 1789504025.895496,
-    "ast_hash": "ca73feabf89e9ccd7ed432e83dca3d72",
+    "mtime": 1789506314.5740678,
+    "ast_hash": "3a6e1ebe79ceb03e81956f8983eaa1a4",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseScale.swift": {
@@ -330,13 +330,13 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseStress.swift": {
-    "mtime": 1789478519.1356087,
-    "ast_hash": "1911f8d86deeb786ab44d19313670797",
+    "mtime": 1789506314.5744085,
+    "ast_hash": "4a1348a3dedde36a1e7245d9c17265bc",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseTabView.swift": {
-    "mtime": 1789504025.895832,
-    "ast_hash": "0ea0431cf9881ad4d84d7654ddd58be2",
+    "mtime": 1789506314.5747318,
+    "ast_hash": "bfeb288fa7a193469f679dd0208d352e",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseVitals.swift": {
@@ -3420,8 +3420,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1789504025.8967485,
-    "ast_hash": "8acbd2c43815639ecf37f55ffde04dd2",
+    "mtime": 1789506314.5750005,
+    "ast_hash": "79293fbaabce52b47a742469187f70cd",
     "semantic_hash": ""
   },
   "scripts/check-swift.sh": {
@@ -3455,8 +3455,8 @@
     "semantic_hash": ""
   },
   "scripts/native-shot.sh": {
-    "mtime": 1789504025.896875,
-    "ast_hash": "d2ec25f25d91d8632d47c046ad342325",
+    "mtime": 1789506314.575141,
+    "ast_hash": "8cb2ef5490c5fb3c5720e69356cda4c2",
     "semantic_hash": ""
   },
   "scripts/store-shots.sh": {
@@ -3485,8 +3485,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1789504025.8948984,
-    "ast_hash": "5683d89a027cbff03b90a83f7fa1483d",
+    "mtime": 1789506314.5729697,
+    "ast_hash": "94c59c51baf29512c69a255e0e70df9d",
     "semantic_hash": ""
   },
   "docs/EPIC_SPRINT_PLAN.md": {
@@ -3520,8 +3520,8 @@
     "semantic_hash": ""
   },
   "native/project.yml": {
-    "mtime": 1789504025.8966348,
-    "ast_hash": "3d428086cee34fb287db3871c251bd8c",
+    "mtime": 1789506314.5748765,
+    "ast_hash": "45a5c7e339c12b4235696c70e730157c",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png": {
@@ -3675,13 +3675,13 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseStressLog.swift": {
-    "mtime": 1789478519.1365893,
-    "ast_hash": "c53601f0482ff0c7f9e05dc3e0dc9066",
+    "mtime": 1789506314.5745635,
+    "ast_hash": "6a1c165d1c92e47703dee8c0e4a877a6",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseCarousel.swift": {
-    "mtime": 1789478519.131479,
-    "ast_hash": "ca6e17f04b79e18f9cf730613e715894",
+    "mtime": 1789506314.5735366,
+    "ast_hash": "7fc871c88891a80f586581db0147c338",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Settings/AppearanceView.swift": {
@@ -3745,8 +3745,8 @@
     "semantic_hash": ""
   },
   "docs/NEXT_GEN_UX_SPRINT.md": {
-    "mtime": 1789504029.0081975,
-    "ast_hash": "3dbc243764bdac906661402dd9765d89",
+    "mtime": 1789504397.7239776,
+    "ast_hash": "9fa627adec10704b3d550472402eca0a",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Nutrition/WaterTruth.swift": {
@@ -3754,19 +3754,9 @@
     "ast_hash": "79f03c3c1a2af60aeae504574e38ffb7",
     "semantic_hash": ""
   },
-  "docs/sql/w1-hk-uuid.sql": {
-    "mtime": 1789502641.8835142,
-    "ast_hash": "ea5b9f6047b4a9fca7acfb0cf4fcd562",
-    "semantic_hash": ""
-  },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/WaterTruthTests.swift": {
     "mtime": 1789502235.1562726,
     "ast_hash": "62500921c7be2600219894f63f3fbd63",
-    "semantic_hash": ""
-  },
-  "docs/sql/w1-stress-events.sql": {
-    "mtime": 1789502641.8838177,
-    "ast_hash": "152c4bf063512ebbc5fc2cf67a6f8464",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Scoring/VitalHero.swift": {
@@ -3782,6 +3772,11 @@
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/VitalHeroTests.swift": {
     "mtime": 1789504025.896313,
     "ast_hash": "6d75deedd6ead515635dc12289dfaa64",
+    "semantic_hash": ""
+  },
+  "native/Onyx/Features/Pulse/PulseSquares.swift": {
+    "mtime": 1789506314.5741982,
+    "ast_hash": "0e9c44e6e1ee6c370d985d971f652503",
     "semantic_hash": ""
   }
 }

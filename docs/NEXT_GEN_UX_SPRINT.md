@@ -1410,3 +1410,91 @@ _Appended by each wave as it merges. W12 harvests these, then deletes this file.
 - **None.** The founder applied both `docs/sql/w1-hk-uuid.sql` and
   `docs/sql/w1-stress-events.sql` on 2026-09-15 and the files are deleted — W12
   no longer has them to clean up, and `docs/sql/` is empty again.
+
+---
+
+### W3 Wave Record — shipped 2026-09-16 as 3.12.0
+
+**Drift from the plan, on purpose:**
+- **The square grid made Pulse TALLER, not shorter, and it shipped anyway.**
+  Measured on a 402 pt phone at default type: the default day went from ~1.37
+  screens to **~1.52**. The carousel saved 66 pt and the stress-log sheet saved
+  ~140, but a 2 × 2 grid of true squares is **361 pt** where the tile + the
+  two-row section it replaced were ~204. A square on half a phone is 172 pt tall
+  whatever is in it, and three of the four cells do not have 172 pt of content.
+  Decision 5 asked for Option 3's treatment *strictly*, so it was built strictly;
+  the budget is still met on the default day, and a day with two sessions is
+  ~2.0 screens. If a later wave wants that 90 pt back, the lever is
+  `PulseSquare`'s `aspectRatio(1, …)` → `4/3`, and nothing else has to move.
+- **`StressTile` was deleted, not reused.** The plan said the index "keeps its
+  sparkline at 50-baseline", which it does — but as `StressSquare`. A full-width
+  tile and a 172 pt square cannot share a layout, and keeping both would have
+  left a dead view drawing the same number.
+- **The index numeral dropped from `.hero` to `.display`.** `StressTile` used
+  `onyxHero()` while the Now strip's Score also does, which is the exact thing
+  `OnyxType.hero` forbids in as many words ("at most one per screen"). W2 argued
+  this out for the sleep hero and resolved the same way; this closes the last
+  live violation on the screen. It also does not fit a square at 28 pt.
+- **`day-soreness` was repointed, not deleted.** It photographed the carousel's
+  third page; the page is gone, so the name now photographs the sheet that page
+  was a door to — which is what the square opens.
+- **Every Pulse fixture now pins the clock**, not just the four sheets that
+  already did. The Stack square's numerator is a question about the time of day,
+  so an unpinned `day` counted 3 doses at lunchtime and 9 after ten.
+
+**Root causes that were not where the plan guessed:**
+- **"The rating verb moves onto the map sheet" was already done.** The severity
+  popover has lived on `DomsTile` since W6 and `SorenessSheet` is a thin wrapper
+  around it. `SorenessCard` was only ever a door with a list on it, so removing
+  the page cost no capability and required no new control. The plan's own
+  resolution note says this; it reads like work and is not.
+- **The preview fixture had a supplement skip with nothing under it.**
+  `seedFullDay` has ended with `setSupplementSkipped(itemKey: "caffeine")` since
+  the stack tracker shipped, and no fixture ever seeded a stack — the write
+  landed on a key with no dose behind it and nothing on any screen read it. It
+  was invisible until a square started counting doses. Seeding
+  `PreviewCatalogue.seedStack`'s nine is what brings it to life, and it is what
+  puts all three dot states on the default shot without a single extra mark.
+- **`fullDay` had no body metrics at all**, so the Scale square would have
+  photographed "No weigh-in" on the flagship shot — W2's lesson (a fixture thin
+  in one column is a claim, not a neutral state) in a second column. Ten
+  weigh-ins over five weeks, at the real twice-a-week cadence.
+
+**Constraints discovered that the next wave must respect:**
+- **`PulseCard`'s floor is not what makes the pages agree.** The carousel's
+  eager `HStack` already sizes every child to the tallest of them; the floor only
+  stops a page with one short line collapsing on a day nothing is logged. That is
+  why 196 → 116 changed the card's height by 66 pt and changed nothing about the
+  two pages matching. Do not "restore" the floor to fix a height that is
+  content-driven.
+- **The `@ScaledMetric` cap is a floor cap, not a height cap.** At AX5 the stress
+  page is ~490 pt because its content is; `min(floor, 200)` only stops the
+  *metric* from reserving 270 pt of empty glass. A wave that wants the AX5
+  carousel shorter has to cut content, not the cap.
+- **`PulseSquareGrid` falls to rows at the accessibility sizes**, reusing
+  `ScaleRow` and `StackRow` unchanged and adding two new ones. Half a phone is
+  171 pt wide, so a square of it is 171 pt tall, and four of those is ~1,370 pt
+  to say what four rows say in 200. Any fifth square must bring a row with it.
+- **Every presentation on Pulse is now declared on `DayScreen`** — the stress
+  breakdown was the last one still owned by a view inside a `List` row. The one
+  exception left is `ScaleSquare`'s `.confirmationDialog` for the weigh-in skip
+  reason, which `ScaleRow` has always carried at that level and which W3 moved
+  rather than re-homed.
+- **`DayModel.Window.weight` costs no query.** It is `weightKg` off the same 49
+  `daily_logs` rows the vitals already read. A future trace over any other
+  `daily_logs` column is the same one-line addition; anything outside that table
+  is not.
+
+**Left open on purpose:**
+- The square grid's height (see the drift note). `aspectRatio(1, …)` is one token
+  away from `4/3` if the founder wants the 90 pt.
+- `SorenessSheet` draws `DomsTile`, whose own header reads "Soreness" directly
+  under the sheet's "Soreness" nav title. Pre-existing, and a W4-sized copy fix
+  rather than a layout one.
+- The five-word picker in `StressLogSheet` runs close to the section's right
+  edge at default type. Measured as inside, not clipped; unchanged by this wave.
+- `OnyxTests` still has the four failures `main` carried in (memory:
+  `auto-fixes-w7`). Not run as part of this wave's gate.
+
+**Founder's manual steps still outstanding:** none for W3. The two SQL pastes
+the sprint still owes are W9's and W11's, unchanged.
