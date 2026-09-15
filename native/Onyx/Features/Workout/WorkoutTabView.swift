@@ -50,6 +50,12 @@ struct WorkoutTabView: View {
     /// resume.
     @State private var presented: LoggerModel?
     @State private var activity = LiveActivityController()
+    /// The geometry the Mini Player hands to the logger on the way in.
+    ///
+    /// `.zoom` needs ONE namespace holding both ends, and the source lives in
+    /// this view's bottom inset while the destination is the cover's content —
+    /// so the namespace has to be owned here, above both.
+    @Namespace private var zoom
     /// The session's elapsed clock, kept beside `session` and for the same
     /// reason: leaving the logger mid-workout tears the cover down, and a clock
     /// that lived in `LiveLoggerView`'s own `@State` went with it. Start at
@@ -165,6 +171,30 @@ struct WorkoutTabView: View {
                 LiveLoggerView(model: model, activity: activity)
             }
             .preferredColorScheme(.dark)
+            // ── THE CARD GROWS INTO THE LOGGER ──────────────────────────────
+            // On the OUTERMOST view inside the closure, never on
+            // `LiveLoggerView` inside the stack: the modifier's own
+            // documentation says to add it to the view that appears within a
+            // stack or a sheet, "outside of any containers", and a cover is a
+            // sheet — both go through one presentation bridge in SwiftUI, which
+            // is why this works from `.fullScreenCover(item:)` at all.
+            //
+            // Two things it changes that are worth knowing:
+            //
+            //  1. The zoom brings its OWN interactive dismissal, so the logger
+            //     can now be dragged down. That used to be unavailable and used
+            //     to be frightening — leaving mid-session dropped you onto a
+            //     dim "Resume workout" strip. It drops you onto a live card
+            //     carrying the clock now, which is the state minimising was
+            //     always meant to be, so the gesture is welcome rather than
+            //     tolerated.
+            //  2. FINISHING a session dismisses without it. `footer` is gated
+            //     on `!isDone`, so by the time the cover tears down the source
+            //     card has already left the tree and the un-zoom has nothing to
+            //     return to; the system falls back to a plain dismiss, which is
+            //     the right feel for an exit that ends with the summary being
+            //     pushed anyway.
+            .navigationTransition(.zoom(sourceID: MiniPlayerCard.transitionID, in: zoom))
         }
         .sheet(isPresented: $showPhase) {
             if let day = today {
@@ -993,19 +1023,82 @@ struct WorkoutTabView: View {
     /// The whole band goes with it, material and hairline included: leaving the
     /// bar with an empty `Group` inside would still paint a 26 pt strip of glass
     /// across the bottom of the screen with nothing in it.
+    /// ── AND WHY THE BAND IS NOW THE BUTTON'S AND NOT THE FOOTER'S ───────────
+    /// The `.regularMaterial` strip plus its hairline used to wrap whatever the
+    /// footer drew. That was right for a full-bleed BUTTON, which has no
+    /// surface of its own and needs something to separate it from the content
+    /// scrolling underneath. It is wrong under the Mini Player, twice over:
+    /// `.regularMaterial` is what `GlassLevel.chrome` resolves to and the card
+    /// is `.tile`, so the two nest — one translucent surface on another, and
+    /// both stop reading as glass, which is the one thing `onyxGlass`'s own
+    /// documentation forbids. And the card does not span the width, so the band
+    /// would paint a strip of material either side of it with nothing in it —
+    /// the same empty-glass failure the `.done` case above is a note about.
+    ///
+    /// So the band moved INTO the `.none` branch, where the button still wants
+    /// it, and the card carries its own surface and its own lift.
     @ViewBuilder
     private var footer: some View {
         if today != nil, !isDone {
-            Group {
-                switch state {
-                case .done:
-                    EmptyView()
-                case let .live(sets, volumeKg):
-                    startButton(title: "Resume workout", detail: liveSummary(sets: sets, volumeKg: volumeKg), icon: "play.fill")
-                case .none:
-                    startButton(title: "Start workout", detail: nil, icon: "figure.strengthtraining.traditional")
+            switch state {
+            case .done:
+                EmptyView()
+            case let .live(sets, volumeKg):
+                // `session` is the live model this tab keeps across the cover
+                // being dismissed (`:44`), and it is the ONE thing that knows
+                // the clock, the deck cursor and the records. The week
+                // snapshot's `.live` numbers are a second, staler answer to two
+                // of the five facts the card draws (F1).
+                //
+                // It can still be nil while `state` says live — the app was
+                // relaunched mid-session, or the watch opened it — and there is
+                // no model to minimise then, only a session to resume. That is
+                // what the fallback is: the old button, doing the only job
+                // still available to it.
+                if let session {
+                    // `start` and not `presented = session`: opening the deck
+                    // also republishes the progression alerts for today's key,
+                    // and it already refuses to mint a second model for a day
+                    // it is holding one for. One door into the logger.
+                    MiniPlayerCard(model: session, onOpen: start)
+                        // OUTERMOST on the card, and after `.onyxPress` inside
+                        // it: the source rect is this view's bounds, so a press
+                        // transform still applied at tap-up would start the
+                        // zoom from a shrunken rectangle. The clip shape is
+                        // spelled because the configuration only accepts a
+                        // `RoundedRectangle` and the default is square — the
+                        // tile's own corner has to be said out loud or the zoom
+                        // begins from a box the card never was.
+                        .matchedTransitionSource(id: MiniPlayerCard.transitionID, in: zoom) {
+                            $0.clipShape(
+                                RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous)
+                            )
+                        }
+                        .padding(.horizontal, OnyxSpace.l)
+                        .padding(.bottom, OnyxSpace.s)
+                } else {
+                    banded {
+                        startButton(
+                            title: "Resume workout",
+                            detail: liveSummary(sets: sets, volumeKg: volumeKg),
+                            icon: "play.fill"
+                        )
+                    }
+                }
+            case .none:
+                banded {
+                    startButton(
+                        title: "Start workout", detail: nil,
+                        icon: "figure.strengthtraining.traditional"
+                    )
                 }
             }
+        }
+    }
+
+    /// The material strip a full-bleed button stands on. See `footer`.
+    private func banded(@ViewBuilder _ content: () -> some View) -> some View {
+        content()
             .padding(.horizontal, OnyxSpace.l)
             .padding(.vertical, OnyxSpace.s)
             .frame(maxWidth: .infinity)
@@ -1015,7 +1108,6 @@ struct WorkoutTabView: View {
             .overlay(alignment: .top) {
                 Color.onyx.hairline.frame(height: 0.5)
             }
-        }
     }
 
     private func startButton(title: String, detail: String?, icon: String) -> some View {

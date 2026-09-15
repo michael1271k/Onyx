@@ -65,6 +65,19 @@ struct SetView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if model.sessionId != nil {
+                // ── LEADING HERE, TRAILING ON THE REST SCREEN ───────────────
+                // It was a second `.topBarTrailing` item, and the 40 mm shot
+                // showed watchOS silently drawing only ONE of them: the deck
+                // link rendered and the clock did not — no warning, no overflow
+                // menu, nothing. The corner holds one item on this device.
+                //
+                // The leading corner is free on this screen — `SetView` is the
+                // root of its stack, so there is no back chevron — and the rest
+                // cover's leading corner is NOT, because a cover has a dismiss
+                // button there. So the clock takes whichever corner is free on
+                // each screen. That is not the symmetry the brief asked for,
+                // and the alternative was one of the two screens not having it.
+                ToolbarItem(placement: .topBarLeading) { WatchSessionTimer() }
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink { DeckView() } label: { Image(systemName: "list.bullet") }
                         .tint(WatchInk.secondary)
@@ -153,7 +166,13 @@ struct SetView: View {
     /// comment on `.navigationTitle`.
     private var setTitle: String {
         guard let cursor = model.cursor else { return model.day?.label ?? "Onyx" }
-        return "Set \(cursor.setNumber) of \(cursor.movement.plannedSets)"
+        // ── "Set 1/3", NOT "Set 1 of 3" ────────────────────────────────────
+        // The words cost ~17 pt of a 162 pt bar that now also carries the
+        // session clock, and the 40 mm shot showed what that buys: the title
+        // truncated to "Set 1 of" — the position without the total, which is
+        // half a fact. A slash is the same fact in a form the bar can hold, and
+        // it is how every set row in this app already writes a count.
+        return "Set \(cursor.setNumber)/\(cursor.movement.plannedSets)"
     }
 
     // MARK: - The two values

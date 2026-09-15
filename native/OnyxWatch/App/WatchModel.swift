@@ -49,6 +49,24 @@ final class WatchModel {
     /// The live session's id, once a set has been logged into it.
     private(set) var sessionId: String?
 
+    /// The instant the session's elapsed clock counts up from.
+    ///
+    /// ── TWO WRITERS, IN THAT ORDER, AND BOTH ARE RIGHT ──────────────────────
+    /// `adopt` sets it from the session row's own `started_at`, which is the
+    /// only answer available when this watch is the device running the workout
+    /// — there is no pause control on the wrist, so wall time IS elapsed time.
+    ///
+    /// A `RestPulse` carrying a `timerOrigin` then overwrites it, because the
+    /// phone holds the pencil in that case and the phone's number has the
+    /// banked pauses already taken out of it. A session paused for eleven
+    /// minutes is eleven minutes younger than `started_at` says, and the wrist
+    /// showing a different hour from the phone in your hand is worse than the
+    /// wrist showing nothing.
+    ///
+    /// Nil before a session and on a rest pulse from a phone that predates the
+    /// field — the toolbar draws no timer rather than a wrong one.
+    private(set) var sessionStartedAt: Date?
+
     /// The fold — every surviving set of this session, in fold order. This is
     /// what makes the watch and the phone agree: it is not a list the watch
     /// maintains, it is the projection `SetEventFold` rebuilds inside every
@@ -137,7 +155,7 @@ final class WatchModel {
             let session = try store.openSession(
                 userId: context.userId, dayKey: day.key, date: context.today
             )
-            adopt(sessionId: session.id)
+            adopt(session)
         } catch {
             storeError = String(describing: error)
         }
@@ -199,14 +217,18 @@ final class WatchModel {
     private func rejoinLiveSession() {
         guard let store, let day, let context else { return }
         guard let live = try? store.liveSession(dayKey: day.key, date: context.today) else { return }
-        adopt(sessionId: live.id)
+        adopt(live)
     }
 
-    private func adopt(sessionId id: String) {
-        guard let store, sessionId != id else { return }
-        sessionId = id
-        holdsPencil = (try? store.holdsPencil(sessionId: id)) ?? true
-        observeSets(id)
+    private func adopt(_ session: WorkoutSession) {
+        guard let store, sessionId != session.id else { return }
+        sessionId = session.id
+        // The row's own start. Wall time, and correct here: the watch has no
+        // pause control, so nothing has been banked out of it. A phone-driven
+        // session overwrites this from the rest pulse — see `sessionStartedAt`.
+        sessionStartedAt = session.startedAt
+        holdsPencil = (try? store.holdsPencil(sessionId: session.id)) ?? true
+        observeSets(session.id)
         seedCursor()
         if !workout.isRunning { workout.start() }
     }
@@ -375,7 +397,7 @@ final class WatchModel {
         let session = try store.openSession(
             userId: context.userId, dayKey: day.key, date: context.today
         )
-        adopt(sessionId: session.id)
+        adopt(session)
         return session.id
     }
 
@@ -413,6 +435,20 @@ final class WatchModel {
     }
 
     /// ±15 s, clamped and snapped to the same grid the phone's control uses.
+    ///
+    /// ── WHY `duration` MOVES WITH THE DEADLINE ──────────────────────────────
+    /// It used to stay put while `endsAt` moved, and that is the wrist's half
+    /// of the same defect the Lock Screen's bar had: `duration` is the
+    /// DENOMINATOR every reader divides the remainder by, so +15 s on a 90 s
+    /// rest left 105 seconds remaining out of a stated 90 — a fraction above 1,
+    /// which the old ring drew as a circle that had closed and kept going.
+    ///
+    /// `max(…, next)` rather than the sum alone because the sum can be smaller
+    /// than what is actually left: the clamp has a floor, so taking 15 s off a
+    /// rest already at the minimum moves the deadline by less than 15 and a
+    /// bare `duration - 15` would go under the remainder and reopen the same
+    /// fraction-above-1. The total is never allowed to be shorter than the
+    /// countdown it contains.
     func adjustRest(by seconds: Double) {
         guard let rest else { return }
         let remaining = rest.endsAt.timeIntervalSinceNow
@@ -420,8 +456,12 @@ final class WatchModel {
         let pulse = RestPulse(
             sessionId: rest.sessionId,
             endsAt: Date().addingTimeInterval(next),
-            duration: rest.duration,
-            exercise: rest.exercise
+            duration: max(rest.duration + seconds, next),
+            exercise: rest.exercise,
+            loadKg: rest.loadKg,
+            reps: rest.reps,
+            rpe: rest.rpe,
+            timerOrigin: rest.timerOrigin
         )
         self.rest = pulse
         link?.send(rest: pulse)
@@ -456,6 +496,7 @@ final class WatchModel {
         }
         setsObserver = nil
         self.sessionId = nil
+        sessionStartedAt = nil
         sets = []
         rest = nil
     }
@@ -484,6 +525,10 @@ final class WatchModel {
             // The phone started or stopped resting. Mirrored, not merged: a
             // rest clock has no history to reconcile, and the last word wins.
             rest = pulse
+            // The phone's origin wins while the phone holds the pencil: it has
+            // the banked pauses already subtracted. Nil from an older phone
+            // leaves whatever `adopt` read off the row.
+            if let origin = pulse?.timerOrigin { sessionStartedAt = origin }
         }
     }
 }
@@ -554,3 +599,80 @@ enum WatchContextCache {
         UserDefaults.standard.set(data, forKey: key)
     }
 }
+
+#if DEBUG
+extension WatchModel {
+
+    /// Stand in for the phone, so the wrist can be photographed.
+    ///
+    /// ── WHY IT GOES THROUGH THE CACHE AND NOT STRAIGHT INTO `context` ───────
+    /// `WatchContextCache` is exactly what a real context arrival writes, and
+    /// `start()` reads it before anything else happens. Seeding there means the
+    /// screenshot exercises the ordinary cold-launch path — stored context,
+    /// `resolveDay`, `rejoinLiveSession` — rather than a second code path that
+    /// only screenshots ever take, and which is therefore free to be wrong
+    /// about the screen it is photographing.
+    ///
+    /// The day is pinned with an `overrides` entry rather than by the weekday
+    /// layout: a shot that depends on which day of the week it ran on is a
+    /// visual diff that fails on Tuesdays.
+    func seedDebugContext() {
+        let today = LogicalDay.iso()
+        let next = WatchContext(
+            userId: "preview",
+            today: today,
+            schedule: ScheduleContext(
+                programId: "onyx5",
+                phase: .cut,
+                overrides: [today: "cb_b"],
+                // Spelled out rather than read from `PlanTemplates`: that
+                // lives in the APP target and the watch cannot see it. Three
+                // real movements off the founder's Upper B — enough deck for
+                // the cursor to advance and for `lastTime` to have something
+                // to say, and the names are ones `MuscleMap` actually knows.
+                programs: [
+                    Program(id: "onyx5", label: "Onyx 5", days: [
+                        ProgramDay(
+                            key: "cb_b", label: "Upper B", accent: 0, weekday: 2,
+                            exercises: [
+                                ProgramExercise("Chest Press", sets: 3, wk1Kg: 40, reps: "8-12", restSec: 150),
+                                ProgramExercise("Neutral-Grip Lat Pulldown", sets: 3, wk1Kg: 47, reps: "8-12", restSec: 150),
+                                ProgramExercise("Single Arm Cable Crossover", sets: 3, wk1Kg: 7.5, reps: "12-15", restSec: 90),
+                            ]
+                        ),
+                    ]),
+                ]
+            )
+        )
+        WatchContextCache.save(next)
+        context = next
+        resolveDay()
+    }
+
+    /// The rest cover, with the set that earned it.
+    ///
+    /// The four optional fields are filled the way a phone on this build fills
+    /// them, because the whole point of photographing this screen is the line
+    /// they draw — a pulse without them renders the state an OLDER phone
+    /// produces, which is a real state and not the one under review.
+    func seedDebugRest() {
+        defer {
+            // The same assignment `receive(.rest:)` makes. Without it the shot
+            // showed a session timer at 0:00 — true of a watch that had just
+            // opened its own session a second earlier, and not the state under
+            // review, which is a phone 45 minutes into a workout.
+            if let origin = rest?.timerOrigin { sessionStartedAt = origin }
+        }
+        rest = RestPulse(
+            sessionId: sessionId ?? "preview",
+            endsAt: Date().addingTimeInterval(97),
+            duration: 150,
+            exercise: "Single Arm Cable Crossover",
+            loadKg: 42.5,
+            reps: 12,
+            rpe: 8.5,
+            timerOrigin: Date().addingTimeInterval(-45 * 60)
+        )
+    }
+}
+#endif

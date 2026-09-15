@@ -198,14 +198,16 @@ struct OnyxWorkoutActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text("\(context.state.setsDone)/\(context.state.setsPlanned)")
-                        .font(OnyxWidgetType.figure(12))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.onyx.textSecondary)
-                        .frame(maxWidth: 62, alignment: .trailing)
-                        .accessibilityLabel(
-                            "\(context.state.setsDone) of \(context.state.setsPlanned) sets done"
-                        )
+                    // ── THIS WAS `9/22`, AND `WorkoutTotals` SAYS IT AGAIN ──
+                    // Twelve points below this slot, in the bottom region, in
+                    // the same colour: "9/22 sets". A number printed twice on
+                    // a surface this small is a number that has stopped being
+                    // read. The muscle tag takes the slot instead — it is the
+                    // fact the island did not carry, it is what the Lock
+                    // Screen's own header pairs with the session, and the
+                    // bottom region's rows have no width to spare for it.
+                    WorkoutMuscleTag(token: context.state.primaryMuscle)
+                        .frame(maxWidth: 110, alignment: .trailing)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -226,7 +228,13 @@ struct OnyxWorkoutActivityWidget: Widget {
                         // Only while the clock is running: controls with nothing
                         // to control are dead chrome on a surface that has no
                         // room for any.
-                        if let countdown = restCountdown(context.state.restEndsAt) {
+                        // `total:` — the same denominator fix the Lock Screen
+                        // takes. This region draws the same `WorkoutRestBand`,
+                        // so without it the island's bar snapped back toward
+                        // full on every redraw while the card's drained.
+                        if let countdown = restCountdown(
+                            context.state.restEndsAt, total: context.state.restTotalSec
+                        ) {
                             // No Skip here. Four 34 pt controls plus a bar do
                             // not fit this region's width, and the phone in the
                             // hand that just opened the island has the same
@@ -253,15 +261,34 @@ struct OnyxWorkoutActivityWidget: Widget {
                 // resting, the load while working. Two facts competing for one
                 // ~44 pt slot is how the compact region becomes unreadable.
                 Group {
-                    if let countdown = restCountdown(context.state.restEndsAt) {
+                    if let countdown = restCountdown(
+                        context.state.restEndsAt, total: context.state.restTotalSec
+                    ) {
                         Text(timerInterval: countdown, countsDown: true)
-                            .frame(maxWidth: 44)
+                            // ── RESERVED, AND MONOSPACED ────────────────────
+                            // With a real lower bound the widest reading over
+                            // this range is the whole rest ("3:00"), not the
+                            // remainder it happened to be opened at — and this
+                            // slot is ~44 pt with no room to grow. Proportional
+                            // digits also re-measure the slot on every tick,
+                            // which shunts the leading mark beside it. Same
+                            // pair of defences `WorkoutElapsed` takes.
+                            .monospacedDigit()
+                            .frame(minWidth: 44, maxWidth: 44, alignment: .trailing)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            // The timer wears the MOVEMENT's colour on every
+                            // surface — see `WorkoutRestBand.accent`.
+                            .foregroundStyle(
+                                WorkoutMuscleTag.tint(context.state.primaryMuscle)
+                                    ?? Color.onyx.day(context.state.dayKey)
+                            )
                     } else {
                         Text(context.state.load.replacingOccurrences(of: " kg ", with: ""))
+                            .foregroundStyle(Color.onyx.day(context.state.dayKey))
                     }
                 }
                 .font(OnyxWidgetType.figure(12))
-                .foregroundStyle(Color.onyx.day(context.state.dayKey))
             } minimal: {
                 Image(systemName: context.state.restEndsAt == nil
                       ? "figure.strengthtraining.traditional" : "timer")

@@ -555,7 +555,10 @@ struct ExerciseCardView: View {
     /// — and shadow it into a call this type cannot make.
     private var liveRest: ClosedRange<Date>? {
         guard model.restingExercise == exercise.name else { return nil }
-        return restCountdown(model.restEndsAt)
+        // `total:` — the prescription this rest is running, so the range's
+        // lower bound is fixed instead of rebased to `now` each redraw. See
+        // `restCountdown`; the same call is what fixed the Lock Screen's bar.
+        return restCountdown(model.restEndsAt, total: Int(model.restDuration))
     }
 
     /// ── WHY ±15 s ARE BUTTONS AND NOT A MENU ────────────────────────────────

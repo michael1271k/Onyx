@@ -145,4 +145,80 @@ struct WatchPayloadTests {
         )
         #expect(there.theme == themed.theme)
     }
+
+    /// The same story one payload down: `RestPulse` gained the set that earned
+    /// the rest and the session's clock origin, and a phone that predates them
+    /// sends none of the four keys.
+    ///
+    /// ── AND THIS ONE FAILS WORSE THAN THE CONTEXT ───────────────────────────
+    /// A context that stops decoding leaves the watch saying "Open Onyx on your
+    /// iPhone", which is at least a visible state. A rest pulse that stops
+    /// decoding is dropped by `WatchLink.receive`'s `try?` and the rest cover
+    /// simply never appears — no clock, no ladder, no haptic at zero, and the
+    /// rating for every set goes unasked. Nothing anywhere says why.
+    @Test("a rest pulse from a build with none of the four keys decodes with them nil")
+    func restPulseWithoutTheSetDecodes() throws {
+        let endsAt = Date(timeIntervalSince1970: 1_790_000_000)
+        let full = RestPulse(
+            sessionId: "s-1", endsAt: endsAt, duration: 150, exercise: "Hack Squat",
+            loadKg: 102.5, reps: 8, rpe: 8.5, timerOrigin: endsAt.addingTimeInterval(-3_600)
+        )
+        var object = try #require(
+            try JSONSerialization.jsonObject(
+                with: try OnyxJSON.encoder.encode(full)
+            ) as? [String: Any]
+        )
+        for key in ["loadKg", "reps", "rpe", "timerOrigin"] { object.removeValue(forKey: key) }
+
+        let back = try OnyxJSON.decoder.decode(
+            RestPulse.self, from: try JSONSerialization.data(withJSONObject: object)
+        )
+        // What an old phone still says, intact.
+        #expect(back.sessionId == "s-1")
+        #expect(back.endsAt == endsAt)
+        #expect(back.duration == 150)
+        #expect(back.exercise == "Hack Squat")
+        // And what it does not. Nil rather than zero: `loadKg` of 0 is a real
+        // bodyweight set, and the rest screen has to tell the two apart.
+        #expect(back.loadKg == nil)
+        #expect(back.reps == nil)
+        #expect(back.rpe == nil)
+        #expect(back.timerOrigin == nil)
+        // Identity is still the clock, so `.fullScreenCover(item:)` behaves
+        // exactly as it did before the four fields existed.
+        #expect(back.id == endsAt)
+    }
+
+    /// The encode half, and the direction nobody thinks to check: a NEW phone
+    /// with nothing to say must put the OLD payload on the wire, so an OLD
+    /// watch is not asked for a key it has never heard of.
+    @Test("a rest pulse with the four fields nil encodes exactly the old keys")
+    func restPulseNilFieldsAreNotEncoded() throws {
+        let sent = RestPulse(
+            sessionId: "s-1", endsAt: Date(timeIntervalSince1970: 1_790_000_000),
+            duration: 120, exercise: "Hack Squat"
+        )
+        let object = try #require(
+            try JSONSerialization.jsonObject(
+                with: try OnyxJSON.encoder.encode(sent)
+            ) as? [String: Any]
+        )
+        #expect(
+            object.keys.sorted() == ["duration", "endsAt", "exercise", "sessionId"],
+            "a nil field must not be encoded at all — not as null, and not as a zero"
+        )
+
+        // And a full pulse round-trips every one of them, half rungs included:
+        // 8.5 is a rung on `Effort.ladder` and 8 is a different one.
+        var full = sent
+        full.loadKg = 102.5
+        full.reps = 8
+        full.rpe = 8.5
+        full.timerOrigin = sent.endsAt.addingTimeInterval(-3_600)
+        let back = try OnyxJSON.decoder.decode(
+            RestPulse.self, from: try OnyxJSON.encoder.encode(full)
+        )
+        #expect(back == full)
+        #expect(back.rpe == 8.5)
+    }
 }

@@ -366,6 +366,10 @@ enum PreviewHarness {
             PulsePreviews.view(screen)
         case "fuel", "fuel-over", "fuel-empty", "nutrients", "macro-edit":
             NutritionPreviews.view(screen)
+        // The minimised session. See `MiniPlayerHarness` for why it is not
+        // photographed on `train`.
+        case "mini-player":
+            MiniPlayerHarness().environment(AppEnvironment.preview)
         case "logger", "logger-stats", "logger-paused", "logger-finish", "logger-options", "logger-timer",
              "set-row", "set-row-split", "set-row-cardio", "set-row-records", "set-options", "effort-picker":
             LoggerPreviews.view(screen)
