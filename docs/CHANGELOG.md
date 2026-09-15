@@ -44,6 +44,50 @@ _Nothing yet._
 
 ---
 
+## [3.6.0] — 2026-09-15 · The Minimised Workout
+
+### Added
+- **Mini Player on Train.** A running workout no longer hides behind a "Resume
+  workout" button. A 64 pt card above the tab bar carries the session's name and
+  its elapsed clock, the movement you are walking to next, and sets, tonnage and
+  records — read from the live session rather than re-queried from the ledger,
+  so the numbers match the logger exactly. Tapping it zooms into the deck, and
+  the logger can now be dragged down to minimise back to it.
+- **The Lock Screen and the Dynamic Island say what is next, truthfully.**
+  "NEXT" used to be a label in front of the lift you were already doing. It
+  names the real next movement in the deck now, on its own line under the
+  current one, and only at a movement boundary — so the name and the load under
+  it are never two different lifts.
+- **Load × reps and RPE on the watch's rest screen**, under the countdown, for
+  the set that earned the rest. Both watch screens also carry a session clock.
+
+### Changed
+- **The rest bar drains instead of snapping back.** It never had a denominator:
+  the range was recomputed from "now" on every redraw, so the fill was
+  elapsed-since-render over time-remaining and +15 s sent it back to full. It
+  now measures the whole rest, and +15 s moves the fill *down* a little, which
+  is what adding time to a rest actually does.
+- **The rest timer wears the movement's colour** — the same muscle hue the deck,
+  the body figure and the card's own tag are drawn in — rather than the split's,
+  which was the same colour for all twenty of a session's rests.
+- **The muscle tag moved up beside the session title** on the Lock Screen and
+  into the Island's trailing slot, which had been printing the set count that
+  the row below it already printed.
+- **The watch's rest screen lost its countdown ring.** It was hidden in the
+  always-on state and under Reduce Motion — the two states it was most needed
+  in — and it was the only thing reading a total that could disagree with the
+  clock after a nudge. The digits took the space.
+
+### Fixed
+- ±15 s on the watch no longer leaves the rest's stated length behind its own
+  countdown.
+- The watch's rest screen lays out inside a 40 mm case: the RPE ladder is on
+  screen without scrolling, and the set position no longer truncates to
+  "Set 1 of".
+
+---
+
+
 ## [3.5.0] — 2026-09-14 · The Engines Under the Live UX Sprint
 
 The first of six waves. On the default theme nothing is recoloured and no
