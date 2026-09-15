@@ -30,7 +30,12 @@ SCREEN="${1:-all}"
 DEVICE="${2:-iPhone 17 Pro}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # `SHOT_OUT` sends the PNGs somewhere else — App Store shots go to a
-# per-size folder rather than over the committed visual-diff set.
+# per-size folder rather than over the working set.
+#
+# Neither set is committed (3.8.0): 220 phone screens came to 144 MiB of PNG
+# that turned over on every layout edit, and nothing in `npm run check` read
+# them. They are evidence you look at while the diff is in front of you, so
+# they live here and are regenerated on demand.
 OUT="${SHOT_OUT:-$ROOT/native/__screenshots__}"
 BUNDLE_ID="app.onyx.health.michael.native"
 # `SHOT_DERIVED` moves the build products, for the same reason `SHOT_OUT` moves
@@ -138,4 +143,4 @@ done
 
 xcrun simctl ui "$UDID" content_size medium >/dev/null
 echo
-echo "git diff --stat native/__screenshots__   # the visual diff"
+echo "open $OUT   # the shots"
