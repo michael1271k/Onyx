@@ -1068,11 +1068,91 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // ── v25 ─────────────────────────────────────────────────────────────
+        // The estimated 1RM became Brzycki and stopped being gated on the
+        // programmed rep floor (2026-09-15, founder decision). Both halves are
+        // STORED — `workout_sets.est_1rm_kg` and `personal_records` — so a code
+        // change alone would leave every historical number on the old formula
+        // and every historical record judged by the old rule, with new sets
+        // measured against them. That is not a cosmetic mismatch: a bar built
+        // from Epley values is systematically lower for a 1–9 rep set and
+        // higher for a long one, so records would fire and fail to fire for
+        // reasons nobody could see.
+        migrator.registerMigration("v25.brzyckiLedger") { db in
+            try Self.adoptBrzyckiEstimates(db)
+        }
+
         return migrator
     }
 }
 
 extension AppDatabase {
+
+    /// Re-derive every stored estimated 1RM, then rebuild the record ledger.
+    ///
+    /// ── THE LOG FIRST, THE PROJECTION SECOND — v23's RULE, AGAIN ────────────
+    /// `workout_sets` is a PROJECTION of `set_events`, and `reproject` rebuilds
+    /// a session's rows from the fold, reading `est1rmKg` straight out of the
+    /// append body. Touching only the table would be undone by the first edit
+    /// to any session — and half-undone at that, since the ledger would already
+    /// have been replayed against the new numbers. So the bodies are rewritten
+    /// with the same function and the table is brought along, exactly as the
+    /// catalogue-id migration does one screen up.
+    ///
+    /// ── AND A STORED ESTIMATE IS NOT EVIDENCE OF ANYTHING ───────────────────
+    /// `buildBaselines` reads a stored value in preference to recomputing one
+    /// (`||` semantics — a stored 0 is missing). That is right while the stored
+    /// value came from the same formula, and it is exactly what makes this
+    /// migration necessary rather than optional: without it the old Epley
+    /// numbers would go on winning the preference forever.
+    ///
+    /// Rows the formula now refuses — unloaded work, and anything past
+    /// `OneRepMax.maxReps` — have their estimate CLEARED rather than left
+    /// standing. A number the engine would no longer produce is not a record it
+    /// should still be defending.
+    static func adoptBrzyckiEstimates(_ db: Database) throws {
+        // The log.
+        for row in try Row.fetchAll(db, sql: "SELECT id, body FROM set_events") {
+            guard let data = row["body"] as Data?,
+                  let body = try? OnyxJSON.decoder.decode(SetEvent.Body.self, from: data),
+                  case .append(var snapshot) = body
+            else { continue }
+            let next = OneRepMax.estimate(weight: snapshot.weightKg, reps: Double(snapshot.reps))
+            guard next != snapshot.est1rmKg else { continue }
+            snapshot.est1rmKg = next
+            try db.execute(
+                sql: "UPDATE set_events SET body = ? WHERE id = ?",
+                arguments: [try OnyxJSON.encoder.encode(SetEvent.Body.append(snapshot)), row["id"] as String]
+            )
+        }
+
+        // The projection, by the same function — so a session that is never
+        // reprojected reads the same as one that is.
+        for row in try Row.fetchAll(db, sql: "SELECT id, weight_kg, reps FROM workout_sets") {
+            let next = OneRepMax.estimate(
+                weight: (row["weight_kg"] as Double?) ?? 0,
+                reps: Double((row["reps"] as Int?) ?? 0)
+            )
+            try db.execute(
+                sql: "UPDATE workout_sets SET est_1rm_kg = ? WHERE id = ?",
+                arguments: [next, row["id"] as String]
+            )
+        }
+
+        // ── AND THE LEDGER, IN THE SAME TRANSACTION ─────────────────────────
+        // `recomputeAll` replays every session chronologically, each judged
+        // only against what came before it — the one pass that can RETRACT a
+        // record as well as file one, which is what a formula change needs:
+        // some Epley-era records no longer stand, and some sets that were
+        // refused the axis by the rep-floor gate should have held it all along.
+        //
+        // Per user, because that is the parameter it takes; a device holds one
+        // in practice and the loop costs nothing when it holds none. A fresh
+        // install has no sessions and this is a no-op.
+        for userId in try String.fetchAll(db, sql: "SELECT DISTINCT user_id FROM workout_sessions") {
+            try PrRecorder.recomputeAll(db, userId: userId)
+        }
+    }
 
     /// Repoint legacy slug-stamped sets at the catalogue row they belong to.
     ///
@@ -1236,6 +1316,37 @@ extension AppDatabase {
                         && Column("ended_at") == nil)
                 .order(Column("started_at"))
                 .fetchOne(db)
+        }
+    }
+
+    /// Is a workout actually IN PROGRESS on this date — an open session with
+    /// work in it?
+    ///
+    /// ── WHY THE SHELL NEEDS TO ASK AT LAUNCH ────────────────────────────────
+    /// `AppEnvironment.selectedTab` is in-memory and dies with the process, so
+    /// every relaunch resolves to `.today`. Get jetsammed three sets from the
+    /// end of a workout and the app comes back on the dashboard, with the
+    /// running session reachable only if you think to go and look for it. The
+    /// deck was never lost; the way back to it was.
+    ///
+    /// ── AND WHY "WITH WORK IN IT" IS PART OF THE QUESTION ───────────────────
+    /// `openSession` is look-up-or-create over `ended_at IS NULL`, so ANY
+    /// append after a close mints a second, empty row beside the closed one.
+    /// Routing on existence alone would send a person who finished this morning
+    /// to the Train tab every time they opened the app. `WorkoutWeek` draws its
+    /// "Resume workout" footer on exactly this test, and the shell agreeing
+    /// with it is the point — two answers to "is there a workout on" is how the
+    /// footer and the tab bar end up disagreeing.
+    public func liveWorkoutInProgress(date: String) throws -> Bool {
+        try writer.read { db in
+            let open = try WorkoutSession
+                .filter(Column("date") == date && Column("ended_at") == nil)
+                .fetchAll(db)
+            for session in open {
+                let sets = try WorkoutSet.filter(Column("session_id") == session.id).fetchAll(db)
+                if sets.contains(where: { SetTags.isWorkingSet($0.setType) }) { return true }
+            }
+            return false
         }
     }
 

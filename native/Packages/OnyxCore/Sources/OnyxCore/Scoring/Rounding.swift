@@ -79,3 +79,14 @@ public func jsToFixed(_ x: Double, _ digits: Int) -> String {
     let fraction = kept.map(String.init).joined()
     return digits == 0 ? "\(sign)\(integer)" : "\(sign)\(integer).\(fraction)"
 }
+
+/// `Math.round(x * 100) / 100` — two decimal places, JavaScript's rounding rule.
+///
+/// One caller, and it earns its own helper: `OneRepMax.estimate` is the only
+/// figure in this app that is compared against another app's screen. Brzycki
+/// puts 24 kg × 9 at 30.857…, which is `30.9` at one decimal and `30.86`
+/// everywhere the athlete can check it.
+@inlinable
+public func jsRound2(_ x: Double) -> Double {
+    jsRound(x * 100) / 100
+}

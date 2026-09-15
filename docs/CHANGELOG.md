@@ -44,6 +44,58 @@ _Nothing yet._
 
 ---
 
+## [3.10.0] — 2026-09-15 · The Deck Tells The Truth
+
+A hotfix wave for one Delts & Arms session that crashed, came back on the
+dashboard with a stopped clock, and then grew sets nobody performed.
+
+### Fixed
+- **Sets you never did no longer appear when a session is reopened.** A
+  movement trained one side at a time is two rows per set, and the deck was
+  counting the shortfall in rows while spending it in sets — so a Single Arm
+  Lateral Raise prescribed four sets, with two logged, reopened showing six.
+  The two extra sets were real, tickable rows. Every reopen added them again,
+  which is why tapping Edit did it a second time.
+- **The treadmill warm-up is drawn once.** Reopening a session that began with
+  a walk put the bout at the top of the deck AND at the bottom, both ticked,
+  both counted — a session's set total and its "20/21 completed" line both
+  inflated by it, and the two cards wrote over each other's set.
+- **A workout in progress survives being killed.** Relaunching mid-session used
+  to land on Today with no sign of the deck you were holding; the app now opens
+  on Train when a workout is actually running.
+- **The timer no longer resets to 0:00.** A session the phone terminated while
+  the clock was stopped came back claiming hours of rest against a ninety-minute
+  workout, and the elapsed reading collapsed to zero. A pause the app never got
+  to close is now worth at most fifteen minutes, the ledger can never claim more
+  time than has passed, and the deck says so in the header when it has had to
+  repair one.
+- **The clock survives a termination before your first set.** Open the deck,
+  warm up for eleven minutes, get killed — those eleven minutes used to vanish,
+  because the start instant only reached storage when the first set was logged.
+- **A phase switch on a deck holding two cards for one movement crashed
+  outright.** It cannot hold two any more, and a card's identity is no longer
+  its name, so a namesake can never take the screen down again.
+
+### Changed
+- **Estimated 1RM is Brzycki — `weight × 36 / (37 − reps)`.** It was Epley, and
+  Onyx was the only app reporting that number, so a set that read 30.86 kg
+  everywhere else read something lower here. Every stored estimate on this
+  device is re-derived and the record ledger is replayed against it, so history
+  and new sets are judged on the same formula.
+- **A hard set below your programmed rep window can win Best 1RM again.** The
+  engine refused the estimated-1RM record to any set under the day's rep floor,
+  unexplained and invisible: Hammer Curl at 25 kg × 8 took Heaviest and nothing
+  else where two records were earned. The bound is now the formula's own — above
+  sixteen reps there is no estimate to compare, which is past every window the
+  programme prescribes.
+- **A split set shows both arms, always.** Left and right each get their own
+  line inside one set box, with one checkmark that completes the pair. Loads and
+  reps can now differ between arms — before, the only control on the row wrote
+  to both sides at once, so there was no way to enter two different weights at
+  all.
+
+---
+
 ## [3.9.0] — 2026-09-15 · Your Two Colours
 
 ### Added

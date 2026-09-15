@@ -121,7 +121,6 @@ public enum PrRecorder {
             return PrCandidateSet(
                 key: s.exerciseId, weightKg: s.weightKg, reps: Double(s.reps), setType: s.setType,
                 timed: TimedExercise.isTimed(canonical),
-                repFloor: Ceilings.repWindow(for: canonical, dayKey: dayKey, program: program)?.floor,
                 // ── THE DOMAIN SPELLING, NOT THE LOCAL ONE ──────────────────
                 // `workout_sets.side` is `left`/`right` on this device
                 // (`SyncTranslation.localSide`) and `L`/`R` on the wire, and
@@ -251,7 +250,6 @@ public enum PrRecorder {
                     key: keyByName[name($0.exerciseId)] ?? $0.exerciseId,
                     weightKg: $0.weightKg, reps: Double($0.reps),
                     est1rm: $0.est1rmKg, setType: $0.setType,
-                    repFloor: Ceilings.repWindow(for: name($0.exerciseId), dayKey: dayKey, program: program)?.floor,
                     pairId: $0.pairId, side: SyncTranslation.domainSide($0.side)
                 )
             },
@@ -462,20 +460,18 @@ public enum PrRecorder {
                   !rows.isEmpty
             else { continue }
 
-            // The rep window is resolved per SESSION, because it depends on the
-            // day key — the same lift has a different floor on a leg day and an
-            // upper day. `Ceilings.repWindow`'s phase default is untouched, so
-            // this gates the e1RM axis exactly as `record` does.
-            let repFloor = Ceilings.repWindow(
-                for: exerciseKey, dayKey: session.dayKey, program: Schedule.programForContext(ctx, session.date).program
-            )?.floor
+            // ── THE PER-SESSION REP WINDOW IS NO LONGER RESOLVED HERE ──────
+            // It existed to gate the e1RM axis by the day's programmed floor,
+            // and that gate is gone (`PrEngine`, 2026-09-15). Nothing else in
+            // this loop wanted it, and resolving a schedule context per session
+            // for a value nobody reads is a query per session for nothing.
             let baselines = PrEngine.buildBaselines(
                 seen, isTimed: { _ in timed }, floorFor: { _ in floor }
             )
             let candidates = rows.enumerated().map { i, s in
                 PrCandidateSet(
                     key: exerciseKey, weightKg: s.weightKg, reps: Double(s.reps), setType: s.setType,
-                    timed: timed, repFloor: repFloor,
+                    timed: timed,
                     // The domain spelling, exactly as `candidates` does it —
                     // `replay` is `record`'s twin and a pair it failed to
                     // collapse would retract a record `record` filed correctly.
@@ -510,7 +506,7 @@ public enum PrRecorder {
             seen.append(contentsOf: rows.map {
                 BaselineSetRow(
                     key: exerciseKey, weightKg: $0.weightKg, reps: Double($0.reps),
-                    est1rm: $0.est1rmKg, setType: $0.setType, repFloor: repFloor,
+                    est1rm: $0.est1rmKg, setType: $0.setType,
                     pairId: $0.pairId, side: SyncTranslation.domainSide($0.side)
                 )
             })

@@ -3,6 +3,20 @@ import GRDB
 
 // MARK: - Device identity and the logical clock
 
+/// A session's pause ledger, before anything decides what it is worth.
+public struct PauseLedger: Sendable, Equatable {
+    /// Seconds from pauses that have CLOSED. Bounded by construction.
+    public var banked: TimeInterval
+    /// When the pause in progress began, or nil while the clock is running.
+    /// UNBOUNDED — it grows with the wall clock and may be days old.
+    public var openedAt: Date?
+
+    public init(banked: TimeInterval = 0, openedAt: Date? = nil) {
+        self.banked = banked
+        self.openedAt = openedAt
+    }
+}
+
 extension AppDatabase {
 
     /// This install's device id, created on first use and stable thereafter.
@@ -121,7 +135,25 @@ extension AppDatabase {
 
     /// True when the session's clock is currently stopped.
     public func isPaused(sessionId: String) throws -> Bool {
-        try Self.isPaused(setEvents(sessionId: sessionId))
+        try pauseLedger(sessionId: sessionId).openedAt != nil
+    }
+
+    /// The pause ledger, SPLIT — what has closed, and when the open one began.
+    ///
+    /// ── WHY THE SPLIT IS THE WHOLE POINT ────────────────────────────────────
+    /// `pausedSeconds` folds the two together and hands back one number, and a
+    /// caller holding one number cannot tell a genuine 40-minute pause from a
+    /// pause that was never closed because iOS terminated the app. The second
+    /// grows at wall-clock rate for as long as the phone is away, and the
+    /// logger imported it whole: `pausedTotal` passed the wall interval,
+    /// `timerOrigin` went into the future, and `PauseControlling.elapsed`
+    /// clamped that to a confident `0:00` on a session that was fully intact.
+    ///
+    /// `SessionRun.resolve` is what decides what an OPEN pause is worth. It
+    /// needs to see it separately to do that, so this is the read the deck uses
+    /// and `pausedSeconds` is the one the close uses.
+    public func pauseLedger(sessionId: String) throws -> PauseLedger {
+        try Self.pauseLedger(setEvents(sessionId: sessionId))
     }
 
     /// How long the session has been paused for, in seconds, as of `now`.
@@ -138,14 +170,13 @@ extension AppDatabase {
         try Self.pausedSeconds(setEvents(sessionId: sessionId), now: now)
     }
 
-    static func isPaused(_ events: [SetEvent]) -> Bool {
-        var paused = false
-        for event in ordered(events) where event.kind.isClock { paused = event.kind == .pause }
-        return paused
-    }
-
-    static func pausedSeconds(_ events: [SetEvent], now: Date) -> TimeInterval {
-        var total: TimeInterval = 0
+    /// ONE fold, two readings. `isPaused` and `pausedSeconds` were two walks
+    /// over the same events answering two halves of one question, and they
+    /// could disagree — `isPaused` took the LAST clock event while this counts
+    /// runs from the FIRST pause of each, so a `pause, pause, resume` sequence
+    /// read as running with an interval still open.
+    static func pauseLedger(_ events: [SetEvent]) -> PauseLedger {
+        var banked: TimeInterval = 0
         var openedAt: Date?
         for event in ordered(events) where event.kind.isClock {
             switch event.kind {
@@ -153,14 +184,21 @@ extension AppDatabase {
                 // Only the FIRST pause of a run opens the interval.
                 if openedAt == nil { openedAt = event.createdAt }
             case .resume:
-                if let start = openedAt { total += max(0, event.createdAt.timeIntervalSince(start)) }
+                if let start = openedAt { banked += max(0, event.createdAt.timeIntervalSince(start)) }
                 openedAt = nil
             default:
                 break
             }
         }
-        if let start = openedAt { total += max(0, now.timeIntervalSince(start)) }
-        return total
+        return PauseLedger(banked: banked, openedAt: openedAt)
+    }
+
+    static func isPaused(_ events: [SetEvent]) -> Bool { pauseLedger(events).openedAt != nil }
+
+    static func pausedSeconds(_ events: [SetEvent], now: Date) -> TimeInterval {
+        let ledger = pauseLedger(events)
+        guard let start = ledger.openedAt else { return ledger.banked }
+        return ledger.banked + max(0, now.timeIntervalSince(start))
     }
 
     /// The total order the fold uses — `(seq, deviceId, id)`, never wall time.

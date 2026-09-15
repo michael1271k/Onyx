@@ -31,16 +31,16 @@ struct AliasGoldenTests {
 
 @Suite("PR engine — the four axes")
 struct PrEngineGoldenTests {
-    struct E1rmIn: Decodable { let reps: Double; let floor: Double? }
     struct TypeIn: Decodable { let setType: String? }
     struct WeightIn: Decodable { let weightKg: Double }
     struct LabelIn: Decodable { let axis: PrAxis; let timed: Bool }
 
     @Test("the eligibility rules and labels match")
     func rulesMatch() throws {
-        for c in try GoldenFixture<E1rmIn, Bool>.load("pr-e1rm-eligible").cases {
-            #expect(PrEngine.e1rmEligible(c.input.reps, floor: c.input.floor) == c.expected, "e1rmEligible — \(c.name)")
-        }
+        // `pr-e1rm-eligible` is gone with the rule it pinned: the e1RM axis is
+        // no longer gated on the programmed rep floor (`PrEngine`, 2026-09-15).
+        // What bounds it now is the formula's own domain, and that is pinned by
+        // `one-rep-max` in `DomainGoldenTests`.
         for c in try GoldenFixture<TypeIn, Bool>.load("pr-ineligible").cases {
             #expect(PrEngine.isPrIneligible(c.input.setType) == c.expected, "isPrIneligible — \(c.name)")
         }
@@ -66,6 +66,27 @@ struct PrEngineGoldenTests {
 
     struct BaseIn: Decodable { let rows: [BaselineSetRow]; let timedKeys: [String]; let floor: Bool }
 
+    /// ── THE e1RM BAR IS NO LONGER PINNED BY THIS VECTOR ─────────────────────
+    /// `bestE1rm` in `pr-baselines.json` was computed under two rules that have
+    /// both changed: Epley, and the programmed-rep-floor gate (`PrEngine`,
+    /// 2026-09-15). Every other tuple in the file — the weight bar, the
+    /// reps-at-load bar, the seconds bar, the set-volume bar, the insertion
+    /// ORDER they are emitted in, and the floor fold — is untouched by that
+    /// change and is still exactly the specification.
+    ///
+    /// So the file is not regenerated. `GoldenVector`'s own header is explicit
+    /// about why — "a spec you can regenerate from the code under test is not a
+    /// spec" — and rewriting 300 expectations from the engine would retire the
+    /// only independent record of what the other four bars are supposed to do.
+    /// The one axis whose rule changed is asserted by hand instead, in
+    /// `PrEngineE1rmTests`, against arithmetic written out longhand.
+    private func withoutE1rm(_ b: PrBaselines) -> PrBaselines {
+        PrBaselines(
+            bestWeight: b.bestWeight, bestRepsAtWeight: b.bestRepsAtWeight,
+            bestE1rm: [], bestSeconds: b.bestSeconds, bestSetVolume: b.bestSetVolume
+        )
+    }
+
     @Test("buildBaselines matches, tuple for tuple, in insertion order")
     func baselinesMatch() throws {
         let fixture = try GoldenFixture<BaseIn, PrBaselines>.load("pr-baselines")
@@ -77,7 +98,7 @@ struct PrEngineGoldenTests {
                 isTimed: { timed.contains($0) },
                 floorFor: c.input.floor ? { FounderTables.floors[$0] } : nil
             )
-            #expect(actual == c.expected, "buildBaselines — \(c.name)")
+            #expect(withoutE1rm(actual) == withoutE1rm(c.expected), "buildBaselines — \(c.name)")
         }
     }
 
@@ -100,24 +121,45 @@ struct PrEngineGoldenTests {
             let r = PrEngine.detectSessionPrs(c.input.sets, c.input.baselines)
             let e = c.expected
 
+            // ── THE e1RM AXIS IS FILTERED OUT OF BOTH SIDES ─────────────────
+            // For the reason `withoutE1rm` gives above, and on the same terms:
+            // the expectations in this file were computed under Epley with the
+            // rep-floor gate, so every `.e1rm` entry in them describes a rule
+            // the engine no longer has. Everything else in the file — which
+            // axes the weight, reps and volume rules award, the ORDER they come
+            // back in, the delta each record carries, the pair collapse, the
+            // per-key grouping — is unaffected and is still the specification.
+            //
+            // Filtering rather than deleting the cases is what keeps that true:
+            // a case whose only recorded axis was `.e1rm` still asserts that
+            // the other three award NOTHING, which is half of what it was
+            // written to say.
+            func drop(_ axes: [PrAxis]) -> [PrAxis] { axes.filter { $0 != .e1rm } }
+
             #expect(r.perSet.count == e.perSet.count, "perSet length — \(c.name)")
             for (i, (a, x)) in zip(r.perSet, e.perSet).enumerated() {
-                #expect(a.axes == x.axes, "axes[\(i)] — \(c.name)")
-                expectClose(a.est1rm, x.est1rm, "est1rm[\(i)] — \(c.name)")
-                let records = Dictionary(uniqueKeysWithValues: a.records.map { ($0.key.rawValue, $0.value) })
-                #expect(records == x.records, "records[\(i)] — \(c.name)")
+                #expect(drop(a.axes) == drop(x.axes), "axes[\(i)] — \(c.name)")
+                let records = Dictionary(uniqueKeysWithValues:
+                    a.records.filter { $0.key != .e1rm }.map { ($0.key.rawValue, $0.value) })
+                #expect(records == x.records.filter { $0.key != PrAxis.e1rm.rawValue }, "records[\(i)] — \(c.name)")
             }
 
-            #expect(r.axesByKey.map(\.key) == e.axesByKey.map(\.key), "axesByKey keys — \(c.name)")
-            #expect(r.axesByKey.map(\.axes) == e.axesByKey.map(\.axes), "axesByKey axes — \(c.name)")
-            #expect(r.prCount == e.prCount, "prCount — \(c.name)")
+            let actualKeys = r.axesByKey.filter { !drop($0.axes).isEmpty }
+            let expectedKeys = e.axesByKey.filter { !drop($0.axes).isEmpty }
+            #expect(actualKeys.map(\.key) == expectedKeys.map(\.key), "axesByKey keys — \(c.name)")
+            #expect(actualKeys.map { drop($0.axes) } == expectedKeys.map { drop($0.axes) }, "axesByKey axes — \(c.name)")
 
-            let rec = PrEngine.recordSets(c.input.sets, r)
-            #expect(rec.map(\.key) == e.recordSets.map(\.key), "recordSets keys — \(c.name)")
-            for (a, x) in zip(rec, e.recordSets) {
-                #expect(a.records.map(\.axis) == x.records.map(\.axis), "recordSets axes — \(a.key) — \(c.name)")
-                for (ra, rx) in zip(a.records, x.records) {
-                    #expect(ra.set == RecordSet(weightKg: rx.weightKg, reps: rx.reps, value: rx.value), "recordSets \(a.key) \(ra.axis) — \(c.name)")
+            let rec = PrEngine.recordSets(c.input.sets, r).map {
+                ($0.key, $0.records.filter { $0.axis != .e1rm })
+            }.filter { !$0.1.isEmpty }
+            let expectedRec = e.recordSets.map {
+                ($0.key, $0.records.filter { $0.axis != .e1rm })
+            }.filter { !$0.1.isEmpty }
+            #expect(rec.map(\.0) == expectedRec.map(\.0), "recordSets keys — \(c.name)")
+            for (a, x) in zip(rec, expectedRec) {
+                #expect(a.1.map(\.axis) == x.1.map(\.axis), "recordSets axes — \(a.0) — \(c.name)")
+                for (ra, rx) in zip(a.1, x.1) {
+                    #expect(ra.set == RecordSet(weightKg: rx.weightKg, reps: rx.reps, value: rx.value), "recordSets \(a.0) \(ra.axis) — \(c.name)")
                 }
             }
         }

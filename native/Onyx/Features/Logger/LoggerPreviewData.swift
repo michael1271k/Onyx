@@ -88,7 +88,7 @@ extension LoggerModel {
                 try WorkoutSet(
                     id: "pv-session-\(i)", sessionId: "pv-session", exerciseId: "pv-\(i)",
                     setIndex: i + 1, weightKg: set.kg, reps: set.reps,
-                    est1rmKg: Epley.oneRepMax(weight: set.kg, reps: Double(set.reps)),
+                    est1rmKg: OneRepMax.estimate(weight: set.kg, reps: Double(set.reps)),
                     rpe: set.rpe, foldOrder: i
                 ).insert(db)
             }

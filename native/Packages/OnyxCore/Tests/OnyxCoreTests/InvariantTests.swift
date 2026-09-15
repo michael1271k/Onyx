@@ -252,22 +252,54 @@ struct InvariantTests {
         #expect(VitalsGate.bodyFatArtifact(.nan) != nil)
     }
 
-    // MARK: Epley
+    // MARK: One-rep max
 
     @Test("unloaded work has no estimate — nil, never zero")
     func unloadedWorkHasNoEstimate() {
         // The exact shape that printed "1RM 0" beside a Reverse Crunch 0 kg × 17
         // and flattened the movement's entire progress chart.
-        #expect(Epley.oneRepMax(weight: 0, reps: 17) == nil)
-        #expect(Epley.oneRepMax(weight: 0, reps: 1) == nil)
-        #expect(Epley.oneRepMax(weight: -12, reps: 5) == nil)
-        #expect(Epley.oneRepMax(weight: .nan, reps: 5) == nil)
-        #expect(Epley.oneRepMax(weight: .infinity, reps: 5) == nil)
+        #expect(OneRepMax.estimate(weight: 0, reps: 17) == nil)
+        #expect(OneRepMax.estimate(weight: 0, reps: 1) == nil)
+        #expect(OneRepMax.estimate(weight: -12, reps: 5) == nil)
+        #expect(OneRepMax.estimate(weight: .nan, reps: 5) == nil)
+        #expect(OneRepMax.estimate(weight: .infinity, reps: 5) == nil)
     }
 
     @Test("a single rep returns the load itself")
     func singleRepIsTheLoad() {
-        #expect(Epley.oneRepMax(weight: 142.5, reps: 1) == 142.5)
+        // Brzycki at one rep is `36/36`, so this falls out of the formula
+        // rather than being special-cased — which is why the special case Epley
+        // needed could be deleted rather than ported.
+        #expect(OneRepMax.estimate(weight: 142.5, reps: 1) == 142.5)
+    }
+
+    @Test("the formula refuses the rep counts it cannot answer for")
+    func repDomainIsRefusedNotExtrapolated() {
+        // `37 − reps` is zero at 37 and negative above it, so an unguarded
+        // Brzycki reports a NEGATIVE one-rep max for a 40-rep set — and an
+        // absurd one well below that (a 30-rep set estimates at five times the
+        // load, which would stand as a permanent record no set could beat).
+        #expect(OneRepMax.estimate(weight: 25, reps: 16) != nil, "the ceiling itself is answered")
+        #expect(OneRepMax.estimate(weight: 25, reps: 17) == nil)
+        #expect(OneRepMax.estimate(weight: 25, reps: 37) == nil, "the singularity")
+        #expect(OneRepMax.estimate(weight: 25, reps: 40) == nil, "past it, where the sign flips")
+        #expect(OneRepMax.estimate(weight: 25, reps: 0) == nil, "a set of no reps is not a set")
+        #expect(OneRepMax.estimate(weight: 25, reps: .nan) == nil)
+    }
+
+    @Test("the Hammer Curl session that reported one PR where it should have reported two")
+    func hammerCurlTopSetHasAnEstimate() {
+        // 2026-09-15. Hammer Curl is programmed 10–12; the session was
+        // 20 kg × 10 then 25 kg × 8. The top set was BELOW the programmed floor,
+        // so the old `e1rmEligible` refused it the e1RM axis — the deck awarded
+        // Heaviest and nothing else while every other app reported a best
+        // estimated 1RM too. Both sets now carry one, and the heavier set's is
+        // the higher, which is what makes the axis winnable.
+        let opener = OneRepMax.estimate(weight: 20, reps: 10)
+        let top = OneRepMax.estimate(weight: 25, reps: 8)
+        #expect(opener == 26.67)
+        #expect(top == 31.03)
+        #expect((top ?? 0) > (opener ?? 0))
     }
 
     // MARK: Energy

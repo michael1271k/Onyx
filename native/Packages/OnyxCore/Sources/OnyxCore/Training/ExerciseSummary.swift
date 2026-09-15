@@ -131,7 +131,7 @@ public extension ExerciseSummary {
         // rejects an infinity as well, and a rule that differs only on an
         // unreachable input is still a rule that differs.
         if let est = set.est, est > 0, est.isFinite { return est }
-        return Epley.oneRepMax(weight: set.weightKg, reps: set.reps)
+        return OneRepMax.estimate(weight: set.weightKg, reps: set.reps)
     }
 
     private static func trendRow(_ s: ExerciseSummarySet) -> TrendSetRow {

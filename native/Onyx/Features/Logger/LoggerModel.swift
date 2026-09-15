@@ -297,12 +297,28 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             )
         }
 
+        /// What `SetGrouping` folds this row onto — the deck's answer to "which
+        /// set is this row part of".
+        ///
+        /// Both fields tested, which is the protocol's own rule: a `pairId`
+        /// with no side is a half-written set, and folding it onto its sibling
+        /// would score one arm's load as the whole set's.
+        ///
+        /// `sideLabel` rather than `side`, so the wire's `L`/`R` counts as a
+        /// side here exactly as it does in the badge. A row that reaches this
+        /// object in the wrong vocabulary draws a pair badge; it does not
+        /// silently become two sets.
+        var pairKey: String? {
+            guard let pairId, !pairId.isEmpty, sideLabel != nil else { return nil }
+            return pairId
+        }
+
         var estimated1RM: Double? {
             guard let weightKg, let reps else { return nil }
             // `Epley` returns nil for an unloaded set rather than 0 — reading it
             // back with `??` instead of a nil check is how "1RM 0" printed for
             // months in the web app.
-            return Epley.oneRepMax(weight: weightKg, reps: Double(reps))
+            return OneRepMax.estimate(weight: weightKg, reps: Double(reps))
         }
     }
 
@@ -329,12 +345,34 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         /// of, where the slug is correct and is what `closeSession` expects.
         var storedExerciseId: String?
 
-        /// `nonisolated` because `Identifiable` is not: `ForEach` reads `id`
-        /// while diffing, outside any actor, and a main-actor-isolated `id`
-        /// makes the conformance itself a data race the compiler refuses.
-        /// Safe here because `plan` is a `let` — the identity of an exercise
-        /// cannot change, which is what makes it an identity.
-        nonisolated var id: String { plan.id }
+        /// SwiftUI's identity — MINTED, not the movement's name.
+        ///
+        /// ── WHY A NAME IS NOT AN IDENTITY ───────────────────────────────────
+        /// It was `plan.id`, which for a synthetic card is the movement's name
+        /// (`WarmupCardio.name` is literally `"Treadmill"`). A deck that
+        /// managed to carry two cards for one movement — `withWarmupCardio`
+        /// prepending a bout the edit deck already held — therefore carried two
+        /// cards with ONE id, and that is not a cosmetic duplicate:
+        ///
+        ///   · `ForEach(model.exercises)` over duplicate ids is undefined by
+        ///     SwiftUI's own documentation, and inside a `LazyVStack` under
+        ///     scroll it is fatal.
+        ///   · `rebuildForPhase` built `Dictionary(uniqueKeysWithValues:)` from
+        ///     them, which TRAPS on a duplicate key — so a phase switch on such
+        ///     a deck crashed outright.
+        ///   · `deckOrder(of:)` is `firstIndex { $0.id == exercise.id }`, so
+        ///     both cards resolved to ONE `exercise_order`, and the second
+        ///     card's appends were filed as the first card's.
+        ///
+        /// A minted id makes every one of those impossible rather than
+        /// unlikely. The duplicate is still a defect and is still fixed at its
+        /// source (`withWarmupCardio`, `DeckRestore.fold`); this is the layer
+        /// that stops it ever being fatal again.
+        ///
+        /// `nonisolated let` because `Identifiable` is not isolated: `ForEach`
+        /// reads `id` while diffing, outside any actor, and a main-actor
+        /// `id` makes the conformance itself a data race the compiler refuses.
+        nonisolated let id = newOnyxID()
         nonisolated var name: String { plan.name }
 
         init(plan: ProgramExercise, rows: [SetRow], note: String = "") {
@@ -431,6 +469,10 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// pause: `Era.forDate`, the PR date and every "when did you train" reader
     /// take this field.
     private(set) var startedAt: Date
+
+    /// The caller named `startedAt` rather than letting `init` stamp now.
+    /// See `init` and `LiveSessionStart`.
+    private let startedAtWasGiven: Bool
 
     /// When the current rest period ends. `nil` means no timer is running —
     /// which is not the same as a timer at zero, and the bar renders the two
@@ -674,25 +716,14 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// Anything that keeps or drops sets has to work on these and not on rows,
     /// or it keeps half a pair: a lone side is not a set to `SessionVolume`, to
     /// `physical`, or to the arm that did not get trained.
-    static func groups(_ rows: [SetRow]) -> [[SetRow]] {
-        var out: [[SetRow]] = []
-        var index: [String: Int] = [:]
-        for row in rows {
-            // A pairId without a side is not a pair to anything downstream —
-            // `SessionVolume` says so explicitly — so it is not one here.
-            guard let id = row.pairId, !id.isEmpty, row.sideLabel != nil else {
-                out.append([row])
-                continue
-            }
-            if let at = index[id] {
-                out[at].append(row)
-            } else {
-                index[id] = out.count
-                out.append([row])
-            }
-        }
-        return out
-    }
+    /// ── THE RULE MOVED, THE MEANING DID NOT ────────────────────────────────
+    /// This was the third copy of "a pair is one set" in the codebase and the
+    /// deck's own. It is now `SetGrouping` in OnyxCore, where `DeckRestore`
+    /// reaches it too — the restore has to count blanks in SETS, and a second
+    /// implementation of the fold inside it would be the fourth. This stays as
+    /// the deck's spelling of the call, because forty call sites say
+    /// `LoggerModel.groups`.
+    static func groups(_ rows: [SetRow]) -> [[SetRow]] { SetGrouping.groups(rows, pairKey: \.pairKey) }
 
     /// Weighted set counts per landmark, for the distribution sheet.
     var muscleSets: [LandmarkMuscle: Double] {
@@ -766,13 +797,22 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         phase: ProgramPhase,
         store: AppDatabase? = nil,
         userId: String = "preview",
-        startedAt: Date = Date()
+        startedAt: Date? = nil
     ) {
         self.day = day
         self.phase = phase
         self.store = store
         self.userId = userId
-        self.startedAt = startedAt
+        self.startedAt = startedAt ?? Date()
+        // ── WHETHER THE CALLER HAD AN OPINION ABOUT THE CLOCK ───────────────
+        // `attach` may adopt a start banked before the first set created a
+        // session row (`LiveSessionStart`), and it must only do that for a deck
+        // that has no start of its own. A caller that named one — the edit path
+        // hands over the session's own `started_at` — has the better answer,
+        // and adopting something OLDER than a deliberately chosen instant is
+        // the failure `attachWithoutALiveSessionKeepsTheOpeningClock` exists to
+        // catch.
+        self.startedAtWasGiven = startedAt != nil
         let opened = Self.loadSeed(store: store, day: day, phase: phase, userId: userId)
         self.seed = opened.seed
         self.progressionAlerts = opened.alerts
@@ -820,7 +860,16 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// honour a prescription would be the store losing a set to enforce a UI
     /// rule — the same mistake `ingest` is explicitly written not to make.
     private func rebuildForPhase() {
-        let existing = Dictionary(uniqueKeysWithValues: exercises.map { ($0.id, $0) })
+        // ── KEYED ON THE PLAN, AND TOLERANT OF A DUPLICATE ──────────────────
+        // `ExerciseState.id` is minted now, so it is no longer the key a plan
+        // is found under — `day.exercises` below is walked by `plan.id`.
+        //
+        // `uniquingKeysWith` and not `uniqueKeysWithValues`: the latter TRAPS
+        // on a duplicate key, and a deck carrying two cards for one movement
+        // (the duplicated treadmill) crashed here on the next phase switch
+        // rather than drawing wrong. First one wins, matching `DeckRestore`'s
+        // own rule — and the duplicate cannot be built any more anyway.
+        let existing = Dictionary(exercises.map { ($0.plan.id, $0) }, uniquingKeysWith: { first, _ in first })
         // The order the deck is in RIGHT NOW, captured before it is rebuilt —
         // `existing.keys` is a Dictionary's, which has none. See `inDeckOrder`.
         let liveOrder = exercises.map(\.id)
@@ -957,9 +1006,28 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     private static func withWarmupCardio(
         _ exercises: [ExerciseState], existing: [String: ExerciseState]
     ) -> [ExerciseState] {
-        guard !exercises.contains(where: { $0.rows.contains(where: \.isCardio) }) else {
-            return exercises
+        // ── TWO TESTS, BECAUSE ONE OF THEM WAS BLIND ────────────────────────
+        // The row test alone let the treadmill be prepended on top of a deck
+        // that ALREADY held a treadmill card, and that is how a session came
+        // back with the bout at the top and again at the bottom:
+        //
+        //   `SessionDetailView.editorDay` builds the edit deck in performed
+        //   order, so a session that walked opens with a `Treadmill` card. At
+        //   `init` that card holds SEEDED rows, and `Self.setRow(SeedRow)`
+        //   carries no `durationSec`, no `distanceKm` and no `incline` —
+        //   `SeedRow` has no such fields. So the card did not look like cardio,
+        //   this guard passed, and a second card was minted beside it.
+        //
+        // The name test is what the row test cannot see, and the row test is
+        // what the name test cannot see (a bike or a rower somebody put at the
+        // top is cardio under another name). Neither is redundant; the bug was
+        // having only one of them.
+        let warmupKey = ExerciseAliases.canonicalName(WarmupCardio.name)
+        let alreadyThere = exercises.contains { card in
+            card.rows.contains(where: \.isCardio)
+                || ExerciseAliases.canonicalName(card.plan.name) == warmupKey
         }
+        guard !alreadyThere else { return exercises }
         if let already = existing[WarmupCardio.name] { return [already] + exercises }
         let plan = ProgramExercise(
             WarmupCardio.name,
@@ -1514,7 +1582,6 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
                     reps: Double(row.reps ?? 0),
                     setType: row.kind.rawValue,
                     timed: TimedExercise.isTimed(name),
-                    repFloor: floor,
                     // ── THE PAIR, WHICH THIS USED TO DROP ───────────────────
                     // Neither field was passed, so the live pass judged each
                     // side of a split set as a set of its own: two volume
@@ -1683,6 +1750,10 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     }
 
     private func persistStart() {
+        // The durable fallback first, and unconditionally: it is the only copy
+        // that exists before the first append creates a row, which is exactly
+        // the window a correction made during the warm-up lives in.
+        if !isEditing { LiveSessionStart.write(startedAt, dayKey: day.key, date: LogicalDay.today()) }
         guard let store, let sessionId else { return }
         do {
             try store.setSessionStart(id: sessionId, startedAt: startedAt)
@@ -1719,6 +1790,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
                 .plan.restSec
                 .map(Double.init)
             try store.closeSession(id: sessionId, sessionRpe: sessionRpe, restTargetSec: restTarget)
+            // The workout is history; the durable start belongs to nothing now.
+            // Left standing it would be adopted by the NEXT deck opened on this
+            // split today — a two-a-day starting its evening session on the
+            // morning one's clock.
+            LiveSessionStart.clear(dayKey: day.key, date: LogicalDay.today())
             storeError = nil
             return true
         } catch {
@@ -1792,6 +1868,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // The clock too: a discarded session's pause belongs to nothing.
             pausedAt = nil
             pausedTotal = 0
+            LiveSessionStart.clear(dayKey: day.key, date: LogicalDay.today())
             storeError = nil
             return true
         } catch {
@@ -1919,11 +1996,13 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // set 1 would then append a FRESH set id at an index the log
             // already holds, which is a duplicated set in the projection and in
             // the upload. Everything is read into locals first.
-            let session = try store.liveSession(dayKey: day.key, date: LogicalDay.today())
+            let today = LogicalDay.today()
+            let session = try store.liveSession(dayKey: day.key, date: today)
             let live = session?.id
             // Rejoining a session that was paused when the app was killed: the
-            // log knows, and the wall clock has kept running.
-            let paused = try live.map { (try store.isPaused(sessionId: $0), try store.pausedSeconds(sessionId: $0)) }
+            // log knows, and the wall clock has kept running. SPLIT rather than
+            // summed — see `SessionRun` for what an open pause is worth.
+            let ledger = try live.map { try store.pauseLedger(sessionId: $0) }
 
             sessionId = live
             // ── THE CLOCK SURVIVES THE KILL, LIKE THE PAUSE LEDGER BELOW ────
@@ -1955,14 +2034,60 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // the two.
             if let session {
                 startedAt = session.startedAt ?? LogicalDay.date(fromISO: session.date) ?? startedAt
+            } else if !startedAtWasGiven,
+                      let pending = LiveSessionStart.read(dayKey: day.key, date: today) {
+                // ── THE WINDOW BEFORE THE FIRST SET ─────────────────────────
+                // `started_at` reaches disk only at `openSession`, which
+                // `ensureSession` calls on the FIRST APPEND. So a deck opened
+                // at 18:00 and terminated at 18:11 with the warm-up done and
+                // nothing ticked had NO row to restore from, and the relaunch
+                // minted a model that believed the workout began at 18:20.
+                // Eleven minutes, gone, with no record they ever existed —
+                // which is the half of "the timer must survive any termination"
+                // that restoring the row could never reach.
+                //
+                // So the instant is durable from the moment the deck opens, in
+                // the one store that costs nothing and needs no session row.
+                // The session row still WINS where there is one: it carries the
+                // corrections `setStart`/`setElapsed` pushed and it is what
+                // uploads.
+                startedAt = pending
             }
-            if let paused {
-                // The store's total already includes the interval still open at
-                // this instant, so the local `pausedAt` is re-anchored to NOW
-                // rather than to when the pause began — otherwise the same
-                // minutes are counted in both.
-                pausedAt = paused.0 ? Date() : nil
-                pausedTotal = paused.1
+            // Written on every attach, not only when it was read: a correction
+            // made in the timer sheet has to reach the fallback too, or a
+            // termination after it would restore the number that was corrected.
+            LiveSessionStart.write(startedAt, dayKey: day.key, date: today)
+
+            if let ledger {
+                // ── THE LEDGER IS RESOLVED AGAINST THE WALL CLOCK ───────────
+                // It used to be imported whole: `pausedTotal = <the store's
+                // total>`, which for an OPEN pause is `now − pauseOpenedAt`
+                // with nothing bounding it. Terminate a paused session at 18:40
+                // and reopen it at 07:00 and the ledger claimed thirteen hours
+                // of rest on a ninety-minute workout — `timerOrigin` landed in
+                // the future and `elapsed`'s `max(0, …)` printed `0:00` on a
+                // session whose sets had all restored correctly. That is the
+                // "timer reset to 0:00 again" report, and restoring
+                // `started_at` harder could never have fixed it.
+                //
+                // `SessionRun` bounds both halves and says when it had to.
+                let run = SessionRun.resolve(
+                    startedAt: startedAt,
+                    banked: ledger.banked,
+                    pauseOpenedAt: ledger.openedAt,
+                    now: Date()
+                )
+                pausedAt = run.pausedAt
+                pausedTotal = run.pausedTotal
+                // Said out loud, in the channel the header already draws. A
+                // clock that had to be repaired is the only evidence anybody
+                // gets that the log went inconsistent, and swallowing it is
+                // what made the last two of these invisible for a week.
+                if run.abandonedPause {
+                    storeError = "The clock was left paused. Resumed — \(Int(SessionRun.openPauseCeilingSec / 60)) min credited as rest."
+                } else if run.clamped {
+                    storeError = "The pause ledger outran the session clock and was trimmed to fit."
+                }
             }
             try restoreLoggedSets()
             // ── THE BAR IS BUILT AFTER THE RESTORE, LIKE THE EDIT PATH'S ────
@@ -2121,14 +2246,60 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         // a second identity beside it.
         refreshCatalogueIndex()
 
-        for exercise in exercises {
-            // Lowercased on BOTH sides. `SessionDetailView.editorDay` compares
-            // case-insensitively when it decides whether the program already
-            // names a movement; a case-sensitive match here would reuse the
-            // program's card and then fail to find its rows — a blank card, and
-            // a fresh `helix5-` id on the first tick.
-            let wanted = ExerciseAliases.canonicalName(exercise.name).lowercased()
-            let mine = logged.filter { canonical($0.exerciseId).lowercased() == wanted }
+        // ── THE MATCHING AND THE ARITHMETIC ARE `DeckRestore.fold` NOW ──────
+        // What is left here is building `SetRow`s, which is the only part that
+        // needs the model. The fold decides two things this method got wrong
+        // twice, and its header says why at length:
+        //
+        //   · WHICH card owns which rows. It PARTITIONS — the first card
+        //     answering to a name consumes the bucket — where this used to
+        //     `filter` the whole log per card and consume nothing, so two cards
+        //     for one movement each got every row. That is the treadmill drawn
+        //     twice, ticked twice, and two writers on one set id.
+        //   · HOW MANY blanks to seed after them, counted in SETS. This used to
+        //     subtract ROWS (`exercise.rows.count - rows.count`) and spend the
+        //     answer on `seedRows(count:)`, whose parameter is working SETS and
+        //     which PRE-SPLITS a unilateral movement. On a Single Arm Lateral
+        //     Raise that squared the shortfall: four prescribed with two logged
+        //     reopened with SIX, and sets 5 and 6 were tickable rows the
+        //     program never asked for.
+        //
+        // Lowercased on BOTH sides. `SessionDetailView.editorDay` compares
+        // case-insensitively when it decides whether the program already names
+        // a movement; a case-sensitive match here would reuse the program's
+        // card and then fail to find its rows — a blank card, and a fresh
+        // `helix5-` id on the first tick.
+        let restore = DeckRestore.fold(
+            cards: exercises.map {
+                DeckRestore.Card(
+                    key: ExerciseAliases.canonicalName($0.name).lowercased(),
+                    // SETS, which is the unit `blankSets` comes back in and the
+                    // unit `seedRows(count:)` has always taken. `rows.count` is
+                    // the number that was wrong.
+                    shownSets: Self.physical($0.rows)
+                )
+            },
+            logged: logged.map {
+                DeckRestore.LoggedSet(
+                    id: $0.id,
+                    key: canonical($0.exerciseId).lowercased(),
+                    pairId: $0.pairId,
+                    // The LOCAL spelling, for the reason the row below restores
+                    // in it: `L` reaching the fold would make one physical set
+                    // count as two and seed a phantom blank to make up the
+                    // difference.
+                    side: SyncTranslation.localSide($0.side)
+                )
+            }
+        )
+        let loggedById = Dictionary(logged.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+        for (exercise, owned) in zip(exercises, restore.cards) {
+            let mine = owned.loggedIds.compactMap { loggedById[$0] }
+            // A card the session holds nothing of keeps the deck it was built
+            // with — blanks the athlete may already have typed into, and rows a
+            // phase switch placed. Rebuilding it from the seed here would throw
+            // that away to say the same thing.
             guard !mine.isEmpty else { continue }
             // Whatever id these rows already carry is the id a set appended
             // beside them must carry — see `ExerciseState.storedExerciseId`.
@@ -2184,10 +2355,9 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
                 )
             }
             // Keep whatever blanks the prescription still asks for beyond what
-            // was logged. Warm-ups are not re-offered: a restored session
-            // already holds the ones that were performed.
-            let remaining = max(0, exercise.rows.count - rows.count)
-            rows.append(contentsOf: seedRows(exercise.plan, count: remaining, warmups: false))
+            // was logged — in SETS, from the fold. Warm-ups are not re-offered:
+            // a restored session already holds the ones that were performed.
+            rows.append(contentsOf: seedRows(exercise.plan, count: owned.blankSets, warmups: false))
             // ── AND ON AN EDIT, NO "PREVIOUS" AT ALL ────────────────────────
             // The seed is built by `sessionSeed(dayKey:)`, which takes no date
             // and answers with the most recent session on this day key. On a
@@ -2465,6 +2635,70 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         } catch {
             storeError = String(describing: error)
         }
+    }
+}
+
+// MARK: - The start instant, before there is a row to keep it in
+
+/// Where a live deck's `startedAt` lives until the first set creates a session.
+///
+/// ── WHY THIS IS NOT THE SESSION ROW ─────────────────────────────────────────
+/// Because there isn't one yet, and there must not be: `attach` looks a session
+/// up and never creates one, so a logger opened by accident leaves nothing
+/// behind. `ensureSession` mints the row on the first APPEND, and everything
+/// this file says about empty session rows is still true.
+///
+/// Which leaves a real window with no durable clock in it — open the deck,
+/// warm up for eleven minutes, get jetsammed, and the relaunch believes the
+/// workout began when you reopened it. `UserDefaults.standard` is the sanctioned
+/// per-device store for exactly this (the `onyx.phase` idiom; the App Group
+/// suite is unsigned dead code on the free team), it needs no session, no
+/// schema and no migration, and the value is a per-device draft rather than an
+/// account fact — the session row is what syncs.
+///
+/// Keyed by `(date, dayKey)` so a two-a-day and a swap cannot collide, and read
+/// through the same six-hour bound `SessionElapsed` applies: a key older than
+/// any real workout is not a clock, it is litter.
+///
+/// ponytail: keys are cleared on finish and on cancel, and a stale one is
+/// refused on read, so the litter is bounded by "days you opened a deck and
+/// never finished it" — a handful of 8-byte values. Sweep them on launch if
+/// that ever stops being true.
+enum LiveSessionStart {
+    private static func key(dayKey: String, date: String) -> String {
+        "onyx.live.start.\(date).\(dayKey)"
+    }
+
+    /// How old a banked start may be and still be believed.
+    ///
+    /// ── WHY IT IS NOT THE SIX-HOUR SESSION BOUND ────────────────────────────
+    /// This value only ever covers the window between opening a deck and
+    /// logging the first set — after that there is a session row and the row
+    /// wins. A deck that has gone three quarters of an hour without a single
+    /// set is not mid-warm-up; it was opened and walked away from, and adopting
+    /// its instant would start the next session two hours in the past. Forty
+    /// five minutes is longer than any warm-up and far shorter than an
+    /// abandoned afternoon.
+    static let maxAgeSec: TimeInterval = 45 * 60
+
+    /// The stored instant, or nil when there is none worth believing.
+    static func read(dayKey: String, date: String, now: Date = Date()) -> Date? {
+        let raw = UserDefaults.standard.double(forKey: key(dayKey: dayKey, date: date))
+        // `double(forKey:)` answers 0 for a key that is not there, which is
+        // also 1970 — so the absent case and the corrupt case are one test.
+        guard raw > 0 else { return nil }
+        let at = Date(timeIntervalSince1970: raw)
+        let age = now.timeIntervalSince(at)
+        guard age >= 0, age <= maxAgeSec else { return nil }
+        return at
+    }
+
+    static func write(_ at: Date, dayKey: String, date: String) {
+        UserDefaults.standard.set(at.timeIntervalSince1970, forKey: key(dayKey: dayKey, date: date))
+    }
+
+    static func clear(dayKey: String, date: String) {
+        UserDefaults.standard.removeObject(forKey: key(dayKey: dayKey, date: date))
     }
 }
 

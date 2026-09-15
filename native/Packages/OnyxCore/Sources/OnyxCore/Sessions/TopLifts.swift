@@ -137,7 +137,7 @@ public enum TopLifts {
                 out[name] = Best(
                     kg: working.map(\.weightKg).max(),
                     rpeKg: working.compactMap { set in set.rpe.map { $0 * set.weightKg } }.max(),
-                    e1rm: working.compactMap { Epley.oneRepMax(weight: $0.weightKg, reps: Double($0.reps)) }.max()
+                    e1rm: working.compactMap { OneRepMax.estimate(weight: $0.weightKg, reps: Double($0.reps)) }.max()
                 )
             }
         }
@@ -162,7 +162,7 @@ public enum TopLifts {
         // The exact expression the app already uses — see `LoggerModel.SetRow.estimated1RM`
         // in native/Onyx/Features/Logger/LoggerModel.swift, which calls this same
         // `Epley.oneRepMax`. Reused here rather than a second formula.
-        if let oneRM = best(eligible, score: { Epley.oneRepMax(weight: $0.kg, reps: Double($0.reps)) }) {
+        if let oneRM = best(eligible, score: { OneRepMax.estimate(weight: $0.kg, reps: Double($0.reps)) }) {
             winners[.oneRM] = oneRM
         }
 

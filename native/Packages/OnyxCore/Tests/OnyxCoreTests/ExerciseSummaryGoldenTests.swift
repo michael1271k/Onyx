@@ -12,13 +12,31 @@ struct ExerciseSummaryGoldenTests {
         let timed: Bool?
     }
 
-    @Test("every case matches the TypeScript")
+    /// ── `bestE1rmKg` IS EXEMPT, AND ONLY IT ─────────────────────────────────
+    /// The fixture's estimates were computed under Epley; the app reports
+    /// Brzycki since 2026-09-15. Every other field in this file — the heaviest
+    /// load, the best session volume, the best reps, the pair collapse, the
+    /// warm-up exclusion, the `unloaded` verdict — is untouched by that and is
+    /// still the specification, so the file is not regenerated (see
+    /// `GoldenVector`). The estimate itself is asserted by hand below and in
+    /// `OneRepMaxGoldenTests`.
+    private func withoutEstimate(_ s: ExerciseSummary) -> ExerciseSummary {
+        var out = s
+        out.bestE1rmKg = nil
+        return out
+    }
+
+    @Test("every case matches, the estimate aside")
     func matchesGoldenVectors() throws {
         let fixture = try GoldenFixture<In, ExerciseSummary>.load("exercise-summary")
         #expect(fixture.cases.count >= 15)
         for c in fixture.cases {
             let got = ExerciseSummary.summarize(c.input.sets, timed: c.input.timed ?? false)
-            #expect(got == c.expected, "summarize — \(c.name)")
+            #expect(withoutEstimate(got) == withoutEstimate(c.expected), "summarize — \(c.name)")
+            // The estimate's PRESENCE is still pinned: unloaded and timed work
+            // must have none, and loaded work must have one. Only the number
+            // moved.
+            #expect((got.bestE1rmKg == nil) == (c.expected.bestE1rmKg == nil), "estimate presence — \(c.name)")
         }
     }
 
@@ -64,7 +82,7 @@ struct ExerciseSummaryGoldenTests {
         let storedZero = ExerciseSummary.summarize([
             ExerciseSummarySet(sessionId: "s1", weightKg: 100, reps: 5, est: 0),
         ])
-        // Epley, not the stored 0 — 100 × (1 + 5/30) = 116.7.
-        #expect(storedZero.bestE1rmKg == 116.7)
+        // The formula, not the stored 0 — Brzycki puts 100 × 5 at 100 × 36/32.
+        #expect(storedZero.bestE1rmKg == 112.5)
     }
 }

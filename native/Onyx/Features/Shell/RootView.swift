@@ -102,6 +102,25 @@ private struct SignedInTabs: View {
             }
         }
         .environment(\.onyxBatteryLevel, battery)
+        // ── A WORKOUT IN PROGRESS OUTRANKS THE DASHBOARD ────────────────────
+        // `selectedTab` is in-memory (see `AppEnvironment`) — deliberately, so
+        // a theme rebuild cannot evict the reader — which also means it is
+        // EMPTY on every cold launch and `initialTab` answers `.today`. So an
+        // app terminated three sets from the end of a workout came back on the
+        // dashboard, and the deck it was still holding had to be gone looking
+        // for. The state survived the kill; the way back to it did not.
+        //
+        // Empty and only empty: the moment the reader has chosen a tab in this
+        // process this does nothing, so it cannot fight a deliberate tap, and a
+        // deep link (`onOpenURL`) writes `selectedTab` before this runs.
+        // `liveWorkoutInProgress` is the same test the Train tab's own footer
+        // uses to decide whether to say "Resume workout".
+        .task {
+            guard environment.selectedTab.isEmpty,
+                  (try? environment.database.liveWorkoutInProgress(date: LogicalDay.today())) == true
+            else { return }
+            selection.wrappedValue = .train
+        }
         // The battery the backgrounds read. Monitoring is off by default and
         // costs nothing to enable; an unknown level reads −1, which is the one
         // value that must NOT become a dimmed screen — a simulator, a preview

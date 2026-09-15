@@ -3,22 +3,42 @@ import Testing
 @testable import OnyxCore
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Epley
+// One-rep max — Brzycki
 // ─────────────────────────────────────────────────────────────────────────────
 
-@Suite("Epley — estimated 1RM")
-struct EpleyGoldenTests {
+@Suite("OneRepMax — estimated 1RM")
+struct OneRepMaxGoldenTests {
     struct Input: Decodable { let weight: Double; let reps: Double }
 
-    @Test("matches the TypeScript implementation on every exported case")
+    /// ── THIS VECTOR IS NO LONGER THE TYPESCRIPT'S ───────────────────────────
+    /// It was `epley.json`, exported from the web app and pinned to it. The web
+    /// app is gone (W6) and the formula changed with it — Brzycki, so the
+    /// number matches what every other training app reports for the same set.
+    /// The grid is the same grid; the expectations were recomputed, plus ten
+    /// cases the old one had no reason to carry: the rep ceiling, the
+    /// singularity at 37, and the three sets from the session that prompted the
+    /// change.
+    @Test("matches the Brzycki vector on every case")
     func matchesGoldenVectors() throws {
-        let fixture = try GoldenFixture<Input, Double?>.load("epley")
+        let fixture = try GoldenFixture<Input, Double?>.load("one-rep-max")
         #expect(!fixture.cases.isEmpty)
 
         for c in fixture.cases {
-            let actual = Epley.oneRepMax(weight: c.input.weight, reps: c.input.reps)
-            expectClose(actual, c.expected, "epley1RM — \(c.name)")
+            let actual = OneRepMax.estimate(weight: c.input.weight, reps: c.input.reps)
+            expectClose(actual, c.expected, "oneRepMax — \(c.name)")
         }
+    }
+
+    @Test("the vector is checked against the formula written out by hand")
+    func vectorIsNotSelfReferential() {
+        // A regenerated golden proves only that the code has not changed since
+        // it was regenerated. This is the independent arithmetic: 24 kg × 9 is
+        // 24 × 36 / 28 = 30.857…, which is 30.86 — the exact figure the founder
+        // read off Hevy for the same set, and the reason Brzycki is what Onyx
+        // now reports.
+        #expect(OneRepMax.estimate(weight: 24, reps: 9) == 30.86)
+        #expect(OneRepMax.estimate(weight: 100, reps: 5) == 112.5)
+        #expect(OneRepMax.estimate(weight: 60, reps: 12) == 86.4)
     }
 }
 
