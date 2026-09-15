@@ -255,6 +255,67 @@ extension SessionAnalysis {
         )
     }
 
+    /// The masthead for a BATCH of sessions, in one walk of the ledger.
+    ///
+    /// ── WHY BATCHED, AND WHY THE NUMBER IS NOT A COLUMN ─────────────────────
+    /// `careerIndex` is a POSITION in the whole record, so asking for it one
+    /// card at a time replays every set you have ever logged once per card —
+    /// and a stored index would need rewriting on every delete, on every row of
+    /// every session after the one removed. One `summaries` walk answers it for
+    /// every id at once, and that walk is the same one the History screens
+    /// already make, so a PR counted here is the PR counted there.
+    ///
+    /// `sets > 0` is the career filter: a session that recorded no work is not
+    /// counted and gets no number. One such shell exists on record, and
+    /// numbering it would put a gap in every number after it.
+    static func headers(database: AppDatabase, userId: String, sessionIds: [String]) -> [String: SessionHeader] {
+        guard !sessionIds.isEmpty,
+              let ledger = try? database.historySets(),
+              let sessions = try? database.sessionHistory()
+        else { return [:] }
+
+        let ctx = context(database: database)
+        let ladder = (try? database.leverLadder(userId: userId)) ?? .empty
+        let goals: UserGoalRow? = (try? database.read { db in
+            try UserGoalRow.filter(Column("user_id") == userId).fetchOne(db)
+        }) ?? nil
+        let today = LogicalDay.today()
+        let wanted = Set(sessionIds)
+
+        let everything = summaries(sessions, ledger: ledger, in: ctx)
+            .sorted { $0.date == $1.date ? $0.id < $1.id : $0.date < $1.date }
+        var career: [String: Int] = [:]
+        for (i, summary) in everything.filter({ $0.sets > 0 }).enumerated() {
+            career[summary.id] = i + 1
+        }
+        let prCounts = Dictionary(everything.map { ($0.id, $0.prCount) }, uniquingKeysWith: { a, _ in a })
+
+        let bySession = Dictionary(grouping: ledger, by: \.sessionId)
+        var out: [String: SessionHeader] = [:]
+        for session in sessions where wanted.contains(session.id) {
+            out[session.id] = SessionHeader(
+                id: session.id,
+                label: dayLabel(session.dayKey, in: ctx.program(on: session.date)) ?? "Session",
+                dayKey: session.dayKey,
+                careerIndex: career[session.id],
+                prCount: prCounts[session.id] ?? 0,
+                // The same three reads the session page makes, resolved for the
+                // session's OWN date — one expression each, so a card and the
+                // page it opens cannot disagree about which week this was.
+                planLabel: Schedule.planLabel(owning: session.date, in: ctx.schedule),
+                week: Phases.weekPhase(
+                    weekStart: Week.start(of: session.date, startDay: Week.startDay(fromEndDay: goals?.weekEndDay)),
+                    in: ctx.schedule.phases
+                ),
+                lever: Levers.leverForDate(session.date, today: today, in: ladder).flatMap { Levers.lever(byId: $0, in: ladder) },
+                maintenance: Maintenance.isMaintenanceDate(session.date, today: today, ladder: ladder, phases: ctx.schedule.phases),
+                stamp: stamp(date: session.date, startedAt: session.startedAt),
+                muscles: primaryLandmarks(grouped(bySession[session.id] ?? []))
+            )
+        }
+        return out
+    }
+
     /// Session-best estimated 1RM per exercise across every session it appears
     /// in — the 40×16 sparkline in a ledger header, and the Library's rows.
     ///

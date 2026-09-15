@@ -243,6 +243,46 @@ struct HistoryWeeksTests {
         #expect(model.window.loaded)
     }
 
+    // MARK: - The masthead
+
+    /// `careerIndex` is a POSITION in the whole record, so no card can compute
+    /// it from its own row — and a session that recorded nothing must not take
+    /// a number, or every number after it is one too high for the rest of the
+    /// user's training life.
+    @Test("headers numbers the career and skips a shell")
+    func headersNumberTheCareer() throws {
+        let database = try store()
+        try seedSession(database, id: "s1", date: "2026-09-01", dayKey: "cb_a", sets: 3, weight: 40)
+        // Twelve hours of a Wednesday and not one set — the shell that exists
+        // on record, and the reason the filter is `sets > 0`.
+        try seedSession(database, id: "shell", date: "2026-09-02", dayKey: "cb_b", sets: 0, weight: 0)
+        try seedSession(database, id: "s2", date: "2026-09-03", dayKey: "cb_a", sets: 3, weight: 42.5)
+        try seedSession(database, id: "s3", date: "2026-09-05", dayKey: "cb_b", sets: 3, weight: 45)
+
+        let headers = SessionAnalysis.headers(
+            database: database, userId: Self.userId,
+            sessionIds: ["s1", "s2", "s3", "shell"]
+        )
+        #expect(headers["s1"]?.careerIndex == 1)
+        #expect(headers["s2"]?.careerIndex == 2)
+        #expect(headers["s3"]?.careerIndex == 3)
+        // The shell still gets a card — it just has no ordinal on it.
+        #expect(headers["shell"] != nil)
+        #expect(headers["shell"]?.careerIndex == nil)
+
+        // The two facts `WorkoutWeek.State` cannot supply: when it happened,
+        // and what it was for.
+        let second = try #require(headers["s2"])
+        #expect(second.stamp.contains("Sep"))
+        #expect(!second.muscles.isEmpty)
+
+        // Asking for one id costs the same walk and answers the same number —
+        // the Train tab draws exactly one of these.
+        let alone = SessionAnalysis.headers(database: database, userId: Self.userId, sessionIds: ["s3"])
+        #expect(alone.count == 1)
+        #expect(alone["s3"]?.careerIndex == 3)
+    }
+
     // MARK: - Seeds
 
     private func seedSession(

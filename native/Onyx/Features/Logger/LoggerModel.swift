@@ -640,6 +640,26 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         )
     }
 
+    /// The token a movement's muscle chip resolves, or nil when it has no mover
+    /// this app can name.
+    ///
+    /// Read from `plan.movers`, which is where the deck's own rail reads it, so
+    /// the Lock Screen, the Live Stats timeline and the card in your hand
+    /// cannot call the same set three different things. A movement whose rows
+    /// are all cardio has no landmark at all and answers `"cardio"`, which the
+    /// callers draw in `Color.onyx.cardio`.
+    ///
+    /// Static and read-only: this reads a plan and nothing else, so it is
+    /// callable off a state the caller already holds without touching the deck.
+    static func primaryMuscle(of exercise: ExerciseState?) -> String? {
+        guard let exercise else { return nil }
+        if let token = exercise.plan.movers.primary.first,
+           LandmarkMuscle.from(token: token) != nil {
+            return token
+        }
+        return exercise.rows.contains(where: \.isCardio) ? "cardio" : nil
+    }
+
     /// How many SETS a list of rows is, once a set can be two rows.
     ///
     /// Each `pairId` once, every unpaired row once — the same rule as

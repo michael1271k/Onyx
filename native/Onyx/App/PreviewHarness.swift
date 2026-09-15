@@ -315,7 +315,7 @@ enum PreviewHarness {
             BackfillSheet(model: .preview).environment(AppEnvironment.preview)
         case "you":
             NavigationStack { SettingsTabView(seeded: model) }.environment(AppEnvironment.preview)
-        case "train", "train-empty", "train-week", "train-wrap", "train-wrap-large",
+        case "train", "train-done", "train-empty", "train-week", "train-wrap", "train-wrap-large",
              "train-wrap-deload", "share-card":
             // Seeded from the history store: the This-week panel and the
             // Ready-to-progress box are both reads over the ledger, so an empty
@@ -370,7 +370,7 @@ enum PreviewHarness {
         // photographed on `train`.
         case "mini-player":
             MiniPlayerHarness().environment(AppEnvironment.preview)
-        case "logger", "logger-stats", "logger-paused", "logger-finish", "logger-options", "logger-timer",
+        case "logger", "logger-stats", "logger-lifts", "logger-paused", "logger-finish", "logger-options", "logger-timer",
              "set-row", "set-row-split", "set-row-cardio", "set-row-records", "set-options", "effort-picker":
             LoggerPreviews.view(screen)
         // ── THE CARDIO SHEET, IN BOTH OF ITS STATES ────────────────────────

@@ -44,6 +44,47 @@ _Nothing yet._
 
 ---
 
+## [3.7.0] — 2026-09-15 · One Session, One Header
+
+### Added
+- **Top Lifts groups by the movement.** A session carried by one lift printed
+  that lift's name three times — once as the hardest set, once as the heaviest,
+  once as the best estimated single, each at body weight and each telling the
+  reader a name they had read on the row above. The movement is a heading now
+  and the roles sit under it, with an arrow against the same movement's last
+  session and a flame when the set took a record. The three maxima, the tie
+  rule and the deltas moved into `TopLifts` (OnyxCore) where they are tested
+  against vectors rather than re-derived in a view.
+- **One `SessionHeaderCard` for a finished session.** The Train tab's done card
+  and the session page's title band were two renderings of one workout that
+  disagreed about which facts mattered — and about the day's NAME: Train read
+  "Upper A" while the page it opened read "Cb A", because the page resolved the
+  label through whichever plan is selected today rather than through the deck
+  that owned the session's date. One card now, one loader behind it, and the
+  Train card gained the career number, the plan and phase tags, the clock and
+  the muscles it trained. (Pulse joins them in the next wave.)
+
+### Changed
+- **The Live Stats timeline is coloured by the muscle, not the day.** Every row
+  drew the split's one hue, so colour said only "this is a Legs day" — which the
+  title two cards up had already said. Each movement's dots now carry the
+  landmark colour the Lock Screen, the deck's rail and the body figure use.
+- **A finished treadmill bout fills its dot.** The opening bout is logged as a
+  warm-up on purpose — it stays out of tonnage, out of the working-set count and
+  out of the PR engine — and the timeline's numerator was the working-set count,
+  so the one row that could never be filled was the one you had definitely done.
+  A cardio-only movement is counted in rows ticked.
+- **The Live Stats rest bar and its countdown carry the whole rest.** Both were
+  still calling the timer helper without a total, so the bar snapped back to
+  full on every +15 s — the same defect 3.6.0 fixed on the Lock Screen, in the
+  last two callers.
+
+### Fixed
+- **The session page and the Train card name the same session the same way.**
+  The label resolves through the session's own deck on both.
+
+---
+
 ## [3.6.0] — 2026-09-15 · The Minimised Workout
 
 ### Added

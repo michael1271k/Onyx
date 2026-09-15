@@ -39,39 +39,92 @@ struct LiveStatsView: View {
     /// query; calling it from a `body` would run it once per frame.
     @State private var session: WorkoutSession?
 
+    /// What each movement did the last time this day was trained, one figure
+    /// per role — the bar the arrows are drawn against. Empty until the read
+    /// lands, and an empty bar simply draws no arrows.
+    @State private var previousBests: [String: TopLifts.Best] = [:]
+
+    /// Optional, and read only inside a `.task`: the logger is presented as a
+    /// cover from the Workout tab and reached by the shot harness directly, and
+    /// a non-optional `@Environment(AppEnvironment.self)` traps the moment it is
+    /// read without one — the same declaration `LiveLoggerView` carries.
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment?
+
+    #if DEBUG
+    /// Harness only: park the page on the Top Lifts card. The two cards above
+    /// it are a screen and a half tall on a 375 pt phone, so the shot that
+    /// reviews the lift groups cannot be a shot of the top of the page.
+    var startAtLifts = false
+    #endif
+
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(spacing: OnyxSpace.m) {
-                volumeCard
-                // ── WHY PRs SIT SECOND, AND ONLY WHEN THERE ARE ANY ─────
-                // They were fourth, which put the one card worth flicking
-                // over for two screens below the fold: a PR lit on the deck
-                // and then had to be hunted for. The other cards answer "how
-                // is this session going", which is a question you scroll to;
-                // this one announces something that just happened, and an
-                // announcement below the fold is not one.
-                //
-                // And it is ABSENT rather than empty. Most of a session has
-                // no records in it, so the empty state WAS the state — a tile
-                // of prose in the second slot, above three cards that always
-                // have something to say, for most of every workout.
-                if !prs.livePrs.isEmpty { recordsCard }
-                muscleCard
-                // Superlatives before the per-movement list: "what was the
-                // hardest thing I did" is three lines, and the list under it
-                // is as long as the day.
-                topLiftsCard
-                exercisesCard
-                effortCard
+        ScrollViewReader { scroller in
+            ScrollView(.vertical) {
+                VStack(spacing: OnyxSpace.m) {
+                    volumeCard
+                    // ── WHY PRs SIT SECOND, AND ONLY WHEN THERE ARE ANY ─────
+                    // They were fourth, which put the one card worth flicking
+                    // over for two screens below the fold: a PR lit on the deck
+                    // and then had to be hunted for. The other cards answer "how
+                    // is this session going", which is a question you scroll to;
+                    // this one announces something that just happened, and an
+                    // announcement below the fold is not one.
+                    //
+                    // And it is ABSENT rather than empty. Most of a session has
+                    // no records in it, so the empty state WAS the state — a tile
+                    // of prose in the second slot, above three cards that always
+                    // have something to say, for most of every workout.
+                    if !prs.livePrs.isEmpty { recordsCard }
+                    muscleCard
+                    // Superlatives before the per-movement list: "what was the
+                    // hardest thing I did" is three lines, and the list under it
+                    // is as long as the day.
+                    topLiftsCard.id(Self.liftsAnchor)
+                    exercisesCard
+                    effortCard
+                }
+                .padding(.horizontal, OnyxSpace.l)
+                .padding(.bottom, OnyxSpace.xl)
             }
-            .padding(.horizontal, OnyxSpace.l)
-            .padding(.bottom, OnyxSpace.xl)
+            .scrollIndicators(.hidden)
+            // Keyed on PHYSICAL sets: a warm-up leaves `completedSets` alone and
+            // still changes the session row this card draws.
+            .task(id: model.physicalSets) { session = model.sessionRow }
+        // The bar for the arrows. One read, off the main actor, keyed on the
+        // day: a session does not change which deck it is halfway through.
+        .task(id: model.day.key) {
+            guard let database = environment?.database else { return }
+            let dayKey = model.day.key, userId = environment?.userIdString
+            // ── THE SESSION YOU ARE IN IS NOT THE ONE YOU ARE BEATING ───────
+            // The deck writes its own row the moment the first set is ticked,
+            // with this day key and today's date, so it is the NEWEST
+            // qualifying session by the time this card has anything to draw.
+            // Left in, the bar becomes today's own numbers: every delta reads
+            // `flat` and the card draws no arrows at all — which is exactly
+            // what the first shot of it photographed.
+            let live = model.sessionId
+            previousBests = await Task.detached(priority: .utility) {
+                guard let history = try? database.sessionsForSeed(dayKey: dayKey, userId: userId)
+                else { return [:] }
+                return TopLifts.previousBests(
+                    sessions: history.sessions.filter { $0.id != live }, sets: history.sets
+                )
+            }.value
         }
-        .scrollIndicators(.hidden)
-        // Keyed on PHYSICAL sets: a warm-up leaves `completedSets` alone and
-        // still changes the session row this card draws.
-        .task(id: model.physicalSets) { session = model.sessionRow }
+            #if DEBUG
+            // After the page lands, for the reason the session page's own ledger
+            // shot gives: the anchor is decided at first layout, when the stack is
+            // still empty.
+            .task {
+                guard startAtLifts else { return }
+                try? await Task.sleep(for: .milliseconds(400))
+                scroller.scrollTo(Self.liftsAnchor, anchor: .top)
+            }
+            #endif
+        }
     }
+
+    private static let liftsAnchor = "onyx.livestats.toplifts"
 
     // MARK: - Volume
 
@@ -125,7 +178,7 @@ struct LiveStatsView: View {
     /// need a per-second `TimelineView` to be anything but frozen.
     @ViewBuilder
     private var restTrack: some View {
-        if let countdown = restCountdown(model.restEndsAt) {
+        if let countdown = restCountdown(model.restEndsAt, total: Int(model.restDuration)) {
             ProgressView(timerInterval: countdown, countsDown: true) {
                 EmptyView()
             } currentValueLabel: {
@@ -207,7 +260,7 @@ struct LiveStatsView: View {
     private var restCell: some View {
         VStack(alignment: .leading, spacing: 2) {
             Group {
-                if let countdown = restCountdown(model.restEndsAt) {
+                if let countdown = restCountdown(model.restEndsAt, total: Int(model.restDuration)) {
                     Text(timerInterval: countdown, countsDown: true)
                 } else {
                     Text("—")
@@ -422,20 +475,20 @@ struct LiveStatsView: View {
     /// answer, so the row falls back to it rather than drawing a bar code.
     @ViewBuilder
     private func setDots(_ exercise: LoggerModel.ExerciseState) -> some View {
-        // ── COUNTED IN SETS, BECAUSE `done` IS ─────────────────────────────
-        // `exercise.rows.count` is ROWS, and on a movement trained one side at
-        // a time a set is two of them. `workingSets` folds each `pairId` once,
-        // so a three-set lunge with all three ticked drew three filled dots
-        // out of SIX — a card reporting a finished movement as half done, on
-        // the one page whose whole job is to say how the session is going.
+        // ── ONE FOLD, AND IT LIVES IN THE MODEL ────────────────────────────
+        // This counted SETS rather than rows — `workingSets` folds each
+        // `pairId` once, so a three-set lunge with all three ticked drew three
+        // filled dots out of SIX — and it counted them HERE, in a view, which
+        // is the second copy of a rule the deck already owns.
         //
-        // `LoggerModel.physical` is the same fold `workingSets` uses, over the
-        // rows the prescription is about: warm-ups and ghosts are excluded
-        // there, so they are excluded here or the denominator counts rows the
-        // numerator never can.
-        let prescribed = exercise.rows.filter { $0.kind != .warmup && $0.kind != .ghost }
-        let planned = max(exercise.plan.sets(for: model.phase), LoggerModel.physical(prescribed))
-        let done = exercise.workingSets
+        // `LoggerModel.dotProgress` is that rule plus the one case a lifting
+        // numerator cannot express: the opening treadmill bout is minted
+        // `kind: .warmup` on purpose, to keep it out of tonnage, out of
+        // `workingSets` and out of the PR engine — so a bout you HAD done read
+        // 0 of 1 planned forever, the one row on this timeline that could never
+        // be filled.
+        let (done, planned) = model.dotProgress(for: exercise)
+        let tint = dotTint(exercise)
         if planned > 8 {
             Text("\(done)/\(planned)")
                 .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
@@ -448,13 +501,34 @@ struct LiveStatsView: View {
                     // ground; an unfilled dot is a FILLED one in tertiary ink,
                     // which is legible and still unmistakably not done.
                     Circle()
-                        .fill(index < done ? accent : Color.onyx.textTertiary.opacity(0.35))
+                        .fill(index < done ? tint : Color.onyx.textTertiary.opacity(0.35))
                         .frame(width: 8, height: 8)
                 }
             }
             .animation(OnyxMotion.move, value: done)
             .accessibilityHidden(true)
         }
+    }
+
+    /// The colour a movement's dots are filled in: the muscle the movement is
+    /// FOR, not the day it happens to sit in.
+    ///
+    /// ── WHY THE DAY ACCENT WAS THE WRONG ANSWER ─────────────────────────────
+    /// Every row on this timeline drew the same hue, so the only thing colour
+    /// said was "this is a Legs day" — which the title two cards up has already
+    /// said, and which does not change between rows. The muscle palette is
+    /// sixteen colours with a measured separation (`OnyxTokens` §W3), and the
+    /// Lock Screen, the deck's own rail and the atlas figure all call one
+    /// muscle by one colour: `LoggerModel.primaryMuscle(of:)` is the single
+    /// resolver they share, so a row here and the chip on your Lock Screen
+    /// cannot name the same set two different colours.
+    ///
+    /// A cardio bout takes `Color.onyx.cardio` — it has no landmark and the
+    /// body domain is what every other cardio mark in the app is drawn in.
+    private func dotTint(_ exercise: LoggerModel.ExerciseState) -> Color {
+        guard let token = LoggerModel.primaryMuscle(of: exercise) else { return accent }
+        if let muscle = LandmarkMuscle.from(token: token) { return Color.onyx.muscle(muscle) }
+        return Color.onyx.cardio
     }
 
     /// `▲ +2.5` when the ladder says raise it, `1 more` when one more session at
@@ -566,142 +640,156 @@ struct LiveStatsView: View {
 
     // MARK: - Top lifts
 
-    /// One superlative per row: the hardest set, the heaviest thing moved, and
-    /// the best estimated single.
+    /// The session's three superlatives — the hardest set, the heaviest thing
+    /// moved, the best estimated single — under the MOVEMENT that won them.
     ///
     /// ── WHY THREE, AND WHY NOT A LEADERBOARD ────────────────────────────────
-    /// "Top set by volume" below answers PER MOVEMENT and is as long as the
+    /// "Top set by exercise" below answers PER MOVEMENT and is as long as the
     /// day's list. These three are about the SESSION, and they are three
     /// different orderings of the same ticked rows rather than three questions
     /// — which is why none of them is a store query: every number here is
     /// already in `model.exercises`, the same rows the deck is drawing.
+    ///
+    /// ── AND WHY THE ARITHMETIC LEFT THIS FILE ───────────────────────────────
+    /// The three maxima were computed here, keyed by ROLE, so a session carried
+    /// by one lift printed that lift's name three times — the name set at body
+    /// weight on all three rows and the one thing the reader already knew from
+    /// the row above. `TopLifts.group` (OnyxCore, golden-tested) owns the
+    /// maxima, the tie rule, the delta against the last session and the record
+    /// test now; this view asks it once and draws what comes back.
     private var topLiftsCard: some View {
         card("Top lifts") {
-            let lifts = topLifts
-            if lifts.isEmpty {
+            let groups = topLiftGroups
+            if groups.isEmpty {
                 Text("Tick a set and the session's best three land here.")
                     .onyxType(.caption)
                     .foregroundStyle(Color.onyx.textTertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                VStack(spacing: 0) {
-                    ForEach(lifts) { lift in
-                        topLiftRow(lift)
-                        if lift.id != lifts.last?.id {
-                            Divider().overlay(Color.onyx.hairline)
-                        }
+                VStack(spacing: OnyxSpace.s) {
+                    ForEach(groups, id: \.exercise) { group in
+                        topLiftGroup(group)
                     }
                 }
             }
         }
     }
 
-    /// A row of the Top Lifts card. `id` is the ROLE — there is exactly one
-    /// hardest set and exactly one heaviest, so the role is the identity and a
-    /// re-tick cannot make the list reshuffle.
-    private struct TopLift: Identifiable {
-        let id: String
-        let exercise: String
-        let figure: String
-    }
-
-    private var topLifts: [TopLift] {
+    /// The ticked rows, as the engine takes them.
+    ///
+    /// ── THE RECORD AXES ARE MATCHED PER MOVEMENT, NOT PER SET ───────────────
+    /// `livePrs` carries the movement and the axis; linking one to an
+    /// individual row would need a set number plumbed out of `LoggerModel`'s PR
+    /// pass. It does not need one: the set that takes an exercise's WEIGHT
+    /// record is that exercise's heaviest set, and the set that takes its e1RM
+    /// record is its best estimated single — which are exactly the sets the
+    /// Heaviest and 1RM roles pick. Hardest has no axis and never flames.
+    private var topLiftGroups: [TopLifts.Group] {
+        // ── ONE KEY, CANONICAL, ON ALL THREE SIDES ──────────────────────────
+        // `ExerciseState.name` is the PLAN's spelling; `LivePrRecord.exercise`
+        // and the previous-session bar are both canonical
+        // (`ExerciseAliases.canonicalName`). A program that spells a movement
+        // as an alias — `Lat Pulldown (Cable)` is a live key in the table —
+        // would then match neither, so that lift would carry no flame and no
+        // arrow, ever, and its heading here would read differently from the
+        // PRs card's heading for the same lift one card up.
+        let axes = Dictionary(grouping: prs.livePrs, by: { ExerciseAliases.canonicalName($0.exercise) })
+            .mapValues { Swift.Set($0.map(\.axis)) }
         let sets = model.exercises.flatMap { exercise in
-            exercise.rows
-                .filter { $0.isDone && $0.kind != .ghost }
-                .map { (name: exercise.name, row: $0) }
+            let key = ExerciseAliases.canonicalName(exercise.name)
+            // ── WARM-UPS ARE NOT CANDIDATES ─────────────────────────────────
+            // "Top" is a claim about the working sets — `SessionAnalysis`'s own
+            // `topKg` says so, and `workingSets` is the same filter. A warm-up
+            // could not usually win one of these, but the bar it is measured
+            // against is working sets only, so leaving it in made the two sides
+            // of the comparison two different questions.
+            return exercise.rows
+                .filter { $0.isDone && $0.kind != .ghost && $0.kind != .warmup }
+                .compactMap { row -> TopLifts.Set? in
+                    guard let kg = row.weightKg, let reps = row.reps else { return nil }
+                    return TopLifts.Set(
+                        exercise: key, kg: kg, reps: reps, rpe: row.rpe,
+                        recordAxes: axes[key] ?? []
+                    )
+                }
         }
-        /// The ticked set that scores highest, or nil when none of them scores
-        /// at all. `max(by:)` keeps the LAST maximum, so a set that merely
-        /// EQUALS the leader does not take the row off it.
-        func best(
-            _ score: (LoggerModel.SetRow) -> Double?
-        ) -> (name: String, row: LoggerModel.SetRow, score: Double)? {
-            sets
-                .compactMap { entry in score(entry.row).map { (entry.name, entry.row, $0) } }
-                .max { $0.2 < $1.2 }
-        }
-
-        var out: [TopLift] = []
-        // ── HARDEST IS RATING × LOAD, NOT RATING ────────────────────────────
-        // An RPE 10 on a 7.5 kg cable crossover is a set that went to failure
-        // on the smallest weight in the room, and it is not the hardest thing
-        // that happened today. Neither is 100 kg at RPE 6. The product is the
-        // only one of the three that needs both columns, which is why an
-        // unrated set cannot win it — `rpe == nil` is UNRATED, never zero.
-        if let hardest = best({ row in
-            guard let rpe = row.rpe, let kg = row.weightKg, kg > 0 else { return nil }
-            return rpe * kg
-        }), let rpe = hardest.row.rpe, let kg = hardest.row.weightKg {
-            out.append(TopLift(
-                id: "Hardest", exercise: hardest.name,
-                // The product itself is a number with no unit and no meaning to
-                // anyone; the two figures it was made of are the reading.
-                figure: "RPE \(OnyxFormat.rpe(rpe)) · \(OnyxFormat.kg(kg)) kg"
-            ))
-        }
-        if let heaviest = best({ row in (row.weightKg ?? 0) > 0 ? row.weightKg : nil }) {
-            out.append(TopLift(
-                id: "Heaviest", exercise: heaviest.name,
-                figure: "\(OnyxFormat.kg(heaviest.score)) kg"
-            ))
-        }
-        // `SetRow.estimated1RM` is Epley through `OnyxCore`, which returns nil
-        // for an unloaded set rather than 0 — the same function the PR engine
-        // grades the e1rm axis with, so this card and a trophy agree.
-        if let single = best({ $0.estimated1RM }) {
-            out.append(TopLift(
-                id: "1RM", exercise: single.name,
-                figure: "\(OnyxFormat.kg(single.score)) kg"
-            ))
-        }
-        return out
+        return TopLifts.group(sets, previous: previousBests)
     }
 
-    /// No leading glyph. Three different SF symbols are three different glyph
-    /// widths, so the three movement names started at three different x — a
-    /// ragged left edge on a card whose whole job is to be read down.
+    /// One movement's superlatives: the name once as a heading, then a row per
+    /// role it won.
+    ///
+    /// The same fold the PRs card directly below makes, minus the gold — two
+    /// cards that group the same way read as one list of movements rather than
+    /// as two different kinds of table. No wash and no border here: the record
+    /// card's tint MEANS record, and a neutral copy of it would be decoration.
+    private func topLiftGroup(_ group: TopLifts.Group) -> some View {
+        VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+            Text(group.exercise)
+                .onyxType(.body).fontWeight(.semibold)
+                .foregroundStyle(Color.onyx.textPrimary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(spacing: 0) {
+                ForEach(group.lifts, id: \.role) { lift in
+                    topLiftRow(lift, in: group.exercise)
+                    if lift.role != group.lifts.last?.role {
+                        Divider().overlay(Color.onyx.hairline)
+                    }
+                }
+            }
+        }
+    }
+
+    /// A role's row. The movement's name is the group's heading, so the row
+    /// leads with the thing that varies between rows.
     ///
     /// ── AND WHY IT IS A COLUMN AT AX5 ───────────────────────────────────────
-    /// "Neutral-Grip Lat Pulldown" beside "RPE 9.5 · 49.5 kg" is two ~24
-    /// character strings sharing 346 pt of card. At an accessibility size both
-    /// hit their scale floor and truncate, and the half that gets cut is the
-    /// movement's name — the answer, not the qualifier. Under it instead, with
-    /// the name free to take a second line, which is the same trade `tonnage`
-    /// makes with its delta chip two cards up.
+    /// "Hardest" beside "RPE 9.5 · 49.5 kg" is two strings sharing 346 pt of
+    /// card. At an accessibility size both hit their scale floor and truncate,
+    /// and the half that gets cut is the figure — the answer, not the
+    /// qualifier. Under it instead, which is the same trade `tonnage` makes
+    /// with its delta chip two cards up.
     @ViewBuilder
-    private func topLiftRow(_ lift: TopLift) -> some View {
+    private func topLiftRow(_ lift: TopLifts.Lift, in exercise: String) -> some View {
         let stacked = typeSize.isAccessibilitySize
-        let name = VStack(alignment: .leading, spacing: 1) {
-            Text(lift.exercise)
-                .onyxType(.body)
-                .foregroundStyle(Color.onyx.textPrimary)
-                .lineLimit(stacked ? 2 : 1)
-                .minimumScaleFactor(0.75)
-            Text(lift.id).onyxMicro()
-        }
+        let label = Text(roleLabel(lift.role))
+            .onyxType(.body)
+            .foregroundStyle(Color.onyx.textSecondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
         // No `layoutPriority`, for the reason the records row spells out: both
         // columns carry a scale factor, so they divide and both shrink rather
         // than one taking its ideal width and truncating the other.
-        let figure = Text(lift.figure)
-            .onyxType(.body).fontWeight(.semibold).onyxNumeral()
-            .foregroundStyle(Color.onyx.textPrimary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
+        let figure = HStack(spacing: 6) {
+            Text(figureText(lift))
+                .onyxType(.body).fontWeight(.semibold).onyxNumeral()
+                .foregroundStyle(lift.isRecord ? Color.onyx.record : Color.onyx.textPrimary)
+                // Two lines at AX5, one everywhere else. `RPE 9.5 · 49.5 kg`
+                // hits its scale floor beside the trend glyph and truncated to
+                // `RPE 9.5 · 49.5…` — the kilograms, which is the half of the
+                // reading the row is about. Wrapping is the same trade the
+                // movement's name above it makes.
+                .lineLimit(stacked ? 2 : 1)
+                .minimumScaleFactor(0.7)
+                .fixedSize(horizontal: false, vertical: stacked)
+            trend(lift)
+        }
 
         Group {
             if stacked {
                 // No `Spacer` here: in a column it is a VERTICAL one and it
-                // expands, which pushes the three rows apart until the card is
-                // a screen tall.
+                // expands, which pushes the rows apart until the card is a
+                // screen tall.
                 VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                    name
+                    label
                     figure
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 HStack(spacing: OnyxSpace.m) {
-                    name
+                    label
                     Spacer(minLength: OnyxSpace.s)
                     figure
                 }
@@ -709,9 +797,74 @@ struct LiveStatsView: View {
         }
         .frame(minHeight: 44)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(lift.id)
-        .accessibilityValue("\(lift.exercise), \(lift.figure)")
+        .accessibilityLabel("\(roleLabel(lift.role)), \(exercise)")
+        .accessibilityValue(spokenFigure(lift))
     }
+
+    /// `▲` / `▼` against the same movement's last session, and the flame when
+    /// this set took the role's record.
+    ///
+    /// ── A FALL IS SECONDARY INK, NEVER `danger` ─────────────────────────────
+    /// One lighter session is information — a deload, a bad night, a movement
+    /// swapped in after a heavy one — and the app has no colour for "you did
+    /// worse". `danger` means a reading outside a safe range and is spent on
+    /// heart rate; spending it here would make a normal Tuesday look like an
+    /// alarm. Up is `good` because a rise IS the thing the block is for.
+    @ViewBuilder
+    private func trend(_ lift: TopLifts.Lift) -> some View {
+        if lift.isRecord {
+            Image(systemName: "flame.fill")
+                .imageScale(.small)
+                .foregroundStyle(Color.onyx.record)
+        }
+        switch lift.delta {
+        case .up:
+            Image(systemName: "arrow.up")
+                .imageScale(.small)
+                .foregroundStyle(Color.onyx.good)
+        case .down:
+            Image(systemName: "arrow.down")
+                .imageScale(.small)
+                .foregroundStyle(Color.onyx.textSecondary)
+        case .flat, nil:
+            // Level with last time draws nothing. A third glyph for "no change"
+            // is a mark the reader has to learn in order to ignore.
+            EmptyView()
+        }
+    }
+
+    private func roleLabel(_ role: TopLifts.Role) -> String {
+        switch role {
+        case .hardest: "Hardest"
+        case .heaviest: "Heaviest"
+        case .oneRM: "1RM"
+        }
+    }
+
+    /// The product `hardest` is scored on is a number with no unit and no
+    /// meaning to anyone; the two figures it was made of are the reading.
+    private func figureText(_ lift: TopLifts.Lift) -> String {
+        switch lift.role {
+        case .hardest:
+            guard let rpe = lift.set.rpe else { return "\(OnyxFormat.kg(lift.set.kg)) kg" }
+            return "RPE \(OnyxFormat.rpe(rpe)) · \(OnyxFormat.kg(lift.set.kg)) kg"
+        case .heaviest, .oneRM:
+            return "\(OnyxFormat.kg(lift.figure)) kg"
+        }
+    }
+
+    private func spokenFigure(_ lift: TopLifts.Lift) -> String {
+        var parts = [figureText(lift)]
+        if lift.isRecord { parts.append("record") }
+        switch lift.delta {
+        case .up: parts.append("up on last time")
+        case .down: parts.append("down on last time")
+        case .flat: parts.append("level with last time")
+        case nil: break
+        }
+        return parts.joined(separator: ", ")
+    }
+
 
     // MARK: - Records
 

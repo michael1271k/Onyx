@@ -28,6 +28,36 @@ struct PreviewCatalogueTests {
     }
 }
 
+/// The Top Lifts shot is the only picture of an arrow or a flame, and both are
+/// drawn from a store: the fixture seeds one previous session of the same day,
+/// and `LiveStatsView` reads it back through its environment. A fixture whose
+/// query comes back empty photographs a card with no arrows on it and looks
+/// exactly like a card whose arrows are broken.
+@MainActor
+@Suite("Live Stats fixture")
+struct LiveStatsFixtureTests {
+    @Test("the seeded previous session reaches TopLifts.previousBests")
+    func fixtureFeedsTheArrows() throws {
+        let fixture = LoggerModel.previewUpperBWithHistory()
+        // `userId: ""` is what a preview passes — nothing is signed in, and the
+        // store falls back to the one user its rows belong to.
+        let history = try fixture.store.sessionsForSeed(
+            dayKey: fixture.model.day.key, userId: ""
+        )
+        #expect(!history.sessions.isEmpty)
+        // The live session is excluded exactly as the card excludes it — the
+        // deck has already written today's row into this store, and a bar that
+        // included it would be today's own numbers.
+        let bests = TopLifts.previousBests(
+            sessions: history.sessions.filter { $0.id != fixture.model.sessionId },
+            sets: history.sets
+        )
+        // 47 kg last time, 49.5 kg today — the shot's one visible arrow.
+        #expect(bests["Neutral-Grip Lat Pulldown"]?.kg == 47)
+        #expect(bests["Chest Press"]?.kg == 40)
+    }
+}
+
 @Suite("Settings model over the preview store")
 struct SettingsModelPreviewTests {
     @MainActor @Test("the harness model sees the plans, the rungs and the goals")
