@@ -30,7 +30,18 @@ enum PulsePreviews {
             row.proteinGoalG = 170
         }
         try? seed(database)
-        return DayModel(database: database, userId: userId, date: date)
+        let model = DayModel(database: database, userId: userId, date: date)
+        // ── THE CLOCK IS PINNED FOR EVERY PULSE FIXTURE (W3) ────────────
+        // It used to be pinned per shot, by the four whose CONTENT moved
+        // with the time of day. The Stack square made that every shot: the
+        // due/later split is a question about the clock, so an unpinned
+        // `day` would have counted 3 of 9 at lunchtime and 9 of 9 after ten,
+        // and the committed PNG would have churned by the hour. 13:00 is the
+        // same minute `pinned` has always used — those call sites are now
+        // restating this rather than setting it, and are kept because they
+        // say WHY that sheet needs it.
+        model.previewNowMinutes = 13 * 60
+        return model
     }
 
     /// A full training day.
@@ -102,6 +113,42 @@ enum PulsePreviews {
             cursor = end
         }
         try db.ingest(HealthPayload(date: date, sleep: Sleep.aggregate(samples)), userId: userId)
+
+        // ── TEN WEIGH-INS, BECAUSE THE SCALE SQUARE DRAWS A TRACE (W3) ──
+        // W2's lesson in the other column: a fixture thin in one column is a
+        // CLAIM, not a neutral state. `fullDay` seeded no body metrics at
+        // all, so the Scale square would have photographed "No weigh-in" on
+        // the DEFAULT shot and its trace would have shipped unreviewed.
+        // Twice a week over five weeks, which is the real cadence — and it is
+        // the cadence, not the count, that makes the sparkline sparse.
+        let weighIns: [(days: Int, kg: Double, fat: Double)] = [
+            (0, 64.8, 15.2), (3, 65.0, 15.4), (7, 65.3, 15.5), (10, 65.5, 15.7),
+            (14, 65.4, 15.9), (17, 65.8, 16.0), (21, 66.0, 16.1), (25, 66.1, 16.3),
+            (28, 66.3, 16.4), (32, 66.2, 16.6),
+        ]
+        for reading in weighIns {
+            let d = ISODate.addDays(date, -reading.days) ?? date
+            try db.saveBodyMetrics(userId: userId, date: d) { row in
+                row.weightKg = reading.kg
+                row.bodyFatPct = reading.fat
+            }
+        }
+
+        // ── AND A STACK, BECAUSE THE STACK SQUARE COUNTS DOSES (W3) ─────
+        // `fullDay` seeded no supplements at all, so the fourth square would
+        // have photographed "Nothing scheduled" on the DEFAULT shot and its
+        // dose dots — counted, still ahead, said no to — would have shipped
+        // unreviewed.
+        //
+        // ── AND THE SKIP BELOW WAS DEAD UNTIL THIS LINE EXISTED ─────────
+        // This fixture has always ended with `setSupplementSkipped("caffeine")`,
+        // against a stack nothing ever seeded: the write landed on a key with
+        // no dose behind it and the day had nine fewer rows than its author
+        // thought. Seeding `PreviewCatalogue`'s nine is what makes that line
+        // mean something, and at the pinned 13:00 it is what puts all three
+        // dot states on the default shot — three counted (10:30 and 11:45 have
+        // passed), one skipped (caffeine), five still ahead.
+        PreviewCatalogue.seedStack(db)
 
         try db.setFatigue(userId: userId, date: date, slot: FatigueSlot.waking.rawValue, level: 2)
         try db.setFatigue(userId: userId, date: date, slot: FatigueSlot.pre.rawValue, level: 3)
@@ -264,19 +311,30 @@ enum PulsePreviews {
     /// Written as raw rows rather than through the logger: the card reads
     /// `workout_sessions` and `workout_sets` and nothing else, and a seed that
     /// drove the whole logger would be photographing the logger.
-    private static func seedSession(_ db: AppDatabase) throws {
-        let lifts: [(name: String, kg: Double, reps: Int)] = [
+    ///
+    /// Parameterised since W3 so `twoSessions` can put a second, different
+    /// session on the same date. Every name below is one `MuscleMap` knows: a
+    /// plausible-looking name it has never seen resolves to NOTHING and the
+    /// card's muscle wash comes out grey (memory: `worktree-guard-and-hooks`).
+    private static func seedSession(
+        _ db: AppDatabase,
+        dayKey: String = "legs_a",
+        hoursAgo: Double = 3,
+        durationMin: Double = 68,
+        lifts: [(name: String, kg: Double, reps: Int)] = [
             ("Leg Press", 92, 10), ("Hack Squat", 60, 10), ("Leg Extension", 45, 12),
             ("Seated Leg Curl", 45, 12), ("Calf Press", 67.5, 15),
         ]
+    ) throws {
         try db.seedRows { db in
             let sessionId = newOnyxID()
             let noon = LogicalDay.date(fromISO: date)!
+            let started = noon.addingTimeInterval(-hoursAgo * 3600)
             try WorkoutSession(
-                id: sessionId, userId: userId, dayKey: "legs_a", date: date,
-                startedAt: noon.addingTimeInterval(-3 * 3600),
-                endedAt: noon.addingTimeInterval(-3 * 3600 + 68 * 60),
-                durationMin: 68, sessionRpe: 8
+                id: sessionId, userId: userId, dayKey: dayKey, date: date,
+                startedAt: started,
+                endedAt: started.addingTimeInterval(durationMin * 60),
+                durationMin: durationMin, sessionRpe: 8
             ).insert(db)
             var index = 0
             for lift in lifts {
@@ -296,6 +354,20 @@ enum PulsePreviews {
                     index += 1
                 }
             }
+        }
+    }
+
+    /// A training day with TWO finished sessions on it — an early upper
+    /// session and a lower one after it, which is what a double day looks like
+    /// and what the screen-and-a-half budget has to survive.
+    @MainActor
+    static func twoSessions() -> DayModel {
+        model { db in
+            try seedFullDay(db, withSession: true)
+            try seedSession(db, dayKey: "cb_b", hoursAgo: 5, durationMin: 54, lifts: [
+                ("Chest Press", 40, 10), ("Neutral-Grip Lat Pulldown", 49.5, 10),
+                ("Seated Cable Row (Wide Grip)", 40, 12), ("Preacher Curl", 20, 12),
+            ])
         }
     }
 
@@ -379,8 +451,11 @@ enum PulsePreviews {
         case "day-stress":
             NavigationStack { PulseTabView(seeded: pinned(fullDay()), startAtPage: .stress) }
                 .environment(AppEnvironment.preview)
+        // Where the soreness square's door leads. It was the carousel's third
+        // page until W3; the page is gone and the sheet it opened is what the
+        // square opens, so the name keeps pointing at the thing being reviewed.
         case "day-soreness":
-            NavigationStack { PulseTabView(seeded: fullDay(), startAtPage: .soreness) }
+            Presenting(model: fullDay()) { SorenessSheet(model: $0) }
                 .environment(AppEnvironment.preview)
         // The one state `day` cannot photograph: a vital far enough out to
         // take the night's slot. The grid stays eight cells — HRV has left it
@@ -407,6 +482,14 @@ enum PulsePreviews {
                 .environment(AppEnvironment.preview)
         case "day-empty":
             NavigationStack { PulseTabView(seeded: model()) }
+                .environment(AppEnvironment.preview)
+        // TWO sessions on one date — the state the W3 budget is measured
+        // against, because the session cards are the only part of this screen
+        // whose count is not fixed. Parked on the rows, like `day-past`: the
+        // wash at the top is `day-session`'s shot and the thing THIS one has to
+        // prove is the square grid with two cards under it.
+        case "day-two":
+            NavigationStack { PulseTabView(seeded: twoSessions(), startAtRows: true) }
                 .environment(AppEnvironment.preview)
         // Named for what it is rather than for where it opens from: the shot
         // list called this `day-inbody` and the plan's gate calls it `scale`,
@@ -580,5 +663,6 @@ enum PulsePreviews {
 #Preview("Pulse — stress day") { PulsePreviews.view("stress-day") }
 #Preview("Pulse — carousel") { PulsePreviews.view("day-stress") }
 #Preview("Pulse — a promoted vital") { PulsePreviews.view("day-hero") }
+#Preview("Pulse — two sessions") { PulsePreviews.view("day-two") }
 #Preview("Quick Log") { PulsePreviews.view("quick-log") }
 #endif

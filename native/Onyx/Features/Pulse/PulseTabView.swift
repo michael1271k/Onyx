@@ -12,11 +12,12 @@ import OnyxData
 /// the web app's shape, and §3.6 names it exactly ("every list is a `List`, not
 /// a `ScrollView` of cards").
 ///
-/// What it is now: two tiles that genuinely need to be tiles because they draw
-/// a GAUGE (the sleep arc, the body), a real `List` section of eight vitals at
-/// 44 pt, and three rows — fatigue, scale, stack — that open sheets. The
-/// Schedule tile is gone (swap moved to the Workout tab's session card, where
-/// the thing you are swapping actually lives) and so is Cardio (§5.2 item 5).
+/// What it is now, after W3: a Now strip, one hero vital over a grid of eight,
+/// a two-page carousel carrying the day's two self-reports, and a 2 × 2 grid of
+/// squares holding the four things the day MEASURED — the stress index, what is
+/// sore, what the scale said and what the stack counted. The Schedule tile is
+/// gone (swap moved to the Workout tab's session card, where the thing you are
+/// swapping actually lives) and so is Cardio (§5.2 item 5).
 struct PulseTabView: View {
     @Environment(AppEnvironment.self) private var environment
 
@@ -25,7 +26,7 @@ struct PulseTabView: View {
     /// Harness only: which section to open scrolled to. Half this screen is
     /// below the fold and a single shot cannot reach it.
     var startAtRows = false
-    /// Harness only: which carousel page to open on. Two of the three pages are
+    /// Harness only: which carousel page to open on. One of the two pages is
     /// off-screen by definition, and `simctl` can film a simulator but cannot
     /// swipe one.
     var startAtPage: PulsePage?
@@ -74,6 +75,12 @@ struct DayScreen: View {
     @State private var showStack = false
     @State private var showSoreness = false
     @State private var editingSleep = false
+    /// The stress breakdown. Declared here rather than on the square that opens
+    /// it for the reason every other sheet on this screen is: the square grid is
+    /// one `List` row, and a `.sheet` on a recyclable cell is torn down with the
+    /// cell. `StressTile` owned this presentation until W3 and was the one
+    /// surface on Pulse that still did.
+    @State private var showingStress = false
     /// Which carousel page is showing.
     ///
     /// ── WHY IT LIVES HERE AND NOT IN `PulseCarousel` ────────────────────────
@@ -170,39 +177,41 @@ struct DayScreen: View {
             // alarming vital takes the lead from the night (`VitalsSection`).
             VitalsSection(model: model) { editingSleep = true }
 
-            // ── AND THEN THE THREE IT ASKS YOU ──────────────────────────────
-            // Fatigue, the stress log and soreness were three 44 pt rows at the
-            // BOTTOM of this screen, under a body map and five doors. They are
-            // the only things on Pulse that cannot be answered by a watch, and
-            // a row has no room for the answer AND the control. One page each,
-            // swiped between, with the verb on the card's face.
+            // ── AND THEN THE TWO IT ASKS YOU ────────────────────────────────
+            // Fatigue and the stress log were 44 pt rows at the BOTTOM of this
+            // screen, under a body map and five doors. They are the only things
+            // on Pulse that cannot be answered by a watch, and a row has no room
+            // for the answer AND the control. One page each, swiped between,
+            // with the verb on the card's face.
             PulseCarousel(
                 model: model,
                 page: $page,
                 onFatigue: { ratingFatigue = true },
                 onLogStress: { loggingStress = true },
-                onBrowseStress: { browsingStress = true },
-                onSoreness: { showSoreness = true }
+                onBrowseStress: { browsingStress = true }
             )
             .plainRow(edgeToEdge: true)
             .id(Self.carouselAnchor)
 
-            // ── WHY THESE TWO ARE ONE SECTION ───────────────────────────────
-            // What you weigh and what you took: two 44 pt rows that each state
-            // an answer and open a sheet, and neither is a question this screen
-            // asks — the scale is a device reading you transcribe and the stack
-            // is a list you maintain. The scale leads (§W11): what you weigh is
-            // the reading the other is context for.
-            Section {
-                ScaleRow(model: model) { entering = true }
-                StackRow(model: model) { showStack = true }
-            }
+            // ── AND THE FOUR IT MEASURES (W3) ───────────────────────────────
+            // The stress index was a full-width tile, the scale and the stack
+            // were a two-row section, and soreness was a third of the carousel
+            // above. Four readings, four kinds of chrome, ~560 pt. One 2 × 2
+            // grid of squares says all four in ~340 (`PulseSquareGrid`).
+            //
+            // Under the carousel, not above it: the index's `self` term is
+            // built from the fatigue slots and the stress log on the cards
+            // above, and a number placed above the thing it is partly made of
+            // asks to be read as a cause of it.
+            PulseSquareGrid(
+                model: model,
+                onStress: { showingStress = true },
+                onSoreness: { showSoreness = true },
+                onScale: { entering = true },
+                onStack: { showStack = true }
+            )
+            .plainRow()
             .id(Self.rowsAnchor)
-
-            // Under the log, not above it: the index's `self` term is built
-            // from the readings on the card above, and a number placed above
-            // the thing it is partly made of asks to be read as a cause of it.
-            StressTile(model: model).plainRow()
 
             // Whatever was trained on this date, and the door to the page that
             // reads it properly. §W11 asks for it on a PAST day; it is drawn
@@ -306,6 +315,7 @@ struct DayScreen: View {
         .sheet(isPresented: $loggingStress) { StressLogSheet(model: model) }
         .sheet(isPresented: $browsingStress) { StressLogListSheet(model: model) }
         .sheet(isPresented: $showSoreness) { SorenessSheet(model: model) }
+        .sheet(isPresented: $showingStress) { StressBreakdownSheet(model: model) }
         .sheet(isPresented: $editingSleep) { SleepEditSheet(model: model) }
         .navigationDestination(item: $openSession) { SessionDetailView(sessionId: $0.id) }
         .sheet(isPresented: $entering) { InBodyEntryView(model: model) }
@@ -395,15 +405,15 @@ struct DayScreen: View {
         }
     }
 
-    /// The anchor the harness scrolls to: the scale-and-stack section, which is
-    /// where the bottom half of the screen starts. Everything under it — the
-    /// stress index and the session card — is below the fold on a phone, and
-    /// everything above it is what the default `day` shot already photographs.
+    /// The anchor the harness scrolls to: the square grid, which is where the
+    /// bottom half of the screen starts. Everything under it — the session
+    /// cards — is below the fold on a phone, and everything above it is what
+    /// the default `day` shot already photographs.
     private static let rowsAnchor = "pulse.rows"
 
     /// The carousel row. At an accessibility size the Now strip alone is most
-    /// of the screen, so the three cards are below the fold by definition and a
-    /// shot of "page two at AX5" photographs the strip — which is how the time
+    /// of the screen, so the cards are below the fold by definition and a shot
+    /// of "page two at AX5" photographs the strip — which is how the time
     /// strip's own accessibility layout went unreviewed for a round.
     private static let carouselAnchor = "pulse.carousel"
 

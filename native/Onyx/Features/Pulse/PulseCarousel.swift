@@ -3,19 +3,27 @@ import OnyxUI
 import OnyxCore
 
 // ─────────────────────────────────────────────────────────────────────────────
-// THE THREE SELF-REPORTS, SIDE BY SIDE (founder decision 7).
+// THE SELF-REPORTS, SIDE BY SIDE (founder decision 7).
 //
-// Fatigue, the stress log and soreness were three 44 pt rows in the section at
-// the bottom of Pulse, each stating an answer and opening a sheet. They are the
-// three questions this screen ASKS — everything else on it is a measurement
-// something else took — and they were the last thing on it, under a body map
-// and five doors, because a row is what you make a thing when you have run out
-// of screen.
+// Fatigue and the stress log were 44 pt rows in the section at the bottom of
+// Pulse, each stating an answer and opening a sheet. They are the questions
+// this screen ASKS — everything else on it is a measurement something else
+// took — and they were the last thing on it, under a body map and five doors,
+// because a row is what you make a thing when you have run out of screen.
 //
 // One page each, swiped between. A page is a card with room for the answer AND
-// the verb, which is what turns three readings you look at into three readings
-// you give. The peek on the right edge is the whole navigation affordance: a
-// pager that looks like a single card is a pager nobody discovers.
+// the verb, which is what turns a reading you look at into a reading you give.
+// The peek on the right edge is the whole navigation affordance: a pager that
+// looks like a single card is a pager nobody discovers.
+//
+// ── TWO PAGES SINCE W3, NOT THREE ───────────────────────────────────────────
+// Soreness left. It was the one page whose verb was a DOOR rather than an
+// answer — `SorenessCard` deliberately never drew the figure, because the atlas
+// is a control and a control shrunk into a third of a pager is neither readable
+// nor tappable — so a whole page was spent restating a list the square grid
+// below now states in a quarter of the space. The rating itself never moved:
+// the severity popover has always lived on the map (`DomsTile`), which is what
+// `SorenessSheet` opens onto.
 //
 // ── WHY A NATIVE `viewAligned` SCROLL AND NOT A HAND-ROLLED PAGER ───────────
 // `SmartStackView.swift:33-60` records what a hand-rolled pager costs on the
@@ -29,15 +37,14 @@ import OnyxCore
 /// Which page is showing. Held by `DayScreen` rather than by the carousel, so
 /// a `List` cell recycle cannot reset it — see `PulseCarousel`.
 enum PulsePage: String, CaseIterable, Identifiable, Hashable {
-    case fatigue, stress, soreness
+    case fatigue, stress
     var id: String { rawValue }
 
     /// What VoiceOver calls the page, and what the dots announce.
     var title: String {
         switch self {
-        case .fatigue:  "Fatigue"
-        case .stress:   "Stress log"
-        case .soreness: "Soreness"
+        case .fatigue: "Fatigue"
+        case .stress:  "Stress log"
         }
     }
 }
@@ -46,8 +53,8 @@ enum PulsePage: String, CaseIterable, Identifiable, Hashable {
 ///
 /// ── WHY NOT `DayTile` ───────────────────────────────────────────────────────
 /// `DayTile` has no height contract, which is correct for a tile that owns a
-/// full-width row and wrong for one of three pages that have to agree. A page
-/// shorter than its neighbours makes the carousel's row jump on every swipe,
+/// full-width row and wrong for one of two pages that have to agree. A page
+/// shorter than its neighbour makes the carousel's row jump on every swipe,
 /// and a `List` row that changes height while a scroll is in flight is a row
 /// that fights the scroll. So: one floor, scaled with the type, and the content
 /// is pinned to the top of it with the verb at the bottom.
@@ -61,19 +68,31 @@ struct PulseCard<Content: View>: View {
 
     @Environment(\.dynamicTypeSize) private var typeSize
 
-    /// Measured from the tallest of the three at shipping type: two capsule
-    /// rows, a 44 pt verb and 12 pt of padding each end. `@ScaledMetric`
-    /// because every word inside grows with the type and a fixed floor would
-    /// clip the verb at xxLarge — which is the one control the page exists for.
-    @ScaledMetric(relativeTo: .body) private var floor: CGFloat = 196
+    /// ── HALVED IN W3 (MEASURED) ─────────────────────────────────────────────
+    /// 196 was measured from the tallest of THREE pages, and it was a floor in
+    /// name only: at shipping type the content of every page — a header, one
+    /// capsule row and the 44 pt verb — comes to about 130 pt, so the other 66
+    /// were empty glass on all three pages at once, in a carousel that is a
+    /// `List` row on a screen budgeted at a screen and a half.
+    ///
+    /// 116 is the real floor: 18 pt header + 12 + a 32 pt capsule row + 12 +
+    /// the 44 pt verb − the padding the frame adds back. The cards still agree
+    /// with each other, because an eager `HStack` sizes every child to the
+    /// tallest of them whatever their own floors say; what the floor stops is a
+    /// page with ONE short line collapsing to 60 pt on the day nothing is
+    /// logged. `@ScaledMetric` because every word inside grows with the type and
+    /// a fixed floor would clip the verb at xxLarge — the one control the page
+    /// exists for.
+    @ScaledMetric(relativeTo: .body) private var floor: CGFloat = 116
 
     /// ── AND CAPPED ──────────────────────────────────────────────────────────
-    /// At AX5 the metric scales to ~460 pt, which is taller than the tallest of
-    /// the three actually is there (the stress card's two stacked rows, its
-    /// wrapped header and its verb come to roughly 320) — so every page got
-    /// 140 pt of empty glass and the carousel became most of the screen. The
-    /// cap keeps the three agreeing, which is all the floor was ever for.
-    private var cardHeight: CGFloat { min(floor, 340) }
+    /// At AX5 the metric scales to ~270 pt, which is taller than either page
+    /// actually is there — so the pages went back to being mostly empty glass
+    /// and the carousel became most of the screen again. 200 is where the
+    /// stress card's two stacked rows, its wrapped header and its wrapped verb
+    /// land at AX5; the cap keeps the two agreeing, which is all the floor was
+    /// ever for.
+    private var cardHeight: CGFloat { min(floor, 200) }
 
     init(_ title: String, _ domain: OnyxDomain, trailing: String? = nil,
          @ViewBuilder content: @escaping () -> Content) {
@@ -122,7 +141,7 @@ struct PulseCard<Content: View>: View {
 ///
 /// A page in a pager cannot be a button — the whole surface is a pan target —
 /// so the action is an explicit control rather than a tap anywhere, which is
-/// also what makes the three pages read as forms rather than as summaries.
+/// also what makes the pages read as forms rather than as summaries.
 struct PulseCardAction: View {
     let symbol: String
     let title: String
@@ -159,7 +178,7 @@ struct PulseCardAction: View {
 
 // MARK: - The pager
 
-/// Three pages and three dots.
+/// Two pages and two dots.
 ///
 /// ── WHY `page` IS A BINDING FROM `DayScreen` (MEASURED) ─────────────────────
 /// This whole view is one `List` row, and a row scrolled out of the window and
@@ -179,7 +198,6 @@ struct PulseCarousel: View {
     let onFatigue: () -> Void
     let onLogStress: () -> Void
     let onBrowseStress: () -> Void
-    let onSoreness: () -> Void
 
     /// How much of the next page shows. Enough to read as a card edge rather
     /// than as a rendering artefact, and not so much that the page in focus
@@ -215,9 +233,8 @@ struct PulseCarousel: View {
                 // List row is shorter than its content and changes height
                 // mid-scroll, the exact failure the floor exists to prevent.
                 // And an unrealised child is NOT in the accessibility tree, so
-                // VoiceOver cannot swipe from page one to pages two and three
-                // at all. Three children: laziness buys nothing and costs the
-                // gate.
+                // VoiceOver cannot swipe from page one to page two at all. Two
+                // children: laziness buys nothing and costs the gate.
                 HStack(spacing: OnyxSpace.l) {
                     ForEach(PulsePage.allCases) { which in
                         card(which)
@@ -258,24 +275,22 @@ struct PulseCarousel: View {
             FatigueCard(model: model, onRate: onFatigue)
         case .stress:
             StressLogCard(model: model, onLog: onLogStress, onBrowse: onBrowseStress)
-        case .soreness:
-            SorenessCard(model: model, onRate: onSoreness)
         }
     }
 
     /// Where you are, and the only thing on screen that says there is more than
     /// one page when the peek is cut off by a narrow phone.
     ///
-    /// Not a control: three 6 pt dots is a target nobody hits, and the page it
-    /// would move to is one swipe away.
+    /// Not a control: a 6 pt dot is a target nobody hits, and the page it would
+    /// move to is one swipe away.
     ///
     /// ── AND HIDDEN FROM VOICEOVER ───────────────────────────────────────────
-    /// The eager `HStack` above puts all three cards in the accessibility tree,
-    /// so a reader swipes through the three pages directly and VoiceOver scrolls
-    /// the carousel to follow. A fourth element announcing "Page, Soreness"
-    /// would then be both redundant and STALE — it tracks the scroll position,
-    /// not the focused card, so it names a different page from the one being
-    /// read. It is decoration for the eye, and it says so.
+    /// The eager `HStack` above puts both cards in the accessibility tree, so a
+    /// reader swipes through the pages directly and VoiceOver scrolls the
+    /// carousel to follow. A third element announcing "Page, Stress log" would
+    /// then be both redundant and STALE — it tracks the scroll position, not the
+    /// focused card, so it names a different page from the one being read. It is
+    /// decoration for the eye, and it says so.
     private var dots: some View {
         HStack(spacing: OnyxSpace.xs) {
             ForEach(PulsePage.allCases) { which in
@@ -418,140 +433,5 @@ struct FatigueCard: View {
 
     private var costSpoken: String {
         Fatigue.delta(day).map { ", session cost \($0 >= 0 ? "+" : "")\($0)" } ?? ""
-    }
-}
-
-// MARK: - Soreness
-
-/// Where it hurts, in words, and the door to the body it hurts on.
-///
-/// ── WHY THE FIGURE IS NOT ON THE PAGE ───────────────────────────────────────
-/// The atlas is 280–360 pt before its caption and it is a CONTROL — a quad has
-/// to be a target a thumb can hit. Shrunk to a 196 pt page it is neither
-/// readable nor tappable, and a body you cannot aim at is the exact failure
-/// `DomsTile`'s own header comment records from the tile before it. So the page
-/// states the answer the map would give and hands the reader to `SorenessSheet`,
-/// where the figure is at the size it is a control at.
-struct SorenessCard: View {
-    let model: DayModel
-    let onRate: () -> Void
-
-    @Environment(\.dynamicTypeSize) private var typeSize
-
-    private var severity: [String: Int] { model.domsSeverity }
-
-    /// The groups with something on them, WORST FIRST. Ties keep `DomsMap`'s
-    /// display order, so the list is stable between ratings — a dictionary
-    /// order would reshuffle the capsules on every tap.
-    private var sore: [(group: String, level: Int)] {
-        DomsMap.muscles
-            .compactMap { group -> (group: String, level: Int)? in
-                guard let level = severity[group], level > 0 else { return nil }
-                return (group, level)
-            }
-            .enumerated()
-            .sorted { a, b in
-                a.element.level != b.element.level ? a.element.level > b.element.level : a.offset < b.offset
-            }
-            .map(\.element)
-    }
-
-    /// The same cap the stress strip takes, for the same reason: this page
-    /// cannot grow sideways and must not grow taller than its siblings.
-    private var visibleCount: Int { typeSize.isAccessibilitySize ? 2 : 3 }
-    private var shown: [(group: String, level: Int)] { Array(sore.prefix(visibleCount)) }
-    private var hidden: Int { max(0, sore.count - shown.count) }
-
-    var body: some View {
-        PulseCard("Soreness", .recover, trailing: sore.isEmpty ? nil : "\(sore.count) sore") {
-            list
-            Spacer(minLength: 0)
-            PulseCardAction(symbol: "figure.arms.open", title: "Open the map", action: onRate)
-        }
-    }
-
-    @ViewBuilder
-    private var list: some View {
-        if sore.isEmpty {
-            Text("Nothing sore")
-                .onyxType(.secondary)
-                .foregroundStyle(Color.onyx.textTertiary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else if typeSize.isAccessibilitySize {
-            // ── A CAPSULE CANNOT SHRINK INSIDE A `FlowRow` ──────────────────
-            // `FlowRow` is a `Layout`: it proposes each subview its IDEAL width
-            // and places it there, so a `minimumScaleFactor` is never offered a
-            // narrower width to shrink into and "Quads moderate" simply runs
-            // off the card's edge — no ellipsis, no warning. At AX5 the
-            // capsules become rows for the same reason the stress strip does,
-            // and the two pages then look like siblings rather than like one
-            // that forgot.
-            VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                ForEach(shown, id: \.group) { entry in
-                    HStack(spacing: OnyxSpace.s) {
-                        Text(entry.group)
-                            .onyxType(.caption)
-                            .foregroundStyle(Color.onyx.textSecondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                        Spacer(minLength: OnyxSpace.s)
-                        Text(DomsMap.levels[min(entry.level, DomsMap.maxSeverity)])
-                            .onyxType(.body).fontWeight(.semibold)
-                            .foregroundStyle(Color.onyx.severity(entry.level))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                    }
-                    .frame(minHeight: 44)
-                }
-                if hidden > 0 {
-                    Text("+\(hidden) more")
-                        .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
-                        .foregroundStyle(Color.onyx.textSecondary)
-                }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Sore")
-            .accessibilityValue(spoken)
-        } else {
-            FlowRow(spacing: OnyxSpace.xs) {
-                ForEach(shown, id: \.group) { entry in capsule(entry) }
-                if hidden > 0 {
-                    Text("+\(hidden)")
-                        .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
-                        .foregroundStyle(Color.onyx.textSecondary)
-                        .padding(.horizontal, OnyxSpace.s)
-                        .frame(minHeight: 32)
-                        .background(Capsule().fill(Color.onyx.hairline))
-                }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Sore")
-            .accessibilityValue(spoken)
-        }
-    }
-
-    /// The group and how bad, in the severity's own ink — §3.2's ramp, the
-    /// same one the figure paints the muscle in.
-    private func capsule(_ entry: (group: String, level: Int)) -> some View {
-            // ── A CAPSULE CANNOT WRAP, SO IT HAS TO SHRINK ──────────────────
-            // `FlowRow` wraps BETWEEN subviews and never inside one, and a page
-            // cannot grow sideways — so a capsule wider than the card is simply
-            // cut off by the card's own edge, with no ellipsis to say so. At AX5
-            // "Quads moderate" is exactly that. 0.7 of a 53 pt accessibility
-            // body is still above this design system's 11 pt floor.
-        Text("\(entry.group) \(DomsMap.levels[min(entry.level, DomsMap.maxSeverity)].lowercased())")
-            .onyxType(.caption).fontWeight(.semibold)
-            .foregroundStyle(Color.onyx.severity(entry.level))
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .padding(.horizontal, OnyxSpace.s)
-            .frame(minHeight: 32)
-            .background(Capsule().fill(Color.onyx.severity(entry.level).opacity(0.16)))
-    }
-
-    private var spoken: String {
-        sore
-            .map { "\($0.group) \(DomsMap.levels[min($0.level, DomsMap.maxSeverity)].lowercased())" }
-            .joined(separator: ", ")
     }
 }

@@ -18,22 +18,23 @@ import OnyxCore
 // felt it. One is a measurement you cannot argue with; the other is an opinion
 // you are asked for, and it is an INPUT to the first.
 //
-// They now sit on one screen (the log in the carousel, the index below it), so
-// the separation has to be structural rather than a matter of wording:
+// They sit on one screen — the log in the carousel, the index in the square
+// grid directly below it — so the separation has to be structural rather than a
+// matter of wording:
 //
-//   • THE NUMERAL IS THE INDEX'S, AND ONLY THE INDEX'S. The tile owns
-//     `onyxHero()` on an integer and a `Sparkline`. Nothing in this file sets a
+//   • THE NUMERAL IS THE INDEX'S, AND ONLY THE INDEX'S. `StressSquare` owns the
+//     `.display` integer and the `Sparkline`. Nothing in this file sets a
 //     reading above `.body`. The only figures here are clock stamps at
 //     `.caption` — metadata, not measurements.
-//   • THE AXIS DIFFERS. The tile's x-axis is fourteen days, drawn as a
+//   • THE AXIS DIFFERS. The square's x-axis is fourteen days, drawn as a
 //     continuous line; this card's x-axis is today's clock, drawn as discrete
 //     stamps. The trailing words say so out loud: "14 days" against "N today".
-//   • THE INK DIFFERS. The tile takes `StressBand.tint`, whose two loaded bands
-//     are Solar's stops (`OnyxDomain.fuel.start/end`) and appear nowhere else
-//     on Pulse. A typed reading takes `Color.onyx.fatigue(level)` — the shared
-//     severity ramp, the same one the fatigue card beside it uses, because D6
-//     folds the two answers into ONE term of the index.
-//   • THE POSTURE DIFFERS. The tile is a button onto a read-only breakdown.
+//   • THE INK DIFFERS. The square takes `StressBand.tint`, whose two loaded
+//     bands are Solar's stops (`OnyxDomain.fuel.start/end`) and appear nowhere
+//     else on Pulse. A typed reading takes `Color.onyx.fatigue(level)` — the
+//     shared severity ramp, the same one the fatigue card beside it uses,
+//     because D6 folds the two answers into ONE term of the index.
+//   • THE POSTURE DIFFERS. The square is a button onto a read-only breakdown.
 //     This card carries its verb on its face.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ enum StressStamp {
 ///
 /// ── WHY A CAP AND NOT A WRAP ────────────────────────────────────────────────
 /// This card is one page of a horizontal pager, so it cannot grow sideways, and
-/// its two siblings have to agree with it about height — a flow-wrapped strip
+/// its sibling has to agree with it about height — a flow-wrapped strip
 /// would set the carousel's height from the worst day anyone ever has, and
 /// would change that height under the thumb the moment you logged. A day with
 /// twelve readings is a real day; a card four hundred points tall is not.
@@ -108,8 +109,8 @@ struct StressLogCard: View {
         PulseCard(
             "Stress log",
             .recover,
-            // The unit that says which axis this is. The index tile's trailing
-            // word is "14 days"; this one counts today.
+            // The unit that says which axis this is. The index square's
+            // trailing word is "14 days"; this one counts today.
             // "today" only on today: `DayScreen` draws past dates too (the
             // calendar, the chevrons, History's push), and a card that says
             // "3 today" while standing on 3 September is a card that lies about
@@ -270,8 +271,18 @@ struct StressLogSheet: View {
     @State private var tags: Set<StressTag> = []
     @State private var note = ""
     @State private var at: Date?
+    /// Whether the note is open. Closed on every open: the field is the one
+    /// control on this sheet most days do not use, and 88 pt of `Form` for a
+    /// line nobody types is the compaction W3 is spending everywhere else.
+    @State private var noteOpen = false
     /// The chip grid's column minimum, scaled — see `tagSection`.
-    @ScaledMetric(relativeTo: .footnote) private var chipWidth: CGFloat = 96
+    ///
+    /// 84, not 96 (W3). 96 packed three columns on a 375 pt phone with 30 pt of
+    /// slack in each; 84 packs four, which takes the seven chips from three rows
+    /// to two and ~50 pt off the sheet. The `@ScaledMetric` is what still
+    /// reflows it to one column at the accessibility sizes, so the number below
+    /// is a packing decision at shipping type and nothing else.
+    @ScaledMetric(relativeTo: .footnote) private var chipWidth: CGFloat = 84
 
     /// Midnight to now on the day being logged.
     ///
@@ -312,9 +323,9 @@ struct StressLogSheet: View {
             "Log stress",
             domain: .recover,
             glass: false,
-            // A form: five words, a wheel, a chip grid and a note do not fit a
-            // medium detent, and a sheet that opens already clipped is worse
-            // than one that opens tall.
+            // A form: five words, a wheel and a chip grid do not fit a medium
+            // detent even with the note folded away, and a sheet that opens
+            // already clipped is worse than one that opens tall.
             detents: [.large],
             // `dayStart` nil means the date did not parse, which cannot
             // happen from a `LogicalDay` string — but if it ever did, `bounds`
@@ -324,8 +335,7 @@ struct StressLogSheet: View {
             primary: ("Save", level != nil && dayStart != nil, save)
         ) {
             Form {
-                wordSection
-                timeSection
+                wordAndTimeSection
                 tagSection
                 noteSection
             }
@@ -340,9 +350,20 @@ struct StressLogSheet: View {
         .task { if at == nil { at = bounds.upperBound } }
     }
 
-    // MARK: The five words
+    // MARK: The five words, and the clock
 
-    private var wordSection: some View {
+    /// ── ONE SECTION, NOT TWO (W3) ───────────────────────────────────────────
+    /// The word and the time were two `Form` sections: two headers, two footers
+    /// and ~34 pt of inter-section inset between a question and the clock it is
+    /// being answered about. They are one act — you say how it was, and when —
+    /// and merging them takes ~90 pt off a sheet that opens at `.large` because
+    /// it did not fit a medium detent.
+    ///
+    /// Both footers survive verbatim, in the order they are read. The anchors
+    /// explain the five words; the slot line explains that the bucket is derived
+    /// and never chosen, which is the one thing a reader who has only ever seen
+    /// the three slot names needs told.
+    private var wordAndTimeSection: some View {
         Section {
             FiveWordPicker(words: PsychStress.levels.map(FiveWordPicker.Word.init), selected: level) { value in
                 level = value
@@ -350,22 +371,6 @@ struct StressLogSheet: View {
             .listRowInsets(EdgeInsets(
                 top: OnyxSpace.s, leading: OnyxSpace.s, bottom: OnyxSpace.s, trailing: OnyxSpace.s
             ))
-        } header: {
-            OnyxSectionHeader("How it was", .recover)
-        } footer: {
-            Text(anchors).fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var anchors: String {
-        guard let first = PsychStress.levels.first, let last = PsychStress.levels.last else { return "" }
-        return "\(first.label) = \(first.hint). \(last.label) = \(last.hint)."
-    }
-
-    // MARK: The time
-
-    private var timeSection: some View {
-        Section {
             DatePicker(
                 "Time",
                 // ── THE CLAMP IS THE BINDING'S JOB, NOT THE PICKER'S ────────
@@ -385,14 +390,22 @@ struct StressLogSheet: View {
             )
             .frame(minHeight: 44)
         } header: {
-            OnyxSectionHeader("When", .recover)
+            OnyxSectionHeader("How it was, and when", .recover)
         } footer: {
-            // The bucket, stated rather than chosen. A reader who has only ever
-            // seen the three slot names needs to know they still exist and that
-            // nothing here asks them to pick one.
-            Text("Files under \(slot.label.lowercased()). The part of the day is worked out from the time — you never pick it.")
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+                Text(anchors)
+                // The bucket, stated rather than chosen. A reader who has only
+                // ever seen the three slot names needs to know they still exist
+                // and that nothing here asks them to pick one.
+                Text("Files under \(slot.label.lowercased()). The part of the day is worked out from the time — you never pick it.")
+            }
+            .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var anchors: String {
+        guard let first = PsychStress.levels.first, let last = PsychStress.levels.last else { return "" }
+        return "\(first.label) = \(first.hint). \(last.label) = \(last.hint)."
     }
 
     // MARK: The chips
@@ -443,14 +456,41 @@ struct StressLogSheet: View {
 
     // MARK: The note
 
+    /// ── FOLDED AWAY UNTIL IT IS WANTED (W3) ─────────────────────────────────
+    /// A four-line `TextField` and its footer is ~88 pt at the bottom of a sheet
+    /// whose primary control is five words at the top, and the note is optional
+    /// on a reading most days answer in one tap. Behind a disclosure it costs
+    /// one 44 pt row, and the row carries what was typed so closing it is not
+    /// the same as losing it.
+    ///
+    /// NOT a `.sheet` or a second screen: the note is saved by the same Save
+    /// button as everything else on this form, and a control that leaves the
+    /// form is a control that has to be brought back to it.
     private var noteSection: some View {
         Section {
-            // `TextField(axis: .vertical)`, not a `TextEditor`: the editor has
-            // no placeholder, no intrinsic height and draws its own box inside
-            // a `Form` row that is already a box.
-            TextField("Note", text: $note, axis: .vertical)
-                .lineLimit(1...4)
+            DisclosureGroup(isExpanded: $noteOpen) {
+                // `TextField(axis: .vertical)`, not a `TextEditor`: the editor
+                // has no placeholder, no intrinsic height and draws its own box
+                // inside a `Form` row that is already a box.
+                TextField("Note", text: $note, axis: .vertical)
+                    .lineLimit(1...4)
+                    .frame(minHeight: 44)
+            } label: {
+                HStack(spacing: OnyxSpace.s) {
+                    Text("Note").onyxType(.body)
+                    Spacer(minLength: OnyxSpace.s)
+                    // What is in there, when it is shut. A disclosure that hides
+                    // a line you already typed and gives no sign of it is a
+                    // disclosure that loses work.
+                    if !noteOpen, !note.isEmpty {
+                        Text(note)
+                            .onyxType(.caption)
+                            .foregroundStyle(Color.onyx.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
                 .frame(minHeight: 44)
+            }
         } footer: {
             Text("Optional. It stays on your account and is never read by anything that scores a day.")
         }
