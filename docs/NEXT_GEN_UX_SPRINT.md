@@ -1196,7 +1196,7 @@ Whole-sprint acceptance, on a device:
 
 **Founder's manual steps (nothing here can be done from this machine):**
 - ~~Paste `docs/sql/w1-hk-uuid.sql` after W1.~~ **Done 2026-09-15; file deleted.**
-- Paste `docs/sql/w9-doms-laterality.sql` after W9.
+- Paste `docs/sql/w9-doms-laterality.sql` after W9. **Requires Postgres 15+ (`NULLS NOT DISTINCT`).**
 - Paste `docs/sql/w11-isolation-rls.sql` after W11, then re-run the schema introspection to confirm every table reports RLS enabled.
 
 ---
@@ -2180,3 +2180,126 @@ the sprint still owes are W9's and W11's, unchanged.
 entitlement (Gate 0, paid Developer Program) remains the one thing that makes
 the widget's theme actually shared — everything else about it now works and
 says so out loud when it cannot.
+
+---
+
+### W9 Wave Record — shipped 2026-09-16 as 3.18.0
+
+**Drift from the plan, on purpose:**
+
+- **A14's `coalesce(...)` index cannot exist.** The plan says the conflict target
+  becomes `(user_id, date, muscle_group, coalesce(side,'both'),
+  coalesce(sub_region,''))` "expressed as a unique index so PostgREST can name
+  it". PostgREST cannot name it. `?on_conflict=` takes a COLUMN LIST and emits
+  `ON CONFLICT (a, b, c) DO UPDATE`; it has no syntax for an expression, so an
+  expression index is unreachable from the client and every upsert would fail
+  outright with *"no unique or exclusion constraint matching the ON CONFLICT
+  specification"*. Shipped instead as a plain five-column unique index with
+  **`NULLS NOT DISTINCT`** (Postgres 15+, which Supabase has shipped on new
+  projects since 2023 — the SQL file says so out loud, because on an older
+  server the clause is a syntax error rather than a silent downgrade). That
+  clause is load-bearing twice over: without it two legacy NULL rows are unique
+  against each other, AND `ON CONFLICT` never fires for a bilateral rating, so
+  every re-rating of a whole muscle would INSERT beside the old row instead of
+  updating it. The columns stay nullable exactly as the plan wanted.
+- **`.center` is spelled `.both`.** The plan names three vocabularies for one
+  idea — the atlas's "centre", the column's `both`, the export's empty marker —
+  and they collapse: a path that straddles the spine is a muscle with no side,
+  and a muscle with no side is rated for both of them. One `BodySide` enum whose
+  `rawValue` IS the stored string, so a round trip through `doms_logs` needs no
+  translation table, and whose `.mark` is the export's `""`/`L`/`R`. The
+  self-check's "Upper back, Lower back and Abs/core are `.center`" is asserted
+  as `.both`.
+- **`muscle(at:in:side:)` returns `MuscleSide?`, not a tuple.** An optional
+  tuple is not `Equatable`, so every call site and every assertion would have had
+  to destructure it — and `MuscleSide` is the key `AtlasFigure` re-keys on
+  anyway, so the pair wanted a name regardless. The `side:` LABEL still means
+  the view; the doc comment says so, because `muscle(at: p, in: r, side: .front)
+  -> (muscle, .left)` is two different words spelled the same.
+- **The centroid rule alone would have lateralised the obliques.** `Abs/core`'s
+  three front paths are a rectus at x ≈ 60 and two flanks at x ≈ 45 and x ≈ 75,
+  so a bare centroid test gives one `both`, one `left` and one `right` — and
+  tapping the middle of a midsection would offer "both" while tapping an inch
+  left offered "left", for one muscle. A second pass makes a muscle lateral only
+  where a view draws it as EXACTLY one left and one right; anything else (one
+  path, three paths, two on the same side) is wholly axial. **Derived, not
+  listed** — a hand-written set of axial muscles is a fourth copy of the anatomy
+  and `check:atlas` could not tell when it went stale.
+- **The atlas is read as a MIRROR.** Image-left is the body's left on BOTH
+  views, which is what "a tap left of the midline answers `.left`" asks for and
+  what a lifter looking at a self-report map expects. (Face a mirror and raise
+  your left hand: it is on the left of your visual field. Stand a camera behind
+  yourself: same.) Stated here because the other convention — the front view as
+  *another person facing you* — is equally coherent and would flip every front
+  answer.
+
+**Root causes that were not where the plan guessed:**
+
+- **`DayModel` does not subscribe on `init` — `observe()` does.** The new
+  `pulse-squares` shot photographed four EMPTY squares over a fully seeded
+  store, twice, deterministically. Nothing about the seed or the timing was
+  wrong; the harness screen simply never called `await model?.observe()`, which
+  `PulseTabView.task` does and which `DomsOnly` does. An empty state is a
+  plausible-looking screenshot, so this failure mode reviews as a design
+  decision rather than as a bug. **Any new Pulse harness screen must call
+  `observe()`.**
+- **Two `PostToolUse` hooks in `.claude/settings.json` still pointed at the dead
+  Helix checkout** and failed on every single `.swift` edit (`bash:
+  scripts/check-swift.sh: No such file or directory`) — the condition
+  `deep-clean-purge-sep15` recorded. Fixed in passing: the `.swift` hook now
+  `cd`s to Onyx, where `scripts/check-swift.sh` exists and runs in 6 s; the
+  `src/lib/` `tsc` hook was deleted, because this repo has no `src/lib/` and the
+  web app it typechecked is gone. **`.claude/` is gitignored, so this repair is
+  LOCAL and did not ship with the wave** — the next checkout of this repo gets
+  the broken hooks back.
+
+**Constraints discovered that the next wave must respect:**
+
+- **`npm run check` compiles `OnyxTests` but runs only `OnyxUITests`** (21
+  tests). `scripts/swift-ui-test.sh` passes `-only-testing:OnyxUITests`, so a
+  broken assertion in `native/OnyxTests` fails the gate as a COMPILE error and
+  passes it as a green run. `AtlasHitTests` must be run explicitly. The baseline
+  is still the documented **4 failures** (`HistoryWeeksTests` ×2,
+  `SessionSummaryHotfixTests`, `WorkoutWeekTests`).
+- **`ScoringInputsBuilder`'s `ponytail:` note is discharged.** It said the local
+  store had no side/sub_region columns and to add the migration "when the native
+  logger grows a side control". It has; `v28` is that migration. The note is
+  replaced by a statement of WHY nothing there changed.
+- **An axial landmark takes only a `both` rating.** "Back, left" rings the left
+  lat and leaves the traps and erectors unringed, because the trapezius is one
+  path and has no left. This is deliberate and documented on `DomsTile.colors` —
+  but it means a group containing both lateral and axial landmarks lights
+  partially, and a wave that dislikes that has to split `Back` in the DOMS
+  vocabulary, not patch the figure.
+- **`OnyxAtlas.swift` now imports `OnyxCore`.** The generated atlas was
+  SwiftUI-only. Anything that consumes `OnyxAtlasPath` inherits that dependency;
+  OnyxUI already depended on OnyxCore, so nothing moved, but the generated file
+  is no longer standalone geometry.
+
+**Left open on purpose:**
+
+- **`sub_region` has a column, a key, a grammar and no writer.** The atlas has no
+  sub-region geometry — there is no "Erectors" path to tap — so building a
+  second picker into the popover would be a control with nothing behind it. The
+  store, the sync, the export and the tests all carry it end to end; the UI that
+  fills it is a future wave's, and `DayEditing.setDoms(subRegion:)` is waiting
+  for it.
+- **`AtlasSheet` keys everything `both`.** Its question is "where did this
+  session land", and the ledger records that a set of squats happened, not which
+  leg did more of it. A side-specific number there would be one the store never
+  held.
+- **`AtlasFigure.colors` still has no caller.** It was already unused before this
+  wave; it was re-keyed rather than deleted because its docstring states a real
+  design distinction (fill versus ring) that the DOMS body may yet need.
+- **A dead dictionary key per axial landmark of a sided group.** Filtering them
+  out means asking the atlas which landmarks are lateral — a second traversal to
+  save three entries. Carries a `ponytail:` note.
+
+**Founder's manual steps still outstanding:** **paste
+`docs/sql/w9-doms-laterality.sql`.** Until it lands, a ONE-SIDED rating's push is
+rejected for an unknown column — per-row, retried under `SyncBackoff`, and it
+clears itself on the first sync after the paste, exactly as `v24.stressEvents`
+and `v26.healthWorkoutUuid` did. A bilateral rating is unaffected, because it
+sends neither column. The file requires **Postgres 15+** for `NULLS NOT
+DISTINCT`; it ends with a two-query VERIFY block, and the counts are the pass,
+not the absence of an error.
