@@ -73,7 +73,29 @@ comment on column public.doms_logs.sub_region is
 -- A named constraint and a bare unique index are dropped by different
 -- statements and the schema was never checked in, so both are attempted. The
 -- DO block finds anything unique over exactly those three columns rather than
--- guessing at a name Supabase may have generated.
+-- guessing at a name Supabase may have generated. A constraint's own index is
+-- dropped with it, and the second loop skips constraint-backed indexes, so
+-- nothing is dropped twice.
+--
+-- The first draft of this block compared `array_agg(a.attname)` against
+-- `array['date', …]` and failed with
+--
+--   ERROR: 42883: operator does not exist: name[] = text[]
+--
+-- because `pg_attribute.attname` is `name`, not `text`, and Postgres has no
+-- equality operator between those two array types. The whole transaction rolled
+-- back, so nothing had been applied — which is the one good thing about putting
+-- it all inside `begin`/`commit`.
+--
+-- Rather than bolt a `::text` onto it, both loops now COUNT matching columns
+-- instead of comparing arrays. A count has no composite type to get wrong, it
+-- does not care what order the columns were declared in, and pairing it with a
+-- key-width check is exactly as precise as set equality was meant to be.
+--
+-- The index loop also avoids `unnest(x.indkey)`: `indkey` is an `int2vector`,
+-- which is not an array type, so `unnest()` — declared over `anyarray` — does
+-- not resolve against it. Its text form is space-separated numbers, and
+-- `string_to_array` turns that into a real array on every server version.
 do $$
 declare
   target text;
@@ -81,16 +103,15 @@ begin
   for target in
     select c.conname
       from pg_constraint c
-      join pg_class t on t.oid = c.conrelid
-      join pg_namespace n on n.oid = t.relnamespace
-     where n.nspname = 'public'
-       and t.relname = 'doms_logs'
+     where c.conrelid = 'public.doms_logs'::regclass
        and c.contype = 'u'
+       and coalesce(array_length(c.conkey, 1), 0) = 3
        and (
-         select array_agg(a.attname order by a.attname)
+         select count(*)
            from unnest(c.conkey) as k(attnum)
            join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
-       ) = array['date', 'muscle_group', 'user_id']
+          where a.attname in ('user_id', 'date', 'muscle_group')
+       ) = 3
   loop
     execute format('alter table public.doms_logs drop constraint %I', target);
     raise notice 'dropped constraint %', target;
@@ -100,17 +121,16 @@ begin
     select i.relname
       from pg_index x
       join pg_class i on i.oid = x.indexrelid
-      join pg_class t on t.oid = x.indrelid
-      join pg_namespace n on n.oid = t.relnamespace
-     where n.nspname = 'public'
-       and t.relname = 'doms_logs'
+     where x.indrelid = 'public.doms_logs'::regclass
        and x.indisunique
+       and x.indnkeyatts = 3
        and not exists (select 1 from pg_constraint c where c.conindid = i.oid)
        and (
-         select array_agg(a.attname order by a.attname)
-           from unnest(x.indkey) as k(attnum)
+         select count(*)
+           from unnest(string_to_array(x.indkey::text, ' ')::int2[]) as k(attnum)
            join pg_attribute a on a.attrelid = x.indrelid and a.attnum = k.attnum
-       ) = array['date', 'muscle_group', 'user_id']
+          where a.attname in ('user_id', 'date', 'muscle_group')
+       ) = 3
   loop
     execute format('drop index public.%I', target);
     raise notice 'dropped index %', target;
@@ -149,8 +169,7 @@ end $$;
 commit;
 
 -- ── VERIFY ───────────────────────────────────────────────────────────────────
--- Both columns present, one unique index over five columns, nothing unique over
--- three. Run it after the commit and read the counts — "no output" is not a pass.
+-- Run all three after the commit and READ THE COUNTS — "no error" is not a pass.
 --
 --   select column_name, is_nullable
 --     from information_schema.columns
@@ -160,5 +179,27 @@ commit;
 --   select indexname, indexdef
 --     from pg_indexes
 --    where tablename = 'doms_logs' and indexdef ilike '%unique%';
---   -- expect doms_logs_user_date_muscle_side_sub_key, and it must read
+--   -- expect doms_logs_pkey and doms_logs_user_date_muscle_side_sub_key, and
+--   -- the second must read
 --   -- "(user_id, date, muscle_group, side, sub_region) NULLS NOT DISTINCT"
+--
+--   select count(*) as old_key_survivors
+--     from pg_index x
+--    where x.indrelid = 'public.doms_logs'::regclass
+--      and x.indisunique and x.indnkeyatts = 3
+--      and (select count(*)
+--             from unnest(string_to_array(x.indkey::text, ' ')::int2[]) as k(attnum)
+--             join pg_attribute a on a.attrelid = x.indrelid and a.attnum = k.attnum
+--            where a.attname in ('user_id', 'date', 'muscle_group')) = 3;
+--   -- expect 0. Anything else means step 2 found nothing to drop and a
+--   -- one-sided rating will still collide with the whole-muscle one.
+--
+-- ── HOW THIS FILE WAS CHECKED ────────────────────────────────────────────────
+-- Executed against a real PostgreSQL 17 cluster before being handed over, on
+-- four starting shapes: the old key as a named UNIQUE CONSTRAINT; as a bare
+-- UNIQUE INDEX with the columns in a DIFFERENT order; a table that never had
+-- it; and the file run three times in a row. In every case the old key is gone,
+-- the five-column index exists, a legacy NULL row is UPDATED in place by an
+-- `on conflict (user_id, date, muscle_group, side, sub_region)` upsert rather
+-- than duplicated, a left and a right rating coexist, and both CHECKs reject
+-- bad data.

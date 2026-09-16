@@ -2295,6 +2295,26 @@ says so out loud when it cannot.
   out means asking the atlas which landmarks are lateral — a second traversal to
   save three entries. Carries a `ponytail:` note.
 
+**Defect found after the merge, fixed 2026-09-16 (`fix(sql)`):** the drop block
+in `docs/sql/w9-doms-laterality.sql` compared `array_agg(a.attname)` against an
+`array['date', …]` literal and failed on the founder's database with `ERROR:
+42883: operator does not exist: name[] = text[]` — `pg_attribute.attname` is
+`name`, not `text`. The whole file is wrapped in `begin`/`commit`, so nothing had
+been applied and the fix cost only a round trip. Both loops now COUNT matching
+columns against a key-width check instead of comparing arrays, which removes the
+composite-type question entirely and is order-independent; the index loop also
+stopped calling `unnest(x.indkey)`, because `indkey` is an `int2vector` and
+`unnest()` is declared over `anyarray`.
+
+**The real lesson is not the cast.** This file was handed over unexecuted, and
+there is no reason it had to be: `brew install postgresql@17` is two minutes and
+a throwaway cluster proves the thing. It has since been run against PG 17 on four
+starting shapes — the old key as a named constraint, as a bare index with the
+columns in a different ORDER, a table that never had it, and the file three times
+in a row — plus the behaviour that matters (a legacy NULL row UPDATED in place by
+a five-column `on conflict`, a left and a right coexisting, both CHECKs biting).
+**Any future `docs/sql/*.sql` handed to the founder is executed locally first.**
+
 **Founder's manual steps still outstanding:** **paste
 `docs/sql/w9-doms-laterality.sql`.** Until it lands, a ONE-SIDED rating's push is
 rejected for an unknown column — per-row, retried under `SyncBackoff`, and it
