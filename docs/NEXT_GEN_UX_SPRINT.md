@@ -1773,3 +1773,115 @@ the sprint still owes are W9's and W11's, unchanged.
 
 **Founder's manual steps still outstanding:** none for W5. The two SQL pastes
 the sprint still owes are W9's and W11's, unchanged.
+
+---
+
+### W6 Wave Record — shipped 2026-09-16 as 3.15.0
+
+**Drift from the plan, on purpose:**
+
+- **The payload `v` is still 4.** The plan says the Train arrangement goes "under a v5
+  key `train`". It goes under a key called `train`, in the row the plan names, and the
+  version number is untouched — because `Dashboard.version` is not a label on the
+  payload, it is the GATE `fromStored` uses to decide whether a stored object has
+  `phone`/`desktop` sides at all. Raising it to 5 without widening that gate reads every
+  existing v4 row as "no sides" and hands every user the default dashboard; widening the
+  gate rewrites `layout-serialize` and fourteen cases of `layout-from-stored`, goldens
+  exported from the retired web app that cannot be regenerated. So `train` is read and
+  written independently of `v` — absent means "everything visible", which is the right
+  answer for every payload ever written, of any version. **W7 still owns the v5 bump**
+  (A9's `StackSlot.linked`) and will find this key already sitting beside the sides,
+  needing nothing from it.
+- **Trends left the doors strip.** A7 says the door prints the delta with the caption
+  beneath it, and it does — but not in a third of a row. `vs same point last week · on
+  pace 32 t` is 38 characters, and the first shot of the 109 pt cell rendered it `vs same
+  point last / week · on pace 1…`, with the projection — the half the caption exists for
+  — inside the ellipsis. Library and History keep the strip because a count fits there;
+  Trends is a full-width row below them. At an accessibility size it collapses to one
+  column, explicitly on `typeSize` and not through `ViewThatFits` (memories
+  `w1b-week-detail`, `epic-sprint-w4-loggers`).
+- **The arithmetic moved to `OnyxCore`.** The plan puts the rule in `WorkoutWeek`. It is
+  in `WeekPace` instead, with `WorkoutWeek.build` reduced to three calls. The reason is
+  the next item.
+- **Five new shots, not three.** `train-monday`, `train-past`, `train-past-open`,
+  `train-customize`, `train-customized`. The last two are not decoration: the Trends row
+  sits under a seven-exercise plan card and is below the fold at **every** anchor a shot
+  can ask for, so `train-customized` — the tab with three sections switched off — is the
+  only frame the new caption appears in, and it doubles as the picture of what the
+  Customize sheet does.
+
+**Root causes that were not where the plan guessed:**
+
+- **`OnyxTests` runs.** The memory `next-gen-w4-ledger` records "OnyxTests executes ZERO
+  tests here", and the "Every wave" list says it has four failures on `main`. Both cannot
+  be true. `xcodebuild test -only-testing:OnyxTests` executes 45 tests and fails exactly
+  four — the documented baseline, confirmed by running the same target in a `main`
+  worktree. The memory is stale; `npm run swift:ui` runs `-only-testing:OnyxUITests`
+  only, which is where "zero tests" came from. **No gate runs `OnyxTests`.** The wave's
+  arithmetic went to `OnyxCore` anyway, because `swift:core` is a gate and this is not.
+- **The wrap-up shared the delta with the door.** `build` passed one `weekDeltaKg` to both
+  the Trends door and the inline `wrap(...)`. A week wraps the evening its last PLANNED
+  day is logged — a Friday on a five-day plan resting Saturday — so a day-matched delta
+  would have given the wrap card a six-day comparison while the same week opened from
+  History (`wrap(_:userId:weekStart:)`, the twin the brief fenced off) showed a seven-day
+  one. Two numbers for one closed week, from a change that looked local to the door.
+  `build` now computes both off one per-date read.
+- **`isWrapped` was blocking the past-weeks list, and it was the wrong gate.** A row per
+  closed week meant a row per week that satisfied `WeeklyWrap.isWrapped`, which on the
+  shot fixture is exactly one. That guard exists to stop the This-week tile becoming a
+  wrap-up door on a Tuesday — it is a question about the CURRENT week. A week that has
+  ENDED has no work left in it whether or not every planned day was logged, and the
+  missed day is part of what its summary reports. `requireComplete: false`; all three
+  existing callers keep the default.
+- **The first `train-monday` shot photographed the wrong Monday.** 31 August is a Monday
+  whose week already holds a Sunday session, so the tab came out mid-week with a full
+  panel. Re-pinned to 7 September — a week with nothing in it, standing behind the
+  fixture's fullest one, which is the exact state the old rule printed −13.0 t in.
+
+**Constraints discovered that the next wave must respect:**
+
+- **`Dashboard.version` is a gate, not a label** (above). W7's A9 bump must widen
+  `fromStored`'s and `otherSideOf`'s sided-version check to accept 4 **and** 5 in the same
+  commit that raises the constant, or every stored dashboard resets. `TrainLayoutTests`
+  has a case pinning that the sides survive a train write; add the mirror for v5.
+- **Any writer of `dashboard_layouts.layout` must carry through what it does not own.**
+  There are now three keys in that row and two writers, each of which parses one and
+  copies the rest (`serializeLayout(other:)`, `Dashboard.withTrain(in:)`). A third writer
+  that rebuilds the object drops the other two silently.
+- **`WeeklyWrapContent` is the wrap-up's body; `WeeklyWrapView` is only its chrome.** A
+  figure added to the reel must go in the content or the Train tab's expanded row will not
+  have it. The two hooks (`showsLegend`, `onNeedsHeight`) are what the sheet does for
+  itself and the tab does not need.
+- **`WorkoutWeek.pastWeekCount` is 8 and carries a `ponytail:` note.** Eight week-queries
+  plus one `historySets` read per session inside them, on a pass that already does a
+  dozen. `workout_sessions.total_volume_kg` holds the same number and is not read, because
+  one seeded session still carries a null aggregate (memory `hotfix-data-ui-sep10`) and a
+  collapsed row that disagreed with the banner it opens would be worse than the cost.
+- **The long press is a `simultaneousGesture`, not a `contextMenu`.** A context menu
+  attached to a whole tab lifts a snapshot of the entire screen, and it closes after one
+  tap — three sections is three long presses. If W7 adds a press verb to Train, it joins
+  the Customize sheet rather than growing a second gesture.
+
+**Left open on purpose:**
+
+- **Floating, movable Train widgets** — explicitly out of scope (W6 §4). Today is the
+  arrangeable surface; Train has one live state and a plan card that must be the first
+  thing seen. The week strip and the session card therefore carry no switch either.
+- **`Swap.weekAssignment`'s Sunday anchor.** Still cuts its own seven dates
+  Sunday-anchored while `build` cuts from the athlete's week start, so on a non-Sunday
+  start the two differ by a day at each end. Documented at `WorkoutWeek.wrap`'s header
+  since W6 of the epic sprint, inherited again here, and still not this wave's to change.
+- **`finishedByDate` / `tonnageByDate` are duplicated inside the closed-week twin.** The
+  twin has its own local `finishedWeek` and `tonnage` closures saying the same thing. The
+  brief fenced that function off and hoisting its internals is a change to it, so the
+  duplication stands — with both copies naming the same rule.
+- **`.claude/settings.json` still points two `PostToolUse` hooks at
+  `~/Documents/PyCharmProjects/Helix`, which does not exist.** Every `.swift` Write/Edit
+  reports `bash: scripts/check-swift.sh: No such file or directory` after succeeding.
+  Known since `deep-clean-purge-sep15`; the write lands and the patches in this wave went
+  through script files anyway, per the "Every wave" rule. One line each to repoint, and it
+  is not a W6 change.
+
+**Founder's manual steps still outstanding:** none for this wave. Nothing here needs DDL,
+a dashboard reset or a Supabase visit — the `train` key is additive to a row every account
+already has, and an account that has never written one reads as "everything visible".
