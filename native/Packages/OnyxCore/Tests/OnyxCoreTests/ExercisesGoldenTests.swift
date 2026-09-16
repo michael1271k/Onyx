@@ -220,3 +220,87 @@ struct ExerciseTagsGoldenTests {
     }
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The cardio table (W4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `MuscleMap.cardioDict` — what a BOUT works, for the surfaces that name
+/// muscles in words.
+///
+/// ── WHY THIS SUITE IS ABOUT WHAT THE TABLE DOES *NOT* TOUCH ─────────────────
+/// The table exists because `dict` cannot hold it. `dict` is held to the
+/// TypeScript by two golden fixtures AND is the input to
+/// `MuscleCredit.weightedSets`, so a treadmill entry there would start paying
+/// muscle credit for walking — moving the weekly accumulator, the Freshness
+/// Map and the battery, silently, in the name of drawing two chips on a card.
+///
+/// So the assertions that matter most here are the negative ones: the lift
+/// table still knows nothing about a bout, and the cardio table still knows
+/// nothing about a lift. Either one failing is the separation collapsing.
+@Suite("Cardio movers — the display table beside the dictionary")
+struct CardioMoversTests {
+
+    @Test("A bout resolves to legs, and the lift dictionary still refuses it")
+    func treadmill() {
+        #expect(MuscleMap.movers("Treadmill") == nil)
+        #expect(MuscleMap.muscleGroups("Treadmill") == nil)
+
+        let movers = MuscleMap.cardioMovers("Treadmill")
+        #expect(movers?.primary == ["quadriceps", "calves"])
+        #expect(movers?.secondary == ["hamstrings", "glutes"])
+        #expect(MuscleMap.cardioPrimaryLandmarks("Treadmill") == [.quads, .calves])
+        #expect(MuscleMap.cardioSecondaryLandmarks("Treadmill") == [.hamstrings, .glutes])
+    }
+
+    /// Every kind `CardioImport.offered` names must resolve, or a card drawn
+    /// for that bout falls back to an empty chip row — which is the defect
+    /// this table was added to fix, surviving for five of six kinds.
+    @Test("Every offered kind except HIIT names a muscle")
+    func everyKind() {
+        for kind in CardioImport.offered where kind != CardioImport.hiit {
+            #expect(MuscleMap.cardioMovers(kind) != nil, "no cardio entry for \(kind)")
+        }
+        // HIIT describes an INTERVAL STRUCTURE, not a movement. Guessing legs
+        // from it would be the table asserting something the row does not say.
+        #expect(MuscleMap.cardioMovers(CardioImport.hiit) == nil)
+    }
+
+    /// The machine names the exercise catalogue files bouts under, which are
+    /// not the `cardio_logs` kinds.
+    @Test("The catalogue's machine names resolve too")
+    func machines() {
+        for name in ["Treadmill Walk", "Incline Treadmill", "Stair Climber",
+                     "Elliptical", "Stationary Bike", "Rowing Machine"] {
+            #expect(MuscleMap.cardioMovers(name) != nil, "no cardio entry for \(name)")
+        }
+    }
+
+    /// ── THE SEPARATION, FROM THE OTHER SIDE ─────────────────────────────────
+    /// A lift must never reach this table, or the ledger would start drawing a
+    /// bench press's chips out of the cardio vocabulary. `cardioDict`'s tokens
+    /// are chosen so that nothing in the catalogue collides — the ergometer is
+    /// `rowing` / `rower` and never the bare `row` that `dict`'s cable-row
+    /// family matches on.
+    @Test("A lift never resolves through the cardio table")
+    func liftsAreRefused() {
+        for name in ["Incline DB Press", "Seated Cable Row (Wide Grip)",
+                     "Lat Pulldown", "Hack Squat", "Hanging Knee Raise",
+                     "Romanian Deadlift", "Bench Press", "Leg Press"] {
+            #expect(MuscleMap.cardioMovers(name) == nil, "\(name) reached the cardio table")
+        }
+    }
+
+    /// Nothing in the cardio table may name a token the landmark fold does not
+    /// know — a silent nil there is a chip that never draws, which is exactly
+    /// the failure mode `LandmarkMuscle.from(token:)`'s own tests exist for.
+    @Test("Every token in the table folds to a landmark")
+    func tokensFold() {
+        for entry in MuscleMap.cardioDict {
+            for token in entry.muscles.primary + entry.muscles.secondary {
+                #expect(LandmarkMuscle.from(token: token) != nil,
+                        "\(token) folds to nothing")
+            }
+        }
+    }
+}

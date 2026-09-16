@@ -44,6 +44,48 @@ _Nothing yet._
 
 ---
 
+## [3.13.0] — 2026-09-16 · The Ledger Stops Shouting
+
+### Added
+- **The post-workout ledger finally compares a unilateral set.** A movement
+  trained one arm at a time was the only kind on the page carrying no arrow at
+  all. It now draws as `L 22 × 10` over `R 22 × 9` under one set badge, with one
+  verdict beneath the pair — scored the way every other tonnage in the app is,
+  at the weaker side, so the row and the card's own kilogram capsule can never
+  disagree about what a pair is worth. A bilateral warm-up on the same card
+  keeps its own line and its own verdict.
+- **The treadmill card says something.** A bout's card prints its distance, its
+  pace, its average heart rate and an **Automatically logged** badge when Apple
+  Health filed it — where, before, all five of the strength readings were
+  correctly suppressed and nothing took their place, so the card drew an empty
+  row. It also names the muscles a walk actually uses, which no surface in the
+  app had ever been able to say.
+- Two screenshot screens, `session-pairs` and `session-cardio`, and a fixture
+  day that is **only** a bout — the one shape that shows a cardio card with no
+  lift beside it to lend the page its colour.
+
+### Changed
+- **A harder set is no longer good news.** The RPE column painted a rise green,
+  like every other column, so three sets that went from an 8 to a 9.5 — the
+  textbook picture of accumulated fatigue — read as progress. A rise in effort
+  is now red. The arrow still points where the number went; only the verdict
+  inverts.
+- **Every exercise header is a line shorter.** The muscle chips and the movement's
+  readings were two stacked flow rows, so a two-mover lift spent a whole line
+  saying "Chest · Triceps" and the numbers began underneath it however much room
+  was left. They are one row now — muscles first, the against-last-time verdict
+  last, after the evidence it is drawn from.
+- A bout's row centres against its set badge instead of hanging from the top of
+  a taller row's height.
+
+### Removed
+- **Fifteen em-dashes a card.** The line under each reading is still reserved —
+  that is what stops a card changing height between two sessions — but it is now
+  blank rather than a dash. A page with no previous session to compare against no
+  longer says so fifteen times.
+
+---
+
 ## [3.12.0] — 2026-09-16 · Four Squares
 
 ### Added

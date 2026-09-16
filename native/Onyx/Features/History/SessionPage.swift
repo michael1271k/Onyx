@@ -90,6 +90,25 @@ extension SessionAnalysis {
         let avgBpm: Double?
         /// True when `avgBpm` is carried forward rather than measured.
         let avgBpmEstimated: Bool
+        /// The `cardio_logs` row FILED AGAINST this session, if there is one.
+        ///
+        /// ── WHY THE PAGE READS A TABLE IT DOES NOT DRAW ─────────────────────
+        /// A treadmill block that is part of a workout is a `workout_sets` row
+        /// and gets an exercise card like any other movement — `list(_:)` says
+        /// so, and this page deliberately draws no second cardio list. But
+        /// `workout_sets` has no heart-rate column and no provenance column, so
+        /// two of the four readings the bout's card wants (F6) exist nowhere
+        /// else: `avg_hr` and `from_healthkit` are `cardio_logs`' alone.
+        ///
+        /// ── AND WHY ONLY `session_id`, NEVER THE DATE ───────────────────────
+        /// `AppDatabase.cardio(sessionId:date:)` matches `session_id = ? OR
+        /// date = ?`, which is right for the tab that lists a day's bouts and
+        /// wrong here: a morning walk would attach its heart rate to an evening
+        /// leg day's treadmill card. Only a row the save path explicitly filed
+        /// against THIS session can speak for it. Nil is the ordinary case — a
+        /// bout typed straight into the deck files no `cardio_logs` row — and
+        /// the two capsules are then absent rather than guessed.
+        let bout: CardioLogRow?
         /// The tag row: plan, phase week and lever, each resolved FOR THIS
         /// DATE and not for today. A session logged in week 3 of the cut still
         /// says so after the block has moved on.
@@ -209,6 +228,11 @@ extension SessionAnalysis {
         let career = everything.filter { $0.sets > 0 }
         let careerIndex = career.firstIndex { $0.id == session.id }.map { $0 + 1 }
 
+        // The bout this session owns, if it owns one — see `Page.bout` for
+        // why the date half of that query is filtered back out.
+        let bout = ((try? database.cardio(sessionId: sessionId, date: session.date)) ?? [])
+            .first { $0.sessionId == sessionId }
+
         let goals: UserGoalRow? = (try? database.read { db in
             try UserGoalRow.filter(Column("user_id") == session.userId).fetchOne(db)
         }) ?? nil
@@ -243,6 +267,7 @@ extension SessionAnalysis {
             calorieBasis: storedKcal == nil ? estimate?.basis : nil,
             avgBpm: session.avgBpm.map(Double.init),
             avgBpmEstimated: session.avgBpmEstimated,
+            bout: bout,
             // The same read the deck's own tag makes — one expression, so the
             // header and the summary cannot drift apart again.
             planLabel: Schedule.planLabel(owning: session.date, in: ctx.schedule),
