@@ -144,7 +144,13 @@ public struct WeeklyExportBuilder: Sendable {
                     "date": r.date, "muscle": r.muscleGroup, "severity": Double(r.severity),
                     "sourceLabel": j(r.sourceDayKey.map { key in program.day(key: key)?.label ?? key }),
                     "sourceDate": j(r.sourceSessionId.flatMap { sessionDateById[$0] }),
-                    "side": j(r.side), "subRegion": j(r.subRegion),
+                    // NORMALISED, not raw. A web-era row spells a bilateral
+                    // whole-muscle rating `('both','')` and this app spells it
+                    // `(nil, nil)`; `domsName` renders both as the bare muscle
+                    // name, but only one of them survives a round trip through
+                    // `ExportDoms` as the same value. The document must not
+                    // depend on which era wrote the row.
+                    "side": j(r.bodySide.stored), "subRegion": j(r.subRegionName),
                 ])
             }
         // Side and sub-region join the sort key because they are now part of

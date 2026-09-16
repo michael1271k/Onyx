@@ -137,6 +137,79 @@ begin
   end loop;
 end $$;
 
+-- 2.5 ── ONE SPELLING OF "THE WHOLE MUSCLE, BOTH SIDES".
+--
+-- The retired web app already added these two columns, and it spelled a
+-- whole-muscle bilateral rating as `side = 'both'` / `sub_region = ''`
+-- (`scripts/src/subRegions.ts`: *"`''` is that answer's stored sub-region"*).
+-- The native app spells the same thing as NULL in both columns, because a nil
+-- is what `encodeIfPresent` leaves OUT of a push body — which is what keeps a
+-- bilateral rating byte-identical on the wire and in the export to what shipped
+-- before laterality existed.
+--
+-- Two spellings of one meaning is not a cosmetic problem. The unique index
+-- below treats `('both','')` and `(NULL,NULL)` as DIFFERENT keys, so re-rating
+-- a muscle the web had already rated would INSERT a second row beside the first
+-- instead of updating it, and the day would hold two ratings of one muscle
+-- forever. So the history is normalised onto the app's spelling, once, here.
+--
+-- `'both'` and `''` are not the only things collapsed: anything that does not
+-- resolve to `left` or `right` becomes NULL, which is exactly the rule
+-- `BodySide(stored:)` applies in Swift — an unreadable side must not be able to
+-- claim a half of the body, and "the whole muscle" is the only answer that
+-- cannot be wrong about which half hurts. Whatever it collapsed is RAISEd, so
+-- nothing disappears quietly.
+do $$
+declare
+  found_sides text;
+  moved_side  bigint;
+  moved_sub   bigint;
+  collisions  bigint;
+begin
+  select string_agg(distinct quote_literal(side), ', ')
+    into found_sides
+    from public.doms_logs
+   where side is not null and lower(btrim(side)) not in ('left', 'right');
+  if found_sides is not null then
+    raise notice 'normalising these side values to NULL (= both): %', found_sides;
+  end if;
+
+  update public.doms_logs
+     set side = case lower(btrim(side)) when 'left' then 'left' when 'right' then 'right' end
+   where side is distinct from
+         (case lower(btrim(side)) when 'left' then 'left' when 'right' then 'right' end);
+  get diagnostics moved_side = row_count;
+
+  update public.doms_logs
+     set sub_region = nullif(btrim(sub_region), '')
+   where sub_region is distinct from nullif(btrim(sub_region), '');
+  get diagnostics moved_sub = row_count;
+
+  raise notice 'normalised % side value(s) and % sub_region value(s)', moved_side, moved_sub;
+
+  -- Normalising can only collide where the old three-column key was NOT
+  -- enforcing one row per muscle per day. Where it was, every row for a
+  -- (user, date, muscle) is already the only one, so collapsing its side and
+  -- sub-region cannot meet a twin. Checked rather than assumed, because the
+  -- index below would fail with a duplicate-key error that names a row and not
+  -- a cause — and because the alternative is this file deleting rows from a
+  -- production table without being asked.
+  select count(*) into collisions from (
+    select 1 from public.doms_logs
+     group by user_id, date, muscle_group, side, sub_region
+    having count(*) > 1
+  ) dupes;
+
+  if collisions > 0 then
+    raise exception using
+      errcode = 'unique_violation',
+      message = format('%s duplicate (user, date, muscle, side, sub_region) group(s) after normalising', collisions),
+      hint    = 'Nothing has been changed — this transaction rolls back. '
+                'See the DEDUPE block in the comments at the end of this file, '
+                'read what it would remove, then run it before this file again.';
+  end if;
+end $$;
+
 -- 3 ── The wider key. This is the name PostgREST's `on_conflict` resolves
 --      against, and the column ORDER here is the order the client sends:
 --      user_id, date, muscle_group, side, sub_region.
@@ -193,6 +266,53 @@ commit;
 --            where a.attname in ('user_id', 'date', 'muscle_group')) = 3;
 --   -- expect 0. Anything else means step 2 found nothing to drop and a
 --   -- one-sided rating will still collide with the whole-muscle one.
+--
+-- ── DEDUPE — ONLY IF STEP 2.5 RAISED ─────────────────────────────────────────
+-- This file never deletes a row on its own. If step 2.5 stopped with "N
+-- duplicate group(s) after normalising", it is because two rows collapse onto
+-- one key — which can only happen if the old three-column unique key was not
+-- there to prevent it.
+--
+-- Both statements below GROUP BY THE NORMALISED value, not by the stored one.
+-- That is not a detail: this file rolled back, so `'both'` and `''` are still in
+-- the table when you run these, and a dedupe that partitioned on the raw columns
+-- would put `('both','')` and `(NULL,NULL)` in different groups, find nothing to
+-- remove, and leave you looping on the same error.
+--
+-- LOOK FIRST. This shows exactly what would go:
+--
+--   with n as (
+--     select id, user_id, date, muscle_group, severity, created_at,
+--            case lower(btrim(side)) when 'left' then 'left' when 'right' then 'right' end as side_n,
+--            nullif(btrim(sub_region), '') as sub_n
+--       from public.doms_logs)
+--   select user_id, date, muscle_group,
+--          coalesce(side_n, '(both)') as side, coalesce(sub_n, '(whole)') as sub_region,
+--          count(*) as rows, array_agg(severity order by severity desc) as severities
+--     from n
+--    group by 1, 2, 3, 4, 5
+--   having count(*) > 1;
+--
+-- Then, if you are happy with it, keep the WORST of each group and drop the
+-- rest. Max-within-a-muscle is the fold the scoring engine, the export and the
+-- summary line all already apply, so the row this keeps is the only one any of
+-- them was ever reading — no battery, document or tile can move because of it:
+--
+--   with n as (
+--     select id, user_id, date, muscle_group, severity, created_at,
+--            case lower(btrim(side)) when 'left' then 'left' when 'right' then 'right' end as side_n,
+--            nullif(btrim(sub_region), '') as sub_n
+--       from public.doms_logs),
+--   ranked as (
+--     select id, row_number() over (
+--              partition by user_id, date, muscle_group, side_n, sub_n
+--              order by severity desc, created_at desc nulls last, id) as rn
+--       from n)
+--   delete from public.doms_logs d
+--    using ranked
+--    where ranked.id = d.id and ranked.rn > 1;
+--
+-- Then run this file again.
 --
 -- ── HOW THIS FILE WAS CHECKED ────────────────────────────────────────────────
 -- Executed against a real PostgreSQL 17 cluster before being handed over, on

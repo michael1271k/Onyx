@@ -70,7 +70,7 @@ struct DomsTile: View {
     private var levels: [MuscleSide: Int] {
         var out: [MuscleSide: Int] = [:]
         for row in model.doms where row.severity > 0 {
-            let side = BodySide(stored: row.side)
+            let side = row.bodySide
             for landmark in DomsMap.landmarks[row.muscleGroup] ?? [] {
                 let key = MuscleSide(landmark, side)
                 out[key] = max(out[key] ?? 0, row.severity)

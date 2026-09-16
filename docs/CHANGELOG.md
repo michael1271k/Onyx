@@ -44,6 +44,29 @@ _Nothing yet._
 
 ---
 
+## [3.18.1] — 2026-09-16 · Two Spellings, One Meaning
+
+A hotfix for 3.18.0, found while applying its migration.
+
+### Fixed
+- **A soreness rating the old web app wrote is now re-rated, not duplicated.**
+  That app spelled "the whole muscle, both sides" as `side = 'both'` /
+  `sub_region = ''`; the native app spells it as an absent column. A rating
+  carrying the older spelling was invisible to the newer lookup, so re-rating
+  that muscle minted a second row beside the first. Both spellings now answer
+  the same question the same way, in the store, on the Soreness map and in the
+  weekly export — whose token for such a rating is unchanged either way.
+- `docs/sql/w9-doms-laterality.sql` normalises the older spelling once, on the
+  server, and reports what it collapsed. It also no longer fails on a catalog
+  type mismatch when it looks for the key it has to replace.
+
+### Changed
+- The migration refuses to delete anything on its own: if two ratings would
+  collapse onto one key it stops, rolls back and prints the query that shows
+  what is involved.
+
+---
+
 ## [3.18.0] — 2026-09-16 · The Body Has Two Sides
 
 Soreness stops being a thing you have and starts being a thing you have on one

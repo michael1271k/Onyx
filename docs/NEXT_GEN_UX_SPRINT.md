@@ -2306,6 +2306,34 @@ composite-type question entirely and is order-independent; the index loop also
 stopped calling `unnest(x.indkey)`, because `indkey` is an `int2vector` and
 `unnest()` is declared over `anyarray`.
 
+**Second defect, same file, found the same way (3.18.1):** the live `doms_logs`
+**already had `side` and `sub_region`** — the retired web app added them and
+spelled a whole-muscle bilateral rating `side = 'both'` / `sub_region = ''`
+(`scripts/src/subRegions.ts` says so in as many words: *"`''` is that answer's
+stored sub-region"*). W9 read F12's "`doms_logs` has no `side` and no
+`sub_region` column" and never checked. The `add column if not exists` was a
+no-op and the CHECK constraint fired on the history: `ERROR: 23514: check
+constraint "doms_logs_sub_region_check" is violated by some row`.
+
+The wrong fix is to relax the CHECK. Two spellings of one meaning is not
+cosmetic: the five-column index treats `('both','')` and `(NULL,NULL)` as
+DIFFERENT keys, so re-rating a muscle the web had already rated would INSERT
+beside it forever. The file now normalises the history onto the app's spelling
+(anything not resolving to `left`/`right` becomes NULL, which is exactly
+`BodySide(stored:)`'s rule, and it RAISEs whatever it collapsed). It refuses to
+delete a row on its own: if two ratings would collapse onto one key it stops,
+rolls back and prints the query that shows what is involved — and a
+`(user_id, date, muscle_group)` key makes that case impossible anyway, which is
+why it is a check and not a `delete`.
+
+**And the app had to learn both spellings**, because the founder is already
+running 3.18.0 and the mirror can pull a web-era row before the SQL is pasted.
+`DomsRow.swift` is the one place that reads laterality: `bodySide`,
+`subRegionName`, `matches(side:subRegion:)` and the two GRDB predicates. Reads
+are tolerant, writes are not — a row this app mints always spells absence as
+NULL. The export normalises too, so the golden document cannot depend on which
+era wrote the row.
+
 **The real lesson is not the cast.** This file was handed over unexecuted, and
 there is no reason it had to be: `brew install postgresql@17` is two minutes and
 a throwaway cluster proves the thing. It has since been run against PG 17 on four
@@ -2313,7 +2341,7 @@ starting shapes — the old key as a named constraint, as a bare index with the
 columns in a different ORDER, a table that never had it, and the file three times
 in a row — plus the behaviour that matters (a legacy NULL row UPDATED in place by
 a five-column `on conflict`, a left and a right coexisting, both CHECKs biting).
-**Any future `docs/sql/*.sql` handed to the founder is executed locally first.**
+**Any future `docs/sql/*.sql` handed to the founder is executed locally first, against a fixture built from what the LIVE table actually holds — not from what a finding says it holds.** Both of this file's defects were invisible to review and obvious to a cluster.
 
 **Founder's manual steps still outstanding:** **paste
 `docs/sql/w9-doms-laterality.sql`.** Until it lands, a ONE-SIDED rating's push is

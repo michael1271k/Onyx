@@ -639,9 +639,7 @@ final class DayModel {
     /// beside the level the athlete chose, and defaulting an unrated side to 0
     /// would tick "None" on a muscle nobody has answered for.
     func domsSeverity(_ group: String, side: BodySide) -> Int? {
-        doms.first {
-            $0.muscleGroup == group && BodySide(stored: $0.side) == side && $0.subRegion == nil
-        }?.severity
+        doms.first { $0.muscleGroup == group && $0.matches(side: side, subRegion: nil) }?.severity
     }
 
     /// The weigh-ins in the window, oldest first, with the days between them
@@ -887,8 +885,10 @@ final class DayModel {
     /// not silently overwrite the right one under the thumb.
     func setDoms(_ muscle: String, severity: Int, side: BodySide = .both) {
         let stored = side.stored
+        // Spelling-tolerant, like the store's own lookup: a row the web era
+        // wrote as `('both','')` is the row this re-rates (`DomsRow.swift`).
         if let i = doms.firstIndex(where: {
-            $0.muscleGroup == muscle && $0.side == stored && $0.subRegion == nil
+            $0.muscleGroup == muscle && $0.matches(side: side, subRegion: nil)
         }) {
             doms[i].severity = severity
         } else {

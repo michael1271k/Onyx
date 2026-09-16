@@ -113,6 +113,47 @@ struct DomsLateralityStoreTests {
         #expect(a == b)
     }
 
+    @Test("a web-era row spelled both/'' is re-rated, not duplicated")
+    func webEraSpellingIsTheSameRow() throws {
+        let db = try store()
+        // Exactly what the retired web app wrote, and what is still in Supabase
+        // until `docs/sql/w9-doms-laterality.sql` is pasted. A phone running
+        // this build can pull one of these before that happens.
+        try db.writer.write { conn in
+            try DomsLogRow(id: "web", userId: user, date: date, muscleGroup: "Quads",
+                           severity: 1, side: "both", subRegion: "").insert(conn)
+        }
+        // The app writes `.both` / nil. A raw column comparison misses the web
+        // row and mints a second rating for a muscle that already had one.
+        try db.setDoms(userId: user, date: date, muscleGroup: "Quads", severity: 3)
+
+        let got = try rows(db)
+        #expect(got.count == 1)
+        #expect(got[0].id == "web" && got[0].severity == 3)
+        #expect(got[0].bodySide == .both && got[0].subRegionName == nil)
+    }
+
+    @Test("both spellings of absence read the same, and a real side still does not")
+    func spellingsNormalise() {
+        func row(_ side: String?, _ sub: String?) -> DomsLogRow {
+            DomsLogRow(id: "r", userId: user, date: date, muscleGroup: "Quads",
+                       severity: 1, side: side, subRegion: sub)
+        }
+        for side in [nil, "both", "BOTH", " both ", "sideways"] as [String?] {
+            #expect(row(side, nil).bodySide == .both, "side \(side ?? "nil")")
+        }
+        #expect(row("left", nil).bodySide == .left)
+        #expect(row("right", nil).bodySide == .right)
+        for sub in [nil, "", "   "] as [String?] {
+            #expect(row(nil, sub).subRegionName == nil)
+        }
+        #expect(row(nil, "Erectors").subRegionName == "Erectors")
+        // And the match is the pair, so a left row is not a both row.
+        #expect(row("both", "").matches(side: .both, subRegion: nil))
+        #expect(!row("left", nil).matches(side: .both, subRegion: nil))
+        #expect(!row("both", "").matches(side: .left, subRegion: nil))
+    }
+
     @Test("the push carries the widened conflict target")
     func conflictTargetWidened() {
         // PostgREST's `on_conflict` is a COLUMN LIST, and the server index it
@@ -163,6 +204,23 @@ struct DomsLateralityExportTests {
         #expect(document.contains("Quads 2"))
         #expect(!document.contains("Quads@"))
         #expect(!document.contains("Quads/"))
+    }
+
+    @Test("a web-era row renders exactly like the native spelling of the same rating")
+    func webEraRowRendersAsV1() throws {
+        let got = try input { db in
+            try db.writer.write { conn in
+                try DomsLogRow(id: "web", userId: user, date: weekStart, muscleGroup: "Quads",
+                               severity: 2, side: "both", subRegion: "").insert(conn)
+            }
+        }
+        let row = try #require(got.doms.first)
+        // Normalised on the way into the document, so the golden text cannot
+        // depend on which era wrote the row.
+        #expect(row.side == nil && row.subRegion == nil)
+        let document = WeeklyExport.build(got)
+        #expect(document.contains("Quads 2"))
+        #expect(!document.contains("Quads@") && !document.contains("Quads/"))
     }
 
     @Test("a left and a right rating of one muscle both survive the sort")
