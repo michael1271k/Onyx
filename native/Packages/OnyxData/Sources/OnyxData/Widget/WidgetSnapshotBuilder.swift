@@ -290,6 +290,58 @@ public struct WidgetSnapshotBuilder: Sendable {
         let batteryStack: [BatteryStackDay]? = wantsBody
             ? try batteryStackSlice(rows, date: date, now: now, calendar: calendar)
             : nil
+        // ── The W7 sentence ───────────────────────────────────────────────
+        //
+        // ── AND WHY IT IS `.full` AND NOT `wantsBody` ─────────────────────
+        // Only the Mega tile draws it, `.daily` is a dashboard tile, and the
+        // Today grid is the one caller that builds at `.full`. Gating on
+        // `wantsBody` would also catch `scope == .body` — a Home Screen family
+        // — and make the widget EXTENSION pay a 49-day `readinessHistory`
+        // (five table scans), a plan resolution and a training-day read on
+        // every timeline refresh, for a string no Home Screen face renders, in
+        // the process with the tightest memory and time budget in the app.
+        // Widen this the day a widget draws the sentence, not before.
+        //
+        // `stressInputs` is the one read that carries BOTH remaining
+        // dimensions — it already folds `Readiness.signals` for the ACWR and
+        // the day's own rows for the index — and it is handed `rows.schedule`
+        // so a context `fetch` has already resolved is not resolved twice.
+        //
+        // The debt comes off `ledgerLogs`, which the ledger and the
+        // consistency grid have already read: eight weeks of `daily_logs`,
+        // narrowed here to the bank's own fortnight. No read of its own.
+        let coach: String? = scope == .full ? {
+            let stress = try? database.writer.read { db in
+                try AppDatabase.stressInputs(db, userId: userId, date: date, schedule: rows.schedule)
+            }
+            // ── NO GOAL, NO DEBT ────────────────────────────────────────────
+            // Not `?? 8`. The sleep ARC on this same tile draws against
+            // `sleep.goalMin`, which is nil when the athlete has set no goal
+            // (see the `sleep:` block below) — so an assumed eight hours here
+            // would put a ring with no target and no progress directly above a
+            // sentence claiming three hours of debt against one. Debt is a
+            // shortfall, and a shortfall needs something to fall short OF.
+            let bank: SleepDebt? = goals?.sleepGoalHours.map { goalHours in
+                let debtFrom = ISODate.addDays(date, -(SleepDebt.windowDays - 1)) ?? date
+                return SleepDebt.compute(
+                    nights: rows.ledgerLogs
+                        .filter { $0.date >= debtFrom && $0.date <= date }
+                        .map { SleepDebtNight(date: $0.date, sleepMinutes: $0.sleepMinutes.map(Double.init)) },
+                    goalHours: goalHours,
+                    weekAgo: ISODate.addDays(date, -7) ?? date
+                )
+            }
+            return CoachSentence.sentence(CoachSentence.Inputs(
+                batteryPct: battery.map(Double.init),
+                acwr: stress?.acwr,
+                stress: stress.flatMap { Stress.breakdown($0).band },
+                // `SleepDebt.minimumNights` and not a 3 spelled here: Pulse's
+                // gauge applies the same floor, and one short night out of one
+                // is not a bank on either surface.
+                sleepDebtHours: bank.flatMap { $0.nights >= SleepDebt.minimumNights ? $0.debtHours : nil }
+            ))
+        }() : nil
+
         let bodyComp: [BodyCompMetric]? = wantsBody
             ? BodyCompSeries.build(
                 bodyReadings.map {
@@ -409,7 +461,8 @@ public struct WidgetSnapshotBuilder: Sendable {
             deficit: deficit,
             trajectory: trajectory,
             batteryStack: batteryStack,
-            bodyComp: bodyComp
+            bodyComp: bodyComp,
+            coach: coach
         )
     }
 

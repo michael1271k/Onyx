@@ -189,6 +189,19 @@ struct SmartStackView: View {
 
     /// Seconds until this slot's next beat — see the header.
     ///
+    /// ── A CONNECTED STACK HAS NO PHASE OF ITS OWN (W7, A9) ──────────────────
+    /// `StackSlot.linked` is the founder's "connected stacks share one window".
+    /// On the Home Screen that is a timeline the system shares between widgets.
+    /// Here every face of a slot is already handed ONE `OnyxTileEntry` by the
+    /// grid, so there is no second window to reconcile — what is genuinely
+    /// per-slot, and the only thing that is, is the rotation phase. A linked
+    /// slot drops it. Every connected stack therefore turns over on the same
+    /// beat, so the grid reads page one of everything and then page two of
+    /// everything, rather than eight tiles flipping at eight moments.
+    ///
+    /// Unlinked is the default and is unchanged: `stagger` spreads it, for the
+    /// reason the header gives.
+    ///
     /// Wall-clock, not `ContinuousClock`: the phase has to mean the same thing
     /// across a relaunch and on every device, and a monotonic clock's zero is
     /// whenever the phone last booted. Each iteration re-derives from the epoch,
@@ -197,8 +210,8 @@ struct SmartStackView: View {
     /// The floor is the one concession. A beat that is already due would flip
     /// the tile in the same blink it came back; `grace` pushes exactly one flip
     /// off the beat, and the next call measures from the epoch again.
-    static func untilNextBeat(now: Date = .now, slotId: String) -> TimeInterval {
-        let since = now.timeIntervalSince1970 - TimeInterval(stagger(slotId)) / 1000
+    static func untilNextBeat(now: Date = .now, slotId: String, linked: Bool = false) -> TimeInterval {
+        let since = now.timeIntervalSince1970 - TimeInterval(linked ? 0 : stagger(slotId)) / 1000
         // `truncatingRemainder` takes the sign of the DIVIDEND, so a `since`
         // before the epoch would return more than a period and break the one
         // invariant this function has.
@@ -319,10 +332,14 @@ struct SmartStackView: View {
         // The id carries the COUNT, not just whether the clock runs: the task
         // captured `slot`, so a stack that gained or lost a face would go on
         // modding by the old count and raise a face that is not there.
-        .task(id: rotating ? slot.items.count : 0) {
+        // `slot.linked` is in the key: connecting a stack has to re-phase it
+        // now, not at its next beat — otherwise the tile the user just linked
+        // goes on turning over on the old offset for up to nine seconds and
+        // the setting looks like it did nothing.
+        .task(id: rotating ? "\(slot.items.count)-\(slot.linked)" : "off") {
             guard rotating else { return }
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(Self.untilNextBeat(slotId: slot.id)))
+                try? await Task.sleep(for: .seconds(Self.untilNextBeat(slotId: slot.id, linked: slot.linked)))
                 // `try?` swallowed the cancellation error along with the sleep.
                 guard !Task.isCancelled else { return }
                 guard Date.now.timeIntervalSince(touchedAt) >= Self.period else { continue }

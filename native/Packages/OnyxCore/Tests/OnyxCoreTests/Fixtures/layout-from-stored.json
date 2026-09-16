@@ -1,7 +1,7 @@
 {
   "module": "dashboard/layout",
   "fn": "fromStored",
-  "note": "v1 upgrades order/size/hidden; v2/v3 read slots at top level; v4 reads the asked-for side (absent side → defaults). Then reconcile: unique ids, hidden narrowed by placed, missing catalogue widgets appended. Minted ids → new-N; a stamped updatedAt → -1. Never called with null.",
+  "note": "v1 upgrades order/size/hidden; v2/v3 read slots at top level; v4 reads the asked-for side (absent side → defaults). Then reconcile: unique ids, hidden narrowed by placed, missing catalogue widgets appended. Minted ids → new-N; a stamped updatedAt → -1. Never called with null. W7: `reconcile` appends `daily` last in every case.",
   "cases": [
     {
       "name": "empty object @phone",
@@ -142,6 +142,13 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -289,6 +296,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -434,6 +448,13 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -581,6 +602,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -726,6 +754,13 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -873,6 +908,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -1018,6 +1060,13 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -1165,6 +1214,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -1309,6 +1365,13 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -1456,6 +1519,13 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -1614,6 +1684,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [
@@ -1770,6 +1847,13 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -1931,6 +2015,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -2089,6 +2180,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -2240,6 +2338,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -2390,6 +2495,13 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -2556,6 +2668,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -2721,6 +2840,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -2878,6 +3004,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -3034,6 +3167,13 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -3199,6 +3339,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -3363,6 +3510,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -3516,6 +3670,13 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -3673,6 +3834,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [
@@ -3829,6 +3997,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [
@@ -3984,6 +4159,13 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -4146,6 +4328,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -4304,6 +4493,13 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -4476,6 +4672,13 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -4650,6 +4853,13 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -4853,6 +5063,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -5053,6 +5270,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -5212,6 +5436,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -5370,6 +5601,13 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -5541,6 +5779,13 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -5715,6 +5960,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [
@@ -5878,6 +6130,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -6038,6 +6297,13 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -6200,6 +6466,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -6361,6 +6634,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -6513,6 +6793,13 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -6676,6 +6963,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -6837,6 +7131,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -6997,6 +7298,13 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -7166,6 +7474,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -7334,6 +7649,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -7484,6 +7806,13 @@
             "items": [
               "fatigue"
             ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
+            ]
           }
         ],
         "hidden": [],
@@ -7633,6 +7962,13 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],

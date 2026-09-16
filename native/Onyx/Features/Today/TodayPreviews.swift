@@ -12,7 +12,16 @@ enum TodayPreviews {
     static let userId = "00000000-0000-0000-0000-000000000001"
 
     @MainActor
-    static func model(editing: Bool = false, sheet: TodaySheet? = nil) -> TodayModel {
+    static func model(
+        editing: Bool = false, sheet: TodaySheet? = nil,
+        /// W7. The Mega Widget is appended LAST by `reconcile`, which on a
+        /// twenty-slot grid is three screens below the fold — so the shot that
+        /// reviews it has to bring it up. Nothing else moves, so the tiles
+        /// around it are the ones every other Today shot photographs.
+        megaFirst: Bool = false,
+        /// W7. A connected stack, for the sheet that says so.
+        linked: Bool = false
+    ) -> TodayModel {
         let database = try! AppDatabase.inMemory(deviceId: "shot")
         // The catalogue as rows (W2): decks, plans, phases, rungs.
         PreviewCatalogue.seed(database)
@@ -26,6 +35,8 @@ enum TodayPreviews {
         // Edit mode is photographed with the hero at Medium, so the smalls, the
         // stack and the gallery all fit on one screen.
         if editing { layout = Dashboard.resizeSlot(layout, slotId: "sl-recovery") }
+        if linked { layout = Dashboard.setLinked(layout, slotId: "sl-sleep", true) }
+        if megaFirst { layout = Dashboard.moveSlot(layout, fromId: "sl-daily", toId: "sl-recovery") }
         try? database.saveDashboardLayout(userId: userId, layout)
 
         let snapshot = OnyxSnapshot.sample
@@ -94,6 +105,26 @@ enum TodayPreviews {
         switch screen {
         case "today-edit":
             NavigationStack { TodayTabView(seeded: model(editing: true)) }.environment(AppEnvironment.preview)
+        // ── W7 ──────────────────────────────────────────────────────────────
+        // The Mega Widget at the top of the grid: three arcs, the battery in
+        // the hole and the rule table's sentence under it. The AX5 twin is the
+        // one that matters — the sentence is the only prose on the dashboard
+        // and it has two lines to fit in.
+        case "today-mega":
+            NavigationStack { TodayTabView(seeded: model(megaFirst: true)) }.environment(AppEnvironment.preview)
+        // A connected stack. The connection is invisible on a tile by design —
+        // it changes WHEN the tile turns over, not what it draws — so the shot
+        // that reviews it is the sheet that sets it.
+        case "today-stack-linked":
+            NavigationStack { TodayTabView(seeded: model(sheet: .stack("sl-sleep"), linked: true)) }
+                .environment(AppEnvironment.preview)
+        // Edit mode for a reader who has asked the system not to move things.
+        // The wiggle is gone and every tile wears its accent hairline instead,
+        // which is the substitution and not the removal.
+        case "today-edit-still":
+            NavigationStack { TodayTabView(seeded: model(editing: true)) }
+                .environment(AppEnvironment.preview)
+                .environment(\.onyxForcesReducedMotion, true)
         // The two sheets §5.1 rewrote. Both are photographed because both were
         // the same bug — a sheet repeating its own content — and a regression in
         // either is invisible in a diff and obvious in a PNG.

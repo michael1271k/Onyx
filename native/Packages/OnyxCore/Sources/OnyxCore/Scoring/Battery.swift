@@ -61,6 +61,21 @@ public enum Battery {
 
     public static let defaults = Defaults()
 
+    // ── THE BAND, WHICH IS NOT THE MODEL ────────────────────────────────────
+    //
+    // Where a percentage stops being green and starts being amber, and where
+    // amber becomes red. It is a DISPLAY cut, not a term in the v9 arithmetic
+    // — nothing above reads it — but it has to live in one place, because two
+    // surfaces judge a day by it and they sit 40 pt apart on the Mega tile:
+    // `Color.onyx.battery` paints the figure and `CoachSentence` writes the
+    // line under it. Declared here rather than in either, because a battery
+    // band belongs to the battery.
+
+    /// At or above this the day reads as good.
+    public static let goodPct = 60.0
+    /// Below this the day reads as a rest day.
+    public static let lowPct = 30.0
+
     /// The worst case the model can ever charge in a single day.
     /// v9: 35 + 12 + 32 + 8 + 6 = 93.
     public static var maxTotalDrain: Double {

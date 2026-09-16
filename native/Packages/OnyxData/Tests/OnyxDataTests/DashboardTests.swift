@@ -31,6 +31,49 @@ struct DashboardLayoutStoreTests {
         #expect(ref.id == user)
     }
 
+    // ── W7: `linked` over the row that is on the device ─────────────────────
+
+    /// The migration this wave performs, at the layer that performs it.
+    /// `Dashboard`'s own vectors prove the reader; this proves that a real
+    /// stored row, written by a build that had never heard of `linked`, comes
+    /// back out of the store saying the same thing — and that connecting a
+    /// stack adds one key and moves nothing else, `v` included.
+    @Test("a row written before `linked` existed reads, re-writes and loses nothing")
+    func v4RowSurvivesTheBump() throws {
+        let db = try AppDatabase.inMemory(deviceId: "device-a")
+        let v4 = #"{"v":4,"phone":{"slots":[{"id":"sl-sleep","size":"m","items":["sleep","vitals"]}],"hidden":["steps"],"updatedAt":7},"desktop":{"slots":[{"id":"d1","size":"xl","items":["recovery"]}],"hidden":[],"updatedAt":5}}"#
+        try db.writer.write { try DashboardLayoutRow(userId: user, layout: JSONText(raw: v4), updatedAt: Date()).insert($0) }
+
+        let read = try db.writer.read { db -> DashboardLayout in
+            let row = try DashboardLayoutRow.filter(Column("user_id") == user).fetchOne(db)!
+            return StoredDashboardLayout(row).layout
+        }
+        // The arrangement the row held, plus the catalogue widgets it predates.
+        #expect(read.slots.first { $0.id == "sl-sleep" }?.items == [.sleep, .vitals])
+        #expect(read.slots.first { $0.id == "sl-sleep" }?.linked == false)
+        #expect(read.hidden == [.steps])
+        #expect(read.slots.last?.items == [.daily], "reconcile appends the Mega Widget last")
+
+        // Connect the stack, save, and read it back off disk.
+        try db.saveDashboardLayout(userId: user, Dashboard.setLinked(read, slotId: "sl-sleep", true))
+        let object = try db.writer.read { db -> [String: Any] in
+            let row = try DashboardLayoutRow.filter(Column("user_id") == user).fetchOne(db)!
+            return try JSONSerialization.jsonObject(with: Data(row.layout.raw.utf8)) as! [String: Any]
+        }
+        // ── AND `v` DID NOT MOVE ────────────────────────────────────────
+        // `linked` is additive, and `Dashboard.version` is the gate an older
+        // build uses to decide whether this row has surface sides at all. See
+        // `Layout.swift`'s header for what raising it costs.
+        #expect(object["v"] as? Double == 4)
+        // The desktop side the phone has no business touching is still there.
+        #expect(((object["desktop"] as! [String: Any])["slots"] as! [[String: Any]])[0]["id"] as? String == "d1")
+        let back = Dashboard.fromStored(object, surface: .phone)
+        #expect(back.slots.first { $0.id == "sl-sleep" }?.linked == true)
+        // And every slot that was NOT connected wrote no flag at all.
+        let slots = (object["phone"] as! [String: Any])["slots"] as! [[String: Any]]
+        #expect(slots.filter { $0["linked"] != nil }.count == 1)
+    }
+
     // ── W6: the Train tab rides in this row ─────────────────────────────────
 
     @Test("a train save keeps both dashboard sides, and a dashboard save keeps the train key")

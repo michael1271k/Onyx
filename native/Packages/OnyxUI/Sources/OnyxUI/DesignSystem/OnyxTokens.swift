@@ -282,7 +282,13 @@ extension Color {
         /// that does not exist is text-grey rather than any verdict.
         public static func battery(_ pct: Int?) -> Color {
             guard let pct else { return textSecondary }
-            return pct >= 60 ? good : pct >= 30 ? OnyxDomain.fuel.accent : danger
+            // `Battery`'s cuts, never a second pair of literals: the sentence
+            // the Mega tile draws under this figure reads the same two numbers
+            // (`CoachSentence`), and a green 59 over "Train light today" is the
+            // disagreement one shared constant makes impossible.
+            return Double(pct) >= Battery.goodPct ? good
+                : Double(pct) >= Battery.lowPct ? OnyxDomain.fuel.accent
+                : danger
         }
 
         /// Effort on the CR-10 ladder, in ink.

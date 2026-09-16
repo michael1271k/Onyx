@@ -47,6 +47,12 @@ public enum WidgetId: String, Codable, Sendable, CaseIterable {
     // `reconcile` appends in, so a new id lands where it reads rather than at
     // the end of the grid.
     case body, trajectory, muscle, volume, pr, consistency, steps, cardio, stack, fatigue
+    // `daily` is W7's Mega Widget and is declared LAST on purpose. Declaration
+    // order is the order `reconcile` appends in, so a twentieth id put anywhere
+    // else would shift the tail of every stored layout — and the golden vectors
+    // pin that tail. Last means "appended after everything that was already
+    // there", which is what a device carrying a v4 row actually experiences.
+    case daily
 }
 
 /// One position on the grid. `items` is ordered and MAY repeat a widget.
@@ -54,11 +60,52 @@ public struct StackSlot: Codable, Sendable, Equatable {
     public var id: String
     public var size: WidgetSize
     public var items: [WidgetId]
+    /// A CONNECTED stack (W7, A9): its faces share one window rather than each
+    /// resolving independently.
+    ///
+    /// ── WHAT IT MEANS ON A PHONE, WHICH IS NOT WHAT IT MEANS IN A PAYLOAD ───
+    /// The storage is the whole of it here: the flag rides in the layout row,
+    /// defaults false, and every reader that does not know about it behaves
+    /// exactly as before. What the Today grid DOES with it is
+    /// `SmartStackView`'s business — a linked slot drops its per-slot rotation
+    /// phase so every connected stack turns over on one beat.
+    public var linked: Bool
 
-    public init(id: String, size: WidgetSize, items: [WidgetId]) {
+    public init(id: String, size: WidgetSize, items: [WidgetId], linked: Bool = false) {
         self.id = id
         self.size = size
         self.items = items
+        self.linked = linked
+    }
+
+    // ── CODABLE BY HAND, FOR ONE KEY ────────────────────────────────────────
+    // A property's default value is NOT consulted by Swift's synthesized
+    // `init(from:)` — only by the memberwise initialiser. So the synthesized
+    // decoder makes `linked` REQUIRED, and every stored layout, every golden
+    // vector and every mirrored row written before W7 fails to decode with
+    // `keyNotFound`. That is not a theoretical migration: it is the row on the
+    // device right now.
+    //
+    // The encoder omits `linked` when it is false for the same reason
+    // `serializeLayout` does: absent and false say the same thing, so writing
+    // it would rewrite every payload to state what it already stated.
+
+    enum CodingKeys: String, CodingKey { case id, size, items, linked }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        size = try c.decode(WidgetSize.self, forKey: .size)
+        items = try c.decode([WidgetId].self, forKey: .items)
+        linked = try c.decodeIfPresent(Bool.self, forKey: .linked) ?? false
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(size, forKey: .size)
+        try c.encode(items, forKey: .items)
+        if linked { try c.encode(true, forKey: .linked) }
     }
 }
 
@@ -109,6 +156,15 @@ public enum Dashboard {
         .cardio: [.s, .m],
         .stack: [.s, .m],
         .fatigue: [.s, .m],
+        // ── ONE SIZE, AND IT IS THE BIG ONE (W7) ───────────────────────────
+        // Three concentric arcs, a battery in the hole and a sentence under
+        // it. A Small is 158 pt square: the arcs would be 40 pt across and the
+        // sentence would be two truncated words. A Medium is the same height
+        // with the width spent sideways, which buys the sentence a line and
+        // costs the rings the room that makes them readable. The widget that
+        // answers "how is the whole day going" is the one widget that has to
+        // be able to hold four answers at once, so it holds one size.
+        .daily: [.l],
     ]
 
     static let defaultSizePhone: [WidgetId: WidgetSize] = [
@@ -116,7 +172,7 @@ public enum Dashboard {
         .sleep: .m, .vitals: .m, .fuel: .m, .water: .s, .micros: .s, .deficit: .m,
         .train: .m, .bar: .s, .body: .m, .trajectory: .m, .muscle: .s, .volume: .s,
         .pr: .s, .consistency: .s, .steps: .s, .cardio: .s, .stack: .s,
-        .fatigue: .s,
+        .fatigue: .s, .daily: .l,
     ]
 
     static let defaultSizeDesktop: [WidgetId: WidgetSize] = defaultSizePhone.merging([
@@ -126,6 +182,10 @@ public enum Dashboard {
         .vitals: .l, .fuel: .l, .deficit: .l, .train: .l, .muscle: .l, .volume: .l,
         .micros: .m, .bar: .m, .consistency: .m, .steps: .m,
         .water: .m, .pr: .m, .cardio: .m, .stack: .m, .fatigue: .m, .trajectory: .m,
+        // `.l` on a desktop too, and not `.xl`: `defaultLayout` takes this
+        // number UNCLAMPED, so a default outside `widgetSizes` mints a slot
+        // whose size no face can draw.
+        .daily: .l,
     ]) { _, new in new }
 
     /// The size a widget lands at when it is added back from the tray.
@@ -174,6 +234,30 @@ public enum Dashboard {
     // MARK: The stored payload
 
     /// v3 added `hidden`; v4 split the arrangement by surface.
+    ///
+    /// ── W7 ADDED `StackSlot.linked` AND DID NOT RAISE THIS ──────────────────
+    /// `version` is not a label on the payload. It is the GATE `fromStored`
+    /// uses to decide whether a stored object has `phone` / `desktop` sides at
+    /// all, and `otherSideOf` uses to decide whether the OTHER side can be
+    /// carried through — so the number is a handshake with every build that has
+    /// ever written this row, not a note about what the schema now holds.
+    ///
+    /// `linked` needs no handshake. It is one optional key per slot, written
+    /// only when true, and `parseSlots` has always read `id` / `size` / `items`
+    /// and ignored everything else — so a build that has never heard of it
+    /// reads a row carrying it perfectly and writes one back without it.
+    ///
+    /// Raising it to 5 costs what W6's record said it costs, and worse. An
+    /// older build's `fromStored` compares `v == 4.0` exactly: on a v5 row
+    /// `side` stays nil, the v1/v2/v3 chain all miss, `slots` comes back empty
+    /// and `reconcile` hands the user the default grid. Its next save then
+    /// writes `v: 4` with those defaults, and its `otherSideOf` — the same
+    /// exact comparison — finds no top-level `slots` in the v5 dict and writes
+    /// `"desktop": {}`. Both arrangements are gone, `touch` stamps the wipe
+    /// with a fresh `updatedAt`, and the wipe wins the next sync. There is no
+    /// version of that trade worth one number nothing reads.
+    ///
+    /// `TrainLayout`'s header names the same hazard for the same row.
     static let version = 4.0
 
     /// A stored payload — a `dashboard_layouts.layout` row, or the app's own
@@ -230,7 +314,17 @@ public enum Dashboard {
                 return newSlotId()
             }()
             let want = size(dict["size"]) ?? defaultSize(for: items[0], surface: surface)
-            out.append(StackSlot(id: id, size: clampSize(items, want, surface: surface), items: items))
+            // Absent, null, or anything that is not a JSON boolean reads as
+            // false — the pre-v5 meaning, which is the meaning every stored
+            // row has.
+            let linked = (dict["linked"] as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() && $0.boolValue } ?? false
+            // The same normalisation `touch` applies, for a row this app did
+            // not write: a hand-edited payload can say a single tile is
+            // connected, and nothing on screen could then disconnect it.
+            out.append(StackSlot(
+                id: id, size: clampSize(items, want, surface: surface), items: items,
+                linked: linked && items.count > 1
+            ))
         }
         return out
     }
@@ -286,7 +380,17 @@ public enum Dashboard {
         _ layout: DashboardLayout, surface: DashboardSurface, other: Any? = nil
     ) -> [String: Any] {
         let side: [String: Any] = [
-            "slots": layout.slots.map { ["id": $0.id, "size": $0.size.rawValue, "items": $0.items.map(\.rawValue)] as [String: Any] },
+            // `linked` is written only when it is TRUE. A key that is absent
+            // and a key that is `false` mean the same thing to every reader
+            // (`parseSlots` above, and any older build), so writing it for
+            // every slot would rewrite every stored row to say what it
+            // already said — which is the "default false leaves every stored
+            // layout unchanged" rule, spelled in the writer.
+            "slots": layout.slots.map { slot -> [String: Any] in
+                var out: [String: Any] = ["id": slot.id, "size": slot.size.rawValue, "items": slot.items.map(\.rawValue)]
+                if slot.linked { out["linked"] = true }
+                return out
+            },
             "hidden": layout.hidden.map(\.rawValue),
             "updatedAt": layout.updatedAt,
         ]
@@ -322,8 +426,26 @@ public enum Dashboard {
     }
 
     /// Stamp an edit. Every mutation goes through this, so `updatedAt` cannot lie.
+    ///
+    /// ── AND IT IS WHERE `linked` IS NORMALISED (W7) ──────────────────────────
+    /// `setLinked` refuses to connect a slot with one face — there is nothing
+    /// for it to share a window with — but `removeFace` and `unstackFace` carry
+    /// the flag onto whatever is left, which may now BE one face. That leaves
+    /// a stored state the setter would not create, and `StackEditSheet` hides
+    /// the toggle for a single tile, so nobody can clear it. It is inert until
+    /// another tile is stacked onto that slot, which then silently arrives
+    /// connected without anyone asking for it.
+    ///
+    /// Every mutation returns through here, so one line covers all six of them
+    /// rather than the two that happen to be able to cause it today.
     public static func touch(_ layout: DashboardLayout) -> DashboardLayout {
         var copy = layout
+        copy.slots = layout.slots.map { s in
+            guard s.linked, s.items.count <= 1 else { return s }
+            var next = s
+            next.linked = false
+            return next
+        }
         copy.updatedAt = (Date().timeIntervalSince1970 * 1000).rounded(.down)
         return copy
     }
@@ -396,7 +518,7 @@ public enum Dashboard {
             let items = s.items.enumerated().filter { $0.offset != index }.map(\.element)
             if items.isEmpty { continue }
             // The TypeScript clamps on the default surface here; mirrored.
-            slots.append(StackSlot(id: s.id, size: clampSize(items, s.size), items: items))
+            slots.append(StackSlot(id: s.id, size: clampSize(items, s.size), items: items, linked: s.linked))
         }
         let stillPlaced = Set(slots.flatMap(\.items))
         var hidden = layout.hidden
@@ -471,7 +593,9 @@ public enum Dashboard {
             .filter { $0.id != fromId }
             .map { s in
                 guard s.id == ontoId else { return s }
-                return StackSlot(id: s.id, size: clampSize(items, s.size, surface: surface), items: items)
+                // The TARGET's flag survives, because the target is the slot
+                // that stays (`TileMenu`'s header states the direction).
+                return StackSlot(id: s.id, size: clampSize(items, s.size, surface: surface), items: items, linked: s.linked)
             }
         return touch(copy)
     }
@@ -483,10 +607,27 @@ public enum Dashboard {
         let rest = s.items.enumerated().filter { $0.offset != index }.map(\.element)
         let at = layout.slots.firstIndex { $0.id == slotId }!
         var slots = layout.slots
-        slots[at] = StackSlot(id: s.id, size: clampSize(rest, s.size), items: rest)
+        slots[at] = StackSlot(id: s.id, size: clampSize(rest, s.size), items: rest, linked: s.linked)
+        // The lifted face is its own tile now, and a tile is not a stack: it
+        // has nothing to be connected TO.
         slots.insert(StackSlot(id: newSlotId(), size: clampSize([id], s.size), items: [id]), at: at + 1)
         var copy = layout
         copy.slots = slots
+        return touch(copy)
+    }
+
+    /// Connect a stack, or disconnect it. A slot with one face cannot be
+    /// connected — there is nothing for it to share a window WITH — so the flag
+    /// is refused there rather than stored and ignored.
+    public static func setLinked(_ layout: DashboardLayout, slotId: String, _ linked: Bool) -> DashboardLayout {
+        guard let s = slot(layout, at: slotId), s.items.count > 1 || !linked, s.linked != linked else { return layout }
+        var copy = layout
+        copy.slots = layout.slots.map { slot in
+            guard slot.id == slotId else { return slot }
+            var next = slot
+            next.linked = linked
+            return next
+        }
         return touch(copy)
     }
 

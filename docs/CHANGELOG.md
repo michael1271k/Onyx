@@ -44,6 +44,44 @@ _Nothing yet._
 
 ---
 
+## [3.16.0] — 2026-09-16 · The Dashboard Grows a Face
+
+### Added
+- **Day Rings, a twentieth dashboard tile.** Three concentric arcs — the night
+  against its goal, the day's movement, the food against its target — a battery
+  percentage in the hole, and one sentence underneath. Large only, and it is on
+  the grid already: a device that has been carrying its arrangement since Wave 5
+  finds it appended at the end rather than in place of anything.
+- **The sentence is a rule table, not a model call.** Battery band, training
+  load (ACWR), stress band and the sleep-debt bank, read in that order, first
+  match wins. It works with the phone in aeroplane mode in a basement, which is
+  where an offline gym app has to be able to say "rest day needed". Nineteen
+  fixtures pin it, one per branch, including the day a new account has: "Nothing
+  is known about today yet."
+- **Connected stacks.** Edit Stack has a *Connected* switch. Connected stacks
+  share one window: they all turn over on the same beat instead of drifting
+  apart, so the grid shows page one of everything and then page two of
+  everything. Off by default, and every stack you already have stays as it was.
+
+### Changed
+- **Edit mode wobbles properly.** The jiggle was ±0.8° on an ease curve, which
+  read as a shimmer from more than arm's length — and since the long press
+  started opening a menu instead, the jiggle is the only thing that says which
+  mode you are in. It is ±1.2° on a spring now.
+- **Edit mode says so without moving, when you have asked it not to move.** With
+  Reduce Motion on, every editable tile wears a hairline in its own accent
+  instead of wobbling. It used to get the two corner badges and nothing else.
+
+### Fixed
+- **The dashboard stops forgetting its arrangement.** The layout was never lost
+  — `dashboard_layouts` has been synced both ways all along. It was *overwritten*:
+  the grid draws the default arrangement for the fraction of a second before the
+  stored one arrives, and a drag made in that window saved the default over the
+  real row and pushed it to every other device. An edit before the first read is
+  now refused outright; nothing is written and nothing is queued.
+
+---
+
 ## [3.15.0] — 2026-09-16 · Train Tells the Truth About the Week
 
 ### Fixed

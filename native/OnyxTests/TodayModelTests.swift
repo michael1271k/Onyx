@@ -32,13 +32,16 @@ struct TodayModelTests {
         #expect(rows.map { $0.slots.map(\.id) } == [["a"], ["b"], ["c", "d"], ["e"], ["f"]])
     }
 
-    /// Sixteen since W12: `trajectory` is new, and `deficit` and `fatigue`
-    /// stopped being projected out when they got their series. The three
-    /// without a face are `bar`, `micros` and `stack`.
+    /// Seventeen since W7, which added the Mega Widget. Sixteen before that:
+    /// `trajectory` is W12's, and `deficit` and `fatigue` stopped being
+    /// projected out when they got their series. The three without a face are
+    /// `bar`, `micros` and `stack`.
     @Test("the catalogue the phone offers is every widget with a face, in catalogue order")
     func native() {
-        #expect(OnyxTile.native.count == 16)
+        #expect(OnyxTile.native.count == 17)
         #expect(OnyxTile.native.first == .recovery)
+        // The Mega Widget is declared last, so it is offered last.
+        #expect(OnyxTile.native.last == .daily)
         #expect(OnyxTile.native.contains(.deficit))
         #expect(OnyxTile.native.contains(.fatigue))
         #expect(OnyxTile.native.contains(.trajectory))
@@ -239,5 +242,141 @@ struct TodayModelTests {
         #expect(TileFrame<EmptyView>.label(stack, up: .vitals) == "Vitals. Stack of 2.")
         let single = StackSlot(id: "b", size: .s, items: [.steps])
         #expect(TileFrame<EmptyView>.label(single, up: .steps) == "Steps")
+    }
+
+    // MARK: - W7: the clobber (F9)
+
+    /// THE bug. `dashboard_layouts` was always synced both ways — the layout was
+    /// never lost, it was overwritten by the default the screen draws while the
+    /// first stream yield is in flight. A save in that window is refused
+    /// outright: nothing moves on screen, nothing is written locally, and above
+    /// all nothing is enqueued for the server.
+    @Test("an edit made before the first stream yield changes nothing and queues nothing")
+    func saveBeforeLoadWritesNothing() throws {
+        let database = try AppDatabase.inMemory(deviceId: "w7-clobber")
+        // No seeded layout, and `observe()` never started: exactly the state the
+        // grid is in for the first frame after `TodayTabView.task` runs.
+        let model = TodayModel(database: database, userId: "u")
+        let before = model.layout
+        #expect(before == Dashboard.defaultLayout(.phone), "the screen still DRAWS a default — it just may not save one")
+
+        // Every route a finger can take in that window.
+        model.remove("sl-steps")
+        model.resize("sl-sleep")
+        model.move("sl-sleep", to: "sl-water")
+        model.stack("sl-vitals", onto: "sl-sleep")
+        model.add(.steps)
+        model.setLinked("sl-sleep", true)
+
+        #expect(model.layout == before)
+        // The outbox is the half that reaches the other devices, and it is the
+        // half that made this a data loss rather than a redraw.
+        #expect(try database.pendingOutbox().isEmpty)
+    }
+
+    /// And the gate has to OPEN, or the grid is simply read-only. The first
+    /// yield is a database round trip, so this polls rather than sleeping a
+    /// fixed amount.
+    @Test("the first stream yield opens the gate, and the next edit lands")
+    func theGateOpens() async throws {
+        let database = try AppDatabase.inMemory(deviceId: "w7-gate")
+        let model = TodayModel(database: database, userId: "u")
+        let observing = Task { await model.observe() }
+        defer { observing.cancel() }
+
+        var landed = false
+        for _ in 0..<200 {
+            try await Task.sleep(for: .milliseconds(10))
+            model.resize("sl-sleep")
+            if !(try database.pendingOutbox().isEmpty) { landed = true; break }
+        }
+        #expect(landed, "the stream yielded and the edit still was not saved")
+    }
+
+    /// A store with no row yields `nil`, and `nil` is an ANSWER. A first-launch
+    /// device that could not save its first drag would be a worse bug than the
+    /// one this wave fixes.
+    @Test("a device with no stored row can still save its first arrangement")
+    func firstLaunchCanSave() async throws {
+        let database = try AppDatabase.inMemory(deviceId: "w7-first")
+        let model = TodayModel(database: database, userId: "nobody-has-a-row")
+        let observing = Task { await model.observe() }
+        defer { observing.cancel() }
+
+        var landed = false
+        for _ in 0..<200 {
+            try await Task.sleep(for: .milliseconds(10))
+            model.resize("sl-vitals")
+            if !(try database.pendingOutbox().isEmpty) { landed = true; break }
+        }
+        #expect(landed)
+    }
+
+    /// A preview or a shot hands a layout in and then arranges it; there is no
+    /// stream behind either, so the seeded layout has to count as a load.
+    @Test("a seeded layout is a load")
+    func seededLayoutIsALoad() throws {
+        let database = try AppDatabase.inMemory(deviceId: "w7-seeded")
+        let model = TodayModel(
+            database: database, userId: "u",
+            layout: DashboardLayout(
+                slots: [StackSlot(id: "a", size: .s, items: [.steps]), StackSlot(id: "b", size: .s, items: [.water])],
+                hidden: [], updatedAt: 1
+            )
+        )
+        model.move("a", to: "b")
+        #expect(model.layout.slots.map(\.id) == ["b", "a"])
+    }
+
+    // MARK: - W7: connected stacks (A9)
+
+    /// `linked` is the founder's "connected stacks share one window". Every face
+    /// of a slot already gets ONE entry from the grid, so the only thing that is
+    /// genuinely per-slot — and therefore the only thing a connection can share
+    /// — is the rotation phase.
+    @Test("a connected stack drops its phase, so every connected stack beats together")
+    func linkedStacksShareTheBeat() {
+        let now = Date(timeIntervalSince1970: 1_757_000_000)
+        let a = SmartStackView.untilNextBeat(now: now, slotId: "sl-sleep", linked: true)
+        let b = SmartStackView.untilNextBeat(now: now, slotId: "sl-vitals", linked: true)
+        #expect(a == b)
+        // Unconnected is untouched: the two are still spread.
+        #expect(abs(SmartStackView.untilNextBeat(now: now, slotId: "sl-sleep")
+                    - SmartStackView.untilNextBeat(now: now, slotId: "sl-vitals")) > 0.5)
+        // And the one invariant `untilNextBeat` has survives the new argument.
+        for step in stride(from: -9_020.0, to: 60.0, by: 0.37) {
+            let wait = SmartStackView.untilNextBeat(now: now.addingTimeInterval(step), slotId: "sl-sleep", linked: true)
+            #expect(wait > 0 && wait <= SmartStackView.period)
+        }
+    }
+
+    /// The flag survives the projection, or a stack the web stored with a
+    /// web-only face would silently disconnect on the phone.
+    @Test("projecting a slot keeps its connection")
+    func projectionKeepsLinked() {
+        let shown = TodayModel.projectNative([
+            StackSlot(id: "a", size: .s, items: [.micros, .water, .sleep], linked: true)
+        ])
+        #expect(shown[0].items == [.water, .sleep])
+        #expect(shown[0].linked)
+    }
+
+    // MARK: - W7: the wiggle
+
+    /// ±1.2°, and the phase window is one half-cycle. A stagger wider than the
+    /// cycle wraps and is the same offset again, which is the bug the old
+    /// 140 ms window had in the other direction — it was narrower than the
+    /// 140 ms half-cycle only by accident.
+    @Test("the wiggle leans 1.2 degrees and its phases fit inside one half-cycle")
+    func wiggleGeometry() {
+        #expect(TileFrame<EmptyView>.tilt == 1.2)
+        let window = Int(TileFrame<EmptyView>.beat * 1000)
+        #expect(window > 0)
+        for id in ["sl-sleep", "sl-vitals", "sl-water", "sl-steps", "sl-daily"] {
+            #expect(SmartStackView.stagger(id) % window < window)
+        }
+        // Two tiles do not start together, which is the whole point of the
+        // offset — if they did the grid would march in step.
+        #expect(SmartStackView.stagger("sl-sleep") % window != SmartStackView.stagger("sl-vitals") % window)
     }
 }
