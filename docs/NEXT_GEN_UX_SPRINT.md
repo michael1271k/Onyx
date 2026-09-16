@@ -1922,3 +1922,160 @@ the sprint still owes are W9's and W11's, unchanged.
 **Founder's manual steps still outstanding:** none for this wave. Nothing here needs DDL,
 a dashboard reset or a Supabase visit — the `train` key is additive to a row every account
 already has, and an account that has never written one reads as "everything visible".
+
+---
+
+### W7 Wave Record — shipped 2026-09-16 as 3.16.0
+
+**Drift from the plan, on purpose:**
+
+- **`TodayFeed.coach` did not exist; it does now, and it is a passthrough.** The
+  brief says "the sentence comes from `TodayFeed.coach`, extended with a rule
+  table". There was no such property — `TodayFeed.readiness` is the coach
+  headline (`ReadinessResult`), three fixed sentences keyed on one composite,
+  with nothing to extend. So the rule table is a new pure type in OnyxCore
+  (`Coach/CoachSentence.swift`), the sentence rides in the widget payload as
+  `OnyxSnapshot.coach`, and `TodayFeed.coach` is a one-line computed passthrough
+  so the name the brief uses exists and means what it says. **It has no caller**
+  — the grid draws `feed?.snapshot` and `MegaView` reads `s?.coach` — and review
+  asked for it to be deleted. Kept, because the brief names it as the API.
+- **`StackSlot.linked` shipped; the v5 payload did not.** This is the wave's one
+  reversal, made after review and confirmed with the founder. `Dashboard.version`
+  is not a label on the payload, it is the GATE `fromStored` uses to decide
+  whether a stored object has `phone`/`desktop` sides at all — W6's record says
+  so and is why W6 left `v` at 4. W7 first raised it to 5 with a
+  `splitVersions: Set<Double> = [4, 5]` gate so this build read both. That works
+  *in this direction only*. An older build compares `v == 4.0` exactly: on a v5
+  row `side` stays nil, the v1/v2/v3 chain all miss, `slots` comes back empty
+  and `reconcile` hands back the default grid — then its next save writes `v: 4`
+  with those defaults and its `otherSideOf`, the same comparison, finds no
+  top-level `slots` and writes `"desktop": {}`. Both arrangements gone, stamped
+  with a fresh `updatedAt`, and the wipe wins the next sync. The same class of
+  bug as F9, in the commit that was fixing F9. `linked` needs no version at all:
+  it is one optional key per slot, written only when true, and `parseSlots` has
+  always read `id`/`size`/`items` and ignored the rest. `version` is 4.0,
+  `splitVersions` is gone, and `layout-serialize.json` is `main`'s file
+  untouched.
+- **A8's 22 pt stroke could not be inherited, and the header says which part
+  was.** `WeeklyMuscleRing` strokes 22 pt on one 170 pt ring; three concentric
+  rings inside a Large tile share 176 pt of diameter and at 22 pt each there is
+  no hole left for the battery. What IS inherited verbatim is the part that is a
+  RULE rather than a measurement: `.butt` caps and `MuscleRingArcs.gap`. The
+  width is 14 pt on a 20 pt pitch, solved backwards from the 68 pt hole the
+  battery and its caption need.
+- **The 2° gap does a different job here than on the muscle ring.** There it
+  separates two adjacent arcs of near-identical lightness. Here each arc's only
+  neighbour is its own tail, so the gap is what stops a ring at 100 % closing
+  seamlessly and becoming indistinguishable from a full-opacity track. Same
+  constant, same `.butt` requirement, different argument — stated rather than
+  borrowed silently.
+- **`WidgetId.daily` is a dashboard tile, not a sixth widget KIND**, and it is
+  called **Day Rings**. No gallery entry, no intent, no scope decision. Not
+  "Daily", because `OnyxDaily` is already a Home Screen kind by that name.
+- **The jiggle was three-quarters already built.** `TileFrame` has had a
+  `wiggle` state, a per-tile phase and both badges since W2, and `Done` has been
+  in the toolbar since the screen was written. What was genuinely wrong: ±0.8°
+  on `.easeInOut(0.14)`, which at arm's length reads as a shimmer, on a screen
+  where the long press now opens a menu so the jiggle is the ONLY thing naming
+  the mode.
+
+**Root causes that were not where the plan guessed:**
+
+- **A9's stated mechanism is already true on this surface.** "A linked stack's
+  faces all render against the slot's own window instead of each resolving today
+  independently" describes a Home Screen timeline. In the app,
+  `SmartStackView` hands every face of a slot ONE `OnyxTileEntry`, evaluated
+  once per body pass — they have never resolved anything independently, so A9 as
+  written is a no-op with a switch on it. The one thing that genuinely is
+  per-slot is the rotation PHASE (`stagger`, the slot id's hash), so a connected
+  stack drops it: every connected stack turns over on one beat and the grid
+  reads page one of everything then page two of everything. The Edit Stack
+  footer says exactly that.
+- **The Mega tile lands below the fold and no shot would have found it.**
+  `reconcile` appends a new catalogue id at the end, which on a twenty-slot grid
+  is three screens down. `TodayPreviews.model(megaFirst:)` moves it up for
+  `today-mega` only; every other Today shot is unchanged.
+- **`accessibilityReduceMotion` is read-only in `EnvironmentValues`.** The
+  reduce-motion shot the brief asks for could not be taken: SwiftUI will not let
+  anything write that key, and the simulator's own toggle is a `defaults write`
+  plus a respring that `native-shot.sh`'s per-screen loop cannot express.
+  `onyxForcesReducedMotion` is a sibling key that ORs with the system value,
+  false everywhere except one `#if DEBUG` preview. Without it the still state
+  would have shipped unphotographed.
+- **The first cut of the rings solved to a 32 pt hole**, and the shot showed the
+  per-cent sign and the word BATTERY both cut off by the inner track. Caught by
+  the shot loop, not by any gate — and then caught a second time by review, as
+  an off-by-one-stroke in the frame that replaced it: `outer − 4·pitch − stroke`
+  is the innermost ring's PATH diameter, not its hole. A stroke is centred, so
+  the clear space is a stroke narrower at EACH end.
+- **`TileFrame` is generic, so its constants could not be `static let`.** Swift
+  has no static stored properties on a generic type; `tilt` and `beat` are
+  computed. The error appears only in `swift:ui`, not in `check:swift`.
+- **The sentence and the ring above it disagreed about the sleep goal.** The
+  debt folded against `goals?.sleepGoalHours ?? 8` while the SLEEP arc draws
+  against `sleep.goalMin`, which is nil when no goal is set — a ring with no
+  target directly over "3.2 h of sleep debt". Found by review. No goal, no debt,
+  now on both this tile and Pulse's gauge.
+
+**Constraints discovered that the next wave must respect:**
+
+- **`Dashboard.version` stays 4.0 until something genuinely changes SHAPE.**
+  Additive keys do not need it; the gate is a handshake with every build that
+  has ever written the row, not a note about what the schema holds. The chain a
+  bump sets off is written out in `Layout.swift`'s header.
+- **`OnyxSnapshot.coach` is filled at `.full` scope only**, not `wantsBody`.
+  `wantsBody` also catches `scope == .body`, a Home Screen family, which made
+  the widget EXTENSION pay a 49-day `readinessHistory` plus a plan resolution
+  per timeline refresh for a string no Home Screen face draws. Widen it the day
+  a widget draws the sentence, not before.
+- **`CoachSentence` borrows every threshold and must go on doing so.**
+  `Readiness.constants.acwrOnset` / `.acwrSaturation`, `SleepDebt.band`'s words,
+  `SleepDebt.minimumNights`, `Stress.band`'s cases, and — since review —
+  `Battery.goodPct` / `Battery.lowPct`, which `Color.onyx.battery` now reads
+  too. The battery band was the one pair that had been copied across the
+  OnyxCore/OnyxUI boundary; `LayoutLinkedTests.batteryBandIsShared` ties them.
+- **`linked` is normalised in `Dashboard.touch`**, which every mutation returns
+  through, and in `parseSlots` for a row this app did not write. `setLinked`
+  refuses to connect a one-face slot, but `removeFace` and `unstackFace` could
+  wear the slot down to one face while carrying the flag — and `StackEditSheet`
+  shows no toggle on a single tile, so nothing on screen could clear it. A new
+  mutation that bypasses `touch` re-opens that.
+- **`TodayModel.apply` is gated on `hasLoaded`, and a seeded layout counts as
+  loaded.** Any new construction path that hands in a layout without a stream
+  behind it must keep that true, or the grid is read-only in previews.
+- **The three Mega ring numbers are solved, not chosen.** `outer`, `pitch` and
+  `stroke` fall out of the legend's width and the battery caption's width; the
+  header carries the arithmetic against the real 68 pt hole. Changing one alone
+  re-clips it.
+
+**Left open on purpose:**
+
+- **A layout read failure leaves the grid read-only, and the only retry is
+  leaving the tab.** Refusing the save is correct — saving an arrangement this
+  device has not read IS the clobber — and the banner now names what is being
+  refused rather than only what failed. An automatic retry is not built.
+- **A ring at or past 100 % is unphotographed.** The 2° notch at twelve o'clock
+  is what says "this one went all the way round", and no reading in
+  `OnyxSnapshot.sample` reaches its goal. The arithmetic is
+  `full = (360 − gap)/360` and is trivially checkable.
+- **Connection is invisible on a tile.** It changes WHEN a stack turns over, not
+  what it draws, so the only shot that reviews it is `today-stack-linked` — the
+  Edit Stack sheet with the switch on.
+- **The sentence costs one extra `stressInputs` read per `.full` build.**
+  `readinessHistory` (five narrow scans) plus the day's own rows, beside the
+  fourteen `scoringInputs` reads `batteryStackSlice` already makes, and it is
+  handed `rows.schedule` so the context is not resolved twice. The documented
+  upgrade is the one `StressInputsBuilder`'s header already names —
+  `daily_scores.stress_index`.
+- **The two `.claude/settings.json` PostToolUse hooks still point at the dead
+  Helix checkout** (memory `deep-clean-purge-sep15`), so every `Edit`/`Write` on
+  a `.swift` file reports a blocking error *after* applying the write. This wave
+  routed Swift edits through `Bash` patch scripts instead, which is what the
+  worktree memory asks for anyway. Repointing the hook would make every `.swift`
+  edit pay for a full OnyxUI + OnyxCore cross-build, so it was left alone.
+- **`OnyxTests` has its usual baseline failures** (`WorkoutWeekTests`,
+  `History weeks`, `Session summary`); `TodayModelTests` is 22/22. The
+  `programId` / `ctx` / `floor` unused-value warnings are pre-existing.
+
+**Founder's manual steps still outstanding:** none for W7. The two SQL pastes
+the sprint still owes are W9's and W11's, unchanged.
