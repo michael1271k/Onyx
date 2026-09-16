@@ -1498,3 +1498,153 @@ _Appended by each wave as it merges. W12 harvests these, then deletes this file.
 
 **Founder's manual steps still outstanding:** none for W3. The two SQL pastes
 the sprint still owes are W9's and W11's, unchanged.
+
+
+---
+
+### W4 Wave Record — shipped 2026-09-16 as 3.13.0
+
+**Drift from the plan, on purpose:**
+- **`MuscleMap` answers for cardio from a SECOND table, not from `dict`.**
+  The brief says "MuscleMap must answer for cardio kinds"; it does, through
+  `MuscleMap.cardioDict` and `cardioMovers(_:)`, which nothing but the ledger
+  header reads. Putting a treadmill in `dict` would have done three things
+  nobody asked for: broken both golden fixtures that hold that array to the
+  TypeScript entry for entry (`muscle-map-dict`, `muscle-dict`), started paying
+  `MuscleCredit.weightedSets` for walking — which moves the weekly MEV/MAV
+  accumulator, the Freshness Map, the per-muscle tonnage breakdown and, through
+  the battery, the readiness score — and done it silently. The display question
+  and the credit question are not the same question, and now they have separate
+  tables. `CardioMoversTests` in `swift:core` holds the separation from both
+  sides: a lift never reaches the cardio table and a bout never reaches `dict`.
+- **The pair's shared delta is keyed on `SessionVolume`, not on `L + R`.**
+  A3 says "the pair's combined load × reps". That phrase has exactly one
+  definition in this app and it is not the sum: `SessionVolume.sessionVolumeKg`
+  scores a genuine L/R pair ONCE at the weaker side, `min(w) × min(r)`, so a set
+  logged split weighs what the same set weighs logged whole. The card's own
+  tonnage capsule is that function and the session's tonnage is that function;
+  summing the two arms would have put a number on the row that disagreed with
+  the capsule 24 pt above it about what a pair is worth.
+- **The pair's sub-lines are `secondary` (15 pt), not `micro` (11 pt).**
+  A3 names `micro`, and `micro` is the one role this scale forbids for a value,
+  in as many words: *"a register label — uppercase, tracked out, never carrying
+  a number"*. `secondary` is the legal step down and is named for exactly this
+  ("the line under a value"). The `L` / `R` TAG is `micro`, because a tag is a
+  label — which is also what the logger's own split row does, down to the 14 pt
+  fixed track.
+- **`.pair` is reached when ANY row of the card is a pair, not when all are.**
+  A movement trained one arm at a time routinely opens with a bilateral warm-up,
+  and a "pure pairs only" rule would have left the commonest real shape on
+  `.whole` — the exact behaviour the layout was added to end. A single row on a
+  `.pair` card draws its own whole string and reserves the same one-verdict line
+  under it, so the two shapes genuinely share a table.
+- **The reserved line is a HIDDEN `Text("—")`, not `Color.clear.frame(height:)`.**
+  A2 suggests the frame. A hardcoded height holds at the default type size and
+  drifts at AX5, where the micro line is several times taller. The same `Text`
+  in the same role with `.hidden()` — documented as "hides this view without
+  changing its layout" — makes the reservation the old height BY CONSTRUCTION,
+  at every text size, with no number to maintain.
+- **`headerTags` gained the bout's readings but kept the four strength guards.**
+  The plan says the cardio branch prints "where the five strength tags are
+  guarded off". They are not skipped by a branch — they guard themselves off,
+  correctly, because a bout has no top set, no tonnage, no prescription and no
+  previous volume. A rated bout therefore still shows its RPE, which is a fact
+  the row should not suppress.
+
+**Root causes that were not where the plan guessed:**
+- **The cardio family hue was ALREADY fixed.** F6 says the hue "falls through
+  `:1155-1161` to `MuscleGroup.forExercise(...).domain.accent` — `.recover`
+  lavender", and task 5 asks for it. `SessionDetailView.family(_ ex:)` — a
+  second overload taking the REPORT rather than the name — has resolved a bout
+  to `Color.onyx.cardio` since `31b58942`, and `ledger(_:)` has called that
+  overload since the same commit. The plan was written against the one-argument
+  version. W4 left the behaviour alone and put it under test instead.
+- **`OnyxTests` does not run on this machine at all, and it is not four
+  failures — it is zero executions.** Measured on a PRISTINE `main` checkout
+  with a fresh derived-data path: `xcodebuild test
+  -only-testing:OnyxTests/SessionTableTests` starts all five of the tests that
+  predate this wave and finishes none of them. Each takes the app host down with
+  `Test crashed with signal trap`, the runner restarts twice, and the summary
+  reads "Executed 0 tests". Those five call `SetRow.layout(_:)` and
+  `SessionDetail.toRows` and nothing else — pure functions with no branch that
+  can trap — so the fault is in the host, not in the suite. **The memory note
+  "`OnyxTests` has four failures on main" understates it and should be read as
+  "the bundle does not execute".** This is why `npm run check` runs `OnyxUITests`
+  and not this bundle, and it is the reason W4's own OnyxCore-side assertions
+  were written as a separate suite that a real gate executes.
+- **Two fixture defects the first shot run found, neither of them in the
+  ledger.** `PreviewHarness` keeps its OWN list of screen names and routes only
+  those to `HistoryPreviews.view(_:)`, so adding a `case` to the view builder
+  and a name to `native-shot.sh` is two of the three edits a new screen needs —
+  the first `session-pairs` PNG is a photograph of "No harness screen named
+  session-pairs". And **every RPE in the fixture was `7 + i × 0.5` on every one
+  of the six sessions**, so the effort column's delta was zero on all eighteen
+  sets and this wave's headline claim had nothing to photograph. The last
+  session is now half a rung harder across the board, which is what its reps
+  say happened — 11/10/10 against 10/9/12 at the same load. Same argument the
+  seed already makes for the failure set: an unreviewable state is one that
+  breaks silently.
+- **The test fixture's "pair" case was never a pair.** `SessionTableTests.whole`
+  asserted `.whole` for two sets carrying `side: "left"` / `"right"` and NO
+  `pairId`. `SessionDetail.toRows` folds on `pairId` alone and tests
+  `side == "R"` exactly, so that fixture produced two SINGLE rows that resolved
+  to `.loaded` — the assertion was about a card that held no pair. Fixed in
+  passing; the helper now takes a `pair:` id and the tags are `"L"` / `"R"`.
+
+**Constraints discovered that the next wave must respect:**
+- **`MuscleMap.dict` is load-bearing arithmetic, not a lookup table.** Anything
+  that wants to name a muscle for DISPLAY and must not move a score belongs
+  beside `cardioDict`, not in `dict`. The `swift:core` suite now fails if a lift
+  leaks into the cardio table or a bout leaks into the dictionary.
+- **`MetaTagRow.Capsule` is the shared capsule now.** `FlowRow` places SUBVIEWS,
+  so a header cannot nest a `MetaTagRow` inside its own flow and get one line
+  out of it. Any surface that wants readings on a line with something else takes
+  `MetaTagRow.Capsule`, never a second drawing of one. Note the nested type also
+  shadows `SwiftUI.Capsule` inside that file, which is why the shape is spelled
+  in full there.
+- **`SetLayout.comparable` now drives the row's ALIGNMENT as well as its delta
+  line.** A layout that reserves no delta centres its content against the 28 pt
+  badge; one that does hangs from the top. A sixth layout has to answer both
+  questions, not just the first.
+- **`Page.bout` is `session_id`-only on purpose.** `AppDatabase.cardio` matches
+  `session_id = ? OR date = ?`, and the date half is filtered back out here: a
+  morning walk would otherwise lend its heart rate to an evening leg day's
+  treadmill card. W5 rebuilds `cardioCard` off the same table and should take
+  the same care.
+- **The fixture's treadmill-only day sits on 2026-09-06**, the Sunday AFTER the
+  photographed block, so it cannot add a row to a week another shot is a picture
+  of. Anything seeded inside 30 August – 5 September changes shots this wave did
+  not touch.
+
+**Left open on purpose:**
+- **The merged header did not save a line on every card.** The claim in A4 is
+  "~24 pt off every card"; what one `FlowRow` actually buys is the line the
+  chips used to reserve when they ended with half a phone free, which is a
+  two-mover movement at 402 pt. A three-chip lift with five readings still wraps
+  to three lines, because eight objects do not fit two. The lever if the founder
+  wants the rest is the `cue` capsule and the `n/m @ window` capsule, both of
+  which say something the progression card above already says — that is a
+  content decision, not a layout one, and it was not this wave's to make.
+- **A `.pair` card's RPE carries no arrow.** `previousSet(_:row:)` still refuses
+  a pair (correctly — the previous session's flat list holds two entries per
+  ordinal), so `prev` is nil on a pair row and the effort WORD is drawn rather
+  than a figure with a delta. The pair's one verdict is its volume. Giving the
+  effort its own comparison means folding the previous session twice, for a
+  second number on a row that has room for one.
+- **`SessionTableTests` is written and cannot be run here.** Every assertion in
+  it is real and none of them has been executed. Its header now records the
+  measurement above so the next wave does not spend an hour rediscovering it.
+  What IS verified: `swift:core` (523 tests) covers the cardio table, and the
+  six screenshots cover the rest — `session-pairs` shows `7.5 ▲ +0.5` in
+  `danger` on three consecutive sets beside `7.5 ▼ −2.5` in `good` on the card
+  below it, which is the inversion and its absence of over-reach in one frame;
+  `session-cardio` shows all four bout capsules and the cardio rail where the
+  empty row was; and every row of every card is the same height whether it
+  carries an arrow or not.
+- **The em-dash also survives inside `CardioMetrics.formatPace`**, which answers
+  `"—"` for anything it cannot divide. `cardioTags` drops the capsule rather
+  than printing one, so nothing on the card shows it — but a future caller that
+  forgets that guard will put the dash back.
+
+**Founder's manual steps still outstanding:** none for W4. The two SQL pastes
+the sprint still owes are W9's and W11's, unchanged.
