@@ -363,20 +363,41 @@ struct TodayModelTests {
 
     // MARK: - W7: the wiggle
 
-    /// ±1.2°, and the phase window is one half-cycle. A stagger wider than the
-    /// cycle wraps and is the same offset again, which is the bug the old
-    /// 140 ms window had in the other direction — it was narrower than the
-    /// 140 ms half-cycle only by accident.
-    @Test("the wiggle leans 1.2 degrees and its phases fit inside one half-cycle")
+    /// ±1.1° — the Home Screen's own amplitude — and the phase window is the
+    /// tile's OWN half-cycle. A stagger wider than the cycle wraps and is the
+    /// same offset again, which is the bug the old 140 ms window had in the
+    /// other direction: it was narrower than the 140 ms half-cycle only by
+    /// accident.
+    @Test("the wiggle leans 1.1 degrees and its phases fit inside one half-cycle")
     func wiggleGeometry() {
-        #expect(TileFrame<EmptyView>.tilt == 1.2)
-        let window = Int(TileFrame<EmptyView>.beat * 1000)
-        #expect(window > 0)
+        #expect(TileFrame<EmptyView>.tilt == 1.1)
         for id in ["sl-sleep", "sl-vitals", "sl-water", "sl-steps", "sl-daily"] {
+            let window = Int(TileFrame<EmptyView>.beat(id) * 1000)
+            #expect(window > 0)
             #expect(SmartStackView.stagger(id) % window < window)
         }
         // Two tiles do not start together, which is the whole point of the
         // offset — if they did the grid would march in step.
+        let window = Int(TileFrame<EmptyView>.beat * 1000)
         #expect(SmartStackView.stagger("sl-sleep") % window != SmartStackView.stagger("sl-vitals") % window)
+    }
+
+    /// The per-tile RATE, which is what stops the grid re-synchronising: a
+    /// shared duration holds whatever phase offset it started with forever, so
+    /// the whole grid still pulses as one body.
+    @Test("every tile runs at its own rate, within ten percent of the beat")
+    func wiggleRatesDiffer() {
+        let ids = ["sl-sleep", "sl-vitals", "sl-water", "sl-steps", "sl-daily"]
+        let nominal = TileFrame<EmptyView>.beat
+        for id in ids {
+            let beat = TileFrame<EmptyView>.beat(id)
+            #expect(beat >= nominal * 0.9)
+            #expect(beat <= nominal * 1.1)
+        }
+        #expect(Set(ids.map { TileFrame<EmptyView>.beat($0) }).count > 1,
+                "a shared period is the lockstep this exists to break")
+        // And they do not all slide the same way — a drift every tile shared
+        // would be the grid itself moving rather than the tiles inside it.
+        #expect(Set(ids.map { TileFrame<EmptyView>.driftSign($0) }).count == 2)
     }
 }

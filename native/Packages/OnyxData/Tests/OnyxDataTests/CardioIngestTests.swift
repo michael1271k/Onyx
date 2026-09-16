@@ -230,6 +230,58 @@ struct CardioIngestTests {
         #expect(try rows(db).count == 1)
     }
 
+    /// The defect the founder reported: an auto-logged walk showing the time
+    /// the app was opened. The row is matched by its uuid on every pass, so no
+    /// duplicate appears — and until this test the pass that matched it copied
+    /// the figures and left the wrong start exactly where it was.
+    @Test("an imported row whose start became the import instant is repaired")
+    func repairsADriftedStart() async throws {
+        let db = try store()
+        let id = UUID()
+        #expect(try await ingest(db, Wrist(bouts: [bout(hour: 7, minutes: 50, uuid: id)])).inserted == 1)
+
+        // 22:47 — the moment of an evening launch, standing where the bout's
+        // 07:00 start belongs. This is what a row pulled back from the web era
+        // or written before the start rule existed actually holds.
+        let wrong = calendar.date(from: DateComponents(year: 2026, month: 9, day: 4, hour: 22, minute: 47))!
+        try await db.writer.write { conn in
+            try conn.execute(sql: "UPDATE cardio_logs SET created_at = ?", arguments: [wrong])
+        }
+
+        // Nothing is INSERTED (the key matched) and nothing is FILLED (Health
+        // could add no figure the row did not already have) — the repair is not
+        // news the toast may claim.
+        let report = try await ingest(db, Wrist(bouts: [bout(hour: 7, minutes: 50, uuid: id)]))
+        #expect(report.isEmpty)
+
+        let stored = try rows(db)
+        #expect(stored.count == 1)
+        let row = try #require(stored.first)
+        let start = try #require(row.createdAt)
+        #expect(abs(start.timeIntervalSince(bout(hour: 7, minutes: 50).start)) < 1,
+                "the bout's own start, not the instant of the import")
+    }
+
+    /// The other half of the rule. A hand-typed row's `created_at` is when it
+    /// was typed; a bout that matches it by the fuzzy window must not stamp a
+    /// start onto a row whose provenance says it has none.
+    @Test("a hand-typed row keeps the moment it was typed")
+    func doesNotRestampAManualRow() async throws {
+        let db = try store()
+        let typedAt = calendar.date(from: DateComponents(year: 2026, month: 9, day: 4, hour: 21))!
+        try db.addCardio(CardioLogRow(
+            id: "m1", userId: user, date: today, kind: CardioImport.walk,
+            distanceM: 4200, durationMin: 50, kcal: 210, fromHealthkit: false,
+            createdAt: typedAt, activeKcal: 210, totalKcal: 270, avgHr: 112, elevationM: 86
+        ))
+
+        _ = try await ingest(db, Wrist(bouts: [bout(hour: 7, minutes: 50)]))
+
+        let row = try #require(rows(db).first)
+        #expect(row.id == "m1")
+        #expect(row.createdAt == typedAt)
+    }
+
     @Test("a pre-migration row matches by window and gains the key")
     func adoptsTheKey() async throws {
         let db = try store()

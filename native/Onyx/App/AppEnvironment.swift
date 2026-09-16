@@ -113,7 +113,50 @@ public final class AppEnvironment {
     /// muscle-mass or body-water type at all (`DailyLogIngest` says so where it
     /// deliberately leaves `muscle_mass_kg` alone), so a row with a weight and
     /// no muscle is exactly "the scale synced, the reading is half here".
+    ///
+    /// ── AND WHY THE ROW ALONE IS NOT ENOUGH ─────────────────────────────────
+    /// It was, and the banner would not go away. The row IS the fact, but it is
+    /// a fact this app does not fully control: `DailyLogIngest` rewrites the
+    /// day's `body_composition` row on every sync, a pull replaces it with the
+    /// server's copy, and a day that ends up with more than one row is read by
+    /// `measured_at` — so "the two columns are blank" could go back to being
+    /// true minutes after the athlete filled them in. A predicate with no
+    /// memory then asks the same question again, and again, for the rest of the
+    /// day.
+    ///
+    /// So there are two conditions now, and the second one is a MEMORY:
+    /// `weighInAnswered` is the date whose nudge the athlete has already dealt
+    /// with. It is set when the InBody form saves — the one moment this app can
+    /// be sure the question was answered — and it is keyed by DATE, so tomorrow
+    /// morning's weigh-in asks again, which is the entire point of the banner.
     private(set) var weighInPending = false
+
+    /// `UserDefaults`, not the store: this is a fact about this phone's UI, not
+    /// about the athlete's training, and a row for it would be a row to sync,
+    /// to mirror and to reconcile for something that is forgotten at midnight.
+    private static let weighInAnsweredKey = "onyx.weighIn.answeredDate"
+
+    /// Has today's nudge already been dealt with?
+    private var weighInAnswered: Bool {
+        UserDefaults.standard.string(forKey: Self.weighInAnsweredKey) == today
+    }
+
+    /// The athlete answered the weigh-in question for today.
+    ///
+    /// Called by the InBody form when a save LANDS, which is the only event
+    /// that means "asked and answered" without guessing. Opening the sheet does
+    /// not count — a form opened and abandoned has answered nothing — and
+    /// neither does the presence of the two columns, for the reason
+    /// `weighInPending` gives above.
+    ///
+    /// ponytail: a phone whose scale reports neither muscle nor water still
+    /// sees the banner once a day until the form is saved once for that day.
+    /// That is the banner doing its job, not the defect — the defect was seeing
+    /// it again five minutes after answering it.
+    func answerWeighIn() {
+        UserDefaults.standard.set(today, forKey: Self.weighInAnsweredKey)
+        weighInPending = false
+    }
 
     /// Bumped by a banner that wants the InBody sheet. Pulse owns that sheet;
     /// Today only knows it wants it open, and switching tab is the shell's job.
@@ -852,7 +895,12 @@ public final class AppEnvironment {
                     // A weight with no muscle AND no water is a scale that
                     // synced through Health; either one present means the
                     // InBody numbers were entered and there is nothing to ask.
-                    self.weighInPending = row != nil && row?.muscleMassKg == nil && row?.waterPct == nil
+                    //
+                    // And the memory wins over the row: once the form has saved
+                    // for this date the question has been answered, whatever a
+                    // later sync does to the two columns.
+                    self.weighInPending = !self.weighInAnswered
+                        && row != nil && row?.muscleMassKg == nil && row?.waterPct == nil
                 }
             } catch {
                 // A dropped observation is not worth a banner of its own — the

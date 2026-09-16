@@ -396,6 +396,14 @@ struct InBodyEntryView: View {
             if let v = masses.boneMineralKg { row.boneMineralKg = v }
             if let v = masses.proteinMassKg { row.proteinMassKg = v }
         }
-        if landed { dismiss() }
+        // The weigh-in question is answered by a save landing, and by nothing
+        // else — see `AppEnvironment.weighInPending`. It is deliberately not
+        // conditional on WHAT was saved: an athlete who opened this form and
+        // committed a reading has dealt with the banner, whether or not their
+        // scale happens to report the two columns it watches.
+        if landed {
+            environment.answerWeighIn()
+            dismiss()
+        }
     }
 }

@@ -280,36 +280,118 @@ private struct StressSquare: View {
 /// How much of you is sore, and the worst of it — the door to the body it hurts
 /// on.
 ///
-/// ── THE FIGURE IS NOT DRAWN HERE, AND NEVER WAS ─────────────────────────────
-/// The atlas is 280–360 pt before its caption and it is a CONTROL: a quad has to
-/// be a target a thumb can hit. Shrunk into a 163 pt square it is neither
-/// readable nor tappable, which is the failure `DomsTile`'s own header records
-/// from the tile before it. So this square states the answer the map would give
-/// and hands the reader to `SorenessSheet`, where the figure is at the size it
-/// is a control at and the severity popover already lives.
+/// ── THE FIGURE IS NOT THE CONTROL HERE, BUT IT IS THE SUBJECT ───────────────
+/// The atlas is 280–360 pt on `DomsTile` and it is a CONTROL there: a quad has
+/// to be a target a thumb can hit. That is still true, and it is still why the
+/// rating verb lives in the sheet and not on this square.
+///
+/// What was wrong was the EMPTY state. A square reading "Nothing sore / Tap to
+/// rate" over an otherwise blank 163 pt box is indistinguishable from a square
+/// that failed to load — which is the report: it "looks completely empty and
+/// broken". Every other square in this grid keeps its shape when it has nothing
+/// to say, because a trace with no data is still a trace and a numeral slot is
+/// still a numeral slot. This one had nothing to keep.
+///
+/// So the body is always drawn, at 96 pt on the trailing edge, as the square's
+/// own MARK rather than as a control — the same thing the Stack square's dots
+/// and the Scale square's trace are. It is `isThumbnail`, so it costs no
+/// offscreen shadow pass, and it is inert: the tap target is the whole square,
+/// exactly as it was, and it still opens the sheet where the figure is big
+/// enough to aim at.
+///
+/// When there IS soreness the same figure paints it, on the side that carries
+/// it. That is the second half of why the placeholder is the body and not a
+/// glyph: an empty state that turns into the reading is one shape a reader
+/// learns once, where an icon that is REPLACED by a number is two.
 private struct SorenessSquare: View {
     let model: DayModel
     let action: () -> Void
+
+    /// 96 pt, and capped: the atlas is 120 × 260, so height is what buys width,
+    /// and a figure taller than the square's own 139 pt of content would push
+    /// the reading off its floor.
+    @ScaledMetric(relativeTo: .body) private var figureHeight: CGFloat = 96
 
     private var sore: [(group: String, level: Int)] { Soreness.worstFirst(model.domsSeverity) }
 
     var body: some View {
         PulseSquare("Soreness", spoken: spoken, action: action) {
-            if sore.isEmpty {
-                SquareBlank(text: "Nothing sore", detail: "Tap to rate")
-            } else {
-                SquareReading(
-                    value: "\(sore.count)",
-                    unit: "sore",
-                    tint: Color.onyx.severity(sore[0].level)
-                )
-                Text(Soreness.line(sore))
-                    .onyxType(.caption)
-                    .foregroundStyle(Color.onyx.textSecondary)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .bottom, spacing: OnyxSpace.s) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if sore.isEmpty {
+                        SquareBlank(text: "Nothing sore", detail: "Tap to rate")
+                    } else {
+                        SquareReading(
+                            value: "\(sore.count)",
+                            unit: "sore",
+                            tint: Color.onyx.severity(sore[0].level)
+                        )
+                        Text(Soreness.line(sore))
+                            .onyxType(.caption)
+                            .foregroundStyle(Color.onyx.textSecondary)
+                            .lineLimit(2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                figure
             }
         }
+    }
+
+    /// The mark. `allowsHitTesting(false)` because the SQUARE is the button and
+    /// a figure that swallowed the tap would make the one corner of the card
+    /// that looks most tappable the one corner that does nothing.
+    private var figure: some View {
+        let painted = painting
+        return AtlasFigure(
+            side: painted.side,
+            worked: painted.worked,
+            monochromeTint: Color.onyx.textTertiary,
+            isThumbnail: true,
+            colors: painted.colors
+        )
+        .frame(height: min(figureHeight, 120))
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// Which body to draw, and what to paint on it.
+    ///
+    /// ── THE SIDE FOLLOWS THE SORENESS, AND DEFAULTS TO THE FRONT ────────────
+    /// One body, not two: at this width a front-and-back pair is two 44 pt
+    /// figures and neither is legible. So the square shows the side that
+    /// actually carries something — hamstrings and lats are back-only, and a
+    /// front figure would have drawn a blank body over the words "2 sore",
+    /// which is worse than the empty state this replaces.
+    ///
+    /// Front when the soreness is on the front, or when there is none at all:
+    /// a placeholder has no side to follow and the front is the body a reader
+    /// recognises fastest.
+    ///
+    /// `worked` is 1 for every sore landmark because `AtlasFigure` gates its
+    /// tint on the WORKED amount — that channel is modelled fatigue on
+    /// `DomsTile` and this square does not draw it, so the amount here is only
+    /// the switch that lets the colour through. The colour is the whole signal.
+    ///
+    /// Severities are max-merged and THEN coloured, the same rule `DomsTile`
+    /// follows and for the same reason: two `Color`s have no order.
+    private var painting: (side: AtlasFigure.Side, worked: [LandmarkMuscle: Double], colors: [MuscleSide: Color]) {
+        var levels: [MuscleSide: Int] = [:]
+        var worked: [LandmarkMuscle: Double] = [:]
+        for row in model.doms where row.severity > 0 {
+            for landmark in DomsMap.landmarks[row.muscleGroup] ?? [] {
+                worked[landmark] = 1
+                let key = MuscleSide(landmark, row.bodySide)
+                levels[key] = max(levels[key] ?? 0, row.severity)
+            }
+        }
+        let front = Set(OnyxAtlas.muscles.filter { $0.view == .front }.map(\.muscle))
+        let showsFront = worked.isEmpty || worked.keys.contains { front.contains($0.rawValue) }
+        return (
+            side: showsFront ? .front : .back,
+            worked: worked,
+            colors: levels.mapValues { Color.onyx.severity($0) }
+        )
     }
 
     private var spoken: String {
@@ -438,6 +520,17 @@ private struct ScaleSquare: View {
 /// log: a dose with no row counts once its slot has passed. The numerator is
 /// therefore `credited`, which is what the day's micronutrients are actually
 /// built from — not "not skipped".
+///
+/// ── AND AT THE END OF THE DAY THE DOTS HAVE NOTHING LEFT TO SAY ─────────────
+/// The dot row is a row of ANSWERED-versus-AHEAD, and its whole job is to say
+/// how much of the day is still in front of you. Once nothing is ahead it is
+/// eight identical filled dots — a shape carrying one bit of information that
+/// the numeral two lines above it already carried, drawn eight times.
+///
+/// So when the day is done the dots give way to the doses themselves: up to
+/// five overlapping discs in each supplement's own colour, newest first, and
+/// the time the last one was due. The square stops reporting progress, which is
+/// finished, and starts reporting what the evening actually contained.
 private struct StackSquare: View {
     let model: DayModel
     let action: () -> Void
@@ -451,9 +544,98 @@ private struct StackSquare: View {
                 SquareBlank(text: "Nothing scheduled")
             } else {
                 SquareReading(value: "\(credited)/\(doses.count)", unit: "counted")
-                dots
+                if dayIsDone, !recent.isEmpty {
+                    capsules
+                    Text(lastLine)
+                        .onyxType(.caption)
+                        .foregroundStyle(Color.onyx.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    dots
+                }
             }
         }
+    }
+
+    // MARK: The end of the day
+
+    /// Nothing is still ahead.
+    ///
+    /// ── THE CLOCK IS ALREADY IN THE DATA ────────────────────────────────────
+    /// `DoseState.later` means "no row, and the slot is still ahead", which is
+    /// resolved against `DayClock` before a dose ever reaches this view. So
+    /// "the day is over" is `no dose is still later` and needs no second clock
+    /// here — and it is right for a PAST day too, where every slot has passed,
+    /// which a `now`-based test would have had to special-case.
+    private var dayIsDone: Bool { !doses.contains { $0.state == .later } }
+
+    /// What was actually taken, newest first, at most five.
+    ///
+    /// Credited rather than `taken`: absence IS the protocol (see the header),
+    /// so a dose nobody said anything about counts once its slot has passed and
+    /// belongs in the pile. A `skipped` dose does not — it is the one thing on
+    /// this square that did not happen.
+    private var recent: [SupplementDose] {
+        doses.filter(\.credited)
+            .sorted { Self.minutes($0.slotTime) > Self.minutes($1.slotTime) }
+    }
+
+    /// Five, because five 16 pt discs overlapped by six fit the square's 139 pt
+    /// of content with room for the `+N` and nothing wider does.
+    private var shown: [SupplementDose] { Array(recent.prefix(5)) }
+    private var hidden: Int { recent.count - shown.count }
+
+    /// The pile. Newest on the LEADING edge and on top, which is the order the
+    /// eye reads and the opposite of what an `HStack` stacks by default — hence
+    /// the explicit `zIndex`.
+    ///
+    /// A dark rim rather than a gap: overlapping is what says "these happened
+    /// together, recently", and six points of overlap with no rim is one wide
+    /// blob. The rim belongs to the disc ABOVE, so it draws over the one below
+    /// and cuts the crescent that makes the pile legible.
+    private var capsules: some View {
+        HStack(spacing: -6) {
+            ForEach(Array(shown.enumerated()), id: \.element.id) { index, dose in
+                Circle()
+                    .fill(Color.onyx.supplement(model.custom(for: dose)?.color))
+                    .frame(width: 16, height: 16)
+                    .overlay(Circle().strokeBorder(Color.black.opacity(0.45), lineWidth: 1.5))
+                    .zIndex(Double(shown.count - index))
+            }
+            if hidden > 0 {
+                Text("+\(hidden)")
+                    .onyxMicro()
+                    .padding(.leading, OnyxSpace.xs + 6)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityHidden(true)
+    }
+
+    /// `21:30 · Magnesium` on a short stack, `last 21:30` on a long one.
+    ///
+    /// The founder's rule, and the reason for it is width: the caption shares
+    /// one line with nothing, but at four or five discs the name of the last
+    /// dose is what gets scaled down to illegibility. A stack of three or fewer
+    /// has the room, and on a stack that small the NAME is the interesting half
+    /// — "Magnesium" says the evening happened in a way "last 21:30" does not.
+    private var lastLine: String {
+        guard let last = shown.first else { return "" }
+        return doses.count <= 3 ? "\(last.slotTime) · \(last.name)" : "last \(last.slotTime)"
+    }
+
+    /// `"21:30"` → 1290. The same parse `Supplements.slotTimePassed` makes, for
+    /// ordering rather than for comparison against a clock. A slot time this
+    /// cannot read sorts last rather than crashing — a malformed row must not
+    /// take the square down with it.
+    private static func minutes(_ hhmm: String) -> Int {
+        let parts = hhmm.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count >= 2, let h = Int(parts[0].trimmingCharacters(in: .whitespaces)),
+              let m = Int(parts[1].trimmingCharacters(in: .whitespaces))
+        else { return -1 }
+        return h * 60 + m
     }
 
     /// One dot per scheduled dose, in the day's own time order.

@@ -176,6 +176,33 @@ public extension HealthSync {
             let before = CardioImport.Fields(stored[index])
             let after = CardioImport.merge(stored: before, incoming: incoming)
 
+            // ── AND THE START IS REPAIRED, NOT ONLY THE BLANKS ──────────────
+            // `created_at` on an imported row IS the bout's start (see
+            // `CardioImport.matchingRow`), and until now only the INSERT branch
+            // above ever wrote it. A row whose start had been replaced by the
+            // moment of the import — a row pulled back from the web era, one
+            // written before that rule existed, or one whose `created_at` did
+            // not survive a round trip, which is the exact shape
+            // `theKeyEndsTheDuplicate` reproduces — was matched by its uuid on
+            // every later pass and then left alone, because `apply` copies the
+            // FIGURES and nothing else. So the ledger kept printing the instant
+            // the app was opened as the time of a walk, forever, while the pass
+            // that could have corrected it held `HKWorkout.startDate` in hand.
+            //
+            // Only on a row Health filed. A hand-typed row's `created_at` is
+            // the moment it was typed and is not a start at all; overwriting it
+            // would invent a bout time for a row whose provenance says it has
+            // none, and `handTypedStillMatchesByWindow` is the test that says
+            // a matched manual row is not re-flagged either.
+            //
+            // One second of tolerance: the value crosses JSON and Postgres on
+            // its way back, and a sub-second difference is the same instant.
+            // Without the guard every launch would queue an outbox item for a
+            // row nothing had changed.
+            let storedStart = stored[index].createdAt
+            let startDrifted = stored[index].fromHealthkit == true
+                && (storedStart.map { abs($0.timeIntervalSince(bout.start)) >= 1 } ?? true)
+
             // ── THE ROW THE WINDOW FOUND GETS THE KEY (W1) ──────────────────
             // A row imported before `hk_uuid` existed, or typed by hand, was
             // matched by the five-minute window. Stamping the bout's uuid on it
@@ -187,11 +214,12 @@ public extension HealthSync {
 
             // A write that changes nothing is a row version, an outbox item and
             // a push for no reason. Most launches land here.
-            if after == before && !adoptsKey { continue }
+            if after == before && !adoptsKey && !startDrifted { continue }
 
             var row = stored[index]
             row.apply(after)
             if adoptsKey { row.hkUuid = key }
+            if startDrifted { row.createdAt = bout.start }
             try Task.checkCancellation()
             try database.addCardio(row)
             stored[index] = row
@@ -200,6 +228,9 @@ public extension HealthSync {
             // gained its heart rate and ascent". A key nobody can see on a
             // screen gained nothing a person would recognise, so a pass that
             // only stamped uuids reports an EMPTY report and puts up no toast.
+            // A repaired START is the same kind of news, for the same reason:
+            // the bout the reader is looking at gained no figure, it stopped
+            // claiming a time it never had.
             if after != before { out.filled += 1 }
         }
 

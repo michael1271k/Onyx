@@ -379,8 +379,21 @@ private extension AppDatabase {
         // instead is the same outcome with none of the race: the delete could
         // land after a concurrent insert and destroy the reading it had just
         // written. `id` is stable, so the upsert is idempotent by construction.
+        //
+        // ── AND IT IS THE LATEST ROW, BECAUSE EVERYONE ELSE READS THAT ONE ──
+        // This was an UNORDERED `fetchOne`, which on a day with one row is the
+        // same row and on a day with several is whichever one SQLite reached
+        // first. `bodyCompositionStream`, `saveBodyMetrics` and `VitalsStore`
+        // all take the newest `measured_at`. So on a day that ended up with two
+        // rows — a web-era row pulled back beside a local one — this could
+        // stamp the weight onto the row NOBODY reads, while the row everyone
+        // reads kept whatever it had. The InBody columns a person had just
+        // typed would appear to vanish, and the weigh-in banner watching them
+        // would come straight back. One writer picking a different row than
+        // every reader is not a tie-break, it is two stores.
         var row = try BodyCompositionRow
             .filter(Column("user_id") == userId && Column("date") == payload.date)
+            .order(Column("measured_at").desc)
             .fetchOne(db)
             ?? BodyCompositionRow(
                 id: newOnyxID(), userId: userId,

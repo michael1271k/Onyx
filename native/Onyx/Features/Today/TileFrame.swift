@@ -21,8 +21,31 @@ import OnyxUI
 /// A spring overshoots and settles, so two tiles a fifth of a beat apart are
 /// visibly out of step rather than merely delayed.
 ///
-/// ±1.2°, and the phase offset window is the spring's own duration — a stagger
-/// wider than one cycle wraps and is the same offset again.
+/// ── WHAT MADE IT READ AS "TOO FAST" (THIS WAVE) ──────────────────────────────
+/// Not the rate. The Home Screen's own jiggle is about a fifth of a second a
+/// half-cycle, which is what this already had — and it still read as a shake
+/// rather than as a wobble, because rotation was the ONLY channel and every
+/// tile ran at exactly the same rate.
+///
+/// Two things fix it, and neither is slowing down:
+///
+///   · A TRANSLATION as well as a rotation. iOS shifts each icon by well under
+///     a point as it leans. A pure rotation pivots around a fixed centre, which
+///     the eye reads as a hinge — a mechanism. Adding the shift makes the tile
+///     read as an object that is loose in its slot, which is the thing the mode
+///     is trying to say. `drift` is 0.6 pt, and the direction is per-tile, so
+///     neighbours do not slide the same way at the same moment.
+///
+///   · A PER-TILE RATE. A shared duration re-synchronises: two tiles offset by
+///     a fraction of a beat hold that offset forever and the grid still pulses
+///     as one body, which is what makes many small movements read as one big
+///     one. `beat(_:)` spreads ±10% off the nominal fifth of a second from the
+///     slot id's own hash, so no two tiles share a period and the grid never
+///     comes back into step.
+///
+/// ±1.1° (the Home Screen's own amplitude), and the phase offset window is the
+/// tile's own duration — a stagger wider than one cycle wraps and is the same
+/// offset again.
 ///
 /// ── AND WHAT `accessibilityReduceMotion` GETS INSTEAD ────────────────────────
 /// Not "the badges and no jiggle", which is what it used to get: the badges are
@@ -79,11 +102,47 @@ struct TileFrame<Content: View>: View {
     // has no static STORED properties on a generic type. A separate namespace
     // would put the numbers somewhere the view that uses them is not.
 
-    /// How far the tile leans, each way.
-    static var tilt: Double { 1.2 }
-    /// One half-cycle. Also the width of the per-tile phase offset — see the
-    /// header for why it cannot usefully be wider.
+    /// How far the tile leans, each way. The Home Screen's own amplitude.
+    static var tilt: Double { 1.1 }
+    /// The NOMINAL half-cycle. Every tile runs at its own rate around this —
+    /// see `beat(_:)` and the header.
     static var beat: TimeInterval { 0.2 }
+    /// How far the tile slides as it leans. Sub-point on purpose: at 0.6 pt it
+    /// is never legible as a movement of its own, which is exactly what makes
+    /// the rotation stop reading as a hinge.
+    static var drift: CGFloat { 0.6 }
+
+    /// This tile's OWN half-cycle: `beat` ±10%, from the slot id's hash.
+    ///
+    /// The same hash `stagger` reads, at a different modulus — one source of
+    /// per-tile variation rather than two that could agree by accident. The
+    /// spread is deliberately small: past about ±15% the grid stops reading as
+    /// one surface and starts reading as tiles that are animating separately.
+    static func beat(_ slotId: String) -> TimeInterval {
+        Self.beat * (0.9 + Double(SmartStackView.stagger(slotId) % 21) / 100)
+    }
+
+    /// Which way this tile slides. Split by the same hash, so about half the
+    /// grid goes one way and half the other — a drift every tile shared would
+    /// be the grid itself moving.
+    ///
+    /// ── NOT THE LOW BIT ─────────────────────────────────────────────────────
+    /// `stagger` is `h = h * 31 + c`, and 31 is odd, so the parity of the whole
+    /// hash is just the parity of the SUM OF THE CHARACTERS. Every default slot
+    /// id is `sl-` plus a widget's own raw value, and they collide on that sum
+    /// constantly — `% 2` put all five of the tiles the test names on the same
+    /// side, which is the shared drift this exists to avoid. Bit four is far
+    /// enough up the hash to have been mixed.
+    static func driftSign(_ slotId: String) -> CGFloat {
+        (SmartStackView.stagger(slotId) >> 4) & 1 == 0 ? 1 : -1
+    }
+
+    /// This tile's half-cycle and slide direction, resolved once.
+    private var beat: TimeInterval { Self.beat(slot.id) }
+    private var driftSign: CGFloat { Self.driftSign(slot.id) }
+    /// The whole wobble is off for a reader who has turned motion off, and the
+    /// hairline stands in for it — see the header.
+    private var wobbling: Bool { editing && !reduceMotion }
 
     private var sizes: [WidgetSize] { Dashboard.sizesFor(slot.items) }
 
@@ -105,19 +164,27 @@ struct TileFrame<Content: View>: View {
             .overlay { if editing, reduceMotion { stillOutline } }
             .overlay(alignment: .topLeading) { if editing { removeBadge } }
             .overlay(alignment: .bottomTrailing) { if editing, sizes.count > 1 { resizeBadge } }
-            .rotationEffect(.degrees(editing && !reduceMotion ? (wiggle ? Self.tilt : -Self.tilt) : 0))
+            .rotationEffect(.degrees(wobbling ? (wiggle ? Self.tilt : -Self.tilt) : 0))
+            // The second channel. It rides the SAME toggle as the rotation, so
+            // the tile leans and slides as one gesture rather than as two
+            // animations that happen to overlap — and the sign is per-tile, so
+            // two neighbours never slide together.
+            .offset(
+                x: wobbling ? (wiggle ? Self.drift : -Self.drift) * driftSign : 0,
+                y: wobbling ? (wiggle ? -Self.drift : Self.drift) * driftSign : 0
+            )
             .animation(
-                editing && !reduceMotion
-                    ? .spring(duration: Self.beat, bounce: 0.35).repeatForever(autoreverses: true)
+                wobbling
+                    ? .spring(duration: beat, bounce: 0.35).repeatForever(autoreverses: true)
                     : .default,
                 value: wiggle
             )
             .onChange(of: editing, initial: true) { _, on in
                 // A different phase per tile, so the grid does not shiver in
                 // lockstep. `stagger` is the slot id's hash and is already what
-                // spreads the stacks' rotation; taking it modulo one half-cycle
-                // spreads the wobble across the same beat.
-                if on { Task { try? await Task.sleep(for: .milliseconds(SmartStackView.stagger(slot.id) % Int(Self.beat * 1000))); wiggle = true } }
+                // spreads the stacks' rotation; taking it modulo THIS TILE's
+                // half-cycle spreads the wobble across its own beat.
+                if on { Task { try? await Task.sleep(for: .milliseconds(SmartStackView.stagger(slot.id) % Int(beat * 1000))); wiggle = true } }
                 else { wiggle = false }
             }
             .sensoryFeedback(.selection, trigger: resizes)

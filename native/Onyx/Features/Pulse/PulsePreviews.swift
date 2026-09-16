@@ -581,6 +581,19 @@ enum PulsePreviews {
         case "pulse-squares":
             SquaresOnly()
                 .environment(AppEnvironment.preview)
+        // ── THE TWO FACES THE MIDDAY SHOT CANNOT HOLD ──────────────────────
+        // `pulse-squares` is pinned to 13:00, where the Stack square is a row
+        // of dots and Soreness has four ratings on it. Both of the faces this
+        // wave added live outside that fixture: the stack's END-OF-DAY pile
+        // needs a clock past the last slot, and the soreness PLACEHOLDER needs
+        // a day nobody rated. A face with no shot is a face that gets reviewed
+        // as though it were not there.
+        case "pulse-squares-evening":
+            SquaresOnly(nowMinutes: 23 * 60)
+                .environment(AppEnvironment.preview)
+        case "pulse-squares-empty":
+            SquaresOnly(seed: { PulsePreviews.model() })
+                .environment(AppEnvironment.preview)
         case "doms-rate":
             SeverityPopover(group: "Glutes", tapped: .right, current: { $0 == .right ? 3 : 0 }) { _, _ in }
                 .fixedSize()
@@ -594,6 +607,14 @@ enum PulsePreviews {
     /// The 2 × 2 grid on its own ground, observed for the same reason
     /// `DomsOnly` is: the ratings arrive on a GRDB stream.
     private struct SquaresOnly: View {
+        /// Minutes since local midnight, for the squares that read the clock.
+        /// 13:00 is the grid's own default and the one every earlier shot used.
+        var nowMinutes: Int = 13 * 60
+        /// Which day to build. The default is the seeded one; `pulse-squares-
+        /// empty` hands in a bare model so the empty faces can be photographed
+        /// over a store that genuinely has nothing in it.
+        var seed: () -> DayModel = { PulsePreviews.fullDay(withSession: true) }
+
         @State private var model: DayModel?
 
         var body: some View {
@@ -609,7 +630,11 @@ enum PulsePreviews {
                 .navigationBarTitleDisplayMode(.inline)
             }
             .task {
-                if model == nil { model = PulsePreviews.fullDay(withSession: true) }
+                if model == nil {
+                    let built = seed()
+                    built.previewNowMinutes = nowMinutes
+                    model = built
+                }
                 // `DayModel` does not subscribe on init — `observe()` is what
                 // opens the GRDB streams. Without it the squares render their
                 // EMPTY states over a seeded store, and the shot photographs

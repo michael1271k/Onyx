@@ -44,6 +44,60 @@ _Nothing yet._
 
 ---
 
+## [3.19.0] — 2026-09-16 · A Walk Knows When It Happened
+
+### Fixed
+- **An auto-logged cardio bout keeps the time it actually started.** Every
+  automatic pass already read `HKWorkout.startDate` and wrote it when it created
+  a row — and then never looked at it again. A bout whose start had been
+  replaced by the moment of the import (a row pulled back from the web era, one
+  written before that rule existed, one whose timestamp did not survive a round
+  trip) was matched by its key on every later pass and left exactly as it was.
+  The walk you took at 07:50 kept printing 22:47 — the moment the app was opened
+  — on the Workout tab and in the weekly export. The ingest now corrects the
+  start it is holding, so every wrong row repairs itself on the next sync. A
+  bout you typed by hand still keeps the moment you typed it: that is not a
+  start, and nothing here invents one for it.
+- **"Weigh-in landed" stops asking once you have answered it.** The banner was
+  a predicate with no memory — "the row has a weight and neither InBody column"
+  — re-evaluated on every yield of a stream this app does not fully control.
+  A sync rewrites the day's `body_composition` row, a pull replaces it with the
+  server's, so two columns filled in at 09:00 could read as blank again at 09:05
+  and the question came back for the rest of the day. Saving the InBody form now
+  answers it for that date, whatever a later sync does. Tomorrow's weigh-in asks
+  again, which is the point of the banner.
+- **The HealthKit ingest writes to the row every reader reads.** It picked the
+  day's `body_composition` row with an unordered `fetchOne`; the stream, the
+  InBody save and the vitals history all take the newest `measured_at`. On a day
+  that ended up with two rows the weight went to one row and the reading came
+  from the other, which is how a typed InBody number appeared to vanish.
+
+### Changed
+- **The dashboard jiggle is the Home Screen's, not a shake.** It ran every tile
+  at one rate on rotation alone, which reads as a hinge and re-synchronises into
+  a single pulse however the phases start offset. Each tile now leans ±1.1° —
+  iOS's own amplitude — slides a little over half a point as it leans, and runs
+  at its own rate within ten percent of the beat, so the grid never comes back
+  into step. Reduce Motion still gets the accent hairline instead of all of it.
+- **The Sleep sheet leads with the two questions only you can answer.** It is
+  titled "Sleep" rather than "Sleep window"; the two flags sit at the top where
+  a thumb lands; the night's gauge sits under them; and the window — two 128 pt
+  wheels that used to push everything else past the fold — is last, shut on
+  arrival, with its span on the closed row. It opens itself when there is
+  something wrong with the window to say.
+- **The Stack square says what the evening contained.** Once nothing is still
+  ahead, the row of dots — whose whole job is "how much is left" — gives way to
+  the doses themselves: up to five overlapping discs in each supplement's own
+  colour, newest first, with the rest as `+N`. A stack of three or fewer names
+  its last dose; a longer one gives the time.
+- **The Soreness square always draws the body.** With nothing sore it was a
+  caption over an empty box, which reads as a square that failed to load. The
+  anatomy figure is now the square's own mark, always drawn, on the side that
+  carries the soreness — and when there is any, the same figure paints it at
+  severity.
+
+---
+
 ## [3.18.2] — 2026-09-16 · The Database Had Already Decided
 
 A second hotfix for 3.18.0, and the one that settles what a whole-muscle

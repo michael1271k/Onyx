@@ -21,6 +21,25 @@ import OnyxData
 /// this one, never worse. So the preview is honest about being an estimate
 /// rather than promising a number the save may improve on.
 ///
+/// ── THE ORDER, AND WHY THE WINDOW IS SHUT WHEN YOU ARRIVE ───────────────────
+/// The sheet used to open reading → window → flags, and the two 128 pt wheels
+/// in the middle pushed the flags past the fold on a 375 pt phone. That put the
+/// screen's two CHEAPEST answers — two taps, no wheels, no Save — behind the
+/// one expensive one, and the expensive one is the one almost nobody came for:
+/// a night is re-windowed a handful of times a year, and "I slept badly" is
+/// true most weeks.
+///
+/// So the order is now what it costs: the flags first, at the top, where a
+/// thumb lands; the night's own reading under them, always open, because it is
+/// the one thing on this screen that is a MEASUREMENT rather than an input; and
+/// the window last, inside a `DisclosureGroup` that is shut on arrival with its
+/// current span on the closed row. A reader who only wanted to see the window
+/// reads it off the closed label without opening anything.
+///
+/// It opens itself when there is something wrong to show — an inverted window,
+/// or a save the store refused — because an error folded inside a shut group is
+/// an error nobody is told about.
+///
 /// ── AND WHY THE WHEELS CARRY A DATE ─────────────────────────────────────────
 /// A night straddles midnight, so an hour-and-minute wheel would need this
 /// screen to guess which calendar day 01:20 meant — and the guess is wrong
@@ -60,6 +79,9 @@ struct SleepEditSheet: View {
     @State private var seeded: (start: Date, end: Date)?
     @State private var saving = false
     @State private var failure: String?
+    /// Shut on arrival — see the header. Opened by a tap, or by anything this
+    /// sheet needs to say about the window it is holding shut.
+    @State private var windowOpen = false
 
     private let accent = Color.onyx.accent(.recover)
 
@@ -118,16 +140,21 @@ struct SleepEditSheet: View {
 
     var body: some View {
         DaySheet(
-            "Sleep window", domain: .recover, glass: false, detents: [.large],
+            "Sleep", domain: .recover, glass: false, detents: [.large],
             primary: ("Save", canSave, { save() })
         ) {
             Form {
+                flagSection
                 readingSection
                 windowSection
-                flagSection
             }
         }
         .task(id: night?.id) { seed() }
+        // An error inside a shut group is an error nobody is told about. Both
+        // of the window's own failures force it open, and neither closes it
+        // again: the reader is mid-correction.
+        .onChange(of: failure) { _, now in if now != nil { windowOpen = true } }
+        .onChange(of: canSave) { _, now in if !now && end <= start { windowOpen = true } }
     }
 
     private func seed() {
@@ -214,7 +241,7 @@ struct SleepEditSheet: View {
 
     /// What the save will do to the stages, in one line. Short on purpose: it
     /// is a footer under a card that has already drawn the answer, and every
-    /// extra line here is a line the two flags below fall past.
+    /// extra line here is a line the closed window below falls past.
     private var previewNote: String {
         let trimmed = preview
         if night == nil { return "No night stored yet — the whole window is filed as core sleep." }
@@ -231,38 +258,43 @@ struct SleepEditSheet: View {
 
     private var windowSection: some View {
         Section {
-            if let window {
-                wheel(
-                    "Asleep at", selection: $start,
-                    in: window.from...window.to.addingTimeInterval(-60)
-                )
-                // The wake wheel reaches past the window's own close: the guard
-                // the store enforces is on the BEDTIME, and a night that ran to
-                // one in the afternoon is a real night, not a bad edit.
-                wheel(
-                    "Awake at", selection: $end,
-                    in: window.from...window.to.addingTimeInterval(6 * 3600)
-                )
+            DisclosureGroup(isExpanded: $windowOpen) {
+                if let window {
+                    wheel(
+                        "Asleep at", selection: $start,
+                        in: window.from...window.to.addingTimeInterval(-60)
+                    )
+                    // The wake wheel reaches past the window's own close: the
+                    // guard the store enforces is on the BEDTIME, and a night
+                    // that ran to one in the afternoon is a real night, not a
+                    // bad edit.
+                    wheel(
+                        "Awake at", selection: $end,
+                        in: window.from...window.to.addingTimeInterval(6 * 3600)
+                    )
+                }
+                // ── NO "DURATION" ROW ───────────────────────────────────────
+                // The live duration is the numeral in the arc's own bowl, one
+                // section up, and it moves with the wheels. A 44 pt row
+                // repeating it is the "no box that only repeats the box above
+                // it" rule (§3.6). An INVALID window still needs saying,
+                // because the arc's answer for one is a silent em dash.
+                if end <= start {
+                    Text("Awake has to come after asleep.")
+                        .onyxType(.caption)
+                        .foregroundStyle(Color.onyx.danger)
+                }
+                if let failure {
+                    Text(failure)
+                        .onyxType(.caption)
+                        .foregroundStyle(Color.onyx.danger)
+                }
+            } label: {
+                windowLabel
             }
-            // ── NO "DURATION" ROW ───────────────────────────────────────
-            // The live duration is the numeral in the arc's own bowl, two
-            // sections up, and it moves with the wheels. A 44 pt row repeating
-            // it is the "no box that only repeats the box above it" rule
-            // (§3.6) — and it was 44 pt of the reason the two flags below fell
-            // off the first screen. An INVALID window still needs saying,
-            // because the arc's answer for one is a silent em dash.
-            if end <= start {
-                Text("Awake has to come after asleep.")
-                    .onyxType(.caption)
-                    .foregroundStyle(Color.onyx.danger)
-            }
-            if let failure {
-                Text(failure)
-                    .onyxType(.caption)
-                    .foregroundStyle(Color.onyx.danger)
-            }
+            .tint(accent)
         } header: {
-            OnyxSectionHeader("Window", .recover)
+            OnyxSectionHeader("Window today", .recover)
         } footer: {
             Text(edited
                  ? "Edited before — Apple Health no longer overwrites this night."
@@ -270,12 +302,53 @@ struct SleepEditSheet: View {
         }
     }
 
+    /// The closed row, which is the whole point of closing it: a reader who
+    /// came to SEE the window reads it here and opens nothing.
+    ///
+    /// It says "Asleep and awake" and NOT "Window today", which is the section's
+    /// own header one line above it. A disclosure label repeating its header is
+    /// the same word twice on two consecutive rows, and it tells a reader
+    /// nothing about what opening it would show them. The header names the
+    /// subject; the label names the CONTROLS inside.
+    ///
+    /// `firstTextBaseline` rather than `center`, because the span is numerals
+    /// against a word and centring sits the digits a hair high against it. One
+    /// line each, scaled rather than wrapped — the chevron owns the trailing
+    /// edge and a wrapped span would push it off the row.
+    private var windowLabel: some View {
+        HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
+            Text("Asleep and awake")
+                .onyxType(.secondary)
+                .foregroundStyle(Color.onyx.textPrimary)
+            Spacer(minLength: OnyxSpace.s)
+            Text(windowSpan)
+                .onyxType(.caption).onyxNumeral()
+                .foregroundStyle(Color.onyx.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Asleep and awake, \(windowSpan)")
+    }
+
+    /// `23:10 – 06:12`. An EN DASH with hair spaces, not a hyphen: this is a
+    /// range and the hyphen is the minus sign the app already prints in front
+    /// of a sleep debt two sections up.
+    private var windowSpan: String {
+        let from = start.formatted(date: .omitted, time: .shortened)
+        let to = end.formatted(date: .omitted, time: .shortened)
+        return "\(from) – \(to)"
+    }
+
     /// ── 128 PT, NOT THE WHEEL'S OWN 216 ─────────────────────────────────────
     /// Two wheels at their intrinsic height plus the card above them is the
-    /// whole sheet, and the two flags — the other half of what this screen is
-    /// for — never come into view. A wheel drawn short shows three rows either
-    /// side of the selection instead of five, which is still every row a thumb
-    /// can reach, and it is what puts the toggles on the first screen.
+    /// whole sheet, and everything else — the flags, the reading — is pushed
+    /// out of view by the one control almost nobody opened this sheet for. The
+    /// group being shut is most of that fix; the short wheel is the rest of it,
+    /// so that OPENING the window does not evict the reading it is being
+    /// compared against. A wheel drawn short shows three rows either side of
+    /// the selection instead of five, which is still every row a thumb can
+    /// reach.
     private func wheel(_ title: String, selection: Binding<Date>, in range: ClosedRange<Date>) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(title).onyxMicro()
@@ -292,10 +365,15 @@ struct SleepEditSheet: View {
 
     // MARK: - C. The two flags
 
-    /// The pair that used to sit on the tile (§U5.1). Plain `Toggle` rows: in a
-    /// `Form` the system switch IS the house style, and the reason they were
-    /// drawn as bordered buttons on the tile — a 31 pt switch beside a 22 pt
-    /// stage row — does not apply on a sheet with room.
+    /// The pair that used to sit on the tile (§U5.1), and the first thing on
+    /// this sheet — see the header. Plain `Toggle` rows: in a `Form` the system
+    /// switch IS the house style, and the reason they were drawn as bordered
+    /// buttons on the tile — a 31 pt switch beside a 22 pt stage row — does not
+    /// apply on a sheet with room.
+    ///
+    /// They write on every tap and nothing here can fail, which is the other
+    /// half of why they lead: the top of a sheet is where a control that needs
+    /// no Save belongs.
     private var flagSection: some View {
         Section {
             Toggle("Trouble falling asleep", isOn: Binding(
