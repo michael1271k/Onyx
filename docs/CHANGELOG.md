@@ -44,6 +44,46 @@ _Nothing yet._
 
 ---
 
+## [3.18.0] — 2026-09-16 · The Body Has Two Sides
+
+Soreness stops being a thing you have and starts being a thing you have on one
+side. The atlas has drawn a left and a right path per bilateral muscle since it
+was first drawn, and the hit test has always known which one a finger was in —
+this is the release where the answer stops being thrown away.
+
+### Added
+- **Rate one side of a muscle.** Tap the right glute and rate the right glute.
+  The severity popover opens with a **Both · L · R** segment pre-selected to the
+  side you touched, so the common case is still one tap and the correction is
+  always there. Muscles the body draws as one shape — the traps, the erectors,
+  a midsection — are still rated whole, because they have no side to choose.
+  (Pulse ▸ Soreness)
+- **`doms_logs` carries `side` and `sub_region`**, both optional. A left and a
+  right rating of one muscle now coexist on one day.
+- **The weekly export finally writes the laterality grammar it has always
+  known**: `muscle[/subRegion][@L|@R]:severity` — `Glutes@R 3`, `Back/Erectors 2`.
+
+### Changed
+- **VoiceOver walks the body by side.** Touch-explore lands on "Glutes, left"
+  rather than one element spanning the whole pelvis, and the rotor still offers
+  the ten whole muscles so nobody has to scroll past thirty.
+- The Soreness square counts a one-sided rating **once**. A sore right glute is
+  one sore muscle.
+
+### Fixed
+- The soreness summary takes the **worst** of a muscle's sides rather than
+  whichever row was read last — the fold the battery has always used.
+
+**Unchanged on purpose:** every battery and stress number. The scoring fold
+takes the max within a muscle, so splitting a rating into a left and a right
+cannot move a score that a single rating at the same severity did not move.
+
+**Requires the founder to paste `docs/sql/w9-doms-laterality.sql`.** Until then,
+one-sided ratings queue in the outbox and land on the first sync after; whole-
+muscle ratings are unaffected.
+
+---
+
 ## [3.17.0] — 2026-09-16 · Appearance, Everywhere
 
 ### Added

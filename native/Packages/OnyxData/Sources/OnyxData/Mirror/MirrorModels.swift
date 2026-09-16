@@ -739,6 +739,8 @@ public struct DomsLogRow: Codable, FetchableRecord, PersistableRecord, Sendable,
     public var createdAt: Date?
     public var sourceSessionId: String?
     public var sourceDayKey: String?
+    public var side: String?
+    public var subRegion: String?
 
     public enum CodingKeys: String, CodingKey {
         case id
@@ -749,6 +751,8 @@ public struct DomsLogRow: Codable, FetchableRecord, PersistableRecord, Sendable,
         case createdAt = "created_at"
         case sourceSessionId = "source_session_id"
         case sourceDayKey = "source_day_key"
+        case side
+        case subRegion = "sub_region"
     }
 
     public init(
@@ -759,7 +763,9 @@ public struct DomsLogRow: Codable, FetchableRecord, PersistableRecord, Sendable,
         severity: Int,
         createdAt: Date? = nil,
         sourceSessionId: String? = nil,
-        sourceDayKey: String? = nil
+        sourceDayKey: String? = nil,
+        side: String? = nil,
+        subRegion: String? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -769,6 +775,8 @@ public struct DomsLogRow: Codable, FetchableRecord, PersistableRecord, Sendable,
         self.createdAt = createdAt
         self.sourceSessionId = sourceSessionId
         self.sourceDayKey = sourceDayKey
+        self.side = side
+        self.subRegion = subRegion
     }
 }
 
@@ -2009,6 +2017,8 @@ extension AppDatabase {
                 t.column("created_at", .datetime)
                 t.column("source_session_id", .text)
                 t.column("source_day_key", .text)
+                t.column("side", .text)
+                t.column("sub_region", .text)
             }
             try db.create(table: "body_composition") { t in
                 t.primaryKey("id", .text)
@@ -2328,9 +2338,9 @@ public enum MirrorCatalogue {
                     pull: { try await $0.pull(StressLogRow.self, from: $1) },
                     push: { try await $1.pushRow(StressLogRow.self, from: $0, table: "stress_logs", conflict: "id", ref: $2) }),
         MirrorTable(name: "doms_logs", group: .daily, strategy: .window(column: "date"),
-                    conflict: "user_id,date,muscle_group", order: ["id"],
+                    conflict: "user_id,date,muscle_group,side,sub_region", order: ["id"],
                     pull: { try await $0.pull(DomsLogRow.self, from: $1) },
-                    push: { try await $1.pushRow(DomsLogRow.self, from: $0, table: "doms_logs", conflict: "user_id,date,muscle_group", ref: $2) }),
+                    push: { try await $1.pushRow(DomsLogRow.self, from: $0, table: "doms_logs", conflict: "user_id,date,muscle_group,side,sub_region", ref: $2) }),
         MirrorTable(name: "body_composition", group: .body, strategy: .window(column: "date"),
                     conflict: "id", order: ["id"],
                     pull: { try await $0.pull(BodyCompositionRow.self, from: $1) },

@@ -33,14 +33,24 @@ struct AtlasFigure: View {
     /// A 44 pt figure in a tile: no drop shadow, because a 10 pt blur is
     /// invisible at that size and costs an offscreen pass per tile.
     var isThumbnail = false
-    /// An explicit colour per muscle, overriding both the family hue and the
-    /// monochrome tint. The DOMS body needs this: soreness is a SEVERITY ramp
-    /// (§3.2 — none tertiary · mild Good · moderate Record · severe Danger) and
-    /// a quadricep that hurts is not "more Tide" than one that does not.
-    var colors: [LandmarkMuscle: Color] = [:]
-    /// What VoiceOver reads for a muscle — "Moderate" on the DOMS body. A
-    /// muscle with no entry reads its worked share instead.
-    var values: [LandmarkMuscle: String] = [:]
+    /// An explicit colour per muscle AND SIDE, overriding both the family hue
+    /// and the monochrome tint. The DOMS body needs this: soreness is a
+    /// SEVERITY ramp (§3.2 — none tertiary · mild Good · moderate Record ·
+    /// severe Danger) and a quadricep that hurts is not "more Tide" than one
+    /// that does not.
+    ///
+    /// ── THE `both` KEY LIGHTS BOTH PATHS (W9) ───────────────────────────────
+    /// Lookup is exact side FIRST, then `both`. A whole-muscle rating is stored
+    /// as `both` and paints the left and the right path alike — which is what
+    /// keeps every rating written before laterality existed drawing exactly as
+    /// it did. A one-sided rating keys the side it names and the other path
+    /// falls through to the plain fill, because the athlete said nothing about
+    /// it and a figure must not invent the half nobody reported.
+    var colors: [MuscleSide: Color] = [:]
+    /// What VoiceOver reads for a muscle — "Moderate" on the DOMS body. Keyed
+    /// and resolved like `colors`; a muscle with no entry reads its worked
+    /// share instead.
+    var values: [MuscleSide: String] = [:]
     /// Muscles to RING, over whatever the fill says.
     ///
     /// ── THE SECOND CHANNEL, AND WHY IT IS A STROKE ──────────────────────────
@@ -61,10 +71,11 @@ struct AtlasFigure: View {
     /// Pulse-only in practice, because nothing else passes it. The logger's
     /// figure answers one question — where did this session land — and a second
     /// channel there would be decoration.
-    var outlined: [LandmarkMuscle: Color] = [:]
-    /// Called with the muscle under a tap, when there is one. Nil leaves the
-    /// figure inert, which is what every figure outside the DOMS tile is.
-    var onPick: ((LandmarkMuscle) -> Void)?
+    var outlined: [MuscleSide: Color] = [:]
+    /// Called with the muscle under a tap and the side of it, when there is
+    /// one. Nil leaves the figure inert, which is what every figure outside the
+    /// DOMS tile is.
+    var onPick: ((MuscleSide) -> Void)?
 
     var body: some View {
         switch side {
@@ -78,22 +89,35 @@ struct AtlasFigure: View {
         }
     }
 
-    /// Muscle name → colour, resolved once per draw rather than per path.
+    /// Muscle-and-side → colour and amount, resolved once per draw rather than
+    /// per path, and built from the paths the VIEW actually draws.
     ///
     /// `OnyxAtlas` keys on the muscle's display STRING, because it is generated
     /// from TypeScript and knows nothing about a Swift enum. This is the join,
     /// and `LandmarkMuscle.rawValue` carrying the display spelling is what makes
     /// it a lookup rather than a translation table.
-    private var tints: [String: (Color, Double)] {
-        var out: [String: (Color, Double)] = [:]
-        for (muscle, intensity) in worked {
-            out[muscle.rawValue] = (colors[muscle] ?? monochromeTint ?? Color.onyx.muscle(muscle), intensity)
+    ///
+    /// The AMOUNT still comes from `worked`, which is whole-muscle: modelled
+    /// fatigue is bilateral and always was — the ledger records that a set of
+    /// squats happened, not which leg did more of it. Only the COLOUR is
+    /// side-aware, because only the colour carries something the athlete
+    /// reported.
+    private func tints(_ view: OnyxAtlasView) -> [MuscleSide: (Color, Double)] {
+        var out: [MuscleSide: (Color, Double)] = [:]
+        for entry in OnyxAtlas.muscles where entry.view == view {
+            guard let muscle = LandmarkMuscle(rawValue: entry.muscle),
+                  let intensity = worked[muscle], intensity > 0 else { continue }
+            let key = MuscleSide(muscle, entry.side)
+            out[key] = (
+                colors[key] ?? colors[MuscleSide(muscle, .both)] ?? monochromeTint ?? Color.onyx.muscle(muscle),
+                intensity
+            )
         }
         return out
     }
 
     private func figure(_ view: OnyxAtlasView) -> some View {
-        let resolved = tints
+        let resolved = tints(view)
         return Canvas { context, size in
             let rect = CGRect(origin: .zero, size: size)
             let light = Self.light(across: rect)
@@ -122,7 +146,8 @@ struct AtlasFigure: View {
             for entry in OnyxAtlas.muscles where entry.view == view {
                 var path = Path()
                 entry.build(rect, &path)
-                if let (tint, intensity) = resolved[entry.muscle], intensity > 0 {
+                let key = LandmarkMuscle(rawValue: entry.muscle).map { MuscleSide($0, entry.side) }
+                if let key, let (tint, intensity) = resolved[key], intensity > 0 {
                     // Alpha carries the amount. A hue RAMP would read as a
                     // verdict — green good, red bad — and this figure passes no
                     // verdicts; it reports where work landed.
@@ -154,7 +179,8 @@ struct AtlasFigure: View {
             // second channel and a rendering artefact.
             for entry in OnyxAtlas.muscles where entry.view == view {
                 guard let muscle = LandmarkMuscle(rawValue: entry.muscle),
-                      let ring = outlined[muscle] else { continue }
+                      let ring = outlined[MuscleSide(muscle, entry.side)]
+                              ?? outlined[MuscleSide(muscle, .both)] else { continue }
                 var path = Path()
                 entry.build(rect, &path)
                 context.stroke(path, with: .color(ring.opacity(0.35)), lineWidth: Self.hairline * 5)
@@ -196,7 +222,7 @@ struct AtlasFigure: View {
         .accessibilityChildren {
             if onPick != nil {
                 ZStack(alignment: .topLeading) {
-                    ForEach(Self.bounds(on: view, in: CGRect(origin: .zero, size: measured)), id: \.muscle) { item in
+                    ForEach(Self.bounds(on: view, in: CGRect(origin: .zero, size: measured)), id: \.key) { item in
                         // `.position`, not `.offset`: an offset takes no part
                         // in layout, so the stack sized itself to the largest
                         // muscle and centred every frame — touch-explore
@@ -204,10 +230,14 @@ struct AtlasFigure: View {
                         Color.clear
                             .frame(width: item.rect.width, height: item.rect.height)
                             .position(x: item.rect.midX, y: item.rect.midY)
-                            .accessibilityLabel(item.muscle.rawValue)
-                            .accessibilityValue(spoken(item.muscle))
+                            // "Glutes, left" — the rotor names the side the
+                            // frame actually covers, because the two frames are
+                            // otherwise two identically-labelled buttons and a
+                            // screen reader cannot tell them apart.
+                            .accessibilityLabel(item.key.label)
+                            .accessibilityValue(spoken(item.key))
                             .accessibilityAddTraits(.isButton)
-                            .accessibilityAction { onPick?(item.muscle) }
+                            .accessibilityAction { onPick?(item.key) }
                     }
                 }
             }
@@ -232,22 +262,29 @@ struct AtlasFigure: View {
     /// §6.7's hairline, on every outline.
     private static let hairline: CGFloat = 0.5
 
-    /// Each landmark the side draws, with the union of its paths' bounds in
-    /// `rect` — the accessibility frame. Zero-size before first layout.
-    private static func bounds(on view: OnyxAtlasView, in rect: CGRect) -> [(muscle: LandmarkMuscle, rect: CGRect)] {
-        var out: [LandmarkMuscle: CGRect] = [:]
+    /// Each landmark-and-side the view draws, with the union of that side's
+    /// paths' bounds in `rect` — the accessibility frame. Zero-size before
+    /// first layout.
+    ///
+    /// Unioning per SIDE rather than per muscle is what makes touch-explore
+    /// useful on a lateralised body: the old union of a left and a right glute
+    /// was one frame spanning the whole pelvis, so a finger anywhere across the
+    /// hips got the same element and the side could not be chosen by feel.
+    private static func bounds(on view: OnyxAtlasView, in rect: CGRect) -> [(key: MuscleSide, rect: CGRect)] {
+        var out: [MuscleSide: CGRect] = [:]
         for entry in OnyxAtlas.muscles where entry.view == view {
             guard let muscle = LandmarkMuscle(rawValue: entry.muscle) else { continue }
+            let key = MuscleSide(muscle, entry.side)
             var path = Path()
             entry.build(rect, &path)
-            out[muscle] = out[muscle].map { $0.union(path.boundingRect) } ?? path.boundingRect
+            out[key] = out[key].map { $0.union(path.boundingRect) } ?? path.boundingRect
         }
-        return OnyxAtlas.landmarks(on: view).compactMap { m in out[m].map { (m, $0) } }
+        return OnyxAtlas.sidedLandmarks(on: view).compactMap { key in out[key].map { (key, $0) } }
     }
 
-    private func spoken(_ muscle: LandmarkMuscle) -> String {
-        if let value = values[muscle] { return value }
-        guard let share = worked[muscle], share > 0 else { return "not worked" }
+    private func spoken(_ key: MuscleSide) -> String {
+        if let value = values[key] ?? values[MuscleSide(key.muscle, .both)] { return value }
+        guard let share = worked[key.muscle], share > 0 else { return "not worked" }
         return "\(Int((min(share, 1) * 100).rounded())) percent"
     }
 
@@ -260,12 +297,12 @@ struct AtlasFigure: View {
                 guard let onPick else { return }
                 // The gesture reports in the modified view's local space, which
                 // after `aspectRatio` is exactly the rect the Canvas drew into.
-                if let muscle = OnyxAtlas.muscle(
+                if let hit = OnyxAtlas.muscle(
                     at: tap.location,
                     in: CGRect(origin: .zero, size: measured),
                     side: view
                 ) {
-                    onPick(muscle)
+                    onPick(hit)
                 }
             }
     }

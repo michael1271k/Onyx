@@ -31,21 +31,49 @@ struct DomsTile: View {
     @ScaledMetric(relativeTo: .body) private var figureHeight: CGFloat = 280
 
     @State private var showingBack = false
-    /// The muscle group whose popover is up. A GROUP, not a landmark: a sore
-    /// arm is a sore arm, and rating "biceps" separately from "triceps" is a
-    /// precision the body does not have.
-    @State private var rating: String?
+    /// The muscle group whose popover is up, and the side the finger landed on.
+    ///
+    /// A GROUP, not a landmark: a sore arm is a sore arm, and rating "biceps"
+    /// separately from "triceps" is a precision the body does not have. But a
+    /// SIDE is a precision the body very much does have, and the tap already
+    /// knew it — `OnyxAtlasHit` has always found which of a muscle's two paths
+    /// the finger was in and, until W9, thrown the answer away.
+    @State private var rating: Rating?
     /// Every rating tap, so one `.selection` trigger serves the whole tile.
     @State private var taps = 0
 
     private var severity: [String: Int] { model.domsSeverity }
 
-    /// Landmark → severity colour, for every landmark of every sore group.
-    private var colors: [LandmarkMuscle: Color] {
-        var out: [LandmarkMuscle: Color] = [:]
-        for (group, level) in severity where level > 0 {
-            for landmark in DomsMap.landmarks[group] ?? [] {
-                out[landmark] = Color.onyx.severity(level)
+    /// Muscle-and-side → severity colour, for every landmark of every sore
+    /// group, on the side the rating named.
+    ///
+    /// ── AN AXIAL LANDMARK TAKES ONLY A `both` RATING ────────────────────────
+    /// "Back, left" keys `MuscleSide(.lats, .left)` and also
+    /// `MuscleSide(.upperBack, .left)` — but the trapezius is ONE path and the
+    /// atlas calls it `both`, so that second key matches nothing and the traps
+    /// stay unringed. That is the honest drawing: the athlete said the left of
+    /// their back, and the only part of a back that HAS a left is the lat. A
+    /// rating with no side keys `both` and rings the whole group, axial paths
+    /// included, exactly as it did before laterality existed.
+    ///
+    /// ponytail: a dead key per axial landmark of a sided group, and it costs a
+    /// dictionary slot nobody reads. Filtering them out means asking the atlas
+    /// which landmarks are lateral, which is a second traversal to save three
+    /// entries.
+    private var colors: [MuscleSide: Color] {
+        levels.mapValues { Color.onyx.severity($0) }
+    }
+
+    /// Muscle-and-side → severity, max-merged. Severities are merged and THEN
+    /// coloured: two `Color`s have no order, so folding the ramp instead of the
+    /// number would need the ramp inverted to compare anything.
+    private var levels: [MuscleSide: Int] {
+        var out: [MuscleSide: Int] = [:]
+        for row in model.doms where row.severity > 0 {
+            let side = BodySide(stored: row.side)
+            for landmark in DomsMap.landmarks[row.muscleGroup] ?? [] {
+                let key = MuscleSide(landmark, side)
+                out[key] = max(out[key] ?? 0, row.severity)
             }
         }
         return out
@@ -75,8 +103,13 @@ struct DomsTile: View {
         .accessibilityLabel("Soreness map, \(showingBack ? "back" : "front")")
         .accessibilityValue(spoken)
         .accessibilityActions {
+            // The rotor offers the WHOLE muscle. The segment inside the popover
+            // is where a side is chosen, so the action list stays ten items
+            // rather than thirty — and a screen reader that cannot aim at a
+            // 20 pt calf is exactly the reader who should not have to scroll
+            // past "Calves, left" to reach "Chest".
             ForEach(DomsMap.muscles, id: \.self) { group in
-                Button("Rate \(group)") { rating = group }
+                Button("Rate \(group)") { rating = Rating(group: group, side: .both) }
             }
             Button(showingBack ? "Show front" : "Show back") { flip() }
         }
@@ -103,12 +136,13 @@ struct DomsTile: View {
                     if abs(drag.translation.width) > abs(drag.translation.height) { flip() }
                 }
         )
-        .popover(item: Binding(get: { rating.map(Group.init) }, set: { rating = $0?.name })) { group in
+        .popover(item: $rating) { target in
             SeverityPopover(
-                group: group.name,
-                current: severity[group.name] ?? 0
-            ) { level in
-                model.setDoms(group.name, severity: level)
+                group: target.group,
+                tapped: target.side,
+                current: { model.domsSeverity(target.group, side: $0) ?? 0 }
+            ) { side, level in
+                model.setDoms(target.group, severity: level, side: side)
                 taps += 1
                 rating = nil
             }
@@ -144,9 +178,13 @@ struct DomsTile: View {
             monochromeTint: Color.onyx.accent(.recover),
             values: spokenValues,
             outlined: colors,
-            onPick: { landmark in
-                guard let group = DomsMap.group(of: landmark) else { return }
-                rating = group
+            onPick: { hit in
+                guard let group = DomsMap.group(of: hit.muscle) else { return }
+                // The side the finger landed in is the popover's PRE-SELECTION
+                // and never its verdict: the segment at the head of the sheet
+                // is right there to say "actually both", so aiming at a glute
+                // costs nothing and aiming at the right one saves a tap.
+                rating = Rating(group: group, side: hit.side)
             }
         )
         .frame(maxWidth: .infinity)
@@ -158,14 +196,20 @@ struct DomsTile: View {
     /// dropping either one would leave the sighted figure saying something the
     /// spoken one does not. The report leads: it is the thing the user typed
     /// and the thing a tap is about to change.
-    private var spokenValues: [LandmarkMuscle: String] {
-        var out: [LandmarkMuscle: String] = [:]
-        for (group, landmarks) in DomsMap.landmarks {
-            let level = severity[group] ?? 0
-            for landmark in landmarks {
-                let reported = DomsMap.levels[min(level, DomsMap.maxSeverity)]
-                guard let loaded = model.window.fatigue[landmark] else { out[landmark] = reported; continue }
-                out[landmark] = "\(reported) · \(MuscleRecovery.label(loaded).lowercased())"
+    private var spokenValues: [MuscleSide: String] {
+        var out: [MuscleSide: String] = [:]
+        let reported = levels
+        for landmark in LandmarkMuscle.allCases {
+            for side in BodySide.allCases {
+                // The side's OWN rating, or the whole-muscle one, whichever is
+                // worse: a right glute rated `severe` on a muscle that also
+                // carries a `both` row reads as the severe one, which is what
+                // the ring under the finger is drawing.
+                let level = max(reported[MuscleSide(landmark, side)] ?? 0, reported[MuscleSide(landmark, .both)] ?? 0)
+                let words = DomsMap.levels[min(level, DomsMap.maxSeverity)]
+                let key = MuscleSide(landmark, side)
+                guard let loaded = model.window.fatigue[landmark] else { out[key] = words; continue }
+                out[key] = "\(words) · \(MuscleRecovery.label(loaded).lowercased())"
             }
         }
         return out
@@ -218,22 +262,58 @@ struct DomsTile: View {
         DomsMap.summary(severity) ?? "nothing sore"
     }
 
-    /// `popover(item:)` wants an `Identifiable`; a muscle group is a `String`.
-    private struct Group: Identifiable {
-        let name: String
-        var id: String { name }
+    /// What the popover is about: a group, and the side the tap landed on.
+    ///
+    /// `popover(item:)` wants an `Identifiable`, and the id has to carry the
+    /// SIDE as well as the group — presenting "Glutes, left" while "Glutes,
+    /// right" is already up must re-present the sheet, and an id of the group
+    /// alone reads as the same item and leaves the old side on screen.
+    private struct Rating: Identifiable, Equatable {
+        let group: String
+        let side: BodySide
+        var id: String { "\(group)-\(side.rawValue)" }
     }
 }
 
-/// Four words, one tap each.
+/// Four words, one tap each — and, above them, which side you meant.
 ///
 /// A popover rather than a sheet: the answer is one of four and the question is
 /// "this muscle" — a half-screen sheet for that loses the body you were just
 /// pointing at, which is the context that makes the question answerable.
-private struct SeverityPopover: View {
+///
+/// ── THE SEGMENT IS A CORRECTION, NOT A STEP ─────────────────────────────────
+/// It opens PRE-SELECTED to the side the finger landed on, so the common case
+/// is still one tap: aim at the right glute, pick a severity, done. The segment
+/// exists for the two cases the tap cannot express — "both, actually", and "I
+/// hit the wrong one" — and for the muscles the atlas draws as one shape, where
+/// the tap can only ever answer `both` and the segment is the only way to say
+/// otherwise.
+///
+/// Whole words for `Both` and single letters for `L` and `R`: three full words
+/// do not fit a 220 pt popover at AX sizes, and `B` alone is the one of the
+/// three that is genuinely ambiguous on a body.
+/// Not `private`: a popover only exists under a finger, so the shot loop cannot
+/// reach it through the tile. `PulsePreviews` renders it directly (the same
+/// trick W8 used on `SignedInTabs`), and a control nobody can photograph is a
+/// control nobody reviews.
+struct SeverityPopover: View {
     let group: String
-    let current: Int
-    let onPick: (Int) -> Void
+    /// Where the finger landed. The initial selection, and nothing more.
+    let tapped: BodySide
+    /// This group's stored severity for a side — read per side, because the
+    /// tick has to move when the segment does.
+    let current: (BodySide) -> Int
+    let onPick: (BodySide, Int) -> Void
+
+    @State private var side: BodySide
+
+    init(group: String, tapped: BodySide, current: @escaping (BodySide) -> Int, onPick: @escaping (BodySide, Int) -> Void) {
+        self.group = group
+        self.tapped = tapped
+        self.current = current
+        self.onPick = onPick
+        _side = State(initialValue: tapped)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -242,8 +322,19 @@ private struct SeverityPopover: View {
                 .padding(.horizontal, OnyxSpace.m)
                 .padding(.top, OnyxSpace.m)
                 .padding(.bottom, OnyxSpace.s)
+            Picker("Side", selection: $side) {
+                ForEach(BodySide.allCases, id: \.self) { option in
+                    Text(option == .both ? "Both" : option.mark)
+                        .accessibilityLabel(option.label)
+                        .tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, OnyxSpace.m)
+            .padding(.bottom, OnyxSpace.s)
+            .accessibilityLabel("Side")
             ForEach(Array(DomsMap.levels.enumerated()), id: \.offset) { level, label in
-                Button { onPick(level) } label: {
+                Button { onPick(side, level) } label: {
                     HStack(spacing: OnyxSpace.s) {
                         Circle()
                             .fill(Color.onyx.severity(level))
@@ -252,7 +343,7 @@ private struct SeverityPopover: View {
                             .onyxType(.body)
                             .foregroundStyle(Color.onyx.textPrimary)
                         Spacer(minLength: OnyxSpace.l)
-                        if level == current {
+                        if level == current(side) {
                             Image(systemName: "checkmark")
                                 .onyxType(.caption).fontWeight(.bold)
                                 .foregroundStyle(Color.onyx.accent(.recover))
@@ -263,7 +354,7 @@ private struct SeverityPopover: View {
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .accessibilityAddTraits(level == current ? .isSelected : [])
+                .accessibilityAddTraits(level == current(side) ? .isSelected : [])
             }
         }
         .frame(minWidth: 220)

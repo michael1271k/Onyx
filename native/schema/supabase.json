@@ -137,12 +137,12 @@
     },
     "doms_logs": {
       "group": "daily",
-      "conflict": "user_id,date,muscle_group",
+      "conflict": "user_id,date,muscle_group,side,sub_region",
       "pk": [
         "id"
       ],
       "window": "date",
-      "cols": "id:uuid,user_id:uuid,date:date,muscle_group:text,severity:int2,created_at:timestamptz?,source_session_id:uuid?,source_day_key:text?"
+      "cols": "id:uuid,user_id:uuid,date:date,muscle_group:text,severity:int2,created_at:timestamptz?,source_session_id:uuid?,source_day_key:text?,side:text?,sub_region:text?"
     },
     "body_composition": {
       "group": "body",

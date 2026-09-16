@@ -1192,6 +1192,42 @@ public final class AppDatabase: Sendable {
             try Self.collapseCardioDuplicates(db)
         }
 
+        // ── v28 ─────────────────────────────────────────────────────────────
+        // The body gets two sides (Next-Gen W9, 2026-09-16).
+        //
+        // The atlas has drawn a left and a right path per bilateral muscle
+        // since it was first drawn, and the hit test has always known which of
+        // the two a tap landed in. `doms_logs` was the only thing in the way:
+        // one row per `(user_id, date, muscle_group)`, so a left glute and a
+        // right glute could not coexist even if the words for them existed —
+        // and they did, in `DomsMuscles.sides` and in the export grammar, with
+        // nothing able to write them.
+        //
+        // BOTH NULLABLE, and absence is the pre-v2 meaning: `side` nil is
+        // "both", `sub_region` nil is "the whole muscle". That is what keeps a
+        // bilateral rating byte-identical to what every build before this one
+        // wrote — `encodeIfPresent` leaves a nil column OUT of the push body,
+        // so a whole-muscle row's request is unchanged on the wire and its
+        // export token is unchanged in the document.
+        //
+        // The same `v26` caveat applies and for the same reason: between this
+        // build landing and `docs/sql/w9-doms-laterality.sql` being pasted, a
+        // ONE-SIDED rating's push is rejected for an unknown column. That
+        // failure is per-row (`outboxFailed`, retried under `SyncBackoff`) and
+        // clears itself on the first sync after the paste. A bilateral rating
+        // is unaffected, because it sends neither column.
+        //
+        // A fresh install gets both from the regenerated `migrateMirrorV1`;
+        // the guard is for every store that already exists.
+        migrator.registerMigration("v28.domsLaterality") { db in
+            let existing = Set(try db.columns(in: "doms_logs").map(\.name))
+            let missing = ["side", "sub_region"].filter { !existing.contains($0) }
+            guard !missing.isEmpty else { return }
+            try db.alter(table: "doms_logs") { t in
+                for column in missing { t.add(column: column, .text) }
+            }
+        }
+
         return migrator
     }
 }

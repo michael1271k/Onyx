@@ -128,15 +128,35 @@ public struct WeeklyExportBuilder: Sendable {
         )
 
         let sessionDateById = Dictionary(rows.sessions.map { ($0.id, $0.date) }, uniquingKeysWith: { _, b in b })
+        // ── THE GRAMMAR'S FIRST NATIVE CONSTRUCTION SITE (W9) ───────────────
+        // `ExportDoms.side` and `.subRegion` and `WeeklyExport.domsName`'s
+        // `muscle[/subRegion][@L|@R]` have existed since v3 with nothing in the
+        // app able to fill them: `doms_logs` had neither column. It has both
+        // now, and this is where they enter the document.
+        //
+        // A nil column stays nil rather than becoming `"both"` or `""`, which
+        // is what makes a bilateral whole-muscle token byte-identical to the
+        // one v1 wrote — `domsName` tests the two lateral spellings and emits
+        // nothing for anything else.
         let doms: [ExportDoms] = try Self.stableSorted(
             rows.doms.map { r in
                 try make([
                     "date": r.date, "muscle": r.muscleGroup, "severity": Double(r.severity),
                     "sourceLabel": j(r.sourceDayKey.map { key in program.day(key: key)?.label ?? key }),
                     "sourceDate": j(r.sourceSessionId.flatMap { sessionDateById[$0] }),
+                    "side": j(r.side), "subRegion": j(r.subRegion),
                 ])
             }
-        ) { (a: ExportDoms, b: ExportDoms) in (a.date, a.muscle) < (b.date, b.muscle) }
+        // Side and sub-region join the sort key because they are now part of
+        // what distinguishes two rows: `(date, muscle)` alone leaves a left and
+        // a right rating of one muscle on one day comparing EQUAL, and a sort
+        // that cannot separate two rows orders them by whatever the fetch
+        // happened to return — which is exactly the non-determinism the golden
+        // document exists to catch.
+        ) { (a: ExportDoms, b: ExportDoms) in
+            (a.date, a.muscle, a.side ?? "", a.subRegion ?? "")
+                < (b.date, b.muscle, b.side ?? "", b.subRegion ?? "")
+        }
 
         // The export folds each day the way the scorer does: a session logged
         // on the day makes it a training day, whatever the calendar said.

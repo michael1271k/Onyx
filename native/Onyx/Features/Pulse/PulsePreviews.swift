@@ -172,6 +172,16 @@ enum PulsePreviews {
                          level: 4, tags: [.work, .money], note: "Deadline moved to Friday.")
         try db.setDoms(userId: userId, date: date, muscleGroup: "Quads", severity: 2)
         try db.setDoms(userId: userId, date: date, muscleGroup: "Chest", severity: 1)
+        // ── ONE SIDE, ON PURPOSE (W9) ───────────────────────────────────────
+        // Quads and Chest are BILATERAL ratings and ring both paths, which is
+        // what every rating written before W9 does. The right glute is the
+        // thing the wave added, and it is the only state where a shot can show
+        // that the body is asymmetric — a figure ringed symmetrically is
+        // identical whether or not laterality works at all.
+        // One per view, because the tile opens on the front and a reviewer
+        // should not have to swipe to find out whether the wave shipped.
+        try db.setDoms(userId: userId, date: date, muscleGroup: "Calves", severity: 3, side: .left)
+        try db.setDoms(userId: userId, date: date, muscleGroup: "Glutes", severity: 3, side: .right)
         try db.setSupplementSkipped(
             userId: userId, date: date, itemKey: "caffeine", skipped: true,
             dueAt: DayModel.localInstant(date, hhmm: "11:45")
@@ -556,8 +566,56 @@ enum PulsePreviews {
             // there.
             DomsOnly()
                 .environment(AppEnvironment.preview)
+        // ── THE RATING POPOVER, WITH ITS SIDE SEGMENT (W9) ─────────────────
+        // Drawn directly rather than presented, because a popover only exists
+        // under a finger and the shot loop has none. It is shown as the tap on
+        // the RIGHT glute leaves it — segment pre-selected to `R`, tick beside
+        // the severity that side already carries — which is the whole claim of
+        // the wave in one frame.
+        // ── THE 2 × 2 GRID, ABOVE THE FOLD ─────────────────────────────────
+        // `day` opens on the score, the night and the vitals; the squares are
+        // three screens down and `native-shot.sh` photographs a scroll view's
+        // FIRST screen only. The Soreness square counts what the map rings, so
+        // once a rating can be one-sided the count is a number W9 changed —
+        // and it had no shot of its own to change it in.
+        case "pulse-squares":
+            SquaresOnly()
+                .environment(AppEnvironment.preview)
+        case "doms-rate":
+            SeverityPopover(group: "Glutes", tapped: .right, current: { $0 == .right ? 3 : 0 }) { _, _ in }
+                .fixedSize()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onyxScreen(.recover)
         default:
             ContentUnavailableView("No Day screen named \(screen)", systemImage: "questionmark.square.dashed")
+        }
+    }
+
+    /// The 2 × 2 grid on its own ground, observed for the same reason
+    /// `DomsOnly` is: the ratings arrive on a GRDB stream.
+    private struct SquaresOnly: View {
+        @State private var model: DayModel?
+
+        var body: some View {
+            NavigationStack {
+                ScrollView {
+                    if let model {
+                        PulseSquareGrid(model: model, onStress: {}, onSoreness: {}, onScale: {}, onStack: {})
+                            .padding(OnyxSpace.l)
+                    }
+                }
+                .onyxScreen(.recover)
+                .navigationTitle("Pulse")
+                .navigationBarTitleDisplayMode(.inline)
+            }
+            .task {
+                if model == nil { model = PulsePreviews.fullDay(withSession: true) }
+                // `DayModel` does not subscribe on init — `observe()` is what
+                // opens the GRDB streams. Without it the squares render their
+                // EMPTY states over a seeded store, and the shot photographs
+                // four blanks that look like a design decision.
+                await model?.observe()
+            }
         }
     }
 
