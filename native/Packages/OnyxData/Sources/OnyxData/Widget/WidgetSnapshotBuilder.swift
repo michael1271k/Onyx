@@ -291,17 +291,29 @@ public struct WidgetSnapshotBuilder: Sendable {
             ? try batteryStackSlice(rows, date: date, now: now, calendar: calendar)
             : nil
         // ── The W7 sentence ───────────────────────────────────────────────
-        // One line, resolved here so the Home Screen and the Today grid say
-        // the same thing (`OnyxSnapshot.coach`'s header). `stressInputs` is
-        // the one read that carries BOTH remaining dimensions — it already
-        // folds `Readiness.signals` for the ACWR and the day's own rows for
-        // the index — so the sentence costs one extra query, not four.
+        //
+        // ── AND WHY IT IS `.full` AND NOT `wantsBody` ─────────────────────
+        // Only the Mega tile draws it, `.daily` is a dashboard tile, and the
+        // Today grid is the one caller that builds at `.full`. Gating on
+        // `wantsBody` would also catch `scope == .body` — a Home Screen family
+        // — and make the widget EXTENSION pay a 49-day `readinessHistory`
+        // (five table scans), a plan resolution and a training-day read on
+        // every timeline refresh, for a string no Home Screen face renders, in
+        // the process with the tightest memory and time budget in the app.
+        // Widen this the day a widget draws the sentence, not before.
+        //
+        // `stressInputs` is the one read that carries BOTH remaining
+        // dimensions — it already folds `Readiness.signals` for the ACWR and
+        // the day's own rows for the index — and it is handed `rows.schedule`
+        // so a context `fetch` has already resolved is not resolved twice.
         //
         // The debt comes off `ledgerLogs`, which the ledger and the
         // consistency grid have already read: eight weeks of `daily_logs`,
         // narrowed here to the bank's own fortnight. No read of its own.
-        let coach: String? = wantsBody ? {
-            let stress = try? database.stressInputs(userId: userId, date: date)
+        let coach: String? = scope == .full ? {
+            let stress = try? database.writer.read { db in
+                try AppDatabase.stressInputs(db, userId: userId, date: date, schedule: rows.schedule)
+            }
             // ── NO GOAL, NO DEBT ────────────────────────────────────────────
             // Not `?? 8`. The sleep ARC on this same tile draws against
             // `sleep.goalMin`, which is nil when the athlete has set no goal

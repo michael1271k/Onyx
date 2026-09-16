@@ -630,10 +630,18 @@ final class DayModel {
 
     /// The bank, or nil when fewer than three nights have data — too little
     /// history to be honest about debt. The window ENDS on the selected date.
+    /// ── NO GOAL, NO DEBT (W7) ───────────────────────────────────────────
+    /// `sleepGoalHours` below falls back to eight so the gauge and the edit
+    /// sheet have a target to draw against, which is right for a DISPLAY. It
+    /// is wrong for a bank: debt is a shortfall, and a shortfall against a goal
+    /// the athlete never set is a number nobody asked for. The Mega tile's
+    /// sentence applies the same rule, so the two surfaces cannot report a debt
+    /// and no debt for the same unset goal.
     var sleepDebt: SleepDebt? {
+        guard let goalHours = goals?.sleepGoalHours else { return nil }
         let debt = SleepDebt.compute(
             nights: nights.map { SleepDebtNight(date: $0.date, sleepMinutes: $0.sleepMinutes.map(Double.init)) },
-            goalHours: sleepGoalHours,
+            goalHours: goalHours,
             weekAgo: ISODate.addDays(date, -7) ?? date
         )
         return debt.nights >= SleepDebt.minimumNights ? debt : nil

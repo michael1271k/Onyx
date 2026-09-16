@@ -64,12 +64,14 @@ public struct MegaView: View {
   // rings get 176 and the gutter 14, and the remaining 147 is the legend's.
   //
   // The HOLE is what the stroke and the pitch are then solved for. The
-  // innermost ring's outer diameter is `outer − 4 × pitch`; its hole is one
-  // stroke narrower again, so 176 − 80 − 14 = 82 pt. "BATTERY" at 7 pt with
-  // 0.8 tracking measures ~41, and a three-digit percentage at 22 pt measures
-  // ~46 — both inside 82 with room for the descender. The first cut of this
-  // face used 132 / 16 / 12, which solved to a 56 pt hole, and the shot showed
-  // the per-cent sign and the caption both cut off by the inner track.
+  // innermost ring's outer diameter is `outer − 4 × pitch` = 96; a stroke is
+  // CENTRED on its path, so the clear space inside it is a stroke narrower at
+  // EACH end — 96 − 2 × 14 = 68 pt. "BATTERY" at 7 pt with 0.8 tracking
+  // measures ~41 and "100%" at 22 pt rounded-bold ~57, so both fit inside 68
+  // with room for the descender and `minimumScaleFactor` never engages. The
+  // first cut of this face used 132 / 16 / 12, which solves to a 32 pt hole,
+  // and the shot showed the per-cent sign and the caption both cut off by the
+  // inner track.
   /// Outer diameter, and the step inwards to the next ring.
   static let outer: CGFloat = 176
   static let pitch: CGFloat = 20
@@ -199,10 +201,12 @@ public struct MegaView: View {
         .font(OnyxWidgetType.face(7, weight: .bold)).tracking(0.8)
         .foregroundStyle(Color.onyx.textSecondary)
     }
-    // The innermost ring's outer diameter is `outer − 4 × pitch`; its hole is
-    // one stroke narrower again. Spelling the frame keeps a three-digit
-    // battery from pushing the innermost track outwards.
-    .frame(width: Self.outer - 4 * Self.pitch - Self.stroke)
+    // The CLEAR width inside the innermost ring: its outer diameter less a
+    // centred stroke at EACH end. Spelling the frame keeps a three-digit
+    // battery from pushing the innermost track outwards, and it has to be the
+    // real hole — the budget in the header is computed against this number, so
+    // a frame one stroke too wide sizes every later edit against the wrong box.
+    .frame(width: Self.outer - 4 * Self.pitch - 2 * Self.stroke)
     .accessibilityHidden(true)
   }
 

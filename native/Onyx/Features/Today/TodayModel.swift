@@ -88,7 +88,18 @@ final class TodayModel {
                 hasLoaded = true
             }
         } catch {
-            if !(error is CancellationError) { failure = "The layout could not be read on this device." }
+            if !(error is CancellationError) {
+                // ── SAY WHAT IT COSTS, NOT JUST WHAT FAILED ─────────────────
+                // A read failure leaves `hasLoaded` false, and `apply` refuses
+                // every edit while it is — correctly, because saving an
+                // arrangement this device has not read IS the clobber. But the
+                // old sentence described the read and left the consequence to
+                // be discovered: tiles snap back from a drag and nothing on
+                // screen connects that to this banner. `.task` re-runs
+                // `observe()` on the next appearance, so leaving the tab and
+                // coming back is the retry, and the sentence says so.
+                failure = "The layout could not be read on this device, so the grid cannot be rearranged \u{2014} a change would overwrite the arrangement this phone has not managed to load. Leave the tab and come back to try again."
+            }
         }
     }
 
