@@ -31,6 +31,57 @@ struct DashboardLayoutStoreTests {
         #expect(ref.id == user)
     }
 
+    // ── W6: the Train tab rides in this row ─────────────────────────────────
+
+    @Test("a train save keeps both dashboard sides, and a dashboard save keeps the train key")
+    func trainAndDashboardShareTheRow() throws {
+        let db = try AppDatabase.inMemory(deviceId: "device-a")
+        let webRow = #"{"v":4,"desktop":{"slots":[{"id":"d1","size":"xl","items":["recovery"]}],"hidden":[],"updatedAt":5}}"#
+        try db.writer.write { try DashboardLayoutRow(userId: user, layout: JSONText(raw: webRow), updatedAt: Date()).insert($0) }
+
+        // The phone arranges its dashboard, then puts the Cardio card away.
+        var layout = Dashboard.defaultLayout(.phone)
+        layout = Dashboard.resizeSlot(layout, slotId: "sl-sleep")
+        try db.saveDashboardLayout(userId: user, layout)
+        try db.saveTrainLayout(userId: user, TrainLayout.default.setting(.cardio, visible: false))
+
+        #expect(db.trainLayout(userId: user).hidden == [.cardio])
+        let stored = try db.writer.read { try DashboardLayoutRow.filter(Column("user_id") == user).fetchOne($0) }
+        let object = try JSONSerialization.jsonObject(with: Data(stored!.layout.raw.utf8)) as! [String: Any]
+        // The Train write may not cost the dashboard either of its sides.
+        #expect((object["desktop"] as! [String: Any])["slots"] != nil)
+        #expect(Dashboard.fromStored(object, surface: .phone) == layout)
+
+        // …and arranging the dashboard again may not bring the Cardio card back.
+        try db.saveDashboardLayout(userId: user, Dashboard.resizeSlot(layout, slotId: "sl-vitals"))
+        #expect(db.trainLayout(userId: user).hidden == [.cardio])
+    }
+
+    @Test("a store that has never held a layout row reads as everything visible")
+    func trainDefaultsOnAnEmptyStore() throws {
+        let db = try AppDatabase.inMemory(deviceId: "device-a")
+        #expect(db.trainLayout(userId: user) == .default)
+    }
+
+    @Test("a train save queues the row like any other mirrored write")
+    func trainSaveQueues() throws {
+        let db = try AppDatabase.inMemory(deviceId: "device-a")
+        try db.saveTrainLayout(userId: user, TrainLayout.default.setting(.pastWeeks, visible: false))
+        let outbox = try db.pendingOutbox()
+        #expect(outbox.map(\.kind) == [SyncKind.rowUpsert])
+        let ref = try OnyxJSON.decoder.decode(RowRef.self, from: outbox[0].payload)
+        #expect(ref.table == "dashboard_layouts")
+        #expect(ref.id == user)
+        // The row it minted is still a readable dashboard, not a train-only
+        // object the grid would choke on.
+        #expect(!Dashboard.fromStored(
+            try JSONSerialization.jsonObject(
+                with: Data(db.writer.read { try DashboardLayoutRow.filter(Column("user_id") == user).fetchOne($0) }!.layout.raw.utf8)
+            ),
+            surface: .phone
+        ).slots.isEmpty)
+    }
+
     @MainActor @Test("the stream yields the reconciled layout after a save")
     func streamYields() async throws {
         let db = try AppDatabase.inMemory(deviceId: "device-a")

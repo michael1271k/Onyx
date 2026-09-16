@@ -47,9 +47,31 @@ struct WorkoutTabView: View {
     /// of the shot is that the REAL screen, with the real week under it, looks
     /// right while it waits.
     var seededHeaderPending = false
+    /// Opens one past week's banner, for the harness only.
+    ///
+    /// The expansion is the largest thing this wave draws and a shot script
+    /// cannot tap a row — the same gap `seededHeaderPending` fills for the done
+    /// card's stand-in, and the reason that seed exists rather than a `#if
+    /// DEBUG` branch inside the row: the point of the shot is the REAL section,
+    /// with the real summary under it.
+    var seededExpandedWeek: String?
 
     @State private var week: WorkoutWeek?
     @State private var weekSheetOpen = false
+    /// The Customize sheet, from a long press anywhere on the tab (W6).
+    @State private var customizing = false
+    /// The one past week showing its banner. One at a time on purpose: three
+    /// wrap-ups expanded at once is most of a metre of scrolling, and the row
+    /// that is open is the question being asked.
+    @State private var expandedWeek: String?
+    /// Whether `seededExpandedWeek` has been applied. A plain `.task` would
+    /// re-open the row every time the tab re-read, which would fight a reader
+    /// who had just closed it.
+    @State private var seedApplied = false
+    /// Summaries already built, keyed by week start. A summary costs a PR
+    /// replay per session, so an expansion that has been paid for once is not
+    /// paid for again when the row is closed and reopened.
+    @State private var pastSummaries: [String: WeeklyWrap.Summary] = [:]
     /// The session this tab is keeping, live or not. Survives the cover being
     /// dismissed — that is the whole reason it lives here.
     @State private var session: LoggerModel?
@@ -139,16 +161,44 @@ struct WorkoutTabView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: OnyxSpace.l) {
+                // ── WHAT CANNOT BE PUT AWAY (W6 §4) ─────────────────────────
+                // The week panel and the live/plan card carry no switch. They
+                // are what the tab IS — the state you are in and the work in
+                // front of you — and a Customize sheet that can empty a screen
+                // is a Customize sheet that produces support requests. Every
+                // section below them is the reader's to hide.
                 weekPanel
                 if let day = today { sessionCard(day) } else { restCard }
-                doorsRow
-                cardioCard
-                progressionCard
+                if shows(.doors) { doorsRow }
+                if shows(.cardio) { cardioCard }
+                if shows(.progression) { progressionCard }
+                if shows(.pastWeeks) { pastWeeksSection }
             }
             .padding(.horizontal, OnyxSpace.l)
             .padding(.top, OnyxSpace.s)
             .padding(.bottom, OnyxSpace.xl)
         }
+        // ── THE LONG PRESS, AND WHY IT IS NOT A `contextMenu` ───────────────
+        // `TileMenu` is the interaction precedent and its lesson is that a
+        // press must SAY THE VERBS rather than start an opaque mode. It is not
+        // a precedent for the modifier: `.contextMenu` renders a lifted
+        // snapshot of the view it is attached to, and attached to a whole tab
+        // that lift is the entire screen peeled off the background — which is
+        // the animation iOS uses to say "this one thing", performed over
+        // everything.
+        //
+        // `simultaneousGesture` and not `onLongPressGesture`: the plan card,
+        // the day cells and the footer all own presses of their own, and an
+        // exclusive recogniser on the container swallows them.
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.6).onEnded { _ in customizing = true }
+        )
+        // On the way IN only — the closure's `true` gates it, so dismissing
+        // the sheet does not buzz a second time for a press nobody made.
+        .sensoryFeedback(.selection, trigger: customizing) { _, open in open }
+        // A long press has no VoiceOver equivalent — the rotor cannot hold one
+        // down. The same gap `TileMenu` fills with `accessibilityActions`.
+        .accessibilityAction(named: "Customize Train") { customizing = true }
         .onyxScreen(.train)
         // The bout arrived without being asked for; the tab it belongs to says
         // so once and then forgets. Train and Pulse only — see the modifier.
@@ -232,6 +282,14 @@ struct WorkoutTabView: View {
         .sheet(isPresented: $weekSheetOpen) {
             if let week, week.loaded {
                 WeekOverrideSheet(week: week)
+            }
+        }
+        .sheet(isPresented: $customizing) {
+            if let week {
+                CustomizeTrainSheet(
+                    layout: week.snapshot.trainLayout,
+                    set: { section, visible in week.setTrainSection(section, visible: visible) }
+                )
             }
         }
         // `item:` and not `isPresented:`, for the reason spelled out above the
@@ -819,13 +877,27 @@ struct WorkoutTabView: View {
     /// As cells they can carry the one number that makes a door worth opening:
     /// how much is behind it. A door with a number on it is a door you decide
     /// about; a chart glyph is one you tap to find out.
+    /// ── AND WHY TRENDS LEFT THE STRIP (W6) ─────────────────────────────────
+    /// Library and History carry a COUNT — `7 lifts`, `3 this month` — and a
+    /// count fits in a third of a row. Trends now carries a SENTENCE: the
+    /// window the delta was taken over, and where the week lands at this rate.
+    /// `vs same point last week · on pace 32 t` is 38 characters, and a 109 pt
+    /// cell renders it as `vs same point last / week · on pace 1…` — with the
+    /// projection, which is the half the caption exists for, inside the
+    /// ellipsis.
+    ///
+    /// So the two counts keep the strip and the sentence gets a line. Shrinking
+    /// the type was the other option and it is the worse one: the caption is
+    /// already `micro`, and a figure a reader has to lean in for is a figure
+    /// they take on trust — which is how the old `−30.0 t` survived four waves.
     private var doorsRow: some View {
-        Group {
+        VStack(spacing: OnyxSpace.grid) {
             if typeSize.isAccessibilitySize {
                 VStack(spacing: OnyxSpace.grid) { doors }
             } else {
                 HStack(spacing: OnyxSpace.grid) { doors }
             }
+            if shows(.trends) { trendsDoor }
         }
     }
 
@@ -837,9 +909,95 @@ struct WorkoutTabView: View {
         door("History", systemImage: "clock", value: sessionsThisMonth, unit: "this month") {
             HistoryView()
         }
-        door("Trends", systemImage: "chart.xyaxis.line", value: weekDelta, unit: "vs last week") {
+    }
+
+    /// The week's delta, the window it was taken over, and the projection.
+    ///
+    /// The value sits on the TITLE's line rather than under it, which is what
+    /// the extra width buys: a full-width cell with a 20 pt figure on a line of
+    /// its own is a banner, and this is a door. Two lines, one for the fact and
+    /// one for the sentence that qualifies it.
+    private var trendsDoor: some View {
+        NavigationLink {
             TrainingTrendsView()
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                // ── ONE COLUMN AT AN ACCESSIBILITY SIZE ─────────────────────
+                // The same collapse `WeekVitalsRow` and the wrap-up's headline
+                // already make, for the reason they state: a figure shown as an
+                // ellipsis is worse than one not shown. At AX5 a 40 pt `+7.6 t`
+                // beside the label left the label as `Tre…`, which is a door
+                // that no longer says where it goes.
+                //
+                // Explicitly on `typeSize` and NOT `ViewThatFits`: that builder
+                // picks the first child that fits and silently keeps the last
+                // one when none does, so the fallback it chooses on a narrow
+                // screen is a truncation rather than a stack (memory:
+                // `w1b-week-detail`, `epic-sprint-w4-loggers`).
+                if typeSize.isAccessibilitySize {
+                    trendsTitle
+                    HStack(spacing: OnyxSpace.xs) {
+                        trendsValue
+                        chevron
+                    }
+                } else {
+                    HStack(spacing: OnyxSpace.xs) {
+                        trendsTitle
+                        Spacer(minLength: OnyxSpace.s)
+                        trendsValue
+                        chevron
+                    }
+                }
+                Text(trendsCaption)
+                    .onyxType(.micro)
+                    .foregroundStyle(Color.onyx.textTertiary)
+                    // NO `lineLimit`. The caption is a sentence and the figure
+                    // it exists to carry is at its END — `on pace 13.0 t` — so
+                    // any cap at all puts the payload inside the ellipsis. One
+                    // line at every ordinary size in a full-width cell, and as
+                    // many as it needs above them.
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(OnyxSpace.s)
+            .onyxGlass(.tile)
+            .contentShape(.rect)
         }
+        .buttonStyle(.plain)
+        .onyxPress(scale: 0.98)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Trends, \(weekDelta) \(trendsSpoken)")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private var trendsTitle: some View {
+        HStack(spacing: OnyxSpace.xs) {
+            Image(systemName: "chart.xyaxis.line")
+                .onyxType(.caption)
+                .foregroundStyle(accent)
+                .accessibilityHidden(true)
+            Text("Trends")
+                .onyxType(.micro)
+                .foregroundStyle(Color.onyx.textSecondary)
+                .lineLimit(1)
+        }
+        // The label never gives way to the figure: an `HStack` shrinks the
+        // child it is cheapest to shrink, and here that was the word.
+        .layoutPriority(1)
+    }
+
+    private var trendsValue: some View {
+        Text(weekDelta)
+            .onyxType(.display).onyxNumeral()
+            .foregroundStyle(Color.onyx.textPrimary)
+            .lineLimit(1).minimumScaleFactor(0.6)
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .onyxType(.caption)
+            .foregroundStyle(Color.onyx.textTertiary)
+            .accessibilityHidden(true)
     }
 
     private func door<Destination: View>(
@@ -894,11 +1052,159 @@ struct WorkoutTabView: View {
 
     /// Tonnes, signed. A delta with no sign is a number you have to look up the
     /// other week to read.
+    ///
+    /// `—` and not `0.0 t` when there is nothing to compare: a zero is a claim
+    /// that the two weeks matched, and `weekDeltaKg` is nil precisely when no
+    /// such claim can be made.
     private var weekDelta: String {
         guard let delta = week?.snapshot.weekDeltaKg else { return "—" }
         let tonnes = delta / 1000
         let sign = tonnes > 0 ? "+" : tonnes < 0 ? "−" : ""
         return "\(sign)\(jsToFixed1(abs(tonnes))) t"
+    }
+
+    /// `vs same point last week · on pace 32 t` (A7).
+    ///
+    /// ── WHY THE CAPTION NAMES THE COMPARISON ────────────────────────────────
+    /// The number above it used to be a full week subtracted from a partial
+    /// one, and nothing on the screen said so — which is how it went four waves
+    /// printing `−30.0 t` on Sunday mornings. Now the comparison is honest AND
+    /// stated, because a delta whose window is left to be guessed is a delta
+    /// that can drift back to the wrong window without anyone noticing.
+    ///
+    /// Each half is dropped when it has nothing behind it, so the caption never
+    /// promises a figure the door is not showing.
+    private var trendsCaption: String { trendsCaptionParts.joined(separator: " · ") }
+
+    /// The same sentence for VoiceOver, with the `·` back as a comma — a
+    /// visual separator read aloud is one more thing in the sentence.
+    private var trendsSpoken: String { trendsCaptionParts.joined(separator: ", ") }
+
+    private var trendsCaptionParts: [String] {
+        var parts: [String] = []
+        if week?.snapshot.weekDeltaKg != nil { parts.append("vs same point last week") }
+        if let pace = week?.snapshot.weekPaceKg {
+            parts.append("on pace \(jsToFixed1(pace / 1000)) t")
+        }
+        // A door with neither half says what it is waiting for rather than
+        // standing under a dash with no caption at all.
+        return parts.isEmpty ? ["nothing to compare yet"] : parts
+    }
+
+    /// Whether a section of this tab is showing (W6). `true` until the read
+    /// lands — the tab that has always been there is the honest first frame,
+    /// and a screen that assembles itself card by card on every launch reads
+    /// as a bug.
+    private func shows(_ section: TrainSection) -> Bool {
+        week?.snapshot.trainLayout.shows(section) ?? true
+    }
+
+    // MARK: - Past weeks
+
+    /// Every closed week behind this one, collapsed, expanding in place into
+    /// the banner the wrap-up sheet shows (W6).
+    ///
+    /// ── WHY IT IS A CONTAINER AND NOT A SCREEN ──────────────────────────────
+    /// The wrap-up already existed and was already reachable — from the
+    /// This-week tile the evening a week closes, and from History forever
+    /// after. What it was not was BROWSABLE: reaching the week before last
+    /// meant leaving Train, opening History, finding the row and opening the
+    /// chip. Three navigations for a question — "was last week better than the
+    /// one before it" — that is asked standing in a gym.
+    ///
+    /// So this adds no view. `WeeklyWrapContent` is the sheet's own body, and
+    /// every figure in an expanded row is the same figure, from the same
+    /// summary, as the sheet would show for that week.
+    @ViewBuilder
+    private var pastWeeksSection: some View {
+        if let weeks = week?.snapshot.pastWeeks, !weeks.isEmpty {
+            VStack(alignment: .leading, spacing: OnyxSpace.grid) {
+                Text("PAST WEEKS").onyxMicro()
+                ForEach(weeks) { pastWeekRow($0) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Keyed on the OPEN week and not on the list: the summary is built
+            // once per expansion, and a task keyed on the rows would rebuild it
+            // every time the tab re-read.
+            .task(id: expandedWeek) { await loadExpandedWeek() }
+            .task {
+                guard !seedApplied, let seededExpandedWeek else { return }
+                seedApplied = true
+                expandedWeek = seededExpandedWeek
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func pastWeekRow(_ past: WorkoutWeek.PastWeek) -> some View {
+        let open = expandedWeek == past.weekStart
+        VStack(alignment: .leading, spacing: OnyxSpace.l) {
+            Button {
+                withAnimation(OnyxMotion.move) {
+                    expandedWeek = open ? nil : past.weekStart
+                }
+            } label: {
+                HStack(spacing: OnyxSpace.s) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(past.label)
+                            .onyxType(.body)
+                            .foregroundStyle(Color.onyx.textPrimary)
+                            .lineLimit(1)
+                        // The banner's own two figures, in the banner's own
+                        // units — `OnyxFormat.volume` and kilograms, not
+                        // tonnes. A row that rounded to `18.2 t` over a card
+                        // that says `18,240 kg` is two numbers for one week.
+                        Text("\(past.sessions) session\(past.sessions == 1 ? "" : "s") · \(OnyxFormat.volume(past.tonnageKg)) kg")
+                            .onyxType(.micro).onyxNumeral()
+                            .foregroundStyle(Color.onyx.textSecondary)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .onyxType(.caption)
+                        .foregroundStyle(Color.onyx.textTertiary)
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                        .accessibilityHidden(true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(OnyxSpace.m)
+                .onyxGlass(.tile)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .onyxPress(scale: 0.98)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(past.label)
+            .accessibilityValue("\(past.sessions) sessions, \(OnyxFormat.volume(past.tonnageKg)) kilograms")
+            .accessibilityHint(open ? "Collapses the week" : "Expands the week")
+            .accessibilityAddTraits(.isButton)
+
+            if open {
+                if let summary = pastSummaries[past.weekStart] {
+                    // NOT wrapped in a tile of its own: every card inside the
+                    // banner already wears `.onyxGlass(.tile)`, and material
+                    // over material reads as a third surface that is not there.
+                    WeeklyWrapContent(
+                        summary: summary,
+                        program: week?.snapshot.program ?? Program(id: "", label: "", days: [])
+                    )
+                } else {
+                    // The summary is a PR replay per session. On a warm store
+                    // it lands inside a frame; on a long week it does not, and
+                    // a row that expanded into nothing would read as a defect.
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, OnyxSpace.l)
+                }
+            }
+        }
+    }
+
+    /// Build the open week's summary, once.
+    private func loadExpandedWeek() async {
+        guard let week, let start = expandedWeek, pastSummaries[start] == nil else { return }
+        guard let summary = await week.pastSummary(weekStart: start) else { return }
+        pastSummaries[start] = summary
     }
 
     // MARK: - Cardio
@@ -1295,6 +1601,127 @@ struct WorkoutTabView: View {
     private var isDone: Bool {
         if case .done = state { return true }
         return false
+    }
+}
+
+/// What each hideable section is called on the Customize sheet, and what it
+/// wears there.
+///
+/// In the app and not in `OnyxCore` alongside the enum, for the reason
+/// `Layout.swift`'s header gives about `WIDGET_META`: a name and an SF Symbol
+/// are UI, and the pure package has no business holding either.
+extension TrainSection {
+    var title: String {
+        switch self {
+        case .doors: return "Library · History · Trends"
+        case .trends: return "Trends"
+        case .cardio: return "Cardio"
+        case .progression: return "Ready to Progress"
+        case .pastWeeks: return "Past Weeks"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .doors: return "rectangle.split.3x1"
+        case .trends: return "chart.xyaxis.line"
+        case .cardio: return "figure.run"
+        case .progression: return "arrow.up.forward"
+        case .pastWeeks: return "calendar"
+        }
+    }
+}
+
+/// The long press, said in words (W6 §3).
+///
+/// ── WHY A SHEET OF SWITCHES AND NOT A MENU OF VERBS ─────────────────────────
+/// `TileMenu` is the precedent for what a press must SAY, and it makes its case
+/// against a press that starts an opaque mode. It is not a precedent for the
+/// control: a context menu closes on the first tap, so hiding three sections
+/// there is three long presses on a screen that has just rearranged itself
+/// twice underneath the thumb. Five switches in one visit is the same five
+/// verbs, said once, with the result visible behind the sheet as each one lands.
+///
+/// The writes go THROUGH `set` as they are made rather than on dismiss. There
+/// is no Cancel here and there should not be — every switch is instantly
+/// reversible by flipping it back, and a sheet that hoards five changes behind
+/// a Done button is a sheet that can lose them to a swipe.
+/// The long press, said in words (W6 §3).
+///
+/// ── WHY A SHEET OF SWITCHES AND NOT A MENU OF VERBS ─────────────────────────
+/// `TileMenu` is the precedent for what a press must SAY, and it makes its case
+/// against a press that starts an opaque mode. It is not a precedent for the
+/// modifier: `.contextMenu` renders a lifted snapshot of the view it is
+/// attached to, and a context menu also closes on the first tap — so hiding
+/// three sections there is three long presses on a screen that has rearranged
+/// itself twice underneath the thumb. Five switches in one visit is the same
+/// five verbs, said once, with the result visible behind the sheet as each
+/// one lands.
+///
+/// `DaySheet` with no `primary`, which is its own documented case: "a sheet
+/// whose every tap already saved gets Done". There is no Cancel here and there
+/// should not be — every switch is instantly reversible by flipping it back,
+/// and a sheet that hoards five changes behind a button is a sheet that can
+/// lose them to a swipe.
+///
+/// Internal and not `private`: the screenshot harness presents it directly,
+/// because a shot script cannot hold a finger down for 600 ms.
+struct CustomizeTrainSheet: View {
+    let layout: TrainLayout
+    let set: (TrainSection, Bool) -> Void
+
+    /// The sheet's own copy, so a switch moves under the thumb that moved it
+    /// rather than on the next read of the tab behind it.
+    @State private var hidden: Set<TrainSection>
+
+    init(layout: TrainLayout, set: @escaping (TrainSection, Bool) -> Void) {
+        self.layout = layout
+        self.set = set
+        _hidden = State(initialValue: Set(layout.hidden))
+    }
+
+    var body: some View {
+        // `glass: false` — a `Form` draws its own rows and takes the form
+        // ground, which is the branch `DaySheet` keeps for exactly this.
+        DaySheet("Customize Train", domain: .train, glass: false) {
+            Form {
+                Section {
+                    ForEach(TrainSection.allCases, id: \.self) { section in
+                        Toggle(isOn: binding(section)) {
+                            Label(section.title, systemImage: section.symbol)
+                        }
+                        // Trends is a door INSIDE the row above it, so with the
+                        // row away there is nothing for this switch to do. Shown
+                        // and disabled rather than hidden — the same call
+                        // `TileMenu` makes about its own unavailable row: a
+                        // control that vanishes is a control nobody learns
+                        // exists.
+                        .disabled(section == .trends && hidden.contains(.doors))
+                    }
+                } header: {
+                    Text("Sections")
+                } footer: {
+                    Text(footer)
+                }
+            }
+        }
+    }
+
+    private var footer: String {
+        if hidden.contains(.doors) {
+            return "The week strip and today's session always show. Trends is a door inside the row above it — bring the row back to use it."
+        }
+        return "The week strip and today's session always show — they are what the tab is for."
+    }
+
+    private func binding(_ section: TrainSection) -> Binding<Bool> {
+        Binding(
+            get: { !hidden.contains(section) },
+            set: { visible in
+                if visible { hidden.remove(section) } else { hidden.insert(section) }
+                set(section, visible)
+            }
+        )
     }
 }
 

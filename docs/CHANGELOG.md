@@ -44,6 +44,50 @@ _Nothing yet._
 
 ---
 
+## [3.15.0] — 2026-09-16 · Train Tells the Truth About the Week
+
+### Fixed
+- **The Trends door no longer says you are thirty tonnes down on a Sunday
+  morning.** It was subtracting a *full* previous calendar week from however
+  much of the current one had happened — two different quantities, with the
+  answer presented as a comparison. Both sides now run from the week's own start
+  to the same ordinal day, so Wednesday compares three days against three and
+  the first morning of a week compares one against one. The rule, its windows
+  and every case in which it must say nothing at all now live in `OnyxCore`
+  (`WeekPace`) with fourteen tests on them.
+- A door with **nothing to compare** shows `—` and says "nothing to compare
+  yet", never a signed zero. Zero is the claim that two weeks matched; two weeks
+  in which nothing has yet happened have not matched.
+
+### Added
+- **On pace.** Under the delta, the Trends door now projects where the week
+  lands if the rest of it goes like the part that has: `vs same point last week ·
+  on pace 32 t`. The denominator is the training days the plan *asked for* that
+  have already passed, not the days you turned up — so a skipped session pulls
+  the projection down instead of leaving it flat.
+- **Past weeks.** Every closed week behind this one is now a collapsed row at the
+  bottom of the Train tab — its date, its sessions and its tonnage — expanding in
+  place into the same wrap-up banner the Sunday-night door opens, reel, rings,
+  movement breakdown and share card included. Reaching the week before last used
+  to mean leaving Train for History, finding the row and opening its chip. A week
+  that missed a planned day now summarises too: "is the week finished" is a
+  question about the *current* week, and a week that has ended has ended.
+- **Customize Train.** A long press anywhere on the tab opens a sheet with a
+  switch for each of Library · History · Trends, the Trends door, Cardio, Ready
+  to Progress and Past Weeks. The week strip and today's session carry no switch
+  — they are what the tab is for. The arrangement is stored in the
+  `dashboard_layouts` row you already have, so it syncs across devices with no
+  new table and no migration.
+- Three screenshot screens: `train-monday` (the morning the old delta lied),
+  `train-past` (the tab parked on its closed weeks) and `train-customize`.
+
+### Changed
+- The wrap-up's content is now a view of its own (`WeeklyWrapContent`), so the
+  sheet and an expanded Past Weeks row draw the same figures from the same
+  summary rather than two screens that could drift apart.
+
+---
+
 ## [3.14.0] — 2026-09-16 · Cardio and the Banners
 
 ### Added

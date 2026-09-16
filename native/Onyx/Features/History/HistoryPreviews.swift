@@ -21,6 +21,23 @@ enum HistoryPreviews {
     static let treadmillOnly = "s-2026-09-06"
     static let incline = ExerciseCatalogEntry(id: "ex-incline", name: "Incline DB Press", setCount: 24, lastTrained: "2026-09-01")
 
+    /// The same environment with some Train sections already put away, for the
+    /// one shot that is about what the Customize sheet DOES.
+    ///
+    /// Written to the store rather than seeded on the view: `WorkoutWeek` reads
+    /// the arrangement out of `dashboard_layouts` in the same detached pass as
+    /// everything else, and a seed on the view would photograph a path the app
+    /// does not take.
+    @MainActor
+    static func hidden<Content: View>(
+        _ environment: AppEnvironment, _ sections: [TrainSection],
+        @ViewBuilder content: (AppEnvironment) -> Content
+    ) -> some View {
+        let layout = sections.reduce(TrainLayout.default) { $0.setting($1, visible: false) }
+        try? environment.database.saveTrainLayout(userId: environment.database.localUserId(), layout)
+        return content(environment)
+    }
+
     @MainActor
     static func environment() -> AppEnvironment {
         let database = try! AppDatabase.inMemory(deviceId: "shot")
@@ -165,6 +182,81 @@ enum HistoryPreviews {
             // `2026-09-05` is the seeded block's Saturday.
             NavigationStack {
                 WorkoutTabView(seededToday: "2026-09-05")
+            }
+            .environment(environment())
+        // ── W6 (next-gen): the morning the old delta lied ───────────────────
+        // Monday 7 September: the first weekday of a week with NOTHING in it,
+        // standing behind the fixture's fullest one. This is the exact state
+        // the Trends door used to print a full week as a loss in — the old rule
+        // subtracted all of 30 Aug–5 Sep from a week two days old and reported
+        // −13.0 t. What it now prints is one day against one day.
+        //
+        // Not 31 August, which is the Monday the first cut of this shot used
+        // and is the wrong picture: that week already holds a Sunday session,
+        // so the tab was photographed mid-week with a full panel above it.
+        case "train-monday":
+            NavigationStack { WorkoutTabView(seededToday: "2026-09-07") }
+                .environment(environment())
+        // ── W6 (next-gen): the weeks behind this one ────────────────────────
+        // Parked at the BOTTOM, the same trick `train-cardio` uses and for the
+        // same reason: the list is the last thing on the tab and a shot taken
+        // from the top photographs the plan card again. Collapsed, which is the
+        // state they are in until one is asked for — the point of the section
+        // is that five weeks fit where one banner used to.
+        case "train-past":
+            NavigationStack {
+                WorkoutTabView(seededDay: PlanTemplates.program("onyx5")?.day(key: "cb_a"), seededToday: "2026-09-03")
+            }
+            .defaultScrollAnchor(.bottom)
+            .environment(environment())
+        // ── W6 (next-gen): one closed week, opened where it sits ────────────
+        // The wave's largest new surface: the wrap-up reel, the rings and the
+        // movement breakdown, drawn INSIDE the Train tab rather than in a sheet
+        // over it. 16 August is the one week in this seed that closed complete,
+        // so the banner has a progression, a regression and a PR in it — the
+        // same week `train-wrap` photographs as a sheet, which makes the pair
+        // the review: the two must draw the same figures and differ only in
+        // their chrome.
+        case "train-past-open":
+            NavigationStack {
+                WorkoutTabView(
+                    seededDay: PlanTemplates.program("onyx5")?.day(key: "cb_a"),
+                    seededToday: "2026-09-03",
+                    seededExpandedWeek: "2026-08-16"
+                )
+            }
+            .defaultScrollAnchor(.bottom)
+            .environment(environment())
+        // ── W6 (next-gen): the tab with three sections put away ─────────────
+        // Two things at once, and the second is why it is bottom-anchored.
+        //
+        // The FEATURE: a Customize sheet is a picture of switches; this is a
+        // picture of what they do. Cardio, Ready to Progress and Past Weeks are
+        // off, and the page is the four things left.
+        //
+        // The LAYOUT: the Trends door carries a sentence now and the sentence
+        // is the half of the wave that most needs eyes — and on the full tab it
+        // sits under a seven-exercise plan card, below the fold, behind the
+        // footer, in every anchor a shot can ask for. With the sections below
+        // it gone it IS the bottom of the page, so the caption is finally in a
+        // frame.
+        case "train-customized":
+            hidden(environment(), [.cardio, .progression, .pastWeeks]) { environment in
+                NavigationStack {
+                    WorkoutTabView(seededDay: PlanTemplates.program("onyx5")?.day(key: "cb_a"), seededToday: "2026-09-03")
+                }
+                .defaultScrollAnchor(.bottom)
+                .environment(environment)
+            }
+        // ── W6 (next-gen): the long press, said in words ────────────────────
+        // A sheet cannot be photographed by launching the screen under it and a
+        // shot script cannot hold a finger down, so the harness presents it
+        // directly — the same trick `train-week` uses. The writes are swallowed:
+        // the shot is of the SWITCHES, and a preview that mutated a store would
+        // photograph a different arrangement on the second run.
+        case "train-customize":
+            PresentingWeek(today: "2026-09-03") { _ in
+                CustomizeTrainSheet(layout: .default, set: { _, _ in })
             }
             .environment(environment())
         // ── W6: the week sheet, opened ──────────────────────────────────────

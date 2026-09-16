@@ -74,6 +74,27 @@ final class WorkoutWeek {
         let timed: Bool
     }
 
+    /// One closed week, as the collapsed row at the bottom of the tab draws it
+    /// (W6).
+    ///
+    /// ── WHY IT IS NOT A `WeeklyWrap.Summary` ────────────────────────────────
+    /// Because a `Summary` costs a PR REPLAY per session — records detected
+    /// against everything logged before that session, which is the only honest
+    /// count `personal_records` cannot give after the fact (see `wrap`'s
+    /// header). Eight weeks of them on every appear would put thirty replays
+    /// behind a row nobody has tapped. So the collapsed row carries the three
+    /// figures a reader decides on, and the Summary is built for the ONE week
+    /// that gets expanded.
+    struct PastWeek: Identifiable, Sendable, Equatable {
+        var id: String { weekStart }
+        let weekStart: String
+        /// `Week of 23 Aug` — the same label the banner it expands into wears,
+        /// so the row and its contents cannot name the week differently.
+        let label: String
+        let sessions: Int
+        let tonnageKg: Double
+    }
+
     /// The last session of the split TODAY is, and what was done in it.
     ///
     /// ── WHY THE SAME `day_key` AND NOT "THE LAST TIME YOU DID THIS LIFT" ────
@@ -116,9 +137,34 @@ final class WorkoutWeek {
         var programId: String { program.id }
         var state: State = .none
         var progression: [ProgressionRow] = []
-        /// This week's tonnage minus last week's. Nil until there is a week
-        /// behind this one to compare against.
+        /// This week's tonnage minus the SAME STRETCH of last week's (W6).
+        ///
+        /// ── WHY IT IS NOT A WEEK MINUS A WEEK ───────────────────────────────
+        /// It was, and on a Sunday morning the Trends door said `−30.0 t`. A
+        /// full seven days of last week subtracted from however much of this
+        /// one has happened is not a comparison — it is the calendar, and it
+        /// reads as a collapse on the one day of the week nothing could
+        /// possibly have been lifted yet. Both sides now run from the week's
+        /// own start to the same ordinal day, so Wednesday compares three days
+        /// against three.
+        ///
+        /// Nil until there is a week behind this one with something in it. Nil,
+        /// not zero: a delta against an absent week is not a gain of nothing.
         var weekDeltaKg: Double?
+        /// Where this week's tonnage LANDS if the rest of it goes like the part
+        /// that has happened — the caption under the delta (A7).
+        ///
+        /// `weekTonnageKg / elapsedTrainingDays × plannedTrainingDays`, both
+        /// counts taken off the plan-with-overrides rather than the calendar,
+        /// so a week with a rest day pinned into it projects over the days it
+        /// actually asks for. Nil before the first training day of the week has
+        /// passed, and nil while the week is empty — a projection off no
+        /// sessions is a number with no input.
+        var weekPaceKg: Double?
+        /// The weeks behind this one, newest first — one collapsed row each.
+        var pastWeeks: [PastWeek] = []
+        /// Which of this tab's sections the reader has put away (W6). Read in
+        /// the same pass as everything else; written by the long-press menu.
         /// Distinct movements this device has ever logged a set of — the
         /// Library door's number.
         var liftsTracked = 0
@@ -170,6 +216,8 @@ final class WorkoutWeek {
         /// Nil is the ordinary state — a week with work left in it. Non-nil is
         /// what turns the This-week tile into the wrap-up door.
         var wrap: WeeklyWrap.Summary?
+
+        var trainLayout = TrainLayout.default
 
         /// Training-only supplement keys, unioned over the week's seven days.
         ///
@@ -228,6 +276,36 @@ final class WorkoutWeek {
             Self.build(database: database, today: today, phase: phase, seededDayKey: dayKey)
         }.value
         loaded = true
+    }
+
+    /// The banner behind one collapsed past-week row, built on expand.
+    ///
+    /// Not held on the snapshot and not prefetched: the summary costs a PR
+    /// replay per session (see `wrap`'s header) and the row that gets tapped is
+    /// one of eight. Detached for the same reason `refresh` is — it is a walk
+    /// over a week of sets and a record book, and it must not run on the actor
+    /// drawing the expansion.
+    nonisolated func pastSummary(weekStart: String) async -> WeeklyWrap.Summary? {
+        let database = self.database
+        return await Task.detached(priority: .userInitiated) {
+            Self.wrap(
+                database, userId: database.localUserId(),
+                weekStart: weekStart, requireComplete: false
+            )
+        }.value
+    }
+
+    /// Show or hide one section of the tab.
+    ///
+    /// The snapshot is updated in hand rather than re-read: the whole tab pass
+    /// costs a dozen queries and a PR replay, and none of its answers change
+    /// because a card was put away. A failed write leaves the section where it
+    /// was, which is the honest outcome — the alternative hides a card and then
+    /// brings it back on the next launch with no explanation.
+    func setTrainSection(_ section: TrainSection, visible: Bool) {
+        let next = snapshot.trainLayout.setting(section, visible: visible)
+        guard (try? database.saveTrainLayout(userId: database.localUserId(), next)) != nil else { return }
+        snapshot.trainLayout = next
     }
 
     /// Cardio written straight through, then the whole tab re-read: a bout
@@ -438,37 +516,58 @@ final class WorkoutWeek {
             .map(\.key)
         })).sorted()
 
+        // The FULL-week delta, which only the wrap-up may use. See below.
+        var wrapDeltaKg: Double?
+
         // ── Last week, for the Trends door's delta ──────────────────────────
         //
-        // The same loop as above over the seven dates before this week. It is
-        // the only number on the screen that needs a second week, and a door
-        // that says "Trends" with no number on it is a door with nothing
-        // behind it.
+        // ── THE SAME STRETCH, NOT THE SAME CALENDAR (W6) ────────────────────
+        // `elapsedDays` is how much of THIS week has happened, today included,
+        // and last week is summed over its FIRST `elapsedDays` dates. Before
+        // this the door subtracted a full seven days from a partial week, so a
+        // Sunday morning — the one moment of the week when nothing could yet
+        // have been lifted — printed the whole of last week as a loss. The bug
+        // was not the sign: it was subtracting two different quantities and
+        // calling the answer a comparison.
+        //
+        // Every window rule and every nil is `WeekPace`'s, in OnyxCore, with
+        // the tests that pin them — this pass only supplies the numbers.
+        let elapsedDays = WeekPace.elapsedDays(today: today, weekStart: weekStart, span: dates.count)
+
         if let lastWeekStart = ISODate.addDays(weekStart, -7) {
             let lastDates = (0..<7).compactMap { ISODate.addDays(lastWeekStart, $0) }
-            let lastSessions = (try? database.read { db in
-                try WorkoutSession
-                    .filter(lastDates.contains(Column("date")) && Column("ended_at") != nil)
-                    .order(Column("date"), Column("started_at"))
-                    .fetchAll(db)
-            }) ?? []
-            // One session per date, first wins — the same rule the current
-            // week's `finished` dictionary applies. Without it a date holding
-            // two finished sessions counts twice on one side of the subtraction
-            // and once on the other, and the delta is wrong by a whole session.
-            var lastFinished: [String: WorkoutSession] = [:]
-            for session in lastSessions where lastFinished[session.date] == nil {
-                lastFinished[session.date] = session
-            }
+            let lastFinished = finishedByDate(database, dates: lastDates)
             if !lastFinished.isEmpty {
-                var previous = 0.0
-                for session in lastFinished.values {
-                    let rows = (try? database.historySets(sessionId: session.id)) ?? []
-                    previous += SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet))
-                }
-                out.weekDeltaKg = jsRound(out.weekTonnageKg - previous)
+                let perDate = tonnageByDate(database, lastFinished)
+                out.weekDeltaKg = WeekPace.delta(
+                    currentKg: out.weekTonnageKg, previousByDate: perDate,
+                    previousDates: lastDates, elapsedDays: elapsedDays
+                )
+                // ── AND THE FULL WEEK, FOR THE WRAP-UP ONLY ─────────────────
+                // A week wraps the evening its last PLANNED day is logged,
+                // which on a five-day plan resting Saturday is a Friday — so
+                // the day-matched delta above would hand the wrap card a
+                // six-day comparison while the same week read from History
+                // (`wrap(_:userId:weekStart:)`) shows a seven-day one. Two
+                // numbers for one closed week. The card gets the full week; the
+                // door gets the matched stretch; neither is the other's.
+                wrapDeltaKg = WeekPace.delta(
+                    currentKg: out.weekTonnageKg, previousByDate: perDate,
+                    previousDates: lastDates, elapsedDays: lastDates.count
+                )
             }
         }
+
+        // ── On pace (A7) ────────────────────────────────────────────────────
+        // The caption under the delta. `trainingDates` is the plan WITH this
+        // week's overrides applied, so a rest day pinned into the week projects
+        // over the days the week actually asks for.
+        let trainingDates = dates.filter { Schedule.isTrainingDayIn(withOverrides, $0) }
+        out.weekPaceKg = WeekPace.pace(
+            tonnageKg: out.weekTonnageKg,
+            elapsedTrainingDays: trainingDates.prefix(elapsedDays).count,
+            plannedTrainingDays: trainingDates.count
+        )
 
         // ── The wrap-up (W6) ────────────────────────────────────────────────
         // Built here, off the rows this pass already holds, and only when the
@@ -476,10 +575,14 @@ final class WorkoutWeek {
         // is the thing `WeeklyWrap.isWrapped` exists to refuse.
         out.wrap = wrap(
             database, weekStart: weekStart, dates: dates, finished: finished,
-            base: out.weekBase, tonnageKg: out.weekTonnageKg, deltaKg: out.weekDeltaKg,
+            base: out.weekBase, tonnageKg: out.weekTonnageKg, deltaKg: wrapDeltaKg,
             phases: context.phases, analysis: analysis, userId: database.localUserId(),
             programId: context.programId, phase: context.phase
         )
+
+        // ── The weeks behind this one (W6) ──────────────────────────────────
+        out.pastWeeks = pastWeeks(database, before: weekStart, in: withOverrides)
+        out.trainLayout = database.trainLayout(userId: database.localUserId())
 
         // ── What the card prints where the rep window used to be ────────────
         out.previous = previousSession(database, dayKey: out.todayKey, before: today)
@@ -637,6 +740,88 @@ final class WorkoutWeek {
     /// `TodayFeedBuilder.muscleFocus`, so a bulk week opened during a cut would
     /// otherwise have its ring graded against cut targets.
     ///
+    // MARK: - A week's sessions, and what they weigh
+
+    /// One finished session per date, first wins.
+    ///
+    /// The rule `build` has always applied inline, hoisted in W6 because three
+    /// callers now need it. Without it a date holding two finished sessions
+    /// counts twice on one side of a subtraction and once on the other, and the
+    /// delta is wrong by a whole session.
+    nonisolated static func finishedByDate(
+        _ database: AppDatabase, dates: [String]
+    ) -> [String: WorkoutSession] {
+        let rows = (try? database.read { db in
+            try WorkoutSession
+                .filter(dates.contains(Column("date")) && Column("ended_at") != nil)
+                .order(Column("date"), Column("started_at"))
+                .fetchAll(db)
+        }) ?? []
+        var out: [String: WorkoutSession] = [:]
+        for session in rows where out[session.date] == nil { out[session.date] = session }
+        return out
+    }
+
+    /// Each date's tonnage under `SessionVolume`'s rule — every non-ghost row,
+    /// warm-ups included, which is the rule `build`'s own total is taken by.
+    ///
+    /// PER DATE and not a single total, because the day-matched delta needs a
+    /// PREFIX of last week and the wrap-up needs all of it, and reading the
+    /// sets twice to answer the same question is how two numbers on one screen
+    /// start disagreeing.
+    nonisolated static func tonnageByDate(
+        _ database: AppDatabase, _ finished: [String: WorkoutSession]
+    ) -> [String: Double] {
+        finished.mapValues { session in
+            let rows = (try? database.historySets(sessionId: session.id)) ?? []
+            return SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet))
+        }
+    }
+
+    /// How many weeks back the collapsed rows go.
+    ///
+    /// ponytail: eight weeks means up to eight week-queries and one
+    /// `historySets` read per session inside them — around thirty small indexed
+    /// reads, once, on a detached pass that already does a dozen. If it ever
+    /// shows in a trace the fix is `workout_sessions.total_volume_kg`, which
+    /// holds the same number; it is not read here because one seeded session in
+    /// this app still carries a null aggregate and a collapsed row that
+    /// disagreed with the banner it opens would be worse than the cost.
+    nonisolated static let pastWeekCount = 8
+
+    /// The closed weeks behind `weekStart`, newest first.
+    ///
+    /// ── WHY EMPTY WEEKS ARE SKIPPED AND NOT STOPPED AT ──────────────────────
+    /// A holiday is a week with nothing in it and the weeks before it are still
+    /// the reader's. Stopping at the first gap would hide a training block
+    /// behind the fortnight someone spent away from a gym, which is exactly the
+    /// stretch a past-weeks list is opened to look past.
+    ///
+    /// Weeks before the plan began are dropped: `Schedule.isPlannable` is the
+    /// gate `wrap` itself applies, so a row that survived it here would expand
+    /// into nothing.
+    nonisolated static func pastWeeks(
+        _ database: AppDatabase, before weekStart: String, in context: ScheduleContext
+    ) -> [PastWeek] {
+        var out: [PastWeek] = []
+        var start = weekStart
+        for _ in 0..<pastWeekCount {
+            guard let previous = ISODate.addDays(start, -7) else { break }
+            start = previous
+            guard Schedule.isPlannable(start, in: context) else { break }
+            let dates = (0..<7).compactMap { ISODate.addDays(start, $0) }
+            let finished = finishedByDate(database, dates: dates)
+            guard !finished.isEmpty else { continue }
+            out.append(PastWeek(
+                weekStart: start,
+                label: "Week of \(Swap.shortDayLabel(start))",
+                sessions: finished.count,
+                tonnageKg: jsRound(tonnageByDate(database, finished).values.reduce(0, +))
+            ))
+        }
+        return out
+    }
+
     /// The weekday LAYOUT still has no memory. `Schedule.scheduleDayIn` does not
     /// consult `Schedule.isPlannable`, so this asks it directly — the same gate
     /// `HistoryWeeks.detail` applies before it will draw a split label. Without
@@ -654,8 +839,18 @@ final class WorkoutWeek {
     /// a week is before either is made right. Fixing it means giving
     /// `weekAssignment` the dates rather than re-deriving them, at both call
     /// sites, and it is not this wave's to change.
+    /// `requireComplete: false` builds the summary of a week that missed a
+    /// planned day (W6).
+    ///
+    /// ── WHY THAT GATE IS ABOUT THE CURRENT WEEK AND NOTHING ELSE ────────────
+    /// `WeeklyWrap.isWrapped` exists to refuse a summary of a week with work
+    /// LEFT IN IT — it is what stops the This-week tile turning into a wrap-up
+    /// door on a Tuesday. A week that has ENDED has no work left in it by
+    /// definition, whether or not every planned day was logged, and the missed
+    /// day is part of what its summary reports. Every call about the live week
+    /// keeps the default and is unchanged.
     nonisolated static func wrap(
-        _ database: AppDatabase, userId: String, weekStart: String
+        _ database: AppDatabase, userId: String, weekStart: String, requireComplete: Bool = true
     ) -> WeeklyWrap.Summary? {
         var context = (try? database.scheduleContext(userId: userId))
             ?? ScheduleContext(programId: "", phase: .cut)
@@ -706,7 +901,8 @@ final class WorkoutWeek {
             base: Swap.weekAssignment(of: weekStart, resolve: { Schedule.scheduleDayIn(bare, $0) }),
             tonnageKg: weekTonnage, deltaKg: delta, phases: context.phases,
             analysis: SessionAnalysis.context(database: database), userId: userId,
-            programId: context.programId, phase: context.phase
+            programId: context.programId, phase: context.phase,
+            requireComplete: requireComplete
         )
     }
 
@@ -729,12 +925,13 @@ final class WorkoutWeek {
         finished: [String: WorkoutSession], base: WeekAssignment,
         tonnageKg: Double, deltaKg: Double?, phases: [PhaseDef],
         analysis: SessionAnalysis.Context, userId: String,
-        programId: String, phase: ProgramPhase
+        programId: String, phase: ProgramPhase,
+        requireComplete: Bool = true
     ) -> WeeklyWrap.Summary? {
         let planned = Set(dates.filter { base.key(on: $0) != Schedule.restOverride })
-        guard WeeklyWrap.isWrapped(
+        if requireComplete, !WeeklyWrap.isWrapped(
             weekStart: weekStart, logged: Set(finished.keys), isTrainingDay: { planned.contains($0) }
-        ) else { return nil }
+        ) { return nil }
 
         // A DELOAD week relabels every drop. Both halves of the rule, because
         // the app has two ways to declare one and a wrap-up that honoured only
