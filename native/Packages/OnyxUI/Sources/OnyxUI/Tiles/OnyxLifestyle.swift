@@ -298,7 +298,7 @@ struct FocusFace: View {
         Spacer(minLength: 0)
         if stale { StaleTag(age: age) }
       }
-      BigValue(value: spec.hero, size: 30, color: .white)
+      BigValue(value: spec.hero, size: 30, color: Color.onyx.textPrimary)
       if let sub = spec.sub {
         Text(sub).font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
       }
@@ -342,7 +342,7 @@ struct CalorieLedgerFace: View {
         Caption("KCAL LEFT", color: tint(OnyxDomain.fuel.accent))
         if entry.isStale { StaleTag(age: entry.age) }
       }
-      BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 30, color: .white)
+      BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 30, color: Color.onyx.textPrimary)
       Rail(progress: OnyxSnapshot.progress(s?.macros.kcal, s?.macros.kcalGoal),
            color: tint(OnyxDomain.fuel.accent), height: 5)
 
@@ -417,7 +417,7 @@ struct WaterLedgerFace: View {
       }
       Spacer(minLength: 0)
       HStack(alignment: .firstTextBaseline, spacing: 4) {
-        BigValue(value: s?.water.ml.map { String(format: "%.1f", $0 / 1000) }, size: 32, color: .white)
+        BigValue(value: s?.water.ml.map { String(format: "%.1f", $0 / 1000) }, size: 32, color: Color.onyx.textPrimary)
         Text("L").font(OnyxWidgetType.face(11)).foregroundStyle(Color.onyx.textSecondary)
       }
       if let goal = s?.water.goalMl {
@@ -450,7 +450,7 @@ struct WaterLedgerFace: View {
         .frame(maxHeight: .infinity)
       Hairline()
       HStack(spacing: 0) {
-        Stat(value: s?.steps.count.map { "\($0)" }, label: "STEPS", color: .white)
+        Stat(value: s?.steps.count.map { "\($0)" }, label: "STEPS", color: Color.onyx.textPrimary)
         Stat(value: s?.steps.activeKcal.map { "\(Int($0.rounded()))" }, label: "MOVE KCAL",
              color: tint(OnyxDomain.body.accent))
       }
@@ -525,7 +525,7 @@ struct SleepArcFace: View {
 
       HStack(spacing: 4) {
         if let score = s?.sleep.score {
-          Text("score \(score)").font(OnyxWidgetType.face(10, weight: .semibold)).foregroundStyle(.white)
+          Text("score \(score)").font(OnyxWidgetType.face(10, weight: .semibold)).foregroundStyle(Color.onyx.textPrimary)
         }
         Spacer(minLength: 0)
         if let window = sleepWindowText(s) {
@@ -559,7 +559,7 @@ struct SleepDepthFace: View {
           Text(window).font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
         }
         if let score = s?.sleep.score {
-          Text("score \(score)").font(OnyxWidgetType.face(9, weight: .semibold)).foregroundStyle(.white)
+          Text("score \(score)").font(OnyxWidgetType.face(9, weight: .semibold)).foregroundStyle(Color.onyx.textPrimary)
         }
         if entry.isStale { StaleTag(age: entry.age) }
       }
@@ -625,7 +625,7 @@ private struct StageRow: View {
       Rail(progress: share, color: mono ? .white : stage.color, height: 4)
       Text(minutes.map { "\($0)m" } ?? "—")
         .font(OnyxWidgetType.face(10, weight: .semibold, design: .monospaced))
-        .foregroundStyle(.white)
+        .foregroundStyle(Color.onyx.textPrimary)
         .frame(width: 30, alignment: .trailing)
       Text(share.map { "\(Int(($0 * 100).rounded()))%" } ?? "")
         .font(OnyxWidgetType.face(9))
@@ -665,12 +665,12 @@ struct SleepLargeFace: View {
           VStack(alignment: .leading, spacing: 4) {
             if let score = s?.sleep.score {
               HStack(alignment: .firstTextBaseline, spacing: 5) {
-                BigValue(value: "\(score)", size: 24, color: .white)
+                BigValue(value: "\(score)", size: 24, color: Color.onyx.textPrimary)
                 Text("sleep score").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
               }
             }
             if let window = sleepWindowText(s) {
-              Text(window).font(OnyxWidgetType.face(11, weight: .semibold)).foregroundStyle(.white)
+              Text(window).font(OnyxWidgetType.face(11, weight: .semibold)).foregroundStyle(Color.onyx.textPrimary)
             }
             if let debt = debtText {
               Text(debt).font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
@@ -778,7 +778,7 @@ struct WeightFocusFace: View {
       }
 
       HStack(alignment: .firstTextBaseline, spacing: 4) {
-        BigValue(value: s?.weight.kg.map { String(format: "%.1f", $0) }, size: 27, color: .white)
+        BigValue(value: s?.weight.kg.map { String(format: "%.1f", $0) }, size: 27, color: Color.onyx.textPrimary)
         Text("kg").font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
         DeltaChip(delta: s?.weight.deltaKg, decimals: 1, upIsGood: false, monochrome: mono)
       }
@@ -828,7 +828,7 @@ struct WeightTrendFace: View {
       .padding(.trailing, OnyxMark.faceInset)
 
       HStack(alignment: .firstTextBaseline, spacing: 6) {
-        BigValue(value: s?.weight.kg.map { String(format: "%.1f", $0) }, size: 28, color: .white)
+        BigValue(value: s?.weight.kg.map { String(format: "%.1f", $0) }, size: 28, color: Color.onyx.textPrimary)
         Text("kg").font(OnyxWidgetType.face(11)).foregroundStyle(Color.onyx.textSecondary)
         // Down is the good direction here, and only here. `deltaVerdict.ts`
         // makes the same point on the web: the sign does not decide the verdict,
@@ -873,7 +873,7 @@ struct WeightTrendFace: View {
                      unit: "kg", color: mono ? .white : OnyxDomain.body.at(0.25), mono: mono)
       Hairline().padding(.vertical, 4)
       CompositionRow(label: "FAT-FREE MASS", value: s?.body?.ffmKg, delta: s?.body?.ffmKgDelta,
-                     unit: "kg", color: .white, mono: mono)
+                     unit: "kg", color: Color.onyx.textPrimary, mono: mono)
     }
     .frame(maxWidth: .infinity)
   }
@@ -898,7 +898,7 @@ struct WeightLargeFace: View {
     VStack(alignment: .leading, spacing: 9) {
       Register(title: "THE SCALE", accent: tint(OnyxDomain.body.accent)) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-          BigValue(value: s?.weight.kg.map { String(format: "%.1f", $0) }, size: 36, color: .white)
+          BigValue(value: s?.weight.kg.map { String(format: "%.1f", $0) }, size: 36, color: Color.onyx.textPrimary)
           Text("kg").font(OnyxWidgetType.face(12)).foregroundStyle(Color.onyx.textSecondary)
           DeltaChip(delta: s?.weight.deltaKg, decimals: 1, upIsGood: false, monochrome: mono)
           Spacer(minLength: 0)
@@ -931,7 +931,7 @@ struct WeightLargeFace: View {
                          unit: "kg", color: tint(OnyxDomain.body.at(0.25)), mono: mono)
           Hairline().padding(.vertical, 4)
           CompositionRow(label: "FAT-FREE MASS", value: s?.body?.ffmKg, delta: s?.body?.ffmKgDelta,
-                         unit: "kg", color: .white, mono: mono)
+                         unit: "kg", color: Color.onyx.textPrimary, mono: mono)
         }
       }
       .frame(maxHeight: .infinity)
@@ -1005,7 +1005,7 @@ struct CalorieDayFace: View {
     VStack(alignment: .leading, spacing: 9) {
       Register(title: "LEFT TO EAT", accent: tint(OnyxDomain.fuel.accent)) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-          BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 34, color: .white)
+          BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 34, color: Color.onyx.textPrimary)
           Text("kcal").font(OnyxWidgetType.face(11)).foregroundStyle(Color.onyx.textSecondary)
           if let goal = s?.macros.kcalGoal {
             Text("of \(Int(goal.rounded()))")
@@ -1061,7 +1061,7 @@ struct CalorieDayFace: View {
              color: mono ? .white : Color.onyx.day(s?.workout.dayKey))
         Foot(label: "WEIGHT", value: s?.weight.kg.map { String(format: "%.1f kg", $0) },
              color: tint(OnyxDomain.body.accent))
-        Foot(label: "SCORE", value: s?.score.map { "\($0)" }, color: .white)
+        Foot(label: "SCORE", value: s?.score.map { "\($0)" }, color: Color.onyx.textPrimary)
       }
     }
   }
@@ -1204,7 +1204,7 @@ struct MacroFocusFace: View {
         if entry.isStale { StaleTag(age: entry.age) }
       }
       HStack(alignment: .firstTextBaseline, spacing: 4) {
-        BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 22, color: .white)
+        BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 22, color: Color.onyx.textPrimary)
         Text("kcal left").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
       }
       Spacer(minLength: 0)
@@ -1239,7 +1239,7 @@ struct MacroFace: View {
       HStack(alignment: .firstTextBaseline, spacing: 6) {
         Caption("MACROS", color: tint(OnyxDomain.fuel.accent))
         Spacer(minLength: 0)
-        BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 20, color: .white)
+        BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 20, color: Color.onyx.textPrimary)
         Text("kcal left").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
         if entry.isStale { StaleTag(age: entry.age) }
       }
@@ -1318,7 +1318,7 @@ private struct MacroLine: View {
 
   private var remainderColor: Color {
     guard let value, let goal else { return Color.onyx.textSecondary }
-    return abs(goal - value) < 0.5 ? Color.onyx.good : .white
+    return abs(goal - value) < 0.5 ? Color.onyx.good : Color.onyx.textPrimary
   }
 }
 
@@ -1339,7 +1339,7 @@ struct MacroLargeFace: View {
     VStack(alignment: .leading, spacing: 10) {
       Register(title: "TODAY'S FUEL", accent: tint(OnyxDomain.fuel.accent)) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-          BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 32, color: .white)
+          BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 32, color: Color.onyx.textPrimary)
           Text("kcal left").font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
           Spacer(minLength: 0)
           if entry.isStale { StaleTag(age: entry.age) }
@@ -1382,7 +1382,7 @@ struct MacroLargeFace: View {
         Foot(label: "WATER", value: s?.water.ml.map { String(format: "%.1f L", $0 / 1000) },
              color: tint(Color.onyx.water))
         Foot(label: "STEPS", value: s?.steps.count.map { "\($0)" }, color: tint(OnyxDomain.body.accent))
-        Foot(label: "SLEEP", value: sleepText, color: .white)
+        Foot(label: "SLEEP", value: sleepText, color: Color.onyx.textPrimary)
       }
     }
   }
@@ -1502,7 +1502,7 @@ struct WaterLargeFace: View {
     VStack(alignment: .leading, spacing: 10) {
       Register(title: "HYDRATION", accent: tint(Color.onyx.water)) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-          BigValue(value: s?.water.ml.map { String(format: "%.1f", $0 / 1000) }, size: 34, color: .white)
+          BigValue(value: s?.water.ml.map { String(format: "%.1f", $0 / 1000) }, size: 34, color: Color.onyx.textPrimary)
           Text("L").font(OnyxWidgetType.face(12)).foregroundStyle(Color.onyx.textSecondary)
           if let goal = s?.water.goalMl {
             Text(String(format: "of %.1f L", goal / 1000))
@@ -1528,7 +1528,7 @@ struct WaterLargeFace: View {
                   s?.steps.count.map(Double.init), s?.steps.goal.map(Double.init)),
                 color: tint(OnyxDomain.body.accent))
           Gauge(label: "MOVE", value: s?.steps.activeKcal.map { "\(Int($0.rounded()))" }, unit: "kcal",
-                progress: nil, color: .white)
+                progress: nil, color: Color.onyx.textPrimary)
           Gauge(label: "SLEEP", value: sleepText, unit: "",
                 progress: OnyxSnapshot.progress(
                   s?.sleep.minutes.map(Double.init),
@@ -1601,7 +1601,7 @@ struct WellbeingLedgerFace: View {
           if entry.isStale { StaleTag(age: entry.age) }
         }
         Spacer(minLength: 0)
-        BigValue(value: s?.score.map { "\($0)" }, size: 34, color: .white)
+        BigValue(value: s?.score.map { "\($0)" }, size: 34, color: Color.onyx.textPrimary)
         BatteryRing(pct: s?.battery, size: 42, lineWidth: 5, monochrome: mono)
         Spacer(minLength: 0)
       }
@@ -1638,7 +1638,7 @@ struct WellbeingLedgerFace: View {
             Rail(progress: value.map { min(1, max(0, $0 / 100)) }, color: color, height: 4)
             Text(value.map { "\(Int($0.rounded()))" } ?? "—")
               .font(OnyxWidgetType.face(9, weight: .semibold, design: .monospaced))
-              .foregroundStyle(.white)
+              .foregroundStyle(Color.onyx.textPrimary)
               .frame(width: 20, alignment: .trailing)
           }
         }
@@ -1674,7 +1674,7 @@ struct WellbeingFace: View {
       .padding(.trailing, OnyxMark.faceInset)
 
       HStack(alignment: .bottom, spacing: 8) {
-        BigValue(value: s?.score.map { "\($0)" }, size: 40, color: .white)
+        BigValue(value: s?.score.map { "\($0)" }, size: 40, color: Color.onyx.textPrimary)
         Text("daily score").font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
         Spacer(minLength: 0)
       }
@@ -1699,7 +1699,7 @@ struct WellbeingFace: View {
             Rail(progress: value.map { min(1, max(0, $0 / 100)) }, color: color, height: 4)
             Text(value.map { "\(Int($0.rounded()))" } ?? "—")
               .font(OnyxWidgetType.face(10, weight: .semibold, design: .monospaced))
-              .foregroundStyle(.white)
+              .foregroundStyle(Color.onyx.textPrimary)
               .frame(width: 22, alignment: .trailing)
           }
           .frame(maxHeight: .infinity)

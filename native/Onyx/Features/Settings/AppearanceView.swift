@@ -258,7 +258,7 @@ struct AppearanceView: View {
         // contrast guard moved — and then spends a widget reload and a watch
         // push writing a blob that is byte-identical to the one already there.
         guard !locked, draft.normalised() != OnyxTheme.current.spec else { return }
-        OnyxTheme.save(draft, to: UserDefaults(suiteName: AppDatabase.appGroupID) ?? .standard)
+        OnyxTheme.save(draft, to: AppDatabase.appGroupDefaults())
         environment.themeDidChange()
     }
 }

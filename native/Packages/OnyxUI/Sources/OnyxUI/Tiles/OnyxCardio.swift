@@ -41,7 +41,7 @@ struct CardioFocusFace: View {
       }
 
       if let last = c?.last {
-        BigValue(value: CardioFormat.distance(last.distanceM), size: 28, color: .white)
+        BigValue(value: CardioFormat.distance(last.distanceM), size: 28, color: Color.onyx.textPrimary)
         Text(CardioFormat.subtitle(last))
           .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
       } else {
@@ -90,9 +90,9 @@ struct CardioLedgerFace: View {
       Hairline()
 
       HStack(spacing: 0) {
-        Stat(value: c.map { "\($0.weekMinutes)′" }, label: "WEEK MINUTES", color: .white)
+        Stat(value: c.map { "\($0.weekMinutes)′" }, label: "WEEK MINUTES", color: Color.onyx.textPrimary)
         Stat(value: c?.last.flatMap { CardioFormat.distance($0.distanceM) },
-             label: "LAST DISTANCE", color: .white)
+             label: "LAST DISTANCE", color: Color.onyx.textPrimary)
         Stat(value: c?.last.flatMap { CardioFormat.pace($0.paceMinPerKm) },
              label: "LAST PACE", color: mono ? .white : Color.onyx.textSecondary)
       }
@@ -128,7 +128,7 @@ struct CardioLargeFace: View {
 
       Register(title: "THIS WEEK", accent: mono ? .white : accent) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-          BigValue(value: c.map { "\($0.weekSessions)" }, size: 34, color: .white)
+          BigValue(value: c.map { "\($0.weekSessions)" }, size: 34, color: Color.onyx.textPrimary)
           Text(c.map { "/ \($0.weekTarget) zone 2 sessions" } ?? "zone 2 sessions")
             .font(OnyxWidgetType.face(11)).foregroundStyle(Color.onyx.textSecondary)
           Spacer(minLength: 0)
@@ -156,9 +156,9 @@ struct CardioLargeFace: View {
 
       if let last = c?.last {
         HStack(spacing: 0) {
-          Stat(value: last.kind.capitalized, label: "LAST SESSION", color: .white)
-          Stat(value: CardioFormat.distance(last.distanceM), label: "DISTANCE", color: .white)
-          Stat(value: last.durationMin.map { "\(Int($0.rounded()))′" }, label: "TIME", color: .white)
+          Stat(value: last.kind.capitalized, label: "LAST SESSION", color: Color.onyx.textPrimary)
+          Stat(value: CardioFormat.distance(last.distanceM), label: "DISTANCE", color: Color.onyx.textPrimary)
+          Stat(value: last.durationMin.map { "\(Int($0.rounded()))′" }, label: "TIME", color: Color.onyx.textPrimary)
           Stat(value: CardioFormat.pace(last.paceMinPerKm), label: "PACE",
                color: mono ? .white : Color.onyx.textSecondary)
         }

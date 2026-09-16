@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import OnyxCore
 import OnyxData
+import OnyxUI
 
 /// The app shell.
 ///
@@ -37,7 +38,12 @@ struct RootView: View {
     }
 }
 
-private struct SignedInTabs: View {
+/// Not `private`: `PreviewHarness` renders this directly for the `tabs-*`
+/// shots. `RootView` gates on `auth` and a preview environment is never signed
+/// in, so photographing the tab bar through the real root would mean seeding a
+/// session — a Keychain read and a Supabase client in the screenshot loop, for
+/// a picture of five icons.
+struct SignedInTabs: View {
     enum Tab: String, Hashable { case today, train, fuel, body, you }
 
     @Environment(AppEnvironment.self) private var environment
@@ -102,6 +108,27 @@ private struct SignedInTabs: View {
             }
         }
         .environment(\.onyxBatteryLevel, battery)
+        // ── THE TAB BAR LEARNS WHICH TAB IT IS ON ───────────────────────────
+        // §4 decision 4: the selected tab icon adopts the domain tint. Every
+        // screen already stands on `onyxScreen(domain)`, so the ground under
+        // Train is Ion and the ground under Nutrition is Solar — and the bar
+        // over both was the one piece of chrome that never got the message.
+        //
+        // ── WHY IT IS ONE MODIFIER HERE AND NOT FIVE ON THE TABS ────────────
+        // The obvious spelling is `.tint()` on each `SwiftUI.Tab`. It does not
+        // exist: `Tab` is a `TabContent`, not a `View`, and the modifiers
+        // SwiftUI declares on `TabContent` are `badge`, `hidden`, `disabled`,
+        // `tabPlacement`, `customizationBehavior`, the accessibility set and
+        // the gesture set — no `tint`. Applying it to the CONTENT inside a tab
+        // tints that screen's controls and never reaches the bar item, which
+        // is the half that matters here.
+        //
+        // A tab bar only ever colours its SELECTED item, so one tint driven by
+        // the selection says exactly what five would have: the bar is Ion on
+        // Train and Solar on Nutrition, and it changes on the tap.
+        //
+        // `nil` restores the system tint, which is what Settings gets.
+        .tint(Self.domain(for: selection.wrappedValue)?.accent)
         // ── A WORKOUT IN PROGRESS OUTRANKS THE DASHBOARD ────────────────────
         // `selectedTab` is in-memory (see `AppEnvironment`) — deliberately, so
         // a theme rebuild cannot evict the reader — which also means it is
@@ -173,6 +200,30 @@ private struct SignedInTabs: View {
     private static var batteryLevel: Double {
         let raw = Double(UIDevice.current.batteryLevel)
         return raw < 0 ? 1 : min(max(raw, 0), 1)
+    }
+
+    /// The domain a tab belongs to, or `nil` for the one that belongs to none.
+    ///
+    /// Settings is deliberately absent. It is not a Recover screen with a
+    /// different title — it is where you go to change the app, and painting it
+    /// a domain's colour would say the tab is ABOUT that domain. The same
+    /// argument `OnyxScreenBackground` already makes for its `nil` ground, and
+    /// `SettingsTabView` takes `onyxFormBackground()` with no domain for it.
+    ///
+    /// Pulse takes `.body` rather than a literal red. Every hue in this app is
+    /// derived from the user's two theme colours by OKLCH rotation
+    /// (`OnyxTheme.init`), so a hardcoded red would be the one colour on the
+    /// screen that goes stale the moment they change Primary — and
+    /// `TokenDisciplineTests` would not even catch it, because `.red` is a
+    /// system colour and not a spelled-out hex.
+    private static func domain(for tab: Tab) -> OnyxDomain? {
+        switch tab {
+        case .today: return .recover
+        case .train: return .train
+        case .fuel:  return .fuel
+        case .body:  return .body
+        case .you:   return nil
+        }
     }
 
     private static func tab(for destination: DeepLink.Destination) -> Tab {

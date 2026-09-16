@@ -44,6 +44,72 @@ public final class AppDatabase: Sendable {
     public static let appGroupID = "group.app.onyx.health"
     static let fileName = "onyx.sqlite"
 
+    /// The defaults suite the app, the widget extension and the watch bridge
+    /// all read the theme out of. **Every caller goes through this.**
+    ///
+    /// ── WHY AN ACCESSOR AND NOT FOUR COPIES OF ONE EXPRESSION ───────────────
+    /// Four call sites wrote `UserDefaults(suiteName: appGroupID) ?? .standard`
+    /// — the app's `@AppStorage` store, `OnyxWidgets.init`,
+    /// `OnyxProvider.theme()` and `AppearanceView.commit`. That fallback is not
+    /// a shared suite with a different name: `.standard` is the CALLING
+    /// PROCESS's own domain, so under it the app writes the theme to the app's
+    /// plist and the extension reads the extension's. The widget never sees the
+    /// write at all. It does not fail, it does not log, and it does not look
+    /// broken — the tiles simply stay on whatever palette the extension booted
+    /// with, which reads as "the theme works on some widgets and not others".
+    ///
+    /// The fallback stays, because `sharedFolder()` has the same shape: a
+    /// free-team build has no App Group entitlement, and a nil suite there must
+    /// not cost the APP its own memory of the theme. What changes is that it is
+    /// one place, it is named, and it says out loud what it costs.
+    ///
+    /// ponytail: `.standard` fallback — the widget's palette is stale under it.
+    /// Gate 0 (the paid Developer Program, a signed App Group entitlement) is
+    /// what removes it; then this can `precondition` on the suite instead.
+    public static func appGroupDefaults() -> UserDefaults {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else {
+            // Reachable only if the suite name collides with the main bundle id
+            // or the global domain, which would be a build-configuration
+            // mistake rather than a runtime condition. Trapping in DEBUG is
+            // right: nothing downstream can be correct after it.
+            assertionFailure("UserDefaults(suiteName: \(appGroupID)) is nil — the suite name collides with a reserved domain")
+            return .standard
+        }
+        #if DEBUG
+        _ = unsharedContainerWarning
+        #endif
+        return defaults
+    }
+
+    #if DEBUG
+    /// The condition that actually bites, said ONCE per process.
+    ///
+    /// `UserDefaults(suiteName:)` hands back a suite for any name that is not
+    /// reserved, so the assertion above can never fire on the bug this exists
+    /// for. What decides whether the app and the extension are looking at the
+    /// SAME suite is the App Group container, and
+    /// `containerURL(forSecurityApplicationGroupIdentifier:)` is the only thing
+    /// that answers it.
+    ///
+    /// A `print` and not an `assert`: the entitlement is unsigned on a free
+    /// team (Gate 0 — see `sharedFolder()`), so this is TRUE on every simulator
+    /// launch, and a trap would take the screenshot loop down on every run
+    /// rather than make the condition visible in it.
+    ///
+    /// A lazy `static let` is the once-guard: the runtime serialises its
+    /// initialiser and runs it exactly once. `Mutex` is not available here —
+    /// OnyxData declares `.macOS(.v14)` and Synchronization needs 15.
+    private static let unsharedContainerWarning: Void = {
+        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) == nil else { return }
+        print("""
+            [Onyx] No App Group container for \(appGroupID) — theme defaults fall back to \
+            this process's own suite. The app and the widget extension are NOT reading one \
+            value, so widget palettes will not follow a theme change. Needs the paid \
+            Developer Program and a signed App Group entitlement (Gate 0).
+            """)
+    }()
+    #endif
+
     /// What all of the above were called before the app was renamed Onyx (W2).
     ///
     /// The container, the folder and the file all changed name in one commit,

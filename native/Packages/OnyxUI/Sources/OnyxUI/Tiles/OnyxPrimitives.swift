@@ -73,7 +73,7 @@ struct Dash: View {
 struct BigValue: View {
   let value: String?
   var size: CGFloat = 30
-  var color: Color = .white
+  var color: Color = Color.onyx.textPrimary
   var body: some View {
     if let value {
       Text(value)
@@ -129,7 +129,7 @@ struct BatteryRing: View {
           .shadow(color: color.opacity(monochrome ? 0 : 0.5), radius: 4)
       }
       VStack(spacing: 0) {
-        BigValue(value: pct.map { "\($0)" }, size: size * 0.27, color: .white)
+        BigValue(value: pct.map { "\($0)" }, size: size * 0.27, color: Color.onyx.textPrimary)
         Text("BATT")
           .font(OnyxWidgetType.face(size * 0.11, weight: .bold))
           .foregroundStyle(Color.onyx.textSecondary)
@@ -156,7 +156,7 @@ struct Caption: View {
 struct Metric: View {
   let value: String?
   let label: String
-  var color: Color = .white
+  var color: Color = Color.onyx.textPrimary
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 5) {
       BigValue(value: value, size: 19, color: color)
@@ -235,7 +235,7 @@ struct Unavailable: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
       Image(systemName: symbol).font(OnyxWidgetType.face(14)).foregroundStyle(Color.onyx.textSecondary)
-      Text(title).font(OnyxWidgetType.face(12, weight: .bold)).foregroundStyle(.white)
+      Text(title).font(OnyxWidgetType.face(12, weight: .bold)).foregroundStyle(Color.onyx.textPrimary)
       if !compact {
         Text(detail)
           .font(OnyxWidgetType.face(9))
@@ -266,7 +266,7 @@ struct Hairline: View {
 struct LedgerRow: View {
   let label: String
   let value: String?
-  var color: Color = .white
+  var color: Color = Color.onyx.textPrimary
   var trailing: String?
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -577,7 +577,7 @@ public struct DepthArc: View {
 
         VStack(spacing: 1) {
           BigValue(value: OnyxSnapshot.formatSleep(minutes) == "—" ? nil
-                   : OnyxSnapshot.formatSleep(minutes), size: d * 0.17, color: .white)
+                   : OnyxSnapshot.formatSleep(minutes), size: d * 0.17, color: Color.onyx.textPrimary)
           if let goalMin, showsGoal {
             Text("goal \(OnyxSnapshot.formatSleep(goalMin))")
               .font(OnyxWidgetType.face(max(7, d * 0.075)))

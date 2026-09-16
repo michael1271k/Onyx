@@ -97,7 +97,7 @@ public struct DailyView: View {
       Hairline()
 
       HStack(spacing: 0) {
-        Stat(value: s?.score.map { "\($0)" }, label: "SCORE", color: .white)
+        Stat(value: s?.score.map { "\($0)" }, label: "SCORE", color: Color.onyx.textPrimary)
         Stat(value: s?.battery.map { "\($0)%" }, label: "BATTERY",
              color: mono ? .white : Color.onyx.battery(s?.battery))
         Stat(value: s?.streak.map { "\($0.current)" }, label: "PROGRAM DAY",
@@ -134,7 +134,7 @@ private struct FuelQuadrant: View {
     VStack(alignment: .leading, spacing: 4) {
       Caption("FUEL", color: accent)
       HStack(alignment: .firstTextBaseline, spacing: 3) {
-        BigValue(value: snapshot?.macros.kcal.map { "\(Int($0.rounded()))" }, size: 20, color: .white)
+        BigValue(value: snapshot?.macros.kcal.map { "\(Int($0.rounded()))" }, size: 20, color: Color.onyx.textPrimary)
         Text(snapshot?.macros.kcalGoal.map { "/ \(Int($0.rounded()))" } ?? "kcal")
           .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
       }
@@ -177,7 +177,7 @@ private struct WaterQuadrant: View {
       Caption("WATER", color: accent)
       HStack(alignment: .firstTextBaseline, spacing: 3) {
         BigValue(value: snapshot?.water.ml.map { String(format: "%.1f", $0 / 1000) },
-                 size: 20, color: .white)
+                 size: 20, color: Color.onyx.textPrimary)
         Text(snapshot?.water.goalMl.map { "/ \(String(format: "%.1f", $0 / 1000)) L" } ?? "L")
           .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
       }
@@ -199,7 +199,7 @@ private struct StepsQuadrant: View {
       Caption("STEPS", color: accent)
       HStack(alignment: .firstTextBaseline, spacing: 3) {
         BigValue(value: snapshot?.steps.count.map { $0.formatted(.number.grouping(.automatic)) },
-                 size: 20, color: .white)
+                 size: 20, color: Color.onyx.textPrimary)
         Text(snapshot?.steps.goal.map { "/ \($0 / 1000)k" } ?? "")
           .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
       }
@@ -222,7 +222,7 @@ private struct TrainingQuadrant: View {
       Caption("TRAINING", color: accent)
       Text(snapshot?.workout.label ?? "—")
         .font(OnyxWidgetType.label(13, weight: .bold))
-        .foregroundStyle(.white)
+        .foregroundStyle(Color.onyx.textPrimary)
         .lineLimit(1)
         .minimumScaleFactor(0.7)
       Text(state)

@@ -171,7 +171,7 @@ struct VitalBar: View {
         // it is the thing the bar is measured from, and a bar with no origin is
         // a bar with no meaning.
         Rectangle()
-          .fill(.white.opacity(0.30))
+          .fill(Color.onyx.ink(0.30))
           .frame(width: 1)
           .offset(x: mid)
       }
@@ -198,7 +198,7 @@ struct VitalRow: View {
         Spacer(minLength: 0)
         Text(OnyxSnapshot.fixed(vital?.value, decimals: spec.decimals) ?? "—")
           .font(OnyxWidgetType.face(12, weight: .bold, design: .monospaced))
-          .foregroundStyle(.white)
+          .foregroundStyle(Color.onyx.textPrimary)
         Text(spec.unit)
           .font(OnyxWidgetType.face(8))
           .foregroundStyle(Color.onyx.textSecondary)
@@ -229,7 +229,7 @@ struct VitalLeadFace: View {
         if entry.isStale { StaleTag(age: entry.age) }
       }
 
-      BigValue(value: OnyxSnapshot.fixed(vital?.value, decimals: spec.decimals), size: 28, color: .white)
+      BigValue(value: OnyxSnapshot.fixed(vital?.value, decimals: spec.decimals), size: 28, color: Color.onyx.textPrimary)
 
       HStack(spacing: 4) {
         DeltaChip(delta: vital?.delta, decimals: spec.decimals,
@@ -377,7 +377,7 @@ struct GoalStat: View {
         Spacer(minLength: 0)
         Text(value ?? "—")
           .font(OnyxWidgetType.face(11, weight: .bold, design: .monospaced))
-          .foregroundStyle(.white)
+          .foregroundStyle(Color.onyx.textPrimary)
           .lineLimit(1)
       }
       Rail(progress: progress, color: color, height: 3)
