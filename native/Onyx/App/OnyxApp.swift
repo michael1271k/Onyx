@@ -18,7 +18,7 @@ struct OnyxApp: App {
     ///
     /// Empty (the fresh-install case) resolves to the default spec, so the app
     /// is pixel-identical until somebody picks a theme.
-    @AppStorage(OnyxTheme.key, store: UserDefaults(suiteName: AppDatabase.appGroupID))
+    @AppStorage(OnyxTheme.key, store: AppDatabase.appGroupDefaults())
     private var themeJSON = ""
 
     var body: some Scene {

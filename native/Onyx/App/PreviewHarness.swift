@@ -253,6 +253,20 @@ enum PreviewHarness {
         OnyxTheme.set(OnyxThemeSpec(primary: hexes[0], secondary: hexes[1]))
     }
 
+    /// The preview environment, opened on the tab the screen name asks for.
+    ///
+    /// `selectedTab` and not `ONYX_START_TAB`: the launch environment is read
+    /// once, by `SignedInTabs.initialTab`, and `simctl launch` passes ARGUMENTS
+    /// — which is the same reason `--onyx-screen` is an argument and not a deep
+    /// link. An unknown suffix leaves the environment on its default tab rather
+    /// than inventing one.
+    @MainActor static func tabsEnvironment(_ screen: String) -> AppEnvironment {
+        let environment = AppEnvironment.preview
+        let tab = screen.hasPrefix("tabs-") ? String(screen.dropFirst("tabs-".count)) : ""
+        if ["today", "train", "fuel", "body", "you"].contains(tab) { environment.selectedTab = tab }
+        return environment
+    }
+
     @MainActor @ViewBuilder
     static func view(_ screen: String) -> some View {
         let _ = applyRequestedTheme()
@@ -345,6 +359,16 @@ enum PreviewHarness {
             .environment(AppEnvironment.preview)
         case "backfill":
             BackfillSheet(model: .preview).environment(AppEnvironment.preview)
+        // ── THE TAB BAR ITSELF (W8) ─────────────────────────────────────────
+        // `tabs-today` … `tabs-you`. Every other screen here is one tab's
+        // CONTENT with the shell taken off, so the selected-item tint — the
+        // whole of W8.1 — appears in none of them.
+        //
+        // A `TabView` mounts only the selected tab's content, so this is one
+        // screen plus five icons, not five screens. Pair it with `SHOT_THEME`:
+        // the point of the shot is that the icon moves when the palette does.
+        case let s where s.hasPrefix("tabs"):
+            SignedInTabs().environment(tabsEnvironment(s))
         case "you":
             NavigationStack { SettingsTabView(seeded: model) }.environment(AppEnvironment.preview)
         case "train", "train-done", "train-pending", "train-cardio", "train-empty", "train-week", "train-wrap", "train-wrap-large",

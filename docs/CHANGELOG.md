@@ -44,6 +44,43 @@ _Nothing yet._
 
 ---
 
+## [3.17.0] — 2026-09-16 · Appearance, Everywhere
+
+### Added
+- **The tab bar knows which tab it is on.** The selected item now wears its
+  domain's accent — Today in Lunar, Train in Ion, Nutrition in Solar, Pulse in
+  Tide — and moves with the theme, because every one of those is derived from
+  your two colours by hue rotation rather than written down. Settings stays
+  neutral: it belongs to no domain, and colouring it would say the tab is about
+  one. (`native/Onyx/Features/Shell/RootView.swift`)
+- **`AppearanceCoverageTests`**, a sibling to `TokenDisciplineTests`. Every root
+  screen must stand on `.onyxScreen` or `.onyxFormBackground`, or be allowlisted
+  in the test **with a written reason**. A screen with no ground is a screen with
+  no domain mesh, and until now that was invisible in a diff, in a build and in
+  a default-theme screenshot alike.
+- `Color.onyx.ink(_:)` — the one name for ink that is a fill or a stroke rather
+  than type.
+
+### Fixed
+- **Widgets follow a theme change.** The four places that read the theme suite
+  each wrote `UserDefaults(suiteName:) ?? .standard`, and `.standard` is the
+  *calling process's own* domain — so under the fallback the app wrote its theme
+  to the app's plist while the extension read the extension's, and a widget
+  never saw the change at all. They now go through one accessor,
+  `AppDatabase.appGroupDefaults()`, which says what the fallback costs and, in
+  DEBUG, prints once when the App Group container is missing instead of failing
+  in silence on the device.
+- **The widget faces move with the theme.** Roughly a hundred ink reads across
+  the eleven tile files and the Live Activity card were spelled `.white` or
+  `.black` by hand — the only surfaces in the app that did not resolve through
+  `Color.onyx.*`. They now read `textPrimary`, `base` and `ink(_:)`. The
+  accessory rendering's `mono ? .white` branch is deliberately left: there the
+  white is the rendering mode's ink, not the theme's.
+- `OnyxThemeTests` now holds **each shipped preset** to sixteen distinct muscle
+  hues, not only the four quarter turns of the rotation.
+
+---
+
 ## [3.16.0] — 2026-09-16 · The Dashboard Grows a Face
 
 ### Added

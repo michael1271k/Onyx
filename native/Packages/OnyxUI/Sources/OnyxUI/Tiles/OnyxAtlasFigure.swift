@@ -57,10 +57,10 @@ struct OnyxAtlasFigure: View {
         var path = Path()
         build(rect, &path)
         context.fill(path, with: .linearGradient(
-          Gradient(colors: [.white.opacity(0.13), .white.opacity(0.05)]),
+          Gradient(colors: [Color.onyx.ink(0.13), Color.onyx.ink(0.05)]),
           startPoint: CGPoint(x: rect.minX, y: rect.minY),
           endPoint: CGPoint(x: rect.maxX, y: rect.maxY)))
-        context.stroke(path, with: .color(.white.opacity(0.12)), lineWidth: 0.5)
+        context.stroke(path, with: .color(Color.onyx.ink(0.12)), lineWidth: 0.5)
       }
 
       for entry in OnyxAtlas.muscles where entry.view == view {
@@ -75,8 +75,8 @@ struct OnyxAtlasFigure: View {
           context.fill(path, with: .color(tint.opacity(0.18 + intensity * 0.55)))
           context.stroke(path, with: .color(tint.opacity(0.9)), lineWidth: 0.6)
         } else {
-          context.fill(path, with: .color(.white.opacity(0.09)))
-          context.stroke(path, with: .color(.white.opacity(0.13)), lineWidth: 0.4)
+          context.fill(path, with: .color(Color.onyx.ink(0.09)))
+          context.stroke(path, with: .color(Color.onyx.ink(0.13)), lineWidth: 0.4)
         }
       }
 
@@ -86,7 +86,7 @@ struct OnyxAtlasFigure: View {
       for entry in OnyxAtlas.detail where entry.view == view {
         var path = Path()
         entry.build(rect, &path)
-        context.stroke(path, with: .color(.white.opacity(0.20)), lineWidth: 0.35)
+        context.stroke(path, with: .color(Color.onyx.ink(0.20)), lineWidth: 0.35)
       }
     }
     .accessibilityHidden(true)

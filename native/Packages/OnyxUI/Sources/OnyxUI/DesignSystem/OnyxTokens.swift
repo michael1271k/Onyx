@@ -129,6 +129,24 @@ extension Color {
         /// already separated by material is noise.
         public static let hairline = Color.white.opacity(0.08)
 
+        /// Ink at a weight the three text tokens do not name — for a FILL or a
+        /// STROKE that is ink rather than type: the body atlas's unworked
+        /// silhouette, a baseline tick, a scrim.
+        ///
+        /// ── WHY A TOKEN WHEN THE ANSWER IS ALWAYS WHITE ────────────────────
+        /// It does not rotate with the theme, and it must not: the atlas's
+        /// empty body is the ABSENCE of a reading, and a hue there would make
+        /// "nothing recorded" look like a value. What the token buys is that
+        /// the app has one ink in one file. A widget face that spells
+        /// `.white.opacity(0.09)` is indistinguishable, in review, from a face
+        /// nobody has themed yet — which is precisely how the tiles came to be
+        /// the last un-themed surface in the app (W8).
+        ///
+        /// Not `textPrimary.opacity(_:)`: that would compound 0.92 into every
+        /// caller's number and make 0.08 here mean something different from
+        /// 0.08 in `hairline`.
+        public static func ink(_ opacity: Double) -> Color { Color.white.opacity(opacity) }
+
         // ── Text ─────────────────────────────────────────────────────────────
 
         public static let textPrimary = Color.white.opacity(0.92)

@@ -95,7 +95,7 @@ struct OnyxIntentProvider<Configuration: WidgetConfigurationIntent & OnyxScoped>
   /// note on `OnyxWidgets.init`.
   private static func theme() async {
     await MainActor.run {
-      OnyxTheme.load(UserDefaults(suiteName: AppDatabase.appGroupID) ?? .standard)
+      OnyxTheme.load(AppDatabase.appGroupDefaults())
     }
   }
 

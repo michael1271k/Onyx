@@ -97,7 +97,7 @@ public struct TrajectoryView: View {
     case .onTrack:      return Color.onyx.good
     case .under, .over: return OnyxDomain.fuel.accent
     case .reversed:     return Color.onyx.danger
-    default:            return .white
+    default:            return Color.onyx.textPrimary
     }
   }
 
@@ -271,7 +271,7 @@ public struct ConsistencyView: View {
       if let model, model.planned > 0 {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
           BigValue(value: model.adherencePct.map { OnyxSeriesFormat.trim($0) },
-                   size: size == .small ? 26 : 30, color: .white)
+                   size: size == .small ? 26 : 30, color: Color.onyx.textPrimary)
           Text("%").font(OnyxWidgetType.face(12)).foregroundStyle(Color.onyx.textSecondary)
           Spacer(minLength: 0)
           Text("\(model.done) of \(model.planned)")
@@ -376,7 +376,7 @@ public struct DeficitLedgerView: View {
       if let model, model.daysCounted > 0 {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
           BigValue(value: model.weeks.last?.balanceKcal.map { OnyxSeriesFormat.signed($0, decimals: 0) },
-                   size: size == .small ? 24 : 28, color: .white)
+                   size: size == .small ? 24 : 28, color: Color.onyx.textPrimary)
           Text("kcal").font(OnyxWidgetType.face(11)).foregroundStyle(Color.onyx.textSecondary)
           Spacer(minLength: 0)
           Text("\(model.daysCounted) d counted")
@@ -439,7 +439,7 @@ public struct DeficitLedgerView: View {
       Stat(value: model.expectedKg.map { OnyxSeriesFormat.signed($0, decimals: 2) },
            label: "PREDICTED", color: mono ? .white : accent)
       Stat(value: model.measuredKg.map { OnyxSeriesFormat.signed($0, decimals: 2) },
-           label: "SCALE", color: .white)
+           label: "SCALE", color: Color.onyx.textPrimary)
       if size != .small {
         Stat(value: model.gapKg.map { OnyxSeriesFormat.signed($0, decimals: 2) },
              label: "GAP", color: Color.onyx.textSecondary)

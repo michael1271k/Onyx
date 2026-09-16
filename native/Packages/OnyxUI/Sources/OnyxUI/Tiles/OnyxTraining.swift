@@ -132,7 +132,7 @@ struct TodayFace: View {
         // half of its own tile. `lineLimit(2)` and the scale factor are what
         // keep "Legs & Core B" inside 338 pt at the larger size.
         .font(OnyxWidgetType.label(compact ? 15 : 20, weight: .bold))
-        .foregroundStyle(.white)
+        .foregroundStyle(Color.onyx.textPrimary)
         .lineLimit(2)
         .minimumScaleFactor(0.8)
 
@@ -327,14 +327,14 @@ private struct TodayPlanned: View {
 
   var body: some View {
     HStack(spacing: 0) {
-      Stat(value: workout.plannedExercises.map { "\($0)" }, label: "EXERCISES", color: .white)
-      Stat(value: workout.plannedSets.map { "\($0)" }, label: "SETS", color: .white)
+      Stat(value: workout.plannedExercises.map { "\($0)" }, label: "EXERCISES", color: Color.onyx.textPrimary)
+      Stat(value: workout.plannedSets.map { "\($0)" }, label: "SETS", color: Color.onyx.textPrimary)
       // The number you are chasing. Nil — not zero — when this split has no
       // earlier session; "0.0 t last time" would be a target of nothing.
       Stat(value: OnyxSnapshot.tonnes(workout.lastVolumeKg), label: "LAST TIME",
            color: mono ? .white : Color.onyx.textSecondary)
       Stat(value: week.sessionTarget.map { "\(week.sessions)/\($0)" } ?? "\(week.sessions)",
-           label: "THIS WEEK", color: .white)
+           label: "THIS WEEK", color: Color.onyx.textPrimary)
     }
   }
 }
@@ -367,8 +367,8 @@ private struct TodayStats: View {
   var body: some View {
     VStack(spacing: 6) {
       HStack(spacing: 0) {
-        Stat(value: done.durationMin.map { "\($0)′" }, label: "TIME", color: .white, size: 15)
-        Stat(value: OnyxSnapshot.tonnes(done.volumeKg), label: "VOLUME", color: .white, size: 15)
+        Stat(value: done.durationMin.map { "\($0)′" }, label: "TIME", color: Color.onyx.textPrimary, size: 15)
+        Stat(value: OnyxSnapshot.tonnes(done.volumeKg), label: "VOLUME", color: Color.onyx.textPrimary, size: 15)
         Stat(value: done.prCount.map { "\($0)" }, label: "RECORDS",
              color: (done.prCount ?? 0) > 0 ? (mono ? .white : Color.onyx.record) : Color.onyx.textSecondary,
              size: 15)
@@ -431,7 +431,7 @@ struct TodayLargeFace: View {
         TodayHeader(entry: entry, mono: mono, branded: true)
         Text(s?.workout.label ?? "—")
           .font(OnyxWidgetType.face(24, weight: .bold))
-          .foregroundStyle(.white)
+          .foregroundStyle(Color.onyx.textPrimary)
           .lineLimit(1)
           .minimumScaleFactor(0.7)
         if let done = s?.today {
@@ -467,9 +467,9 @@ struct TodayLargeFace: View {
       Hairline()
 
       HStack(spacing: 0) {
-        Stat(value: s.map { "\($0.week.sessions)" }, label: "SESSIONS", color: .white)
-        Stat(value: OnyxSnapshot.tonnes(s?.week.volumeKg), label: "VOLUME", color: .white)
-        Stat(value: s.map { "\($0.week.sets)" }, label: "SETS", color: .white)
+        Stat(value: s.map { "\($0.week.sessions)" }, label: "SESSIONS", color: Color.onyx.textPrimary)
+        Stat(value: OnyxSnapshot.tonnes(s?.week.volumeKg), label: "VOLUME", color: Color.onyx.textPrimary)
+        Stat(value: s.map { "\($0.week.sets)" }, label: "SETS", color: Color.onyx.textPrimary)
         Stat(value: s?.streak.map { "\($0.current)" }, label: "STREAK",
              color: mono ? .white : OnyxDomain.train.accent)
       }
@@ -494,7 +494,7 @@ private struct DayRow: View {
         .frame(width: 10, height: 10)
       Text(OnyxSnapshot.weekdayInitial(day.d) + (OnyxSnapshot.dayOfMonth(day.d).map { " \($0)" } ?? ""))
         .font(OnyxWidgetType.face(11, weight: isToday ? .bold : .semibold))
-        .foregroundStyle(isToday ? .white : Color.onyx.textSecondary)
+        .foregroundStyle(isToday ? Color.onyx.textPrimary : Color.onyx.textSecondary)
         .frame(width: 42, alignment: .leading)
       // The plan's own name for the session, which the payload now carries. A
       // week of rows reading "trained · trained · trained" said only that they
@@ -502,7 +502,7 @@ private struct DayRow: View {
       // day is asking.
       Text(day.label ?? state)
         .font(OnyxWidgetType.face(11, weight: .medium))
-        .foregroundStyle(day.logged ? .white : Color.onyx.textSecondary)
+        .foregroundStyle(day.logged ? Color.onyx.textPrimary : Color.onyx.textSecondary)
         .lineLimit(1)
       Text(state)
         .font(OnyxWidgetType.face(9))
@@ -512,7 +512,7 @@ private struct DayRow: View {
       if let volume = OnyxSnapshot.tonnes(day.volumeKg) {
         Text(volume)
           .font(OnyxWidgetType.face(11, weight: .bold, design: .monospaced))
-          .foregroundStyle(.white)
+          .foregroundStyle(Color.onyx.textPrimary)
       }
     }
   }
@@ -541,7 +541,7 @@ private struct DayRow: View {
 struct Stat: View {
   let value: String?
   let label: String
-  var color: Color = .white
+  var color: Color = Color.onyx.textPrimary
   /// 13 is what a row of FOUR can carry. A row of three has 112 pt a column
   /// instead of 84 and can afford 15, which is the difference between a
   /// figure you read and one you decode. Passed in rather than derived,
@@ -641,7 +641,7 @@ struct CalendarFace: View {
               .foregroundStyle(mono ? .white : OnyxDomain.train.accent)
             Text("\(streak.current)")
               .font(OnyxWidgetType.face(10, weight: .bold, design: .monospaced))
-              .foregroundStyle(.white)
+              .foregroundStyle(Color.onyx.textPrimary)
           }
         }
       }
@@ -658,10 +658,10 @@ struct CalendarFace: View {
       if weeks >= 6 && !compact {
         Hairline()
         HStack(spacing: 0) {
-          Stat(value: s.map { "\($0.week.sessions)" }, label: "THIS WEEK", color: .white)
+          Stat(value: s.map { "\($0.week.sessions)" }, label: "THIS WEEK", color: Color.onyx.textPrimary)
           Stat(value: s?.streak.map { "\($0.current)" },
                label: "PROGRAM DAY", color: mono ? .white : OnyxDomain.train.accent)
-          Stat(value: OnyxSnapshot.tonnes(s?.week.volumeKg), label: "VOLUME", color: .white)
+          Stat(value: OnyxSnapshot.tonnes(s?.week.volumeKg), label: "VOLUME", color: Color.onyx.textPrimary)
         }
       }
     }
@@ -789,14 +789,14 @@ private struct DayCell: View {
   /// ring, which is where it is carrying information rather than decoration.
   private var textColor: Color {
     if outside { return Color.onyx.textSecondary.opacity(0.55) }
-    if day.logged { return .black }
-    return day.scheduled ? .white : Color.onyx.textSecondary
+    if day.logged { return Color.onyx.base }
+    return day.scheduled ? Color.onyx.textPrimary : Color.onyx.textSecondary
   }
 
   var body: some View {
     ZStack {
       if day.logged {
-        Circle().fill(.white)
+        Circle().fill(Color.onyx.textPrimary)
       } else if day.scheduled {
         Circle().strokeBorder(color.opacity(0.5), lineWidth: 1.5)
       }
@@ -868,7 +868,7 @@ struct VolumeFocusFace: View {
         Spacer(minLength: 0)
         if entry.isStale { StaleTag(age: entry.age) }
       }
-      BigValue(value: OnyxSnapshot.tonnes(s?.week.volumeKg), size: 28, color: .white)
+      BigValue(value: OnyxSnapshot.tonnes(s?.week.volumeKg), size: 28, color: Color.onyx.textPrimary)
       HStack(spacing: 5) {
         Text("this week").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
         DeltaChip(delta: deltaTonnes, decimals: 1, suffix: " t", monochrome: mono)
@@ -909,12 +909,12 @@ struct VolumeFace: View {
           if entry.isStale { StaleTag(age: entry.age) }
         }
         Spacer(minLength: 0)
-        BigValue(value: OnyxSnapshot.tonnes(s?.week.volumeKg), size: 30, color: .white)
+        BigValue(value: OnyxSnapshot.tonnes(s?.week.volumeKg), size: 30, color: Color.onyx.textPrimary)
         Text("this week").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
         DeltaChip(delta: volumeDeltaTonnes(s), decimals: 1, suffix: " t", monochrome: mono)
         Spacer(minLength: 0)
         Hairline()
-        LedgerRow(label: "SESSIONS", value: sessionsText(s), color: .white)
+        LedgerRow(label: "SESSIONS", value: sessionsText(s), color: Color.onyx.textPrimary)
         LedgerRow(label: "SETS", value: s.map { "\($0.week.sets)" }, color: Color.onyx.textSecondary)
       }
       .frame(width: 118, alignment: .leading)
@@ -951,14 +951,14 @@ struct VolumeLargeFace: View {
     VStack(alignment: .leading, spacing: 9) {
       Register(title: "THIS WEEK", accent: tint(OnyxDomain.train.accent)) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-          BigValue(value: OnyxSnapshot.tonnes(s?.week.volumeKg), size: 34, color: .white)
+          BigValue(value: OnyxSnapshot.tonnes(s?.week.volumeKg), size: 34, color: Color.onyx.textPrimary)
           DeltaChip(delta: volumeDeltaTonnes(s), decimals: 1, suffix: " t", monochrome: mono)
           Spacer(minLength: 0)
           if entry.isStale { StaleTag(age: entry.age) }
         }
         HStack(spacing: 0) {
-          Stat(value: sessionsText(s), label: "SESSIONS", color: .white)
-          Stat(value: s.map { "\($0.week.sets)" }, label: "SETS", color: .white)
+          Stat(value: sessionsText(s), label: "SESSIONS", color: Color.onyx.textPrimary)
+          Stat(value: s.map { "\($0.week.sets)" }, label: "SETS", color: Color.onyx.textPrimary)
           Stat(value: s.map { "\($0.week.prs)" }, label: "RECORDS",
                color: (s?.week.prs ?? 0) > 0 ? tint(Color.onyx.record) : Color.onyx.textSecondary)
           Stat(value: OnyxSnapshot.tonnes(s?.weekPrev?.volumeKg), label: "LAST WEEK",
@@ -1054,7 +1054,7 @@ struct StreakFace: View {
         Image(systemName: "flame.fill")
           .font(OnyxWidgetType.face(26))
           .foregroundStyle(mono ? .white : (current ?? 0) > 0 ? OnyxDomain.train.accent : Color.onyx.textSecondary)
-        BigValue(value: current.map { "\($0)" }, size: 34, color: .white)
+        BigValue(value: current.map { "\($0)" }, size: 34, color: Color.onyx.textPrimary)
       }
 
       Text(subtitle).font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
@@ -1124,7 +1124,7 @@ struct ConsistencyFace: View {
           // `.map` on the STREAK, not on `current` — `streak` is the optional and
           // `current` is a plain Int, so `s?.streak?.current.map` asks an Int for
           // a `map` it does not have. Same trap as `week.volumeKg`.
-          BigValue(value: s?.streak.map { "\($0.current)" }, size: large ? 40 : 30, color: .white)
+          BigValue(value: s?.streak.map { "\($0.current)" }, size: large ? 40 : 30, color: Color.onyx.textPrimary)
         }
         Text("day streak")
           .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
@@ -1137,7 +1137,7 @@ struct ConsistencyFace: View {
       VStack(alignment: .leading, spacing: large ? 9 : 6) {
         LedgerRow(label: "ADHERENCE",
                   value: adherence.map { "\(Int(($0 * 100).rounded()))" },
-                  color: .white, trailing: "%")
+                  color: Color.onyx.textPrimary, trailing: "%")
         Hairline()
         LedgerRow(label: "BEST", value: s?.streak.map { "\($0.best)" }, color: accent)
         Hairline()

@@ -65,7 +65,7 @@ struct CompositionFocusFace: View {
       }
 
       HStack(alignment: .firstTextBaseline, spacing: 4) {
-        BigValue(value: (fat?.latest ?? b?.fatPct).map { String(format: "%.1f", $0) }, size: 30, color: .white)
+        BigValue(value: (fat?.latest ?? b?.fatPct).map { String(format: "%.1f", $0) }, size: 30, color: Color.onyx.textPrimary)
         Text("%").font(OnyxWidgetType.face(12)).foregroundStyle(Color.onyx.textSecondary)
         Spacer(minLength: 0)
         // Down is good here, and only here on this face.
@@ -119,7 +119,7 @@ struct CompositionFace: View {
 
       HStack(alignment: .firstTextBaseline, spacing: 6) {
         BigValue(value: (fat?.latest ?? b?.fatPct).map { String(format: "%.1f", $0) },
-                 size: large ? 38 : 30, color: .white)
+                 size: large ? 38 : 30, color: Color.onyx.textPrimary)
         Text("% fat").font(OnyxWidgetType.face(large ? 13 : 11)).foregroundStyle(Color.onyx.textSecondary)
         Spacer(minLength: 0)
         if let span = OnyxSnapshot.spanCaption(fat) {
@@ -190,7 +190,7 @@ struct CompositionFace: View {
         Hairline()
 
         HStack(spacing: 0) {
-          Stat(value: s?.weight.kg.map { String(format: "%.1f", $0) }, label: "WEIGHT", color: .white)
+          Stat(value: s?.weight.kg.map { String(format: "%.1f", $0) }, label: "WEIGHT", color: Color.onyx.textPrimary)
           Stat(value: s?.weight.targetKg.map { String(format: "%.1f", $0) }, label: "TARGET",
                color: mono ? .white : Color.onyx.textSecondary)
           Stat(value: OnyxSnapshot.relativeDay(s?.weight.measuredOn), label: "MEASURED",

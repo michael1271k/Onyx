@@ -40,7 +40,7 @@ struct OnyxWidgets: WidgetBundle {
     /// weakened: this is the assertion, not an escape from it.
     init() {
         MainActor.assumeIsolated {
-            OnyxTheme.load(UserDefaults(suiteName: AppDatabase.appGroupID) ?? .standard)
+            OnyxTheme.load(AppDatabase.appGroupDefaults())
         }
     }
 

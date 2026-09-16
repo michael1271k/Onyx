@@ -149,7 +149,7 @@ struct WorkoutWatchCard: View {
                 .lineLimit(1)
             Text(state.exercise)
                 .font(OnyxWidgetType.label(12, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.onyx.textPrimary)
                 .lineLimit(2)
             if let countdown = restCountdown(state.restEndsAt, total: state.restTotalSec) {
                 Text(timerInterval: countdown, countsDown: true)
@@ -160,7 +160,7 @@ struct WorkoutWatchCard: View {
             } else if !state.load.isEmpty {
                 Text(state.load)
                     .font(OnyxWidgetType.figure(15))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.onyx.textPrimary)
             }
             Text("\(state.setsDone)/\(state.setsPlanned) sets · \(state.volume)")
                 .font(OnyxWidgetType.label(10, weight: .medium))
@@ -418,7 +418,7 @@ struct WorkoutCurrentSet: View {
                         // thing on the card. 16 pt semibold is what the sparkline's
                         // band paid for.
                         .font(OnyxWidgetType.label(16, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.onyx.textPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                     // ── AND THE MUSCLE TAG IS NOT ON THIS ROW ───────────────
@@ -448,7 +448,7 @@ struct WorkoutCurrentSet: View {
                 if !state.load.isEmpty {
                     Text(state.load)
                         .font(OnyxWidgetType.figure(17))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.onyx.textPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }

@@ -39,7 +39,7 @@ struct OnyxThemeTests {
         }
     }
 
-    @Test("every preset keeps the four domain accents apart, and the first is the default")
+    @Test("every preset keeps the four domain accents and the sixteen muscles apart")
     func presetsKeepDomainsApart() {
         #expect(OnyxTheme.presets.count >= 6 && OnyxTheme.presets.count <= 8)
         #expect(OnyxTheme.presets.first?.spec == .default)
@@ -50,6 +50,16 @@ struct OnyxThemeTests {
             let theme = OnyxTheme(spec: preset.spec)
             let accents = OnyxDomain.allCases.map { theme.start[$0]!.description }
             #expect(Set(accents).count == accents.count, "\(preset.name)")
+
+            // ── AND THE MUSCLES, PER PRESET ────────────────────────────────
+            // `musclesStayDistinct` proves the property for four quarter
+            // turns, which is a fact about the ROTATION. What ships is this
+            // fixed table, and a preset whose Δp folded two muscles onto one
+            // colour would draw a sixteen-row legend with fifteen hues in it
+            // and pass every other test in this file.
+            let muscles = LandmarkMuscle.allCases.map { theme.muscle[$0]!.description }
+            #expect(muscles.count == 16, "\(preset.name): the atlas is sixteen muscles")
+            #expect(Set(muscles).count == muscles.count, "\(preset.name) muscles")
         }
     }
 
