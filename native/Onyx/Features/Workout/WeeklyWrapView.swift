@@ -60,50 +60,27 @@ struct WeeklyWrapView: View {
         self.program = program
         _detent = State(initialValue: detent)
     }
-    /// Every movement of the week. Closed by default; opening it raises the sheet.
-    @State private var breakdownOpen = false
-
-    /// Off by default. A share card is the one surface in this app that leaves
-    /// the phone, and the figures on it are the user's to choose — so the
-    /// private ones are absent until asked for, which is the only default that
-    /// cannot leak something by being forgotten.
-    @State private var showBodyweight = false
-    /// The rendered card, re-made whenever the toggle changes.
-    ///
-    /// Held rather than computed in `body`: `ShareLink` needs its item up front,
-    /// and rendering a 540×960 composition on every layout pass to supply one
-    /// would re-rasterise the card every time the screen scrolls.
-    @State private var card: Image?
-    /// Which toggle state `card` was rendered for. A sheet is opened and closed
-    /// far more casually than a screen is pushed, and without this every open
-    /// pays the 18 MB rasterise again for a card nothing asked to change.
-    @State private var renderedFor: Bool?
-
-    @Environment(\.displayScale) private var displayScale
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                // LAZY, and it is load-bearing rather than an optimisation: a
-                // plain VStack builds every subview on presentation, which
-                // fires `shareSection`'s render task in the same turn that lays
-                // the sheet out. The share control is below the 560 fold by
-                // construction, so lazily is the only way it is honestly last.
-                LazyVStack(alignment: .leading, spacing: OnyxSpace.l) {
-                    headline
-                    bestsCard
-                    ringCard
-                    topThree
-                    breakdown
-                    shareSection
-                }
+                WeeklyWrapContent(
+                    summary: summary, program: program,
+                    // The legend is the half of the ring that only fits once
+                    // the sheet has been dragged up, so it follows the detent.
+                    showsLegend: detent == .large,
+                    // Both the ring and the breakdown disclosure ask for room.
+                    // Raising here and not inside the content is what lets the
+                    // same content sit inline on the Train tab, where there is
+                    // no sheet and nothing to raise.
+                    onNeedsHeight: { withAnimation(OnyxMotion.move) { detent = .large } }
+                )
                 .padding(.horizontal, OnyxSpace.l)
                 .padding(.bottom, OnyxSpace.xl)
             }
             .onyxScreen(.train)
-            .navigationTitle(title)
+            .navigationTitle(WeeklyWrapContent.title(summary))
             .navigationBarTitleDisplayMode(.inline)
             // Without this the inline bar draws its own material band over the
             // mesh the moment content scrolls under it.
@@ -124,18 +101,79 @@ struct WeeklyWrapView: View {
         // were suppressing.
         .presentationContentInteraction(.resizes)
         .preferredColorScheme(.dark)
+    }
+}
+
+/// The wrap-up's CONTENT, with no chrome of its own (W6).
+///
+/// ── WHY IT WAS SPLIT OUT OF THE SHEET ───────────────────────────────────────
+/// The Train tab grew a list of closed weeks, each row expanding IN PLACE into
+/// the same banner. "In place" rules out the sheet: it carries a
+/// `NavigationStack`, a `ScrollView` and two detents, and a scroll view inside
+/// the tab's own scroll view is the one arrangement SwiftUI will not lay out.
+/// So the chrome stayed on `WeeklyWrapView` and everything that draws a figure
+/// moved here, unchanged — the reel is a `LazyVStack` either way and neither
+/// container had an opinion about it.
+///
+/// The two hooks are what the chrome used to do for itself. A sheet answers
+/// `showsLegend` from its detent and grows on `onNeedsHeight`; the tab passes
+/// `true` and `{}`, because inline content is already at its full height.
+struct WeeklyWrapContent: View {
+    let summary: WeeklyWrap.Summary
+    let program: Program
+    var showsLegend = true
+    var onNeedsHeight: () -> Void = {}
+
+    /// Every movement of the week. Closed by default; opening it raises the sheet.
+    @State private var breakdownOpen = false
+
+    /// Off by default. A share card is the one surface in this app that leaves
+    /// the phone, and the figures on it are the user's to choose — so the
+    /// private ones are absent until asked for, which is the only default that
+    /// cannot leak something by being forgotten.
+    @State private var showBodyweight = false
+    /// The rendered card, re-made whenever the toggle changes.
+    ///
+    /// Held rather than computed in `body`: `ShareLink` needs its item up front,
+    /// and rendering a 540×960 composition on every layout pass to supply one
+    /// would re-rasterise the card every time the screen scrolls.
+    @State private var card: Image?
+    /// Which toggle state `card` was rendered for. A sheet is opened and closed
+    /// far more casually than a screen is pushed, and without this every open
+    /// pays the 18 MB rasterise again for a card nothing asked to change.
+    @State private var renderedFor: Bool?
+
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// `Week of 23 Aug` — the banner's own name for the week, and the one the
+    /// collapsed row that expands into it wears.
+    static func title(_ summary: WeeklyWrap.Summary) -> String {
+        "Week of \(Swap.shortDayLabel(summary.weekStart))"
+    }
+
+    var body: some View {
+        // LAZY, and it is load-bearing rather than an optimisation: a
+        // plain VStack builds every subview on presentation, which
+        // fires `shareSection`'s render task in the same turn that lays
+        // the sheet out. The share control is below the 560 fold by
+        // construction, so lazily is the only way it is honestly last.
+        LazyVStack(alignment: .leading, spacing: OnyxSpace.l) {
+            headline
+            bestsCard
+            ringCard
+            topThree
+            breakdown
+            shareSection
+        }
         .onChange(of: breakdownOpen) { _, open in
             // Expanding raises the sheet, so the rows arrive in the same
             // gesture that asked for them rather than one drag later.
             // Collapsing does NOT lower it: shrinking the sheet out from under
             // a thumb that just tapped "hide" is a second thing nobody asked
             // for.
-            if open { withAnimation(OnyxMotion.move) { detent = .large } }
+            if open { onNeedsHeight() }
         }
-    }
-
-    private var title: String {
-        "Week of \(Swap.shortDayLabel(summary.weekStart))"
     }
 
     // MARK: - The reel
@@ -296,8 +334,8 @@ struct WeeklyWrapView: View {
         if let muscle = summary.muscle, muscle.doneSets > 0 {
             VStack(alignment: .leading, spacing: OnyxSpace.m) {
                 Text("WHERE THE WORK WENT").onyxMicro()
-                WeeklyMuscleRing(summary: muscle, showLegend: detent == .large) {
-                    withAnimation(OnyxMotion.move) { detent = .large }
+                WeeklyMuscleRing(summary: muscle, showLegend: showsLegend) {
+                    onNeedsHeight()
                 }
                 if let session = summary.topSession, session.volumeKg > 0 {
                     Label(
@@ -461,7 +499,7 @@ struct WeeklyWrapView: View {
             if let card {
                 ShareLink(
                     item: card,
-                    preview: SharePreview(title, image: card)
+                    preview: SharePreview(Self.title(summary), image: card)
                 ) {
                     Label("Share this week", systemImage: "square.and.arrow.up")
                         .onyxType(.secondary).fontWeight(.semibold)

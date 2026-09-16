@@ -293,6 +293,11 @@ public enum Dashboard {
         var out: [String: Any] = ["v": version, surface.rawValue: side]
         let otherKey: DashboardSurface = surface == .desktop ? .phone : .desktop
         if let kept = otherSideOf(other, surface: surface) { out[otherKey.rawValue] = kept }
+        // The Train tab's own sections ride in this row too (W6, `TrainLayout`).
+        // Carried through UNPARSED, exactly like the other surface above and for
+        // the identical reason: dragging a dashboard tile must not put the Train
+        // tab's Cardio card back, and this writer has no opinion about it.
+        if let train = (other as? [String: Any])?[trainKey], !(train is NSNull) { out[trainKey] = train }
         return out
     }
 

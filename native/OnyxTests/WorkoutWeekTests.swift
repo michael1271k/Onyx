@@ -191,4 +191,148 @@ struct WorkoutWeekTests {
         await faded.refresh()
         #expect(faded.snapshot.progression.isEmpty)
     }
+
+    // MARK: - W6 · the week delta compares the same stretch
+
+    /// A week that starts on MONDAY, so "Wednesday is three days in" is
+    /// arithmetic and not an artefact of where the fixture begins.
+    /// `week_end_day == 0` (a week ending Sunday) is what `Week.startDay`
+    /// turns into a Monday start.
+    ///
+    /// The CATALOGUE is seeded too, and that is not decoration: `weekPaceKg`'s
+    /// denominator is the plan's training days, which `Schedule.isTrainingDayIn`
+    /// resolves through `routines` ROWS. A store holding only a `user_goals`
+    /// row naming `onyx5` has an empty `activeProgram`, so every day of the
+    /// week is a rest day and the projection is correctly — and uselessly —
+    /// nil. The first cut of these tests asserted against exactly that.
+    private func mondayStartStore() throws -> AppDatabase {
+        let database = try AppDatabase.inMemory(deviceId: "test")
+        PreviewCatalogue.seed(database, userId: Self.userId, today: "2026-09-09")
+        try database.editUserGoals(userId: Self.userId) { $0.weekEndDay = 0; $0.activePlan = "onyx5" }
+        return database
+    }
+
+    /// One finished session, `kg × reps` on one movement, on a given date.
+    private func seedSession(_ database: AppDatabase, id: String, date: String, kg: Double) throws {
+        let start = LogicalDay.date(fromISO: date)!
+        let user = Self.userId
+        try database.seedRows { db in
+            try WorkoutSession(id: id, userId: user, dayKey: "cb_a", date: date,
+                               startedAt: start, endedAt: start.addingTimeInterval(3600),
+                               durationMin: 60).insert(db)
+            try WorkoutSet(id: "\(id)-1", sessionId: id, exerciseId: "ex-incline",
+                           setIndex: 1, weightKg: kg, reps: 10, foldOrder: 0).insert(db)
+        }
+    }
+
+    /// THE BUG (F8). Monday morning, nothing lifted yet, and a full week
+    /// behind it — the door used to print the whole of last week as a loss.
+    @Test("the first morning of the week is nil, never the whole of last week as a negative")
+    func firstMorningIsNotACollapse() async throws {
+        let database = try mondayStartStore()
+        // Last week: Tuesday through Friday, four sessions, nothing on its Monday.
+        for (i, date) in ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04"].enumerated() {
+            try seedSession(database, id: "last-\(i)", date: date, kg: 100)
+        }
+        let monday = week(database, dayKey: "cb_a", today: "2026-09-07")
+        await monday.refresh()
+        #expect(monday.snapshot.weekTonnageKg == 0)
+        // Last Monday holds nothing either, so the matched stretch is empty on
+        // both sides: nothing to say, and certainly not −4,000 kg.
+        #expect(monday.snapshot.weekDeltaKg == nil)
+        // An empty week has no rate, so nothing to project from.
+        #expect(monday.snapshot.weekPaceKg == nil)
+    }
+
+    @Test("Wednesday compares three days against three, not three against seven")
+    func wednesdayComparesThreeDays() async throws {
+        let database = try mondayStartStore()
+        // Last week: five sessions, 1,000 kg each — 5,000 over the full week,
+        // 3,000 over its first three days.
+        for (i, date) in ["2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04"].enumerated() {
+            try seedSession(database, id: "last-\(i)", date: date, kg: 100)
+        }
+        // This week: three sessions at the same load. Level at this point.
+        for (i, date) in ["2026-09-07", "2026-09-08", "2026-09-09"].enumerated() {
+            try seedSession(database, id: "now-\(i)", date: date, kg: 100)
+        }
+        let wednesday = week(database, dayKey: "cb_a", today: "2026-09-09")
+        await wednesday.refresh()
+        #expect(wednesday.snapshot.weekTonnageKg == 3_000)
+        // The old rule subtracted all five of last week's sessions and reported
+        // −2,000 on a week that was running exactly level.
+        #expect(wednesday.snapshot.weekDeltaKg == 0)
+    }
+
+    @Test("a week with nothing behind it has no delta rather than a gain of everything")
+    func noPreviousWeekHasNoDelta() async throws {
+        let database = try mondayStartStore()
+        for (i, date) in ["2026-09-07", "2026-09-08"].enumerated() {
+            try seedSession(database, id: "now-\(i)", date: date, kg: 100)
+        }
+        let tuesday = week(database, dayKey: "cb_a", today: "2026-09-08")
+        await tuesday.refresh()
+        #expect(tuesday.snapshot.weekTonnageKg == 2_000)
+        #expect(tuesday.snapshot.weekDeltaKg == nil)
+        // The projection needs no previous week — it is this week's own rate.
+        #expect(tuesday.snapshot.weekPaceKg != nil)
+    }
+
+    /// The projection is finite and above the work done so far, and a week with
+    /// nothing in it produces none — the two states a caption may be drawn in.
+    @Test("the projection is a real number mid-week and absent on an empty one")
+    func paceNeverDividesByZero() async throws {
+        let database = try mondayStartStore()
+        try seedSession(database, id: "now-0", date: "2026-09-07", kg: 100)
+        let monday = week(database, dayKey: "cb_a", today: "2026-09-07")
+        await monday.refresh()
+        let pace = try #require(monday.snapshot.weekPaceKg)
+        #expect(pace.isFinite)
+        #expect(pace >= monday.snapshot.weekTonnageKg)
+
+        let empty = week(try mondayStartStore(), dayKey: "cb_a", today: "2026-09-07")
+        await empty.refresh()
+        #expect(empty.snapshot.weekPaceKg == nil)
+    }
+
+    // MARK: - W6 · past weeks and the arrangement
+
+    @Test("closed weeks come back newest first, and a week with a missed day still summarises")
+    func pastWeeksAreListedAndSummarise() async throws {
+        let database = try mondayStartStore()
+        // Three weeks behind this one, one session each — none of them complete
+        // under `WeeklyWrap.isWrapped`, which is the ordinary state of a log.
+        for (i, date) in ["2026-08-18", "2026-08-25", "2026-09-01"].enumerated() {
+            try seedSession(database, id: "past-\(i)", date: date, kg: 100)
+        }
+        let tab = week(database, dayKey: "cb_a", today: "2026-09-09")
+        await tab.refresh()
+        let weeks = tab.snapshot.pastWeeks
+        #expect(weeks.map(\.weekStart) == ["2026-08-31", "2026-08-24", "2026-08-17"])
+        #expect(weeks.allSatisfy { $0.sessions == 1 })
+        #expect(weeks[0].tonnageKg == 1_000)
+        // The row expands into a summary even though the week missed four of
+        // its five planned days — `isWrapped` is about the CURRENT week.
+        #expect(await tab.pastSummary(weekStart: "2026-08-31") != nil)
+    }
+
+    @Test("hiding a section survives a re-read, and costs the dashboard nothing")
+    func customizeRoundTrips() async throws {
+        let database = try mondayStartStore()
+        try database.saveDashboardLayout(userId: database.localUserId(), Dashboard.defaultLayout(.phone))
+        let tab = week(database, dayKey: "cb_a", today: "2026-09-09")
+        await tab.refresh()
+        #expect(tab.snapshot.trainLayout == .default)
+
+        tab.setTrainSection(.cardio, visible: false)
+        #expect(!tab.snapshot.trainLayout.shows(.cardio))
+
+        let reread = week(database, dayKey: "cb_a", today: "2026-09-09")
+        await reread.refresh()
+        #expect(reread.snapshot.trainLayout.hidden == [.cardio])
+        // That the dashboard in the same row survives a Train write is
+        // `DashboardLayoutStoreTests.trainAndDashboardShareTheRow`'s claim,
+        // where the stored JSON is reachable.
+    }
+
 }
