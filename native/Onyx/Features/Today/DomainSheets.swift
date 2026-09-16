@@ -646,6 +646,29 @@ struct StackEditSheet: View {
                         guard let f = from.first else { return }
                         model.reorderFace(slotId, from: f, to: to > f ? to - 1 : to)
                     }
+                    // ── CONNECTED (W7, A9) ──────────────────────────────────
+                    // In its own section, under the faces, because it is a
+                    // property of the STACK and the rows above are its
+                    // contents. The footer says what it does in the same
+                    // register `TileMenu` says the verbs — a switch labelled
+                    // "Connected" with nothing under it is a setting people
+                    // toggle once to find out and never touch again.
+                    Section {
+                        Toggle(isOn: Binding(
+                            get: { slot.linked },
+                            set: { model.setLinked(slotId, $0) }
+                        )) {
+                            Label("Connected", systemImage: "link")
+                                .foregroundStyle(Color.onyx.textPrimary)
+                        }
+                        // The system green is the one colour on this sheet that
+                        // is nobody's token. Recover's accent is the ground the
+                        // Today tab stands on and the hue the stack's own tiles
+                        // already wear.
+                        .tint(OnyxDomain.recover.accent)
+                    } footer: {
+                        Text("Connected stacks share one window: they all turn over on the same beat instead of drifting apart.")
+                    }
                 } else {
                     Text("This stack is a single tile now.").foregroundStyle(Color.onyx.textSecondary)
                 }

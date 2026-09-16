@@ -1,0 +1,102 @@
+{
+  "module": "coach/CoachSentence",
+  "fn": "sentence",
+  "note": "W7 (2026-09-16). Hand-computed, one case per branch of the rule table plus the boundary of every cut it reads. The table is ordered and first-match-wins, so the precedence cases matter as much as the branches: several inputs below trip two rules and pin which one speaks. Thresholds are borrowed — acwrOnset 1.3 and acwrSaturation 2.0 from Readiness.constants, the 2 h / 5 h debt bands from SleepDebt.band, 30 / 60 from the battery's own colour cuts.",
+  "cases": [
+    {
+      "name": "nothing is known yet",
+      "input": {},
+      "expected": "Nothing is known about today yet."
+    },
+    {
+      "name": "a flat battery outranks a spiking load",
+      "input": { "batteryPct": 22, "acwr": 2.5, "stress": "high", "sleepDebtHours": 9 },
+      "expected": "Battery 22%. Rest day needed."
+    },
+    {
+      "name": "30 is not low — the cut is strict",
+      "input": { "batteryPct": 30 },
+      "expected": "Battery 30%. Train light today."
+    },
+    {
+      "name": "a spiking load outranks overreached stress",
+      "input": { "batteryPct": 70, "acwr": 2.1, "stress": "overreached" },
+      "expected": "Load is spiking at 2.10. Hold the week where it is."
+    },
+    {
+      "name": "saturation itself is spiking",
+      "input": { "batteryPct": 70, "acwr": 2.0 },
+      "expected": "Load is spiking at 2.00. Hold the week where it is."
+    },
+    {
+      "name": "overreached, with the load in band",
+      "input": { "batteryPct": 70, "acwr": 1.0, "stress": "overreached" },
+      "expected": "Stress is overreached. Train light and sleep early."
+    },
+    {
+      "name": "oxide debt outranks high stress",
+      "input": { "batteryPct": 70, "stress": "high", "sleepDebtHours": 6.4 },
+      "expected": "6.4 h of sleep debt. Bank an early night before anything heavy."
+    },
+    {
+      "name": "a whole number of hours drops its decimal",
+      "input": { "batteryPct": 70, "sleepDebtHours": 6 },
+      "expected": "6 h of sleep debt. Bank an early night before anything heavy."
+    },
+    {
+      "name": "onset itself is climbing",
+      "input": { "batteryPct": 70, "acwr": 1.3 },
+      "expected": "Load is climbing at 1.30. Keep this week flat."
+    },
+    {
+      "name": "climbing outranks high stress",
+      "input": { "batteryPct": 70, "acwr": 1.45, "stress": "high" },
+      "expected": "Load is climbing at 1.45. Keep this week flat."
+    },
+    {
+      "name": "high stress, with the load in band",
+      "input": { "batteryPct": 70, "acwr": 1.1, "stress": "high" },
+      "expected": "Stress is high. Keep the session short and finish it."
+    },
+    {
+      "name": "a middling battery outranks the gold debt behind it",
+      "input": { "batteryPct": 47, "sleepDebtHours": 3.2 },
+      "expected": "Battery 47%. Train light today."
+    },
+    {
+      "name": "gold debt on a day that is otherwise fine",
+      "input": { "batteryPct": 72, "sleepDebtHours": 3.2 },
+      "expected": "3.2 h of sleep debt is the only thing behind. Train as planned."
+    },
+    {
+      "name": "five hours is still gold — the band's cut is inclusive",
+      "input": { "batteryPct": 72, "sleepDebtHours": 5 },
+      "expected": "5 h of sleep debt is the only thing behind. Train as planned."
+    },
+    {
+      "name": "two hours is ember, and ember says nothing of its own",
+      "input": { "batteryPct": 72, "sleepDebtHours": 2 },
+      "expected": "Battery 72% and nothing is behind. Train hard."
+    },
+    {
+      "name": "everything known is in band",
+      "input": { "batteryPct": 78, "acwr": 1.05, "stress": "calm", "sleepDebtHours": 1.1 },
+      "expected": "Battery 78% and nothing is behind. Train hard."
+    },
+    {
+      "name": "60 is good — the cut is inclusive",
+      "input": { "batteryPct": 60 },
+      "expected": "Battery 60% and nothing is behind. Train hard."
+    },
+    {
+      "name": "a stress reading before the day has been scored",
+      "input": { "stress": "baseline" },
+      "expected": "Nothing is flagged today."
+    },
+    {
+      "name": "a load reading before the day has been scored",
+      "input": { "acwr": 1.1 },
+      "expected": "Nothing is flagged today."
+    }
+  ]
+}

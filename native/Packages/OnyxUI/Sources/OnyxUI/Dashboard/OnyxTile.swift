@@ -52,6 +52,11 @@ public extension WidgetId {
         case .cardio: "Cardio"
         case .stack: "Stack"
         case .fatigue: "Fatigue"
+        // Not "Daily": the Home Screen already has a widget kind by that name
+        // (`OnyxDaily`, the 2x2 ledger) and two things called Daily on one
+        // phone is a gallery you cannot choose from. This one is the whole day
+        // as one shape, so it is called what it draws.
+        case .daily: "Day Rings"
         }
     }
 
@@ -59,7 +64,12 @@ public extension WidgetId {
     /// onto the four domains.
     var domain: OnyxDomain {
         switch self {
-        case .recovery, .sleep, .vitals, .fatigue: .recover
+        // `daily` spans all four domains by construction — that is the point
+        // of it — so it takes Recover's, the ground the Today tab already
+        // stands on (`TodayTabView.onyxScreen(.recover)`). A tile that belongs
+        // to every domain has to wear ONE, and the screen's own is the only
+        // one that does not claim a winner.
+        case .recovery, .sleep, .vitals, .fatigue, .daily: .recover
         case .fuel, .water, .micros, .deficit, .stack: .fuel
         case .train, .bar, .muscle, .volume, .pr, .consistency: .train
         case .body, .steps, .cardio, .trajectory: .body
@@ -87,6 +97,7 @@ public extension WidgetId {
         case .cardio: "heart.fill"
         case .stack: "pills.fill"
         case .fatigue: "battery.25percent"
+        case .daily: "circle.circle"
         }
     }
 
@@ -148,6 +159,7 @@ public enum OnyxTile {
         case .cardio: TrainingView(entry: entry, focus: .cardio)
         case .deficit: DeficitLedgerView(entry: entry)
         case .fatigue: FatigueStackView(entry: entry)
+        case .daily: MegaView(entry: entry)
         case .bar, .micros, .stack:
             TileNote(caption: id.title.uppercased(), text: "No face for this one yet.")
         }

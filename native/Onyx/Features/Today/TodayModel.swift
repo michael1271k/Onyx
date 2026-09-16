@@ -24,6 +24,25 @@ final class TodayModel {
     let userId: String
 
     private(set) var layout: DashboardLayout = Dashboard.defaultLayout(.phone)
+    /// Whether the layout on this object came from the STREAM rather than from
+    /// the field initialiser above.
+    ///
+    /// ── THE LAYOUT WAS NEVER LOST; IT WAS OVERWRITTEN (W7, F9) ──────────────
+    /// `dashboard_layouts` has been synced both ways, keyed `user_id`, since
+    /// the grid shipped — so "the dashboard forgets itself on a reinstall" was
+    /// never a missing write. It is this: the field above starts at
+    /// `Dashboard.defaultLayout(.phone)` because the screen has to draw
+    /// something before the first `ValueObservation` yield, and the first yield
+    /// is a database round trip AFTER the first frame. Any edit made in that
+    /// window — and an edit is one drag, which `Arrangeable` will happily start
+    /// the moment the grid appears — called `apply(_:)` on a layout derived
+    /// from the DEFAULT, and `saveDashboardLayout` wrote it over the real row
+    /// and enqueued the outbox upsert. The pull then arrived and was
+    /// immediately correct about a row the app had just destroyed.
+    ///
+    /// The gate is one flag and it is on the WRITE, not on the read: drawing a
+    /// default before the row lands is right, and saving one is never right.
+    private var hasLoaded = false
     private(set) var feed: TodayFeed?
     private(set) var failure: String?
 
@@ -41,7 +60,9 @@ final class TodayModel {
         self.userId = userId
         self.seededFeed = feed
         self.feed = feed
-        if let layout { self.layout = layout }
+        // A seeded layout is a load: the shot harness and the previews hand one
+        // in and then arrange it, and there is no stream behind them to yield.
+        if let layout { self.layout = layout; hasLoaded = true }
     }
 
     // MARK: - Reading
@@ -60,6 +81,11 @@ final class TodayModel {
         do {
             for try await stored in database.dashboardLayoutStream(userId: userId) {
                 layout = stored?.layout ?? Dashboard.defaultLayout(.phone)
+                // A device with no row yields `nil` — which is a LOAD. The
+                // athlete's first drag on a fresh install has to be savable,
+                // and "the stream answered" is the fact the gate needs, not
+                // "the answer was non-empty".
+                hasLoaded = true
             }
         } catch {
             if !(error is CancellationError) { failure = "The layout could not be read on this device." }
@@ -120,7 +146,7 @@ final class TodayModel {
     static func projectNative(_ slots: [StackSlot]) -> [StackSlot] {
         slots.compactMap { s in
             let items = s.items.filter(\.isNative)
-            return items.isEmpty ? nil : StackSlot(id: s.id, size: s.size, items: items)
+            return items.isEmpty ? nil : StackSlot(id: s.id, size: s.size, items: items, linked: s.linked)
         }
     }
 
@@ -208,8 +234,20 @@ final class TodayModel {
         apply(Dashboard.addWidget(layout, id))
     }
 
+    /// Connect a stack, or disconnect it (W7, A9).
+    func setLinked(_ slotId: String, _ linked: Bool) {
+        apply(Dashboard.setLinked(layout, slotId: slotId, linked))
+    }
+
     private func apply(_ next: DashboardLayout) {
-        guard next != layout else { return }
+        // ── NEVER PUSH A LAYOUT THIS OBJECT HAS NOT READ ────────────────────
+        // See `hasLoaded`. The edit is refused outright rather than applied
+        // locally and saved later: applying it would move the tiles under a
+        // stream that is about to yield the real arrangement and move them
+        // back, which is a grid that undoes a drag a fraction of a second
+        // after it lands. The window is one database round trip on first
+        // appearance.
+        guard hasLoaded, next != layout else { return }
         layout = next
         do {
             try database.saveDashboardLayout(userId: userId, next)

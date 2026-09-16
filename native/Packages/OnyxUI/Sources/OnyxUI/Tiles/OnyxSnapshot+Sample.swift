@@ -225,7 +225,15 @@ public extension OnyxSnapshot {
       deficit: deficit,
       trajectory: trajectory,
       batteryStack: batteryStack,
-      bodyComp: bodyComp)
+      bodyComp: bodyComp,
+      // RUN, never typed out. A hand-written sentence in the fixture is a
+      // second author for the one string the Mega tile draws, and it would go
+      // on photographing a line the rule table had stopped producing. The
+      // inputs are the sample's own: a 72 % battery with three hours of sleep
+      // debt behind it, which is the table's "the only thing behind" branch —
+      // the most useful one to have a picture of, because it is the one that
+      // has to fit two lines under the rings.
+      coach: CoachSentence.sentence(CoachSentence.Inputs(batteryPct: 72, sleepDebtHours: 3.2)))
   }()
 
   /// The same fixture with every W12 series removed, and the muscle split with
@@ -279,7 +287,7 @@ public extension OnyxSnapshot {
       calendar: s.calendar, volumeTrend: s.volumeTrend, body: s.body, scores: s.scores,
       readiness: s.readiness, vitals: s.vitals,
       consistency: s.consistency, deficit: s.deficit, trajectory: s.trajectory,
-      batteryStack: s.batteryStack, bodyComp: s.bodyComp)
+      batteryStack: s.batteryStack, bodyComp: s.bodyComp, coach: s.coach)
   }()
 }
 

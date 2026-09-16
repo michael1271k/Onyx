@@ -1,7 +1,7 @@
 {
   "module": "dashboard/layout",
   "fn": "defaultLayout",
-  "note": "One slot per catalogue widget, in catalogue order, id sl-<widget>, nothing hidden, updatedAt 0.",
+  "note": "One slot per catalogue widget, in catalogue order, id sl-<widget>, nothing hidden, updatedAt 0. W7: `reconcile` appends `daily` last in every case.",
   "cases": [
     {
       "name": "phone",
@@ -141,6 +141,13 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],
@@ -286,6 +293,13 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-daily",
+            "size": "l",
+            "items": [
+              "daily"
             ]
           }
         ],

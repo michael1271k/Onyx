@@ -42,6 +42,14 @@ public struct TodayFeed: Sendable, Equatable {
     /// Last week's start, for the CTA's destination.
     public var lastWeekStart: String
 
+    /// The Mega Widget's sentence (W7) — the payload's, not a second one.
+    ///
+    /// Computed and not stored, for the reason `volumeByFamily` is: the tile
+    /// on the Home Screen reads `snapshot.coach` and the tile in this grid
+    /// reads the same field through the same snapshot. A second copy on this
+    /// struct is a second thing that can go stale.
+    public var coach: String? { snapshot.coach }
+
     public init(snapshot: OnyxSnapshot, readiness: ReadinessResult?, goalBoard: GoalBoard, weekSoFar: WeekSoFarSummary, weeklySummaryReady: Bool, lastWeekStart: String, muscleFocus: MuscleFocusSummary = MuscleFocusSummary()) {
         self.snapshot = snapshot
         self.readiness = readiness

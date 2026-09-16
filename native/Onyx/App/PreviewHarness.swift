@@ -442,7 +442,10 @@ enum PreviewHarness {
             .environment(AppEnvironment.preview)
         case "today", "today-edit", "today-sheet", "today-sheet-vitals",
              "today-sheet-steps", "today-sheet-muscle", "today-sheet-records",
-             "today-weighin", "today-board":
+             "today-weighin", "today-board",
+             // W7: the Mega Widget, a connected stack, and the jiggle as a
+             // reader who has turned motion off sees it.
+             "today-mega", "today-stack-linked", "today-edit-still":
             TodayPreviews.view(screen)
         case "history", "history-week", "history-week-live", "history-week-wrapped",
              "history-week-wrap-open", "session", "session-ledger", "exercise-history",

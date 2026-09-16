@@ -290,6 +290,37 @@ public struct WidgetSnapshotBuilder: Sendable {
         let batteryStack: [BatteryStackDay]? = wantsBody
             ? try batteryStackSlice(rows, date: date, now: now, calendar: calendar)
             : nil
+        // ── The W7 sentence ───────────────────────────────────────────────
+        // One line, resolved here so the Home Screen and the Today grid say
+        // the same thing (`OnyxSnapshot.coach`'s header). `stressInputs` is
+        // the one read that carries BOTH remaining dimensions — it already
+        // folds `Readiness.signals` for the ACWR and the day's own rows for
+        // the index — so the sentence costs one extra query, not four.
+        //
+        // The debt comes off `ledgerLogs`, which the ledger and the
+        // consistency grid have already read: eight weeks of `daily_logs`,
+        // narrowed here to the bank's own fortnight. No read of its own.
+        let coach: String? = wantsBody ? {
+            let stress = try? database.stressInputs(userId: userId, date: date)
+            let debtFrom = ISODate.addDays(date, -(SleepDebt.windowDays - 1)) ?? date
+            // Fewer than three nights is too little history to be honest about
+            // debt — the same floor `PulseModel.sleepDebt` applies, and for the
+            // same reason: one short night in a window of one is not a bank.
+            let bank = SleepDebt.compute(
+                nights: rows.ledgerLogs
+                    .filter { $0.date >= debtFrom && $0.date <= date }
+                    .map { SleepDebtNight(date: $0.date, sleepMinutes: $0.sleepMinutes.map(Double.init)) },
+                goalHours: goals?.sleepGoalHours ?? 8,
+                weekAgo: ISODate.addDays(date, -7) ?? date
+            )
+            return CoachSentence.sentence(CoachSentence.Inputs(
+                batteryPct: battery.map(Double.init),
+                acwr: stress?.acwr,
+                stress: stress.flatMap { Stress.breakdown($0).band },
+                sleepDebtHours: bank.nights >= 3 ? bank.debtHours : nil
+            ))
+        }() : nil
+
         let bodyComp: [BodyCompMetric]? = wantsBody
             ? BodyCompSeries.build(
                 bodyReadings.map {
@@ -409,7 +440,8 @@ public struct WidgetSnapshotBuilder: Sendable {
             deficit: deficit,
             trajectory: trajectory,
             batteryStack: batteryStack,
-            bodyComp: bodyComp
+            bodyComp: bodyComp,
+            coach: coach
         )
     }
 

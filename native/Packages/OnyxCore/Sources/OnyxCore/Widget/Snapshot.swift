@@ -602,7 +602,25 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
   /// Body scope. Four composition metrics and their own spans.
   public let bodyComp: [BodyCompMetric]?
 
-  public init(date: String, generatedAt: String, scope: String? = nil, battery: Int? = nil, score: Int? = nil, sleep: Sleep, weight: Weight, macros: Macros, water: Water, steps: Steps, workout: Workout, week: Week, weekPrev: WeekTotals? = nil, records: [Record]? = nil, e1rm: [E1rm]? = nil, muscleFocus: [MuscleVolume]? = nil, today: Today? = nil, streak: Streak? = nil, context: DayContext? = nil, cardio: Cardio? = nil, calendar: [CalendarDay]? = nil, volumeTrend: [Point]? = nil, body: Body? = nil, scores: Scores? = nil, readiness: Readiness? = nil, vitals: Vitals? = nil, consistency: Consistency? = nil, deficit: DeficitLedger? = nil, trajectory: Trajectory? = nil, batteryStack: [BatteryStackDay]? = nil, bodyComp: [BodyCompMetric]? = nil) {
+  // ── The W7 sentence ────────────────────────────────────────────────────────
+  //
+  /// The Mega Widget's line — `CoachSentence.sentence`, resolved by the
+  /// builder rather than by the face.
+  ///
+  /// ── WHY THE STRING AND NOT ITS FOUR INPUTS ─────────────────────────────────
+  /// The rule table is pure and lives in `Coach/CoachSentence.swift`, so a face
+  /// COULD run it. Two reasons it does not. The inputs are not all in this
+  /// payload — the stress band and the ACWR are a `stressInputs` read, and
+  /// putting four scalars here to be folded into one line by every host is four
+  /// fields where one is enough. And the sentence is the thing the app and the
+  /// Home Screen have to agree on: one resolution, written once, is the same
+  /// argument `volumeByFamily`'s header makes against a second accumulator.
+  ///
+  /// Nil on a payload built before W7, and on any scope that does not resolve
+  /// the battery. The face draws nothing rather than a blank line.
+  public let coach: String?
+
+  public init(date: String, generatedAt: String, scope: String? = nil, battery: Int? = nil, score: Int? = nil, sleep: Sleep, weight: Weight, macros: Macros, water: Water, steps: Steps, workout: Workout, week: Week, weekPrev: WeekTotals? = nil, records: [Record]? = nil, e1rm: [E1rm]? = nil, muscleFocus: [MuscleVolume]? = nil, today: Today? = nil, streak: Streak? = nil, context: DayContext? = nil, cardio: Cardio? = nil, calendar: [CalendarDay]? = nil, volumeTrend: [Point]? = nil, body: Body? = nil, scores: Scores? = nil, readiness: Readiness? = nil, vitals: Vitals? = nil, consistency: Consistency? = nil, deficit: DeficitLedger? = nil, trajectory: Trajectory? = nil, batteryStack: [BatteryStackDay]? = nil, bodyComp: [BodyCompMetric]? = nil, coach: String? = nil) {
     self.date = date
     self.generatedAt = generatedAt
     self.scope = scope
@@ -634,6 +652,7 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
     self.trajectory = trajectory
     self.batteryStack = batteryStack
     self.bodyComp = bodyComp
+    self.coach = coach
   }
 }
 
