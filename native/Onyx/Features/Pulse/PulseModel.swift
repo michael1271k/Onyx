@@ -884,7 +884,7 @@ final class DayModel {
     /// The optimistic row is keyed on the side too, so rating a left glute does
     /// not silently overwrite the right one under the thumb.
     func setDoms(_ muscle: String, severity: Int, side: BodySide = .both) {
-        let stored = side.stored
+        let stored = side.stored  // always the word: the column is NOT NULL
         // Spelling-tolerant, like the store's own lookup: a row the web era
         // wrote as `('both','')` is the row this re-rates (`DomsRow.swift`).
         if let i = doms.firstIndex(where: {
@@ -895,8 +895,8 @@ final class DayModel {
             // The id carries the side: two optimistic rows both called "local"
             // are two rows the next reload cannot tell apart.
             doms.append(DomsLogRow(
-                id: "local-\(muscle)-\(stored ?? "both")", userId: userId, date: date,
-                muscleGroup: muscle, severity: severity, side: stored
+                id: "local-\(muscle)-\(stored)", userId: userId, date: date,
+                muscleGroup: muscle, severity: severity, side: stored, subRegion: ""
             ))
         }
         write { [database, userId, date] in

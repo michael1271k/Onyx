@@ -150,7 +150,7 @@ public struct WeeklyExportBuilder: Sendable {
                     // name, but only one of them survives a round trip through
                     // `ExportDoms` as the same value. The document must not
                     // depend on which era wrote the row.
-                    "side": j(r.bodySide.stored), "subRegion": j(r.subRegionName),
+                    "side": j(r.bodySide.exported), "subRegion": j(r.subRegionName),
                 ])
             }
         // Side and sub-region join the sort key because they are now part of

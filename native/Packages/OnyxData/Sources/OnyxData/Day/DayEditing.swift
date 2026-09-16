@@ -339,11 +339,12 @@ public extension AppDatabase {
         source: (sessionId: String, dayKey: String?)? = nil, now: Date = Date()
     ) throws {
         let storedSide = side.stored
-        let storedSubRegion = DomsLogRow.normalise(subRegion)
+        let storedSubRegion = DomsLogRow.canonical(subRegion: subRegion)
         try writer.write { db in
-            // The match is spelling-tolerant, the WRITE is not: a row the web
-            // era spelled `('both','')` is found and updated in place, and a row
-            // this app mints spells absence as NULL. See `DomsRow.swift`.
+            // The match is spelling-tolerant, the WRITE is canonical: a row an
+            // earlier build spelled `(nil, nil)` is found and updated in place,
+            // and a row this app mints always says `'both'` / `''` — which is
+            // what the server's NOT NULL columns require. See `DomsRow.swift`.
             var row = try DomsLogRow
                 .filter(Column("user_id") == userId && Column("date") == date
                         && Column("muscle_group") == muscleGroup

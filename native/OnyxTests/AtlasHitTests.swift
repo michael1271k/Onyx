@@ -208,11 +208,16 @@ struct OnyxAtlasHitTests {
     /// what the database column holds; `BodySide.rawValue` is what the app
     /// writes into it. A rename on either side without the other is a rating
     /// that round-trips as `both` forever, silently.
-    @Test("BodySide is the stored vocabulary, and both means absent")
+    @Test("BodySide is the stored vocabulary, and both is a word the column holds")
     func sideVocabulary() {
         #expect(BodySide.allCases.map(\.rawValue) == DomsMuscles.sides)
-        #expect(BodySide.both.stored == nil)
+        // STORED is the word, because the column is NOT NULL on the server.
+        #expect(BodySide.both.stored == "both")
         #expect(BodySide.left.stored == "left" && BodySide.right.stored == "right")
+        // EXPORTED is the absence, because the document's grammar spells a
+        // bilateral rating with no marker. Two questions, two answers.
+        #expect(BodySide.both.exported == nil)
+        #expect(BodySide.left.exported == "left" && BodySide.right.exported == "right")
         #expect(BodySide(stored: nil) == .both)
         #expect(BodySide(stored: "both") == .both)
         #expect(BodySide(stored: "sideways") == .both)

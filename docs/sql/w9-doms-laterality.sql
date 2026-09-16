@@ -1,72 +1,53 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- W9 · The body has two sides — `doms_logs` grows `side` and `sub_region`
+-- W9 · The body has two sides — `doms_logs` learns to hold a left and a right
 --
 -- Paste this into the Supabase SQL editor. Nothing in the repo can apply it:
 -- this machine holds no service-role key and there is no staging database.
 --
--- Safe to run twice. Every statement is `if not exists` / `if exists`, and the
--- one destructive line drops a UNIQUE KEY that the new index replaces exactly.
+-- Safe to run twice, and safe to run on a table that has already had it.
 --
--- ── WHAT IT CHANGES, AND WHY EACH PART ───────────────────────────────────────
+-- ── WHAT WAS ACTUALLY WRONG, AND IT WAS NOT THE COLUMNS ──────────────────────
+-- The plan said `doms_logs` had no `side` and no `sub_region`. It has both: the
+-- retired web app added them, declared them NOT NULL, and spelled "the whole
+-- muscle, both sides" as `side = 'both'` / `sub_region = ''`.
 --
---   1. Two nullable text columns. NULL is the pre-W9 meaning: `side` NULL is
---      "both", `sub_region` NULL is "the whole muscle". NOT NULL with a default
---      was the other option and was rejected — it would rewrite every existing
---      row's payload, and the app relies on a nil column being OMITTED from the
---      push body (`encodeIfPresent`) so that a bilateral rating's request and
---      its export token stay byte-identical to what v1 sent.
+-- So the columns were never the problem. The problem is the UNIQUE KEY over
+-- `(user_id, date, muscle_group)`, which allows exactly one rating per muscle
+-- per day — a left glute and a right glute collide on insert no matter what the
+-- other two columns say. That key is what this file replaces.
 --
---   2. The old unique key over `(user_id, date, muscle_group)` goes. It is the
---      one thing making laterality impossible: with it in place a left glute
---      and a right glute collide on insert no matter what the new columns say.
+-- ── THE SPELLING THIS FILE SETTLES ───────────────────────────────────────────
+-- `'both'` and `''` are the canonical values, because that is what the table
+-- already holds and what its NOT NULL constraints already require. The native
+-- app has been changed to write the same, so there is ONE spelling of "the whole
+-- muscle, both sides" everywhere: in Postgres, in the phone's local store, on
+-- the wire and in the export.
 --
---   3. A wider unique index, `NULLS NOT DISTINCT`.
+-- This matters more than it looks. A unique index treats `('both','')` and
+-- `(NULL, NULL)` as DIFFERENT keys, so two spellings would mean re-rating a
+-- muscle the web app had already rated INSERTS a second row beside the first
+-- rather than updating it — one muscle, one day, two ratings, forever. Anything
+-- in the table that does not already read as `left` or `right` is therefore
+-- normalised to `'both'`, and an absent or blank sub-region to `''`.
 --
---      ⚠ `NULLS NOT DISTINCT` needs Postgres 15 or newer. Supabase has shipped
---        15+ on every new project since 2023; if this line errors with a syntax
---        error near `NULLS`, the project predates that and needs a Postgres
---        upgrade before the rest of this file is meaningful.
---
---      Postgres treats NULLs as DISTINCT in a unique index by default, so
---      without this clause every legacy row (side NULL) would be unique against
---      every other legacy row — the constraint would not constrain, and, worse,
---      `ON CONFLICT` would never fire for a bilateral rating, so each re-rating
---      of a whole muscle would INSERT a second row instead of updating the
---      first. The clause is what lets absence keep meaning "both" instead of
---      meaning "a value nobody can match".
---
---      It is a plain column list and not an expression index over
---      `coalesce(side,'both')` for a mechanical reason: PostgREST's
---      `?on_conflict=` takes COLUMN NAMES and emits `ON CONFLICT (a, b, c)`. It
---      cannot spell a `coalesce(...)`, so an expression index would be
---      unreachable from the client and every upsert would fail outright with
---      "no unique or exclusion constraint matching the ON CONFLICT
---      specification".
---
---   4. Two CHECK constraints, so a row that reaches the scoring fold is one the
---      fold can read. `side` is the three words `DomsMuscles.sides` knows;
---      `sub_region` is non-empty when present, because `''` and NULL would
---      otherwise be two spellings of "the whole muscle" and the unique index
---      would let both exist for one muscle.
+-- Because both columns end up NOT NULL, the new index needs no `NULLS NOT
+-- DISTINCT` and this file has no Postgres 15 requirement.
 --
 -- ── WHAT IT DOES NOT DO ──────────────────────────────────────────────────────
--- No backfill, and none is needed: every existing row is a whole-muscle
--- bilateral rating, which is exactly what NULL already says. No rescore either
--- — the scoring fold takes the MAX within a muscle, so splitting a rating into
--- a left and a right cannot move a battery a single row at the same peak did
--- not already move.
+-- It never deletes a row on its own. If two ratings would collapse onto one key
+-- it stops, rolls back, and points at a query that shows you what is involved.
+--
+-- No rescore is needed either: the scoring fold takes the MAX within a muscle,
+-- so splitting a rating into a left and a right cannot move a battery that a
+-- single row at the same peak did not already move.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 begin;
 
--- 1 ── The columns.
+-- 1 ── The columns, for a database that somehow does not have them.
+--      On the live table both of these are no-ops.
 alter table public.doms_logs add column if not exists side       text;
 alter table public.doms_logs add column if not exists sub_region text;
-
-comment on column public.doms_logs.side is
-  'both | left | right. NULL means both — the pre-W9 meaning of an absent column.';
-comment on column public.doms_logs.sub_region is
-  'Traps, Erectors, Adductors, … NULL means the whole muscle. Record-only: nothing in the scoring path reads it.';
 
 -- 2 ── The old key, whatever shape it was declared in.
 --
@@ -77,25 +58,15 @@ comment on column public.doms_logs.sub_region is
 -- dropped with it, and the second loop skips constraint-backed indexes, so
 -- nothing is dropped twice.
 --
--- The first draft of this block compared `array_agg(a.attname)` against
--- `array['date', …]` and failed with
---
---   ERROR: 42883: operator does not exist: name[] = text[]
---
--- because `pg_attribute.attname` is `name`, not `text`, and Postgres has no
--- equality operator between those two array types. The whole transaction rolled
--- back, so nothing had been applied — which is the one good thing about putting
--- it all inside `begin`/`commit`.
---
--- Rather than bolt a `::text` onto it, both loops now COUNT matching columns
--- instead of comparing arrays. A count has no composite type to get wrong, it
--- does not care what order the columns were declared in, and pairing it with a
--- key-width check is exactly as precise as set equality was meant to be.
+-- Both loops COUNT matching columns rather than comparing arrays. An earlier
+-- draft compared `array_agg(a.attname)` against `array['date', …]` and failed
+-- with `ERROR: 42883: operator does not exist: name[] = text[]`, because
+-- `pg_attribute.attname` is `name` and not `text`. A count has no composite
+-- type to get wrong and does not care what order the columns were declared in.
 --
 -- The index loop also avoids `unnest(x.indkey)`: `indkey` is an `int2vector`,
 -- which is not an array type, so `unnest()` — declared over `anyarray` — does
--- not resolve against it. Its text form is space-separated numbers, and
--- `string_to_array` turns that into a real array on every server version.
+-- not resolve against it. Its text form is space-separated numbers.
 do $$
 declare
   target text;
@@ -137,28 +108,14 @@ begin
   end loop;
 end $$;
 
--- 2.5 ── ONE SPELLING OF "THE WHOLE MUSCLE, BOTH SIDES".
+-- 3 ── One spelling, and then the constraints that keep it.
 --
--- The retired web app already added these two columns, and it spelled a
--- whole-muscle bilateral rating as `side = 'both'` / `sub_region = ''`
--- (`scripts/src/subRegions.ts`: *"`''` is that answer's stored sub-region"*).
--- The native app spells the same thing as NULL in both columns, because a nil
--- is what `encodeIfPresent` leaves OUT of a push body — which is what keeps a
--- bilateral rating byte-identical on the wire and in the export to what shipped
--- before laterality existed.
---
--- Two spellings of one meaning is not a cosmetic problem. The unique index
--- below treats `('both','')` and `(NULL,NULL)` as DIFFERENT keys, so re-rating
--- a muscle the web had already rated would INSERT a second row beside the first
--- instead of updating it, and the day would hold two ratings of one muscle
--- forever. So the history is normalised onto the app's spelling, once, here.
---
--- `'both'` and `''` are not the only things collapsed: anything that does not
--- resolve to `left` or `right` becomes NULL, which is exactly the rule
--- `BodySide(stored:)` applies in Swift — an unreadable side must not be able to
--- claim a half of the body, and "the whole muscle" is the only answer that
--- cannot be wrong about which half hurts. Whatever it collapsed is RAISEd, so
--- nothing disappears quietly.
+-- `left` and `right` survive, case- and whitespace-insensitively. EVERYTHING
+-- else becomes `'both'` — including NULL, including a value nobody can explain.
+-- That is the rule `BodySide(stored:)` applies in Swift, and it is the safe
+-- direction: an unreadable side must not be able to claim a half of the body,
+-- and "the whole muscle" is the only answer that cannot be wrong about which
+-- half hurts. Whatever it collapsed is reported, so nothing goes quietly.
 do $$
 declare
   found_sides text;
@@ -166,23 +123,23 @@ declare
   moved_sub   bigint;
   collisions  bigint;
 begin
-  select string_agg(distinct quote_literal(side), ', ')
+  select string_agg(distinct coalesce(quote_literal(side), 'NULL'), ', ')
     into found_sides
     from public.doms_logs
-   where side is not null and lower(btrim(side)) not in ('left', 'right');
+   where side is null or lower(btrim(side)) not in ('left', 'right', 'both');
   if found_sides is not null then
-    raise notice 'normalising these side values to NULL (= both): %', found_sides;
+    raise notice 'normalising these side values to ''both'': %', found_sides;
   end if;
 
   update public.doms_logs
-     set side = case lower(btrim(side)) when 'left' then 'left' when 'right' then 'right' end
+     set side = case lower(btrim(side)) when 'left' then 'left' when 'right' then 'right' else 'both' end
    where side is distinct from
-         (case lower(btrim(side)) when 'left' then 'left' when 'right' then 'right' end);
+         (case lower(btrim(side)) when 'left' then 'left' when 'right' then 'right' else 'both' end);
   get diagnostics moved_side = row_count;
 
   update public.doms_logs
-     set sub_region = nullif(btrim(sub_region), '')
-   where sub_region is distinct from nullif(btrim(sub_region), '');
+     set sub_region = coalesce(btrim(sub_region), '')
+   where sub_region is distinct from coalesce(btrim(sub_region), '');
   get diagnostics moved_sub = row_count;
 
   raise notice 'normalised % side value(s) and % sub_region value(s)', moved_side, moved_sub;
@@ -191,9 +148,9 @@ begin
   -- enforcing one row per muscle per day. Where it was, every row for a
   -- (user, date, muscle) is already the only one, so collapsing its side and
   -- sub-region cannot meet a twin. Checked rather than assumed, because the
-  -- index below would fail with a duplicate-key error that names a row and not
-  -- a cause — and because the alternative is this file deleting rows from a
-  -- production table without being asked.
+  -- index below would otherwise fail with a duplicate-key error that names a
+  -- row and not a cause — and because the alternative is this file deleting
+  -- rows from a production table without being asked.
   select count(*) into collisions from (
     select 1 from public.doms_logs
      group by user_id, date, muscle_group, side, sub_region
@@ -210,14 +167,35 @@ begin
   end if;
 end $$;
 
--- 3 ── The wider key. This is the name PostgREST's `on_conflict` resolves
---      against, and the column ORDER here is the order the client sends:
---      user_id, date, muscle_group, side, sub_region.
-create unique index if not exists doms_logs_user_date_muscle_side_sub_key
-  on public.doms_logs (user_id, date, muscle_group, side, sub_region)
-  nulls not distinct;
+-- The defaults are what let the app push a bilateral rating without naming
+-- either column, and NOT NULL is what the live table already said. Both are
+-- restated rather than assumed, so a database that had one and not the other
+-- ends up in the same place as one that had both.
+alter table public.doms_logs alter column side       set default 'both';
+alter table public.doms_logs alter column sub_region set default '';
+alter table public.doms_logs alter column side       set not null;
+alter table public.doms_logs alter column sub_region set not null;
 
--- 4 ── The vocabulary, stated where it cannot drift.
+comment on column public.doms_logs.side is
+  'both | left | right. ''both'' is a whole-muscle rating and the default.';
+comment on column public.doms_logs.sub_region is
+  'Traps, Erectors, Adductors, … '''' is the whole muscle and the default. Record-only: nothing in the scoring path reads it.';
+
+-- 4 ── The wider key. This is what PostgREST's `on_conflict` resolves against,
+--      and the column ORDER here is the order the client sends:
+--      user_id, date, muscle_group, side, sub_region.
+--
+--      A plain column list: both columns are NOT NULL, so there are no NULLs
+--      for the index to have an opinion about and no `NULLS NOT DISTINCT` is
+--      needed. An expression index over `coalesce(...)` was the other option
+--      and is unusable — PostgREST's `?on_conflict=` takes COLUMN NAMES and
+--      emits `ON CONFLICT (a, b, c)`, so it cannot name an expression and every
+--      upsert would fail with "no unique or exclusion constraint matching the
+--      ON CONFLICT specification".
+create unique index if not exists doms_logs_user_date_muscle_side_sub_key
+  on public.doms_logs (user_id, date, muscle_group, side, sub_region);
+
+-- 5 ── The vocabulary, stated where it cannot drift.
 do $$
 begin
   if not exists (
@@ -226,35 +204,25 @@ begin
   ) then
     alter table public.doms_logs
       add constraint doms_logs_side_check
-      check (side is null or side in ('both', 'left', 'right'));
-  end if;
-
-  if not exists (
-    select 1 from pg_constraint
-     where conname = 'doms_logs_sub_region_check' and conrelid = 'public.doms_logs'::regclass
-  ) then
-    alter table public.doms_logs
-      add constraint doms_logs_sub_region_check
-      check (sub_region is null or length(sub_region) > 0);
+      check (side in ('both', 'left', 'right'));
   end if;
 end $$;
 
 commit;
 
 -- ── VERIFY ───────────────────────────────────────────────────────────────────
--- Run all three after the commit and READ THE COUNTS — "no error" is not a pass.
+-- Run all four after the commit and READ THE COUNTS — "no error" is not a pass.
 --
---   select column_name, is_nullable
+--   select column_name, is_nullable, column_default
 --     from information_schema.columns
 --    where table_name = 'doms_logs' and column_name in ('side', 'sub_region');
---   -- expect exactly 2 rows, both YES
+--   -- expect 2 rows, both NO, defaults 'both'::text and ''::text
 --
 --   select indexname, indexdef
 --     from pg_indexes
 --    where tablename = 'doms_logs' and indexdef ilike '%unique%';
---   -- expect doms_logs_pkey and doms_logs_user_date_muscle_side_sub_key, and
---   -- the second must read
---   -- "(user_id, date, muscle_group, side, sub_region) NULLS NOT DISTINCT"
+--   -- expect doms_logs_pkey and doms_logs_user_date_muscle_side_sub_key, the
+--   -- second over (user_id, date, muscle_group, side, sub_region)
 --
 --   select count(*) as old_key_survivors
 --     from pg_index x
@@ -264,30 +232,32 @@ commit;
 --             from unnest(string_to_array(x.indkey::text, ' ')::int2[]) as k(attnum)
 --             join pg_attribute a on a.attrelid = x.indrelid and a.attnum = k.attnum
 --            where a.attname in ('user_id', 'date', 'muscle_group')) = 3;
---   -- expect 0. Anything else means step 2 found nothing to drop and a
+--   -- expect 0. Anything else means step 2 found nothing to drop, and a
 --   -- one-sided rating will still collide with the whole-muscle one.
 --
--- ── DEDUPE — ONLY IF STEP 2.5 RAISED ─────────────────────────────────────────
--- This file never deletes a row on its own. If step 2.5 stopped with "N
--- duplicate group(s) after normalising", it is because two rows collapse onto
--- one key — which can only happen if the old three-column unique key was not
--- there to prevent it.
+--   select count(*) as unreadable_rows from public.doms_logs
+--    where side not in ('both', 'left', 'right') or sub_region is null;
+--   -- expect 0
 --
--- Both statements below GROUP BY THE NORMALISED value, not by the stored one.
--- That is not a detail: this file rolled back, so `'both'` and `''` are still in
--- the table when you run these, and a dedupe that partitioned on the raw columns
--- would put `('both','')` and `(NULL,NULL)` in different groups, find nothing to
--- remove, and leave you looping on the same error.
+-- ── DEDUPE — ONLY IF STEP 3 RAISED ───────────────────────────────────────────
+-- This file never deletes a row on its own. If step 3 stopped with "N duplicate
+-- group(s) after normalising", two rows collapse onto one key — which can only
+-- happen if the old three-column unique key was not there to prevent it.
+--
+-- Both statements below group by the NORMALISED value, not by the stored one.
+-- That is not a detail: this file rolled back, so the un-normalised spellings
+-- are still in the table when you run these, and grouping by the raw column
+-- would put `'BOTH'` and `'both'` in different groups, find nothing to remove,
+-- and leave you looping on the same error.
 --
 -- LOOK FIRST. This shows exactly what would go:
 --
 --   with n as (
 --     select id, user_id, date, muscle_group, severity, created_at,
---            case lower(btrim(side)) when 'left' then 'left' when 'right' then 'right' end as side_n,
---            nullif(btrim(sub_region), '') as sub_n
+--            case lower(btrim(side)) when 'left' then 'left' when 'right' then 'right' else 'both' end as side_n,
+--            coalesce(btrim(sub_region), '') as sub_n
 --       from public.doms_logs)
---   select user_id, date, muscle_group,
---          coalesce(side_n, '(both)') as side, coalesce(sub_n, '(whole)') as sub_region,
+--   select user_id, date, muscle_group, side_n as side, sub_n as sub_region,
 --          count(*) as rows, array_agg(severity order by severity desc) as severities
 --     from n
 --    group by 1, 2, 3, 4, 5
@@ -300,8 +270,8 @@ commit;
 --
 --   with n as (
 --     select id, user_id, date, muscle_group, severity, created_at,
---            case lower(btrim(side)) when 'left' then 'left' when 'right' then 'right' end as side_n,
---            nullif(btrim(sub_region), '') as sub_n
+--            case lower(btrim(side)) when 'left' then 'left' when 'right' then 'right' else 'both' end as side_n,
+--            coalesce(btrim(sub_region), '') as sub_n
 --       from public.doms_logs),
 --   ranked as (
 --     select id, row_number() over (
@@ -316,10 +286,16 @@ commit;
 --
 -- ── HOW THIS FILE WAS CHECKED ────────────────────────────────────────────────
 -- Executed against a real PostgreSQL 17 cluster before being handed over, on
--- four starting shapes: the old key as a named UNIQUE CONSTRAINT; as a bare
--- UNIQUE INDEX with the columns in a DIFFERENT order; a table that never had
--- it; and the file run three times in a row. In every case the old key is gone,
--- the five-column index exists, a legacy NULL row is UPDATED in place by an
--- `on conflict (user_id, date, muscle_group, side, sub_region)` upsert rather
--- than duplicated, a left and a right rating coexist, and both CHECKs reject
--- bad data.
+-- five starting shapes: the live one (both columns NOT NULL with 'both'/''
+-- defaults and the three-column unique constraint, including the exact row the
+-- third error named); the same with the columns NULLABLE; the same with the
+-- columns absent entirely; a table whose old key was a bare unique INDEX with
+-- the columns in a different order; and a table that never had the key at all.
+-- Each was also run twice.
+--
+-- In every case: the old key is gone, the five-column index exists, both
+-- columns are NOT NULL with defaults, and — the assertion that actually
+-- matters — an `insert … on conflict (user_id, date, muscle_group, side,
+-- sub_region)` that names NEITHER column, exactly as the app pushes a bilateral
+-- rating, UPDATES the existing row in place rather than inserting beside it,
+-- while a one-sided rating of the same muscle inserts as its own row.

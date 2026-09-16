@@ -44,6 +44,28 @@ _Nothing yet._
 
 ---
 
+## [3.18.2] — 2026-09-16 · The Database Had Already Decided
+
+A second hotfix for 3.18.0, and the one that settles what a whole-muscle
+soreness rating is stored as.
+
+### Changed
+- **A rating of a whole muscle is now stored as `both` / `''`, not as an absent
+  value.** `doms_logs` declares both columns NOT NULL — the old web app made
+  them that way and filled them with those words — so 3.18.0's design was not a
+  second spelling of the same thing, it was a value the table refuses. The app
+  now writes what the table requires, which means one spelling in Postgres, in
+  the phone's local store and on the wire.
+- The weekly export is unaffected and pinned by its golden document: a bilateral
+  rating is still the bare muscle name, with no marker of any kind.
+
+### Fixed
+- `docs/sql/w9-doms-laterality.sql` now normalises the column values rather than
+  trying to empty them, and sets the defaults that let a bilateral rating be
+  pushed without naming either column. It no longer requires Postgres 15.
+
+---
+
 ## [3.18.1] — 2026-09-16 · Two Spellings, One Meaning
 
 A hotfix for 3.18.0, found while applying its migration.

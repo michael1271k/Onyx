@@ -43,16 +43,17 @@ struct DomsLateralityStoreTests {
         #expect(Set(got.map(\.id)).count == 2)
     }
 
-    @Test("both stores NULL, and re-rating the same side updates in place")
-    func bothIsAbsence() throws {
+    @Test("both stores the word, and re-rating the same side updates in place")
+    func bothIsAWord() throws {
         let db = try store()
         try db.setDoms(userId: user, date: date, muscleGroup: "Quads", severity: 2)
         var got = try rows(db)
         #expect(got.count == 1)
-        // NULL, not the word: absence is the pre-W9 meaning of this column, and
-        // it is what keeps the push body — and so the export token — byte
-        // identical to what every build before this one sent.
-        #expect(got[0].side == nil && got[0].subRegion == nil)
+        // The WORD, not a NULL. Both columns are NOT NULL on the server — the
+        // retired web app declared them that way and filled them with
+        // 'both' / '' — so the app writes what the table requires. The export
+        // token is unaffected: `BodySide.both.mark` is the empty string.
+        #expect(got[0].side == "both" && got[0].subRegion == "")
 
         let firstId = got[0].id
         try db.setDoms(userId: user, date: date, muscleGroup: "Quads", severity: 3)
@@ -80,8 +81,10 @@ struct DomsLateralityStoreTests {
 
         let got = try rows(db)
         #expect(got.count == 1)
-        #expect(got[0].id == "legacy" && got[0].severity == 3 && got[0].side == nil)
-        #expect(BodySide(stored: got[0].side) == .both)
+        #expect(got[0].id == "legacy" && got[0].severity == 3)
+        // Found and updated IN PLACE — the row keeps the spelling it had, which
+        // is what makes this a re-rating rather than a second rating.
+        #expect(got[0].side == nil && got[0].bodySide == .both)
     }
 
     @Test("a sub-region is part of the key, and the whole muscle is still its own row")
@@ -113,18 +116,16 @@ struct DomsLateralityStoreTests {
         #expect(a == b)
     }
 
-    @Test("a web-era row spelled both/'' is re-rated, not duplicated")
+    @Test("a row spelled the OTHER way is re-rated, not duplicated")
     func webEraSpellingIsTheSameRow() throws {
         let db = try store()
-        // Exactly what the retired web app wrote, and what is still in Supabase
-        // until `docs/sql/w9-doms-laterality.sql` is pasted. A phone running
-        // this build can pull one of these before that happens.
+        // What the web era wrote, and what the server still holds.
         try db.writer.write { conn in
             try DomsLogRow(id: "web", userId: user, date: date, muscleGroup: "Quads",
                            severity: 1, side: "both", subRegion: "").insert(conn)
         }
-        // The app writes `.both` / nil. A raw column comparison misses the web
-        // row and mints a second rating for a muscle that already had one.
+        // A raw column comparison would miss it and mint a second rating for a
+        // muscle that already had one.
         try db.setDoms(userId: user, date: date, muscleGroup: "Quads", severity: 3)
 
         let got = try rows(db)
@@ -196,9 +197,9 @@ struct DomsLateralityExportTests {
             try db.setDoms(userId: user, date: weekStart, muscleGroup: "Quads", severity: 2)
         }
         let row = try #require(got.doms.first)
-        // nil, NOT "both". The builder passes the column through rather than
-        // normalising it, which is the whole reason the three v1 export goldens
-        // still pass untouched.
+        // The builder NORMALISES on the way into the document: the store holds
+        // 'both' / '' and `ExportDoms` carries nil, which is the whole reason
+        // the three v1 export goldens still pass untouched.
         #expect(row.side == nil && row.subRegion == nil)
         let document = WeeklyExport.build(got)
         #expect(document.contains("Quads 2"))
@@ -206,8 +207,8 @@ struct DomsLateralityExportTests {
         #expect(!document.contains("Quads/"))
     }
 
-    @Test("a web-era row renders exactly like the native spelling of the same rating")
-    func webEraRowRendersAsV1() throws {
+    @Test("every spelling of a bilateral rating renders as the bare muscle name")
+    func everySpellingRendersAsV1() throws {
         let got = try input { db in
             try db.writer.write { conn in
                 try DomsLogRow(id: "web", userId: user, date: weekStart, muscleGroup: "Quads",

@@ -2334,6 +2334,41 @@ are tolerant, writes are not — a row this app mints always spells absence as
 NULL. The export normalises too, so the golden document cannot depend on which
 era wrote the row.
 
+**Third defect, and the one that was a DESIGN error rather than a typo
+(3.18.2):** `side` is **NOT NULL** on the live table. W9's whole "absence means
+both" convention — `BodySide.stored` returning nil so `encodeIfPresent` omits the
+column — was not a second spelling of the same thing; it was a value the table
+refuses outright. `ERROR: 23502: null value in column "side" violates not-null
+constraint`.
+
+The fix was to stop arguing with the schema. `'both'` / `''` are canonical
+everywhere now: in Postgres, in the local store, on the wire. The wire property
+W9 was protecting ("byte-identical to what v1 sent") was never a requirement —
+the brief asked for the EXPORT TOKEN to be byte-identical, and that is a
+different function (`BodySide.mark`) which was never in question. Chasing a
+property nobody asked for is what put the design on a collision course with a
+NOT NULL it had not checked for.
+
+Two things fell out of it worth keeping:
+
+- **`stored` and `exported` are different questions.** The column holds a word
+  because it is NOT NULL; `ExportDoms.side` holds an absence because the
+  document spells a bilateral rating with no marker. They were briefly the same
+  answer, and collapsing them broke `weekly-export.json`'s v1 case the moment the
+  convention moved. `BodySide` now answers both separately, and the golden
+  document is what caught it.
+- **The migration no longer needs Postgres 15.** With both columns NOT NULL there
+  are no NULLs for the index to have an opinion about, so `NULLS NOT DISTINCT`
+  is gone and the unique index is a plain column list.
+
+**Three round trips for one file, and every one of them was the same mistake:**
+believing a finding about the live schema instead of checking it. F12 said
+`doms_logs` had neither column; it had both, NOT NULL, populated. `schema-truth-checker`
+exists precisely for this and could not run — the Supabase MCP server is not
+connected in this session — and the right move at that point was to say so and
+ask, not to infer. **W11 must introspect before it writes a line of RLS**, and if
+it cannot introspect it must stop and say so.
+
 **The real lesson is not the cast.** This file was handed over unexecuted, and
 there is no reason it had to be: `brew install postgresql@17` is two minutes and
 a throwaway cluster proves the thing. It has since been run against PG 17 on four
