@@ -1648,3 +1648,128 @@ the sprint still owes are W9's and W11's, unchanged.
 
 **Founder's manual steps still outstanding:** none for W4. The two SQL pastes
 the sprint still owes are W9's and W11's, unchanged.
+
+---
+
+### W5 Wave Record — shipped 2026-09-16 as 3.14.0
+
+**Drift from the plan, on purpose:**
+- **The bout's figures are `MetaTagRow.Capsule`s, not a labelled column block.**
+  The brief says "day, time, duration, distance, pace, avg HR with a heart
+  glyph, compact". The four-column value-over-unit block it replaced was the
+  compact-looking option and the wrong one: W4 had already given the SAME row
+  a vocabulary on the session page — `figure.run` for distance, `speedometer`
+  for pace, `heart.fill` for bpm, `heart.text.square` for provenance, all in
+  `Color.onyx.cardio` — and a second drawing of those four readings is exactly
+  the drift W4's own record forbids ("never a second drawing of one"). The
+  Train card now says what the ledger card says, capsule for capsule. The heart
+  glyph the brief asks for is the one the ledger already wears.
+- **The time is printed only for an IMPORTED bout, not for every bout.** The
+  brief says "Time comes from `created_at`, which on an imported row is the
+  bout's START". True — and on a row the founder typed, the same column is the
+  moment they typed it. `CardioImport`'s own header says so in as many words,
+  and it is why its matching rule has two branches. A walk done at 08:00 and
+  entered at 21:00 would have been stamped 21:00. So `boutStamp` appends the
+  clock only when `fromHealthkit == true`, which also makes the pair legible:
+  the bout that says WHEN is the bout that says who timed it.
+- **The two placeholders became ONE view, not two edited views.** Tasks 4 and 5
+  ask for the same treatment on two stand-ins that already drew the same three
+  things. `SessionFallbackCard` is the one card; Train and Pulse pass four
+  arguments each. The leading marks both of them carried — Train's
+  `checkmark.circle.fill`, Pulse's 8 pt day-hue disc — are gone rather than
+  unified: the real masthead draws neither, and a mark that vanishes when the
+  read lands is a pop in the one transition the wave exists to smooth. For the
+  same reason the title is `.hero`, matching `SessionHeaderCard` exactly, and
+  not the `.display` both placeholders used.
+- **`Shoulders` was promoted out of `SessionHeaderCard`.** The bout's kind and
+  its stamp are two things at the two ends of one line with the same AX5
+  failure the masthead's title row has, and the app already had the answer as a
+  private helper. It is a view now, with three callers. Note it could not stay a
+  `@ViewBuilder func` wrapper — forwarding non-escaping closures to a `View`
+  init that needs `@escaping` does not compile.
+
+**Root causes that were not where the plan guessed:**
+- **`FlowRow` drew a chip off the edge of the card, and had since it was
+  written.** The AX5 shot of the new card showed "Automatically lo" running past
+  the glass. The badge was not at fault and neither was `MetaTagRow.Capsule`,
+  which carries `.lineLimit(2).minimumScaleFactor(0.6)`: `FlowRow` measures
+  every subview with `.unspecified`, so a chip whose IDEAL width exceeds the
+  container is placed at that ideal and clipped — its own wrapping and scaling
+  rules never consulted, because nothing ever told the text it was short of
+  room. Unseen for as long as every chip in the app was two or three words.
+  Fixed in `FlowRow` and not in the badge, because the same capsule is on the
+  ledger (W4) and was clipped there too. The guard is strict (`ideal.width >
+  width`), so a chip that already fitted takes the old path exactly.
+- **The Zone-2 rail's arithmetic was NOT the defect, and F7 half-says so.**
+  `zone2Done` counts this week's bouts over `Zone2.minMinutes`; `weeklyTarget`
+  is a target count of the same thing. 1/2 was a fraction that meant something.
+  What was wrong was drawing it as a filled BAR one line under the last bout's
+  `avg bpm`: a bar under a heart rate reads as a heart-rate bar, and there is no
+  zone column behind that promise. The first version of this wave's comment and
+  changelog both claimed the two halves measured different things; they do not,
+  and review caught it. The caption still says "Zone 2" for a duration rule —
+  that name is `Zone2` in OnyxCore and on the widget face, so renaming it is
+  four surfaces and a founder's word, not this card's call. Marked `ponytail:`.
+- **The stand-in's capsules could DISAPPEAR when the header landed.**
+  `DayModel.focus` folded `MuscleCredit.weightedSets` — which pays a SECONDARY
+  mover half a set and counts warm-ups — while `SessionHeader.muscles` is
+  `SessionAnalysis.primaryLandmarks`: whole working sets per PRIMARY mover. A
+  muscle that is only ever an assistor could take a capsule in the stand-in and
+  have none at all in the real card, which is the exact contradiction the card's
+  own documentation promised was impossible. `focus` is now
+  `primaryLandmarks(...).prefix(3)`, so the stand-in is a prefix by
+  construction and the read can only append. This also silently fixed Pulse,
+  whose screen wash reads the same list.
+
+**Constraints discovered that the next wave must respect:**
+- **`FlowRow` now measures against `proposal.width` in `sizeThatFits` and
+  `bounds.width` in `placeSubviews`.** Every current caller sits in a
+  width-constrained `VStack`, so the two agree. A caller that measures with a
+  nil width and then places at a definite one would under-report its height and
+  clip its last row.
+- **`RoutineDayEditor.swift:148` is the only `FlowRow` whose subviews are not
+  text chips** — they are `Stepper`s, which rearrange their own contents when
+  given a definite width rather than merely narrowing. It previously drew past
+  the card edge, so the clamp is still a fix there, but it is the one call site
+  whose AX5 appearance changes shape rather than width.
+- **`DayModel.focus` is now the muscle ranking for THREE surfaces** — Pulse's
+  screen wash, Pulse's session card and the Train tab's done card — and its
+  contract is "a prefix of `SessionHeader.muscles`". Anything that changes how
+  it ranks breaks the stand-in's no-pop guarantee.
+- **`.defaultScrollAnchor(.bottom)` applied in the harness reaches the screen's
+  own `ScrollView` through the environment.** It is how `train-cardio` reviews a
+  card three screens below the fold with no seed added to the production view.
+  It parks on the LAST card, which on a rest day is the cardio card only because
+  `progressionCard` is keyed on today's split and a rest day has none.
+- **`seededHeaderPending` is the only production scaffolding this wave added**
+  — one `Bool` with a default beside the two existing preview seeds, guarding
+  the `doneHeader` task. Without it the stand-in is unphotographable: the read
+  finishes faster than the screenshot, which is how it stayed a grey box through
+  four waves.
+
+**Left open on purpose:**
+- **`fromHealthkit` is set true for a row the founder FILLED IN from a Health
+  bout and then edited by hand** (`CardioLog.swift:372` writes
+  `fromHealthkit: start != nil`). The stamp stays honest — the start is real —
+  but the "Automatically logged" capsule overclaims on a corrected row. Naming
+  that distinction needs a column `cardio_logs` does not have.
+- **The clock renders in the DEVICE's current timezone while the day beside it
+  is the row's ISO date.** A bout logged abroad can print a time that disagrees
+  with its own day. Pre-existing family — `SessionAnalysis.stamp` does the same
+  for every session on the ledger — and not worth a second convention here.
+- **`lastCardio` has no upper date bound.** Harmless in the app, where no bout
+  is in the future; in the pinned-date fixture the 6 September walk is "the last
+  bout" on a tab whose today is the 3rd. It is what makes the badge and the
+  clock photographable at all, so it was left alone.
+- **The Pulse stand-in has no shot of its own.** It is the same view as Train's
+  with four arguments, and `train-pending` photographs it; a second harness seed
+  on `DayScreen.sessionHeaders` bought nothing the first one does not prove.
+- **`OnyxTests` still executes zero tests here** (W4's measurement), so the
+  three new behaviours — the prefix guarantee, the stamp's `fromHealthkit`
+  branch, the `FlowRow` clamp — are verified by `swift:core`/`swift:data`
+  staying green and by the screenshots, not by a unit test. `WorkoutWeekTests`
+  is unchanged, as the brief required: `doneMuscles` is a new `Snapshot` field
+  with a default and `State.done` was not touched.
+
+**Founder's manual steps still outstanding:** none for W5. The two SQL pastes
+the sprint still owes are W9's and W11's, unchanged.

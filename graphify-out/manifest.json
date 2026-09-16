@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/App/PreviewHarness.swift": {
-    "mtime": 1789545421.7456434,
-    "ast_hash": "55dfa0fc682c522204bd627df5fced17",
+    "mtime": 1789549220.719508,
+    "ast_hash": "7d65a826cf38de3789b2914de5960ce6",
     "semantic_hash": ""
   },
   "native/Onyx/App/SyncCoordinating.swift": {
@@ -80,8 +80,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Exercises/ExerciseDetailView.swift": {
-    "mtime": 1788631673.366184,
-    "ast_hash": "2f014c77c085546008d72a071a6ad8a2",
+    "mtime": 1789549220.7198193,
+    "ast_hash": "90bce77a81e3dbe3274e21d946d7b5b9",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Exercises/ExerciseLibraryView.swift": {
@@ -115,8 +115,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/History/HistoryPreviews.swift": {
-    "mtime": 1789545421.745938,
-    "ast_hash": "f7af446c55738d87fb7cdb76364b9e8b",
+    "mtime": 1789549220.7202446,
+    "ast_hash": "004e60f09a335e431419694325427667",
     "semantic_hash": ""
   },
   "native/Onyx/Features/History/HistoryView.swift": {
@@ -305,8 +305,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseModel.swift": {
-    "mtime": 1789506314.5738673,
-    "ast_hash": "716d4efc3c82a388737095d27527789f",
+    "mtime": 1789549220.7210996,
+    "ast_hash": "24575e901b04b3c196bbb39ac5622192",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulsePreviews.swift": {
@@ -345,8 +345,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseWorkout.swift": {
-    "mtime": 1789478519.1381235,
-    "ast_hash": "2c51b50e667558f162226a1dda30cf98",
+    "mtime": 1789549220.721302,
+    "ast_hash": "0f75f8393af62a2b39aa6be9cbe7e76c",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/SleepEditSheet.swift": {
@@ -550,13 +550,13 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Workout/WorkoutTabView.swift": {
-    "mtime": 1789485445.5846007,
-    "ast_hash": "6a1c9a4d5e91ec34349b67460a8f8987",
+    "mtime": 1789549220.7217178,
+    "ast_hash": "047b325e789d5010568bca63fb92b84c",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Workout/WorkoutWeek.swift": {
-    "mtime": 1789489617.7033827,
-    "ast_hash": "0a603a5476958915e628110c88f2fb4f",
+    "mtime": 1789549220.7221334,
+    "ast_hash": "58cbb4d0969888975c37ef80e4c83ea4",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json": {
@@ -3420,8 +3420,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1789545421.7485704,
-    "ast_hash": "d26fef90062154b52e200b8f0719e55a",
+    "mtime": 1789549220.7232082,
+    "ast_hash": "c825278939dbdcaa22b030c1cb45dbc6",
     "semantic_hash": ""
   },
   "scripts/check-swift.sh": {
@@ -3455,8 +3455,8 @@
     "semantic_hash": ""
   },
   "scripts/native-shot.sh": {
-    "mtime": 1789545421.74891,
-    "ast_hash": "81675edd255314da9e72bdc846440a39",
+    "mtime": 1789549220.72346,
+    "ast_hash": "928ce85ced3a8a80ab422e29aa90ca85",
     "semantic_hash": ""
   },
   "scripts/store-shots.sh": {
@@ -3485,8 +3485,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1789545421.7453613,
-    "ast_hash": "9648a6436ee3f4f54bf456d40cc50601",
+    "mtime": 1789549220.7191317,
+    "ast_hash": "cf98a4f0cf131d6266496e347a3c308f",
     "semantic_hash": ""
   },
   "docs/EPIC_SPRINT_PLAN.md": {
@@ -3520,8 +3520,8 @@
     "semantic_hash": ""
   },
   "native/project.yml": {
-    "mtime": 1789545421.7483866,
-    "ast_hash": "5d9fd3bc0edd098037b62429ab854f63",
+    "mtime": 1789549220.7226133,
+    "ast_hash": "03d5336d11ce68112f967f11e5afb98a",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png": {
@@ -3670,8 +3670,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/History/SessionHeaderCard.swift": {
-    "mtime": 1789468813.4504538,
-    "ast_hash": "cf2f1eca45cb7216bb0d3aabdf41208e",
+    "mtime": 1789549220.7206926,
+    "ast_hash": "705f73602a56b035f9c0778057b300e9",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseStressLog.swift": {
@@ -3777,6 +3777,11 @@
   "native/Onyx/Features/Pulse/PulseSquares.swift": {
     "mtime": 1789506314.5741982,
     "ast_hash": "0e9c44e6e1ee6c370d985d971f652503",
+    "semantic_hash": ""
+  },
+  "native/Onyx/Features/History/SessionFallbackCard.swift": {
+    "mtime": 1789549220.7204568,
+    "ast_hash": "762fe5ffa11e67dbf4a1cf85eec0882c",
     "semantic_hash": ""
   }
 }
