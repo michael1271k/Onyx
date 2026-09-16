@@ -1778,6 +1778,8 @@ the sprint still owes are W9's and W11's, unchanged.
 
 ### W6 Wave Record — shipped 2026-09-16 as 3.15.0
 
+`d013808a` (the wave) · `a739bd15` (the merge) · `5adfd644` (this record and the graph).
+
 **Drift from the plan, on purpose:**
 
 - **The payload `v` is still 4.** The plan says the Train arrangement goes "under a v5
@@ -1803,12 +1805,22 @@ the sprint still owes are W9's and W11's, unchanged.
 - **The arithmetic moved to `OnyxCore`.** The plan puts the rule in `WorkoutWeek`. It is
   in `WeekPace` instead, with `WorkoutWeek.build` reduced to three calls. The reason is
   the next item.
-- **Five new shots, not three.** `train-monday`, `train-past`, `train-past-open`,
-  `train-customize`, `train-customized`. The last two are not decoration: the Trends row
-  sits under a seven-exercise plan card and is below the fold at **every** anchor a shot
-  can ask for, so `train-customized` — the tab with three sections switched off — is the
-  only frame the new caption appears in, and it doubles as the picture of what the
-  Customize sheet does.
+- **Five new shots, not three,** and two of the extra three are the only way the wave can
+  be reviewed at all:
+  - `train-monday` · `train-past` · `train-customize` are the brief's three.
+  - `train-customized` — the tab with Cardio, Ready to Progress and Past Weeks switched
+    off, bottom-anchored. The Trends row sits under a seven-exercise plan card and is
+    below the fold at **every** anchor a shot can ask for, so with the sections beneath it
+    gone it becomes the bottom of the page and the new caption is finally in a frame. It
+    doubles as the picture of what the Customize sheet *does*, which a sheet of switches
+    cannot show.
+  - `train-past-open` — one closed week expanded in place. The wrap-up reel drawn inside
+    the tab is the largest thing this wave draws and a shot script cannot tap a row open,
+    so `WorkoutTabView` gained `seededExpandedWeek`, the same kind of harness seed
+    `seededHeaderPending` already is and for the same reason: the point of the shot is the
+    REAL section with the real summary under it, not a `#if DEBUG` branch inside the row.
+    Pinned to 16 August, the one week in the fixture that closed complete, so it pairs with
+    `train-wrap` — the two must draw the same figures and differ only in their chrome.
 
 **Root causes that were not where the plan guessed:**
 
@@ -1819,6 +1831,22 @@ the sprint still owes are W9's and W11's, unchanged.
   worktree. The memory is stale; `npm run swift:ui` runs `-only-testing:OnyxUITests`
   only, which is where "zero tests" came from. **No gate runs `OnyxTests`.** The wave's
   arithmetic went to `OnyxCore` anyway, because `swift:core` is a gate and this is not.
+
+  The four are, by name, so the next wave can check the baseline rather than trust a
+  count: `ready to progress fires only after the ceiling is cleared twice`, `A capsule
+  counts its week and marks the days that were missed`, `Week 0 is the week the block
+  opened on`, and `a treadmill logged on this phone is titled Treadmill, not its slug`.
+  Run them with
+
+  ```bash
+  cd native && xcodebuild test -project Onyx.xcodeproj -scheme Onyx \
+    -destination "id=$(xcrun simctl list devices available | grep -m1 'iPhone 17 Pro (' \
+      | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')" \
+    -only-testing:OnyxTests CODE_SIGNING_ALLOWED=NO
+  ```
+
+  W6 added six cases to `WorkoutWeekTests` and all six pass; the failure count is still
+  four.
 - **The wrap-up shared the delta with the door.** `build` passed one `weekDeltaKg` to both
   the Trends door and the inline `wrap(...)`. A week wraps the evening its last PLANNED
   day is logged — a Friday on a five-day plan resting Saturday — so a day-matched delta
@@ -1833,6 +1861,15 @@ the sprint still owes are W9's and W11's, unchanged.
   ENDED has no work left in it whether or not every planned day was logged, and the
   missed day is part of what its summary reports. `requireComplete: false`; all three
   existing callers keep the default.
+- **A `user_goals` row naming a plan is not a plan.** Two of the new `WorkoutWeekTests`
+  cases went red asserting `weekPaceKg != nil`, and the product was right: the test store
+  set `activePlan = "onyx5"` and seeded nothing else, and `Schedule.isTrainingDayIn`
+  resolves the weekday layout through `routines` ROWS, not through that string. With an
+  empty `activeProgram` every day of the week is a rest day, `plannedTrainingDays` is 0
+  and the projection is correctly nil. The fix is `PreviewCatalogue.seed(database, …)` in
+  the fixture — **any `WorkoutWeek` test that touches the schedule needs it**, and the
+  existing cases in that file did not reveal the requirement because they assert on the
+  progression queue and the ledger, which read sets rather than the plan.
 - **The first `train-monday` shot photographed the wrong Monday.** 31 August is a Monday
   whose week already holds a Sunday session, so the tab came out mid-week with a full
   panel. Re-pinned to 7 September — a week with nothing in it, standing behind the
