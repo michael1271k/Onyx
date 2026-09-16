@@ -58,9 +58,9 @@ public enum CoachSentence {
     // MARK: - The cuts
 
     /// Below this the battery is painted `danger` and the day is a rest day.
-    public static let batteryLow = 30.0
+    public static let batteryLow = Battery.lowPct
     /// At or above this the battery is painted `good`.
-    public static let batteryGood = 60.0
+    public static let batteryGood = Battery.goodPct
 
     // MARK: - The table
 

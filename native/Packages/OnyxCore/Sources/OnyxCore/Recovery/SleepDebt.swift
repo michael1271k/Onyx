@@ -27,6 +27,11 @@ public extension SleepDebt {
     static let windowDays = 14
     /// Last week's debt keeps 75% weight.
     static let weeklyDecay = 0.75
+    /// Fewer nights than this in the window and there is no honest answer: one
+    /// short night out of one is not a bank. Every reader applies it — Pulse's
+    /// gauge and the Mega tile's sentence — so it is stated once here rather
+    /// than spelled at each of them.
+    static let minimumNights = 3
 
     static func compute(nights: [SleepDebtNight], goalHours: Double, weekAgo: String) -> SleepDebt {
         let withData = nights.filter { ($0.sleepMinutes ?? 0) > 0 }

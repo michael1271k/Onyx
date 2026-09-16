@@ -302,22 +302,31 @@ public struct WidgetSnapshotBuilder: Sendable {
         // narrowed here to the bank's own fortnight. No read of its own.
         let coach: String? = wantsBody ? {
             let stress = try? database.stressInputs(userId: userId, date: date)
-            let debtFrom = ISODate.addDays(date, -(SleepDebt.windowDays - 1)) ?? date
-            // Fewer than three nights is too little history to be honest about
-            // debt — the same floor `PulseModel.sleepDebt` applies, and for the
-            // same reason: one short night in a window of one is not a bank.
-            let bank = SleepDebt.compute(
-                nights: rows.ledgerLogs
-                    .filter { $0.date >= debtFrom && $0.date <= date }
-                    .map { SleepDebtNight(date: $0.date, sleepMinutes: $0.sleepMinutes.map(Double.init)) },
-                goalHours: goals?.sleepGoalHours ?? 8,
-                weekAgo: ISODate.addDays(date, -7) ?? date
-            )
+            // ── NO GOAL, NO DEBT ────────────────────────────────────────────
+            // Not `?? 8`. The sleep ARC on this same tile draws against
+            // `sleep.goalMin`, which is nil when the athlete has set no goal
+            // (see the `sleep:` block below) — so an assumed eight hours here
+            // would put a ring with no target and no progress directly above a
+            // sentence claiming three hours of debt against one. Debt is a
+            // shortfall, and a shortfall needs something to fall short OF.
+            let bank: SleepDebt? = goals?.sleepGoalHours.map { goalHours in
+                let debtFrom = ISODate.addDays(date, -(SleepDebt.windowDays - 1)) ?? date
+                return SleepDebt.compute(
+                    nights: rows.ledgerLogs
+                        .filter { $0.date >= debtFrom && $0.date <= date }
+                        .map { SleepDebtNight(date: $0.date, sleepMinutes: $0.sleepMinutes.map(Double.init)) },
+                    goalHours: goalHours,
+                    weekAgo: ISODate.addDays(date, -7) ?? date
+                )
+            }
             return CoachSentence.sentence(CoachSentence.Inputs(
                 batteryPct: battery.map(Double.init),
                 acwr: stress?.acwr,
                 stress: stress.flatMap { Stress.breakdown($0).band },
-                sleepDebtHours: bank.nights >= 3 ? bank.debtHours : nil
+                // `SleepDebt.minimumNights` and not a 3 spelled here: Pulse's
+                // gauge applies the same floor, and one short night out of one
+                // is not a bank on either surface.
+                sleepDebtHours: bank.flatMap { $0.nights >= SleepDebt.minimumNights ? $0.debtHours : nil }
             ))
         }() : nil
 

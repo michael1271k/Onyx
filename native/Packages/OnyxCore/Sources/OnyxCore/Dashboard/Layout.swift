@@ -233,22 +233,32 @@ public enum Dashboard {
 
     // MARK: The stored payload
 
-    /// v3 added `hidden`; v4 split the arrangement by surface; v5 added
-    /// `StackSlot.linked` (W7, A9).
-    static let version = 5.0
-
-    /// The versions whose payload carries `phone` / `desktop` SIDES.
+    /// v3 added `hidden`; v4 split the arrangement by surface.
     ///
-    /// ── WHY THIS IS A SET AND NOT `== version` ──────────────────────────────
-    /// `version` is not a label on the payload, it is the GATE `fromStored`
-    /// uses to decide whether a stored object has sides at all — W6's record
-    /// says so, and is why W6 left `v` at 4 rather than widen anything. v5 is
-    /// additive over v4: one optional boolean per slot, absent when false. So
-    /// the two versions are the SAME shape, and the gate names both. Raise
-    /// `version` without adding the new number here and every stored v4 row
-    /// reads as "no sides": `fromStored` hands back the default dashboard and
-    /// `otherSideOf` drops the desktop arrangement on the next save.
-    static let splitVersions: Set<Double> = [4, 5]
+    /// ── W7 ADDED `StackSlot.linked` AND DID NOT RAISE THIS ──────────────────
+    /// `version` is not a label on the payload. It is the GATE `fromStored`
+    /// uses to decide whether a stored object has `phone` / `desktop` sides at
+    /// all, and `otherSideOf` uses to decide whether the OTHER side can be
+    /// carried through — so the number is a handshake with every build that has
+    /// ever written this row, not a note about what the schema now holds.
+    ///
+    /// `linked` needs no handshake. It is one optional key per slot, written
+    /// only when true, and `parseSlots` has always read `id` / `size` / `items`
+    /// and ignored everything else — so a build that has never heard of it
+    /// reads a row carrying it perfectly and writes one back without it.
+    ///
+    /// Raising it to 5 costs what W6's record said it costs, and worse. An
+    /// older build's `fromStored` compares `v == 4.0` exactly: on a v5 row
+    /// `side` stays nil, the v1/v2/v3 chain all miss, `slots` comes back empty
+    /// and `reconcile` hands the user the default grid. Its next save then
+    /// writes `v: 4` with those defaults, and its `otherSideOf` — the same
+    /// exact comparison — finds no top-level `slots` in the v5 dict and writes
+    /// `"desktop": {}`. Both arrangements are gone, `touch` stamps the wipe
+    /// with a fresh `updatedAt`, and the wipe wins the next sync. There is no
+    /// version of that trade worth one number nothing reads.
+    ///
+    /// `TrainLayout`'s header names the same hazard for the same row.
+    static let version = 4.0
 
     /// A stored payload — a `dashboard_layouts.layout` row, or the app's own
     /// copy — as a layout, reconciled against the current catalogue. Takes the
@@ -264,7 +274,7 @@ public enum Dashboard {
         let v = jsNumber(dict["v"])
 
         var side: [String: Any]? = nil
-        if let v, splitVersions.contains(v) {
+        if v == version {
             let raw = dict[surface.rawValue]
             if raw == nil || raw is NSNull { return defaultLayout(surface) }
             // A present, non-object side reads as an empty one.
@@ -308,7 +318,13 @@ public enum Dashboard {
             // false — the pre-v5 meaning, which is the meaning every stored
             // row has.
             let linked = (dict["linked"] as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() && $0.boolValue } ?? false
-            out.append(StackSlot(id: id, size: clampSize(items, want, surface: surface), items: items, linked: linked))
+            // The same normalisation `touch` applies, for a row this app did
+            // not write: a hand-edited payload can say a single tile is
+            // connected, and nothing on screen could then disconnect it.
+            out.append(StackSlot(
+                id: id, size: clampSize(items, want, surface: surface), items: items,
+                linked: linked && items.count > 1
+            ))
         }
         return out
     }
@@ -398,7 +414,7 @@ public enum Dashboard {
         if stored is [Any] { return [String: Any]() }
         guard let dict = stored as? [String: Any] else { return nil }
         let key: DashboardSurface = surface == .desktop ? .phone : .desktop
-        if let v = jsNumber(dict["v"]), splitVersions.contains(v) {
+        if jsNumber(dict["v"]) == version {
             let raw = dict[key.rawValue]
             return raw is NSNull ? nil : raw
         }
@@ -410,8 +426,26 @@ public enum Dashboard {
     }
 
     /// Stamp an edit. Every mutation goes through this, so `updatedAt` cannot lie.
+    ///
+    /// ── AND IT IS WHERE `linked` IS NORMALISED (W7) ──────────────────────────
+    /// `setLinked` refuses to connect a slot with one face — there is nothing
+    /// for it to share a window with — but `removeFace` and `unstackFace` carry
+    /// the flag onto whatever is left, which may now BE one face. That leaves
+    /// a stored state the setter would not create, and `StackEditSheet` hides
+    /// the toggle for a single tile, so nobody can clear it. It is inert until
+    /// another tile is stacked onto that slot, which then silently arrives
+    /// connected without anyone asking for it.
+    ///
+    /// Every mutation returns through here, so one line covers all six of them
+    /// rather than the two that happen to be able to cause it today.
     public static func touch(_ layout: DashboardLayout) -> DashboardLayout {
         var copy = layout
+        copy.slots = layout.slots.map { s in
+            guard s.linked, s.items.count <= 1 else { return s }
+            var next = s
+            next.linked = false
+            return next
+        }
         copy.updatedAt = (Date().timeIntervalSince1970 * 1000).rounded(.down)
         return copy
     }

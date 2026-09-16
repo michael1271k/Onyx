@@ -1,7 +1,7 @@
 {
   "module": "dashboard/layout",
   "fn": "serializeLayout",
-  "note": "v4 wire form: the written side from the layout, the other side carried through UNPARSED from whatever was stored (a pre-split payload stands in whole). `other: null` in the input means nothing stored. W7: `v` is 5 — `StackSlot.linked`. The slots are byte-identical, because `linked` is written only when it is true.",
+  "note": "v4 wire form: the written side from the layout, the other side carried through UNPARSED from whatever was stored (a pre-split payload stands in whole). `other: null` in the input means nothing stored.",
   "cases": [
     {
       "name": "phone, nothing on disk",
@@ -145,7 +145,7 @@
         "other": null
       },
       "expected": {
-        "v": 5,
+        "v": 4,
         "phone": {
           "slots": [
             {
@@ -425,7 +425,7 @@
         "other": null
       },
       "expected": {
-        "v": 5,
+        "v": 4,
         "desktop": {
           "slots": [
             {
@@ -720,7 +720,7 @@
         }
       },
       "expected": {
-        "v": 5,
+        "v": 4,
         "phone": {
           "slots": [
             {
@@ -1030,7 +1030,7 @@
         }
       },
       "expected": {
-        "v": 5,
+        "v": 4,
         "desktop": {
           "slots": [
             {
@@ -1353,7 +1353,7 @@
         }
       },
       "expected": {
-        "v": 5,
+        "v": 4,
         "phone": {
           "slots": [
             {
@@ -1674,7 +1674,7 @@
         }
       },
       "expected": {
-        "v": 5,
+        "v": 4,
         "desktop": {
           "slots": [
             {
@@ -1967,7 +1967,7 @@
         "other": "garbage"
       },
       "expected": {
-        "v": 5,
+        "v": 4,
         "phone": {
           "slots": [
             {
@@ -2262,7 +2262,7 @@
         }
       },
       "expected": {
-        "v": 5,
+        "v": 4,
         "phone": {
           "slots": [
             {

@@ -636,7 +636,7 @@ final class DayModel {
             goalHours: sleepGoalHours,
             weekAgo: ISODate.addDays(date, -7) ?? date
         )
-        return debt.nights >= 3 ? debt : nil
+        return debt.nights >= SleepDebt.minimumNights ? debt : nil
     }
 
     var sleepGoalHours: Double { goals?.sleepGoalHours ?? 8 }

@@ -31,13 +31,14 @@ struct DashboardLayoutStoreTests {
         #expect(ref.id == user)
     }
 
-    // ── W7: the v5 payload over the row that is on the device ───────────────
+    // ── W7: `linked` over the row that is on the device ─────────────────────
 
-    /// The migration this wave actually performs, at the layer that performs
-    /// it. `Dashboard`'s own vectors prove the reader; this proves that a real
+    /// The migration this wave performs, at the layer that performs it.
+    /// `Dashboard`'s own vectors prove the reader; this proves that a real
     /// stored row, written by a build that had never heard of `linked`, comes
-    /// back out of the store saying the same thing.
-    @Test("a v4 row on disk reads, re-writes as v5, and loses nothing")
+    /// back out of the store saying the same thing — and that connecting a
+    /// stack adds one key and moves nothing else, `v` included.
+    @Test("a row written before `linked` existed reads, re-writes and loses nothing")
     func v4RowSurvivesTheBump() throws {
         let db = try AppDatabase.inMemory(deviceId: "device-a")
         let v4 = #"{"v":4,"phone":{"slots":[{"id":"sl-sleep","size":"m","items":["sleep","vitals"]}],"hidden":["steps"],"updatedAt":7},"desktop":{"slots":[{"id":"d1","size":"xl","items":["recovery"]}],"hidden":[],"updatedAt":5}}"#
@@ -59,7 +60,11 @@ struct DashboardLayoutStoreTests {
             let row = try DashboardLayoutRow.filter(Column("user_id") == user).fetchOne(db)!
             return try JSONSerialization.jsonObject(with: Data(row.layout.raw.utf8)) as! [String: Any]
         }
-        #expect(object["v"] as? Double == 5)
+        // ── AND `v` DID NOT MOVE ────────────────────────────────────────
+        // `linked` is additive, and `Dashboard.version` is the gate an older
+        // build uses to decide whether this row has surface sides at all. See
+        // `Layout.swift`'s header for what raising it costs.
+        #expect(object["v"] as? Double == 4)
         // The desktop side the phone has no business touching is still there.
         #expect(((object["desktop"] as! [String: Any])["slots"] as! [[String: Any]])[0]["id"] as? String == "d1")
         let back = Dashboard.fromStored(object, surface: .phone)

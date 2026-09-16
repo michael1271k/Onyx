@@ -607,17 +607,26 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
   /// The Mega Widget's line — `CoachSentence.sentence`, resolved by the
   /// builder rather than by the face.
   ///
-  /// ── WHY THE STRING AND NOT ITS FOUR INPUTS ─────────────────────────────────
-  /// The rule table is pure and lives in `Coach/CoachSentence.swift`, so a face
-  /// COULD run it. Two reasons it does not. The inputs are not all in this
-  /// payload — the stress band and the ACWR are a `stressInputs` read, and
-  /// putting four scalars here to be folded into one line by every host is four
-  /// fields where one is enough. And the sentence is the thing the app and the
-  /// Home Screen have to agree on: one resolution, written once, is the same
-  /// argument `volumeByFamily`'s header makes against a second accumulator.
+  /// ── WHY THE STRING AND NOT ITS INPUTS ──────────────────────────────────────
+  /// The rule table is pure and lives in `Coach/CoachSentence.swift`, and
+  /// `CoachSentence.Inputs` is one `Codable` struct, so carrying the inputs
+  /// instead would cost one field rather than four and a face could fold them
+  /// at render time. It would also be wrong, and the failure is quiet.
+  ///
+  /// The rules read four dimensions and every one of them is optional, because
+  /// "in band" and "never looked at" are different facts and the table says so
+  /// — nothing known at all is its own branch. Only the BUILDER knows which it
+  /// is. Two of the four come from a `stressInputs` read that runs at one scope
+  /// (`wantsBody`), so a payload built at a narrower one would carry a perfectly
+  /// well-formed `Inputs` with the battery present and the load and stress
+  /// absent — and a face folding that would print "Battery 72 % and nothing is
+  /// behind. Train hard." from two readings nobody consulted. Resolving where
+  /// the reads happen is the only place that distinction survives.
   ///
   /// Nil on a payload built before W7, and on any scope that does not resolve
-  /// the battery. The face draws nothing rather than a blank line.
+  /// the battery. The face draws nothing rather than a blank line — which is
+  /// also what a scoped render of the Mega tile would get, though nothing does
+  /// that today: `.daily` is a dashboard tile and the grid builds at `.full`.
   public let coach: String?
 
   public init(date: String, generatedAt: String, scope: String? = nil, battery: Int? = nil, score: Int? = nil, sleep: Sleep, weight: Weight, macros: Macros, water: Water, steps: Steps, workout: Workout, week: Week, weekPrev: WeekTotals? = nil, records: [Record]? = nil, e1rm: [E1rm]? = nil, muscleFocus: [MuscleVolume]? = nil, today: Today? = nil, streak: Streak? = nil, context: DayContext? = nil, cardio: Cardio? = nil, calendar: [CalendarDay]? = nil, volumeTrend: [Point]? = nil, body: Body? = nil, scores: Scores? = nil, readiness: Readiness? = nil, vitals: Vitals? = nil, consistency: Consistency? = nil, deficit: DeficitLedger? = nil, trajectory: Trajectory? = nil, batteryStack: [BatteryStackDay]? = nil, bodyComp: [BodyCompMetric]? = nil, coach: String? = nil) {
