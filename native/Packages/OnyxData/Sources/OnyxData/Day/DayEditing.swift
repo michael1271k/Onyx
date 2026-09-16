@@ -307,22 +307,48 @@ public extension AppDatabase {
         })
     }
 
-    /// Rate (or re-rate) a muscle. One row per (day, muscle), so tapping a
-    /// different level replaces the rating rather than stacking rows. `0` is a
-    /// stored rating — "None" — not an absence, exactly as the web writes it.
+    /// Rate (or re-rate) a muscle, optionally one side of it and one part of
+    /// it. One row per (day, muscle, side, sub-region), so tapping a different
+    /// level replaces that rating rather than stacking rows. `0` is a stored
+    /// rating — "None" — not an absence, exactly as the web wrote it.
+    ///
+    /// ── ABSENCE IS THE SPELLING OF "BOTH" (W9) ──────────────────────────────
+    /// `side: .both` stores NULL and `subRegion: nil` stores NULL, which is the
+    /// meaning every row written before these columns existed already carried.
+    /// Three things follow, and all three are the point:
+    ///
+    ///   · A bilateral whole-muscle rating is byte-identical to a v1 row, on
+    ///     the wire (`encodeIfPresent` omits a nil) and in the export document
+    ///     (`BodySide.both.mark` is the empty string).
+    ///   · A legacy row is found by this lookup without a backfill, because
+    ///     GRDB turns `Column("side") == nil` into `side IS NULL`.
+    ///   · Re-rating a whole muscle updates that row rather than minting a
+    ///     second one beside it.
+    ///
+    /// The left and the right row coexist because they differ in the key. The
+    /// scoring fold takes the MAX within a muscle, so a pair cannot move the
+    /// battery that a single whole-muscle row at the same peak would not have
+    /// moved — which is why this migration needs no rescore.
     ///
     /// `source` ties the rating to the session that caused it, when the caller
     /// knows one. Left alone when it does not, so a re-rating never erases the
     /// attribution an earlier one carried.
     func setDoms(
         userId: String, date: String, muscleGroup: String, severity: Int,
+        side: BodySide = .both, subRegion: String? = nil,
         source: (sessionId: String, dayKey: String?)? = nil, now: Date = Date()
     ) throws {
+        let storedSide = side.stored
         try writer.write { db in
             var row = try DomsLogRow
-                .filter(Column("user_id") == userId && Column("date") == date && Column("muscle_group") == muscleGroup)
+                .filter(Column("user_id") == userId && Column("date") == date
+                        && Column("muscle_group") == muscleGroup
+                        && Column("side") == storedSide && Column("sub_region") == subRegion)
                 .fetchOne(db)
-                ?? DomsLogRow(id: newOnyxID(), userId: userId, date: date, muscleGroup: muscleGroup, severity: severity, createdAt: now)
+                ?? DomsLogRow(
+                    id: newOnyxID(), userId: userId, date: date, muscleGroup: muscleGroup,
+                    severity: severity, createdAt: now, side: storedSide, subRegion: subRegion
+                )
             row.severity = severity
             if let source {
                 row.sourceSessionId = source.sessionId

@@ -177,10 +177,12 @@ public extension AppDatabase {
             // rating. The web applies the identical fold in
             // the web app's `lib/recovery/soreness.ts`; a golden vector pins the two.
             //
-            // ponytail: the LOCAL store still has no side/sub_region columns, so
-            // a phone can only write whole-muscle bilateral rows. The fold is
-            // correct either way; add the GRDB migration when the native logger
-            // grows a side control.
+            // The store grew `side` and `sub_region` in W9 (`v28`), so a day
+            // can now hold a left row and a right row for one muscle. Nothing
+            // here changed and nothing here needed to: the fold takes the MAX
+            // within a muscle, so a pair peaks exactly where the single
+            // whole-muscle row at the same severity peaked, and the battery
+            // cannot move because a rating was split in two.
             let domsSeverity = Self.foldDomsSeverity(
                 try DomsLogRow.filter(Column("user_id") == userId && Column("date") == date)
                     .fetchAll(db)

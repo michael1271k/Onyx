@@ -67,6 +67,30 @@ export type LandmarkMuscle = (typeof LANDMARK_MUSCLES)[number]
 
 export const ATLAS_VIEWBOX = { width: 120, height: 260 } as const
 
+/**
+ * The midline band, in viewBox x — how a path learns which SIDE of the body it
+ * is on.
+ *
+ * ── THE GEOMETRY ALREADY KNEW ────────────────────────────────────────────────
+ * Every bilateral muscle below is TWO entries, one mirrored about x = 60, and
+ * that has been true since the atlas was first drawn. Nothing read it: the hit
+ * test found which path contained the tap and then returned only the muscle,
+ * so "the right glute" and "the left glute" were the same answer. Adding a
+ * `side` to the emitted Swift is therefore not new anatomy — it is the fact the
+ * coordinates have carried all along, finally written down.
+ *
+ * A path's side is its vertex centroid's x against this band: left of `left`
+ * is the body's left, right of `right` is its right, and anything inside the
+ * band is AXIAL and has no side. The band is ±2 rather than a bare `x < 60`
+ * test because three shapes straddle the spine on purpose — the trapezius
+ * diamond, the erector column and the rectus abdominis — and a hard midline
+ * would assign each of them a side on the accident of a control point.
+ *
+ * `gen-atlas-swift.mjs` parses these two numbers out of this file rather than
+ * carrying its own copy, so the rule and the anatomy cannot drift apart.
+ */
+export const ATLAS_MIDLINE_BAND = { left: 58, right: 62 } as const
+
 export type AtlasView = 'front' | 'back'
 
 export interface AtlasPath {

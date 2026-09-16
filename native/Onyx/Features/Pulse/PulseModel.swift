@@ -618,9 +618,30 @@ final class DayModel {
         }))
     }
 
-    /// Muscle group → severity, as rated today.
+    /// Muscle group → severity, as rated today: the MAX across sides.
+    ///
+    /// Max, not last-wins, and that is a W9 change with a reason. A day can now
+    /// hold a left row and a right row for one muscle, and "left quad severe,
+    /// right quad fine" is a severe quad — averaging it, or taking whichever
+    /// row the fetch returned last, reports a day nobody had. It is the same
+    /// fold `ScoringInputsBuilder.foldDomsSeverity` and `Derived` apply, so the
+    /// summary line, the battery and the export cannot disagree about how sore
+    /// a muscle was.
     var domsSeverity: [String: Int] {
-        Dictionary(doms.map { ($0.muscleGroup, $0.severity) }, uniquingKeysWith: { _, last in last })
+        doms.reduce(into: [:]) { out, row in
+            out[row.muscleGroup] = max(out[row.muscleGroup] ?? 0, row.severity)
+        }
+    }
+
+    /// One rating exactly as stored — this group, this side, the whole muscle.
+    ///
+    /// Nil is "never rated", which is NOT "None": the popover shows a tick
+    /// beside the level the athlete chose, and defaulting an unrated side to 0
+    /// would tick "None" on a muscle nobody has answered for.
+    func domsSeverity(_ group: String, side: BodySide) -> Int? {
+        doms.first {
+            $0.muscleGroup == group && BodySide(stored: $0.side) == side && $0.subRegion == nil
+        }?.severity
     }
 
     /// The weigh-ins in the window, oldest first, with the days between them
@@ -860,14 +881,26 @@ final class DayModel {
     /// Attribution (`source`) is left nil: the session that caused the soreness
     /// is a 72-hour lookup over `workout_sessions` the web runs per muscle, and
     /// nothing on this screen reads it back yet.
-    func setDoms(_ muscle: String, severity: Int) {
-        if let i = doms.firstIndex(where: { $0.muscleGroup == muscle }) {
+    /// `side` defaults to `.both`, which stores NULL — the pre-W9 meaning, and
+    /// what every rating written before the body had two sides already says.
+    /// The optimistic row is keyed on the side too, so rating a left glute does
+    /// not silently overwrite the right one under the thumb.
+    func setDoms(_ muscle: String, severity: Int, side: BodySide = .both) {
+        let stored = side.stored
+        if let i = doms.firstIndex(where: {
+            $0.muscleGroup == muscle && $0.side == stored && $0.subRegion == nil
+        }) {
             doms[i].severity = severity
         } else {
-            doms.append(DomsLogRow(id: "local", userId: userId, date: date, muscleGroup: muscle, severity: severity))
+            // The id carries the side: two optimistic rows both called "local"
+            // are two rows the next reload cannot tell apart.
+            doms.append(DomsLogRow(
+                id: "local-\(muscle)-\(stored ?? "both")", userId: userId, date: date,
+                muscleGroup: muscle, severity: severity, side: stored
+            ))
         }
         write { [database, userId, date] in
-            try database.setDoms(userId: userId, date: date, muscleGroup: muscle, severity: severity)
+            try database.setDoms(userId: userId, date: date, muscleGroup: muscle, severity: severity, side: side)
         }
     }
 

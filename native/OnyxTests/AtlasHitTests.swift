@@ -37,12 +37,12 @@ struct OnyxAtlasHitTests {
     func hits() {
         // Points read off the generated file's own coordinates: chest at
         // sternum height, quads and hamstrings mid-thigh, lats mid-back.
-        #expect(OnyxAtlas.muscle(at: at(48, 66), in: rect, side: .front) == .chest)
-        #expect(OnyxAtlas.muscle(at: at(47, 175), in: rect, side: .front) == .quads)
-        #expect(OnyxAtlas.muscle(at: at(50, 205), in: rect, side: .front) == .calves)
+        #expect(OnyxAtlas.muscle(at: at(48, 66), in: rect, side: .front)?.muscle == .chest)
+        #expect(OnyxAtlas.muscle(at: at(47, 175), in: rect, side: .front)?.muscle == .quads)
+        #expect(OnyxAtlas.muscle(at: at(50, 205), in: rect, side: .front)?.muscle == .calves)
         // The same two points on the back are a different body.
-        #expect(OnyxAtlas.muscle(at: at(47, 175), in: rect, side: .back) == .hamstrings)
-        #expect(OnyxAtlas.muscle(at: at(48, 90), in: rect, side: .back) == .lats)
+        #expect(OnyxAtlas.muscle(at: at(47, 175), in: rect, side: .back)?.muscle == .hamstrings)
+        #expect(OnyxAtlas.muscle(at: at(48, 90), in: rect, side: .back)?.muscle == .lats)
 
         // The head carries no trainable muscle, and neither does the margin
         // the aspect-fit letter-boxes away.
@@ -98,8 +98,8 @@ struct OnyxAtlasHitTests {
             for point in probes(p.path) {
                 probed += 1
                 let answer = OnyxAtlas.muscle(at: point, in: rect, side: side)
-                #expect(answer?.rawValue == painted(point), "\(muscle) \(side.rawValue) at \(point): hit \(String(describing: answer)), painted \(String(describing: painted(point)))")
-                if answer == muscle { reachable = true }
+                #expect(answer?.muscle.rawValue == painted(point), "\(muscle) \(side.rawValue) at \(point): hit \(String(describing: answer)), painted \(String(describing: painted(point)))")
+                if answer?.muscle == muscle { reachable = true }
             }
         }
         #expect(probed > 0, "\(muscle) \(side.rawValue): no path has an interior")
@@ -119,7 +119,106 @@ struct OnyxAtlasHitTests {
             return path.contains(shoulder)
         }
         let painted = OnyxAtlas.muscles.last { $0.view == .front && covers($0) }
-        #expect(OnyxAtlas.muscle(at: shoulder, in: rect, side: .front)?.rawValue == painted?.muscle)
+        #expect(OnyxAtlas.muscle(at: shoulder, in: rect, side: .front)?.muscle.rawValue == painted?.muscle)
+    }
+
+    // MARK: - Laterality (W9)
+
+    /// The geometry always knew which side it was drawing; until W9 nothing
+    /// asked. This is the table that says the derivation got it right, and it
+    /// is written against the ATLAS rather than against a list of muscle names,
+    /// so re-running the generator cannot quietly move a side without failing.
+    @Test("every bilateral muscle is exactly one left path and one right path, per view")
+    func sidesAreDerivedNotDeclared() {
+        for view in [OnyxAtlasView.front, .back] {
+            let byMuscle = Dictionary(grouping: OnyxAtlas.muscles.filter { $0.view == view }, by: \.muscle)
+            for (muscle, paths) in byMuscle {
+                let lefts = paths.filter { $0.side == .left }
+                let rights = paths.filter { $0.side == .right }
+                let axial = paths.filter { $0.side == .both }
+                // A muscle is either a mirrored PAIR or wholly axial. A muscle
+                // with one sided path and one axial path would be half
+                // lateralised — a body where tapping the left quad rates the
+                // left quad and tapping the right one rates both.
+                let isPair = lefts.count == 1 && rights.count == 1 && axial.isEmpty
+                let isAxial = lefts.isEmpty && rights.isEmpty && !axial.isEmpty
+                #expect(isPair || isAxial, "\(muscle) on the \(view.rawValue) is \(lefts.count)L/\(rights.count)R/\(axial.count) axial")
+            }
+        }
+    }
+
+    /// The three the plan named, and they are named here rather than derived
+    /// because the POINT is that these three specifically must not lateralise:
+    /// the trapezius and the erector column are one shape each, and the
+    /// midsection is three shapes whose two flanks would otherwise take a side
+    /// of their own while the rectus between them took none.
+    @Test("the axial three carry no side")
+    func axialMusclesAreBoth() {
+        for muscle in ["Upper back", "Lower back", "Abs/core"] {
+            let paths = OnyxAtlas.muscles.filter { $0.muscle == muscle }
+            #expect(!paths.isEmpty, "\(muscle) is not in the atlas")
+            #expect(paths.allSatisfy { $0.side == .both }, "\(muscle) took a side")
+        }
+        // And the shapes the plan expects, so a redraw that quietly merged the
+        // obliques into the rectus shows up here.
+        #expect(OnyxAtlas.muscles.filter { $0.muscle == "Abs/core" }.count == 3)
+        #expect(OnyxAtlas.muscles.filter { $0.muscle == "Upper back" }.count == 1)
+        #expect(OnyxAtlas.muscles.filter { $0.muscle == "Lower back" }.count == 1)
+    }
+
+    /// A tap answers the side of the figure the finger was on.
+    ///
+    /// The atlas is read as a MIRROR: x below the midline is the body's left on
+    /// both views, so what a reader points at on screen is what they get told.
+    @Test("a tap left of the midline answers left, and right of it answers right")
+    func tapsCarryTheirSide() {
+        #expect(OnyxAtlas.muscle(at: at(47, 175), in: rect, side: .front)?.side == .left)
+        #expect(OnyxAtlas.muscle(at: at(73, 175), in: rect, side: .front)?.side == .right)
+        #expect(OnyxAtlas.muscle(at: at(47, 175), in: rect, side: .back)?.side == .left)
+        #expect(OnyxAtlas.muscle(at: at(73, 175), in: rect, side: .back)?.side == .right)
+        // And a tap on an axial muscle has no side to answer with.
+        #expect(OnyxAtlas.muscle(at: at(60, 110), in: rect, side: .front)?.muscle == .absCore)
+        #expect(OnyxAtlas.muscle(at: at(60, 110), in: rect, side: .front)?.side == .both)
+        #expect(OnyxAtlas.muscle(at: at(60, 55), in: rect, side: .back)?.muscle == .upperBack)
+        #expect(OnyxAtlas.muscle(at: at(60, 55), in: rect, side: .back)?.side == .both)
+    }
+
+    /// The rotor's list: one row per thing that can be rated separately.
+    @Test("the sided rotor splits a pair and leaves an axial muscle whole")
+    func sidedRotor() {
+        for view in [OnyxAtlasView.front, .back] {
+            let sided = OnyxAtlas.sidedLandmarks(on: view)
+            // No repeats, and every landmark the plain list offers is still
+            // reachable through at least one sided row.
+            #expect(Set(sided).count == sided.count)
+            #expect(Set(sided.map(\.muscle)) == Set(OnyxAtlas.landmarks(on: view)))
+        }
+        let front = OnyxAtlas.sidedLandmarks(on: .front)
+        #expect(front.contains(MuscleSide(.quads, .left)) && front.contains(MuscleSide(.quads, .right)))
+        #expect(front.contains(MuscleSide(.absCore, .both)))
+        #expect(!front.contains(MuscleSide(.absCore, .left)))
+        let back = OnyxAtlas.sidedLandmarks(on: .back)
+        #expect(back.contains(MuscleSide(.glutes, .left)) && back.contains(MuscleSide(.glutes, .right)))
+        #expect(back.contains(MuscleSide(.upperBack, .both)))
+    }
+
+    /// The enum and the generated storage vocabulary are one list.
+    ///
+    /// `DomsMuscles.sides` is emitted from `scripts/src/subRegions.ts` and is
+    /// what the database column holds; `BodySide.rawValue` is what the app
+    /// writes into it. A rename on either side without the other is a rating
+    /// that round-trips as `both` forever, silently.
+    @Test("BodySide is the stored vocabulary, and both means absent")
+    func sideVocabulary() {
+        #expect(BodySide.allCases.map(\.rawValue) == DomsMuscles.sides)
+        #expect(BodySide.both.stored == nil)
+        #expect(BodySide.left.stored == "left" && BodySide.right.stored == "right")
+        #expect(BodySide(stored: nil) == .both)
+        #expect(BodySide(stored: "both") == .both)
+        #expect(BodySide(stored: "sideways") == .both)
+        // The export markers, which are what keeps a bilateral token v1-shaped.
+        #expect(BodySide.both.mark.isEmpty)
+        #expect(BodySide.left.mark == "L" && BodySide.right.mark == "R")
     }
 }
 

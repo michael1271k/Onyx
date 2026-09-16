@@ -301,7 +301,7 @@ struct AtlasSheet: View {
             side: side,
             worked: worked,
             values: spoken,
-            onPick: { muscle in pick(muscle) }
+            onPick: { hit in pick(hit.muscle) }
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Reduce Motion turns the turn into a cross-fade: the face that is
@@ -429,8 +429,18 @@ struct AtlasSheet: View {
     }
 
     /// What VoiceOver reads on a landmark, and what the callout would say.
-    private var spoken: [LandmarkMuscle: String] {
-        Dictionary(uniqueKeysWithValues: ranked.map { ($0.muscle, "\(OnyxFormat.sets($0.sets)) weighted sets") })
+    ///
+    /// Keyed `both`, and that is the whole of this screen's relationship with
+    /// laterality (W9): the figure answers "where did this session land", and
+    /// the ledger behind it records that a set of squats happened, not which
+    /// leg did more of it. A `both` key lights and speaks for the left path and
+    /// the right path alike, so a tap on either glute states the same share —
+    /// which is the truthful answer, where a side-specific number here would be
+    /// one the store never held.
+    private var spoken: [MuscleSide: String] {
+        Dictionary(uniqueKeysWithValues: ranked.map {
+            (MuscleSide($0.muscle, .both), "\(OnyxFormat.sets($0.sets)) weighted sets")
+        })
     }
 
     // MARK: - The ranking

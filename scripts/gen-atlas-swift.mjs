@@ -70,7 +70,77 @@ export function readAtlas(ts) {
   // BASE_SHAPES are the bare string literals; the muscle paths are matched
   // above and must not be counted twice.
   const muscleDs = new Set(paths.map((p) => p.d))
-  return { base: base.filter((d) => !muscleDs.has(d)), paths, detail }
+  return { base: base.filter((d) => !muscleDs.has(d)), paths: withSides(paths, readMidline(ts)), detail }
+}
+
+/**
+ * `ATLAS_MIDLINE_BAND`, read out of the source rather than restated here.
+ *
+ * The rule that turns a coordinate into a side is anatomy, so it belongs beside
+ * the anatomy; this generator is the only thing that applies it, so it is the
+ * only thing that reads it. Two copies of the band would drift the first time
+ * either was nudged — the same argument that made this file exist at all.
+ */
+export function readMidline(ts) {
+  const m = ts.match(/ATLAS_MIDLINE_BAND\s*=\s*\{\s*left:\s*(-?\d*\.?\d+)\s*,\s*right:\s*(-?\d*\.?\d+)\s*\}/)
+  if (!m) throw new Error('atlas.ts: no ATLAS_MIDLINE_BAND found — did the shape change?')
+  return { left: Number(m[1]), right: Number(m[2]) }
+}
+
+/**
+ * The mean x of every point a path names — on-curve and control alike.
+ *
+ * Not the area centroid, and deliberately: these are 4–12 segment bellies drawn
+ * symmetrically about their own long axis, so the two agree to well inside the
+ * ±2 band, and a polygon-area centroid would need the curves flattened first.
+ * A control point pulls the mean the same way it pulls the shape.
+ */
+export function centroidX(d) {
+  const xs = []
+  for (const { args } of tokenize(d)) {
+    for (let i = 0; i < args.length; i += 2) xs.push(args[i])
+  }
+  if (!xs.length) throw new Error(`no points in "${d}"`)
+  return xs.reduce((a, b) => a + b, 0) / xs.length
+}
+
+/**
+ * Each path's side, and the one rule that keeps an axial muscle axial.
+ *
+ * Pass one is the band: centroid left of the band is `left`, right of it is
+ * `right`, inside it is `both`.
+ *
+ * Pass two is the reason `Abs/core` does not come out lateralised. The rectus
+ * straddles the spine and lands in the band, but the two oblique flanks sit at
+ * x ≈ 45 and x ≈ 75 and would each take a side of their own — so tapping the
+ * middle of a midsection would offer "both" and tapping an inch to the left
+ * would offer "left", for one muscle the athlete rates as one thing. A muscle
+ * is lateral only when a view draws it as EXACTLY one left and one right; any
+ * other shape (one path, three paths, two on the same side) is axial and every
+ * path of it answers `both`.
+ *
+ * Derived, not listed. A hand-written set of axial muscles would be a fourth
+ * copy of the anatomy, and `npm run check:atlas` would not be able to tell when
+ * it went stale.
+ */
+export function withSides(paths, band) {
+  const raw = paths.map((p) => {
+    const cx = centroidX(p.d)
+    return { ...p, side: cx < band.left ? 'left' : cx > band.right ? 'right' : 'both' }
+  })
+  const groups = new Map()
+  for (const p of raw) {
+    const key = `${p.muscle}\u001F${p.view}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(p)
+  }
+  for (const group of groups.values()) {
+    const lefts = group.filter((p) => p.side === 'left').length
+    const rights = group.filter((p) => p.side === 'right').length
+    if (lefts === 1 && rights === 1 && group.length === 2) continue
+    for (const p of group) p.side = 'both'
+  }
+  return raw
 }
 
 const NUM = /-?\d*\.?\d+/g
@@ -121,7 +191,7 @@ export function swiftPath(d) {
 export function generate(ts) {
   const { base, paths, detail } = readAtlas(ts)
   const entry = (p) => [
-    '  OnyxAtlasPath(muscle: "' + p.muscle + '", view: .' + p.view + ') { rect, p in',
+    '  OnyxAtlasPath(muscle: "' + p.muscle + '", view: .' + p.view + ', side: .' + p.side + ') { rect, p in',
     swiftPath(p.d).split('\n').map((l) => '  ' + l).join('\n'),
     '  },',
   ].join('\n')
@@ -145,6 +215,7 @@ export function generate(ts) {
 // the tiles' \`OnyxAtlasFigure\` alike. Geometry only — how a body is TINTED
 // is each figure's own decision.
 import SwiftUI
+import OnyxCore
 
 public enum OnyxAtlasView: String, Sendable {
   case front, back
@@ -175,13 +246,24 @@ public struct OnyxAtlasDetail: Sendable {
 public struct OnyxAtlasPath: Identifiable, Sendable {
   public let muscle: String
   public let view: OnyxAtlasView
+  /// Which side of the body this ONE path is — derived from its centroid
+  /// against \`ATLAS_MIDLINE_BAND\`, never hand-written.
+  ///
+  /// A bilateral muscle is two entries per view and always has been; this is
+  /// the field that finally says so, and it is what lets a tap answer "the
+  /// right glute" rather than "the glutes". \`both\` is an AXIAL path — the
+  /// trapezius diamond, the erector column, a midsection — and also every path
+  /// of a muscle a view does not draw as a mirrored pair, so a muscle is never
+  /// half lateralised.
+  public let side: BodySide
   public let build: @Sendable (CGRect, inout Path) -> Void
 
   public var id: String { "\\(muscle)-\\(view.rawValue)-\\(String(describing: build))" }
 
-  public init(muscle: String, view: OnyxAtlasView, _ build: @escaping @Sendable (CGRect, inout Path) -> Void) {
+  public init(muscle: String, view: OnyxAtlasView, side: BodySide = .both, _ build: @escaping @Sendable (CGRect, inout Path) -> Void) {
     self.muscle = muscle
     self.view = view
+    self.side = side
     self.build = build
   }
 }
