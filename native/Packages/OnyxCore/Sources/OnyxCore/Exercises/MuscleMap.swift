@@ -341,4 +341,78 @@ public enum MuscleMap {
     public static func secondaryLandmarks(_ exerciseName: String) -> [LandmarkMuscle] {
         landmarks(movers(exerciseName)?.secondary ?? [])
     }
+
+    // MARK: - The cardio table
+
+    /// What a BOUT works, for the surfaces that name muscles in words.
+    ///
+    /// ── AND WHY IT IS NOT IN `dict` ─────────────────────────────────────────
+    /// `dict` is held to the TypeScript entry for entry by two golden fixtures
+    /// (`muscle-map-dict`, `muscle-dict`), and it is the input to
+    /// `MuscleCredit.weightedSets` — the weekly MEV/MAV accumulator, the
+    /// Freshness Map, the per-muscle tonnage breakdown and, through the battery,
+    /// the readiness score. Teaching `movers(_:)` that a treadmill trains calves
+    /// would therefore start paying muscle credit for walking, in five places
+    /// nobody asked to change, and would break both fixtures on the way.
+    ///
+    /// A bout genuinely uses these muscles and genuinely is not resistance
+    /// training. So this table answers the DISPLAY question — "what is this card
+    /// about" — and answers nothing else. Nothing here reaches an accumulator,
+    /// `movers(_:)`, `muscleGroups(_:)` or `resolveMovers(_:stored:)`, and that
+    /// separation is the whole point of the file it lives in rather than beside
+    /// the view that reads it.
+    ///
+    /// Empty for a name that is not a bout, which is what makes the caller's
+    /// fallback safe: a bench press can never reach this table.
+    public static func cardioMovers(_ exerciseName: String) -> MoverTokens? {
+        let name = tokenize(exerciseName)
+        var best: (muscles: MoverTokens, specificity: Int)?
+        for entry in cardioDict where entry.tokens.allSatisfy(name.contains) {
+            // STRICTLY greater, exactly as `movers(_:)` resolves: a tie keeps
+            // the entry written first.
+            if best == nil || entry.tokens.count > best!.specificity {
+                best = (entry.muscles, entry.tokens.count)
+            }
+        }
+        return best?.muscles
+    }
+
+    /// `cardioMovers`, folded to landmarks — the shape `primaryLandmarks(_:)`
+    /// answers in, so a caller can fall back from one to the other.
+    public static func cardioPrimaryLandmarks(_ exerciseName: String) -> [LandmarkMuscle] {
+        landmarks(cardioMovers(exerciseName)?.primary ?? [])
+    }
+
+    public static func cardioSecondaryLandmarks(_ exerciseName: String) -> [LandmarkMuscle] {
+        landmarks(cardioMovers(exerciseName)?.secondary ?? [])
+    }
+
+    /// The six kinds `CardioImport.offered` names, plus the machine names the
+    /// exercise catalogue files them under. Keyed on the same token match
+    /// `dict` uses so `Treadmill`, `Treadmill Walk` and `Incline Treadmill` all
+    /// resolve to one entry.
+    ///
+    /// The splits are the uncontroversial ones: a bout is hip and knee
+    /// extension against the ground, or against a pedal, or — on a rower —
+    /// against a handle, which is the one kind here whose primary is not a leg.
+    /// HIIT names no muscle at all: the word describes an INTERVAL STRUCTURE,
+    /// not a movement, and guessing legs from it would be the table asserting
+    /// something the row does not say.
+    static let cardioDict: [Entry] = [
+        Entry(["treadmill"], primary: ["quadriceps", "calves"], secondary: ["hamstrings", "glutes"]),
+        Entry(["walk"], primary: ["quadriceps", "calves"], secondary: ["hamstrings", "glutes"]),
+        Entry(["run"], primary: ["quadriceps", "calves"], secondary: ["hamstrings", "glutes"]),
+        Entry(["jog"], primary: ["quadriceps", "calves"], secondary: ["hamstrings", "glutes"]),
+        Entry(["stair"], primary: ["quadriceps", "glutes"], secondary: ["calves", "hamstrings"]),
+        Entry(["stepper"], primary: ["quadriceps", "glutes"], secondary: ["calves", "hamstrings"]),
+        Entry(["elliptical"], primary: ["quadriceps", "glutes"], secondary: ["hamstrings", "calves"]),
+        Entry(["cycling"], primary: ["quadriceps"], secondary: ["glutes", "hamstrings", "calves"]),
+        Entry(["bike"], primary: ["quadriceps"], secondary: ["glutes", "hamstrings", "calves"]),
+        // The ergometer, not the cable row: `rowing` and `rower` are the two
+        // spellings a bout carries, and neither collides with `dict`'s
+        // `["cable", "row"]` family because this table is only ever consulted
+        // when `dict` has already answered nothing.
+        Entry(["rowing"], primary: ["upper back", "quadriceps"], secondary: ["lats", "hamstrings"]),
+        Entry(["rower"], primary: ["upper back", "quadriceps"], secondary: ["lats", "hamstrings"]),
+    ]
 }

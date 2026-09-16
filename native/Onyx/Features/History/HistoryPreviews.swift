@@ -13,6 +13,12 @@ import OnyxData
 enum HistoryPreviews {
     static let userId = "00000000-0000-0000-0000-000000000001"
     static let lastSession = "s-2026-09-01"
+    /// A day that is ONLY a bout — the card W4 is reviewed from.
+    ///
+    /// The Sunday AFTER the photographed block, deliberately: every other
+    /// screen in this harness is pinned inside 30 August – 5 September, so a
+    /// session here cannot add a row to a week another shot is a picture of.
+    static let treadmillOnly = "s-2026-09-06"
     static let incline = ExerciseCatalogEntry(id: "ex-incline", name: "Incline DB Press", setCount: 24, lastTrained: "2026-09-01")
 
     @MainActor
@@ -50,6 +56,23 @@ enum HistoryPreviews {
         // not read back out of `personal_records`, which no longer holds them.
         case "session-records":
             NavigationStack { SessionDetailView(sessionId: lastSession, startAtRecord: true) }
+                .environment(environment())
+        // ── W4: the pair table, with something to compare against ───────────
+        // 2 September rather than 1 September, parked at the ledger. Single Arm
+        // Lateral Raise is the only unilateral movement in this seed, and this
+        // is the session where it moved most — 5 kg × 21/22 against the
+        // previous week's 16/15 — so `.pair`'s shared delta has something to
+        // say on both of its rows instead of reserving a blank twice.
+        case "session-pairs":
+            NavigationStack { SessionDetailView(sessionId: "s-2026-09-02", startAtLedger: true) }
+                .environment(environment())
+        // ── W4: the card the treadmill brief is actually about ──────────────
+        // A day with no lift on it: nothing to give the page a rail, a family
+        // hue or a muscle chip, and all five of `headerTags`' strength capsules
+        // guarded off. The whole session fits one screen, so it is shot from
+        // the top rather than parked at the ledger.
+        case "session-cardio":
+            NavigationStack { SessionDetailView(sessionId: treadmillOnly) }
                 .environment(environment())
         // §U4.5's edit mode, re-opened on the logger's own deck. It is the ONLY
         // way to see the edit hero — a shot script can launch a screen and
@@ -348,7 +371,21 @@ enum HistoryPreviews {
                 order += 1
             }
             try set("ex-incline", 0, 20, 12, type: "warmup")
-            for (i, (w, r)) in s.incline.enumerated() { try set("ex-incline", i + 1, w, r, rpe: 7 + Double(i) * 0.5) }
+            // ── ONE SESSION WHERE IT FELT HARDER (W4) ───────────────────
+            // Every RPE in this fixture was `7 + i × 0.5` on every session, so
+            // set 2 was rated 7.5 in July and 7.5 in September and the effort
+            // column's delta was zero on all six sessions and all three sets.
+            // W4's headline claim is that a RISE in RPE renders red, and a
+            // fixture that cannot produce a rise cannot photograph it — the
+            // same argument the failure set two loops down was added on.
+            //
+            // The last session is half a rung harder across the board, which
+            // is what the reps say happened: 11/10/10 against 10/9/12 at the
+            // same load. `session-pairs` is the shot that reviews it.
+            let harder = s.date == "2026-09-02"
+            for (i, (w, r)) in s.incline.enumerated() {
+                try set("ex-incline", i + 1, w, r, rpe: (harder ? 7.5 : 7) + Double(i) * 0.5)
+            }
             // The last set of the pulldown on the session the shot loop opens
             // is taken to FAILURE, which is the only way any screenshot of this
             // app shows the state: nothing else in six weeks of this fixture
@@ -425,6 +462,43 @@ enum HistoryPreviews {
             try WorkoutSet(id: "\(legs)-hack-\(i)", sessionId: legs, exerciseId: "ex-hack", setIndex: i + 1, weightKg: w, reps: r,
                            est1rmKg: OneRepMax.estimate(weight: w, reps: Double(r)), rpe: 8, foldOrder: i).insert(db)
         }
+
+        // ── A DAY THAT IS ONLY A BOUT (W4) ──────────────────────────────────
+        // Every treadmill row in this seed until now rode along on a full chest
+        // day, which is the one shape that HIDES what F6 found: the card's
+        // family hue, its muscle chips and its tag row all look fine when four
+        // lifts either side of it are supplying the page's colour. Alone on a
+        // page they are the page.
+        //
+        // No `day_key`: a walk is not one of Onyx-5's five days, and inventing
+        // one would put this session on a split's progression line.
+        let walkStart = LogicalDay.date(fromISO: "2026-09-06")!.addingTimeInterval(8 * 3600)
+        try WorkoutSession(
+            id: treadmillOnly, userId: userId, date: "2026-09-06",
+            startedAt: walkStart, endedAt: walkStart.addingTimeInterval(38 * 60),
+            durationMin: 38, avgBpm: 118, caloriesBurned: 214,
+            avgBpmEstimated: false, caloriesEstimated: false
+        ).insert(db)
+        try WorkoutSet(
+            id: "\(treadmillOnly)-treadmill", sessionId: treadmillOnly,
+            exerciseId: "ex-treadmill", setIndex: 1,
+            // A warm-up, exactly as the 7 September row is: that is what keeps
+            // a walk out of tonnage and out of the PR engine, and it is why
+            // `Top` and `Volume` are absent from the header rather than zero.
+            weightKg: 0, reps: 0, setType: "warmup",
+            exerciseOrder: 0,
+            durationSec: 2280, incline: 1, distanceKm: 3.6, elevationM: 24,
+            foldOrder: 0
+        ).insert(db)
+        // The bout Apple Health filed against it — the ONLY place this card's
+        // heart rate and its "Automatically logged" badge can come from, since
+        // `workout_sets` carries neither. See `SessionAnalysis.Page.bout`.
+        try CardioLogRow(
+            id: "c-walk", userId: userId, date: "2026-09-06", kind: "walk",
+            distanceM: 3600, durationMin: 38,
+            fromHealthkit: true, createdAt: walkStart,
+            avgHr: 118, sessionId: treadmillOnly, inclinePct: 1, elevationM: 24
+        ).insert(db)
 
         // The record book as the save path would have filed it.
         for (axis, value, w, r) in [("weight", 42.0, 42.0, 10), ("e1rm", 56.0, 42.0, 10), ("volume", 480.0, 40.0, 12)] {

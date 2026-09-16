@@ -446,7 +446,9 @@ enum PreviewHarness {
             TodayPreviews.view(screen)
         case "history", "history-week", "history-week-live", "history-week-wrapped",
              "history-week-wrap-open", "session", "session-ledger", "exercise-history",
-             "session-atlas", "session-edit", "session-records":
+             "session-atlas", "session-edit", "session-records",
+             // W4: the pair table, and a day that is only a bout.
+             "session-pairs", "session-cardio":
             HistoryPreviews.view(screen)
         case "trends", "trends-empty", "trends-maintenance":
             TrendsPreviews.view(screen)

@@ -60,7 +60,7 @@ struct MetaTagRow: View {
     var body: some View {
         FlowRow(spacing: OnyxSpace.xs) {
             ForEach(tags, id: \.text) { tag in
-                capsule(tag)
+                Capsule(tag)
             }
         }
         .accessibilityElement(children: .combine)
@@ -71,7 +71,29 @@ struct MetaTagRow: View {
         .accessibilityLabel(tags.map(\.spoken).joined(separator: ", "))
     }
 
-    private func capsule(_ tag: Tag) -> some View {
+    /// One reading, as the object it is.
+    ///
+    /// ── WHY THE DRAWING LEFT THE ROW (W4) ───────────────────────────────────
+    /// The session ledger's header now flows the movement's muscle chips and
+    /// its readings through ONE `FlowRow` — the anatomy and the arithmetic on
+    /// the same line, because two flow layouts stacked cannot share a line even
+    /// when both of them have room (A4). A `FlowRow` places SUBVIEWS, so the
+    /// header cannot nest a `MetaTagRow` inside its own and get one line out of
+    /// it; it needs the capsule itself.
+    ///
+    /// Nested rather than free: a capsule is the row's own vocabulary, and the
+    /// two must never come to disagree about what a reading looks like.
+    struct Capsule: View {
+        let tag: Tag
+
+        init(_ tag: Tag) { self.tag = tag }
+
+        var body: some View { drawn }
+    }
+}
+
+private extension MetaTagRow.Capsule {
+    var drawn: some View {
         let tint = tag.tint
         return HStack(spacing: OnyxSpace.xs) {
             if let symbol = tag.symbol {
@@ -110,9 +132,12 @@ struct MetaTagRow: View {
         // `onyxMuscleWash` at 6 %→2 % of a related hue. The same opacity over
         // a lit surface reads a step heavier, and a row of five heavy capsules
         // is a row of buttons — these are readings.
+        // `SwiftUI.Capsule()` spelled in full, not `.capsule`: this type now
+        // nests a view of its own called `Capsule`, and the shorthand would
+        // resolve to that one.
         .background(
             (tint?.opacity(0.12) ?? Color.onyx.hairline.opacity(0.55)),
-            in: .capsule
+            in: SwiftUI.Capsule()
         )
         .accessibilityHidden(true)
     }
