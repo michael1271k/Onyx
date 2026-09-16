@@ -38,6 +38,15 @@ struct WorkoutTabView: View {
     /// weekday the shot happens to run on. The app never passes one.
     var seededDay: ProgramDay?
     var seededToday: String?
+    /// Holds the done card on its stand-in, for the harness only.
+    ///
+    /// `SessionFallbackCard` is drawn for as long as `SessionAnalysis.headers`
+    /// takes, which on a warm fixture is less than a frame — so the state this
+    /// wave rebuilt is the one state of this tab a screenshot could never
+    /// catch. A seed, and not a `#if DEBUG` branch inside the card: the point
+    /// of the shot is that the REAL screen, with the real week under it, looks
+    /// right while it waits.
+    var seededHeaderPending = false
 
     @State private var week: WorkoutWeek?
     @State private var weekSheetOpen = false
@@ -276,7 +285,7 @@ struct WorkoutTabView: View {
         // opening the tab on a rest day clears the last one rather than leaving
         // yesterday's card under today's date.
         .task(id: doneSessionId) {
-            guard let id = doneSessionId else {
+            guard let id = doneSessionId, !seededHeaderPending else {
                 doneHeader = nil
                 return
             }
@@ -544,25 +553,16 @@ struct WorkoutTabView: View {
                 if let header = doneHeader, header.id == id {
                     SessionHeaderCard(header: header, totals: summary)
                 } else {
-                    // The header is a database read; these two facts are on the
-                    // state already. A card that drew nothing until the read
-                    // landed would blink on every open of the tab.
-                    VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                        HStack(spacing: OnyxSpace.s) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(Color.onyx.good)
-                            Text(day.label)
-                                .onyxDisplay()
-                                .foregroundStyle(Color.onyx.dayLabel(day.key))
-                            Spacer(minLength: OnyxSpace.s)
-                        }
-                        Text(summary)
-                            .onyxType(.secondary).onyxNumeral()
-                            .foregroundStyle(Color.onyx.textSecondary)
-                    }
-                    .padding(OnyxSpace.l)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .onyxGlass(.tile)
+                    // The header is a career-wide read; the label, the four
+                    // numbers and the day's three muscles are all on the
+                    // snapshot already. A card that drew nothing until the read
+                    // landed would blink on every open of the tab — and one
+                    // that drew a grey box made the finished session, which is
+                    // the subject of this tab, the plainest thing on it (W5).
+                    SessionFallbackCard(
+                        dayKey: day.key, label: day.label, totals: summary,
+                        muscles: week?.snapshot.doneMuscles ?? []
+                    )
                 }
             }
             .buttonStyle(.plain)
@@ -903,29 +903,47 @@ struct WorkoutTabView: View {
 
     // MARK: - Cardio
 
-    /// The last bout in full, the eight before it as a trail, and the week's
-    /// Zone 2 under both.
+    /// The last bout in full, and the eight before it as a trail.
     ///
-    /// ── WHY IT GREW ─────────────────────────────────────────────────────────
+    /// ── WHY IT GREW, AND WHAT IT LOST AGAIN (W5) ────────────────────────────
     /// It was one 44 pt row: a glyph, the word "Cardio", and a line of
     /// `type · km · min · pace` truncated to whatever fitted. Everything that
-    /// makes a bout worth reading — when it was, how hard it was, whether the
-    /// week's Zone 2 is on track — was either missing or squeezed out by
-    /// `lineLimit(1)`. Cardio is the second half of this tab's subject and it
-    /// was the smallest thing on the screen.
+    /// makes a bout worth reading — when it was, how hard it was — was either
+    /// missing or squeezed out by `lineLimit(1)`. Cardio is the second half of
+    /// this tab's subject and it was the smallest thing on the screen.
     ///
-    /// The Zone 2 rail lives INSIDE the card rather than beside it because it
-    /// is a fact about the bouts above it; a separate tile would have been a
-    /// box repeating the box above (§3.6).
+    /// What grew back too far was the Zone 2 RAIL. Its own arithmetic was
+    /// sound — `zone2Done` counts this week's bouts over `Zone2.minMinutes`
+    /// and `Zone2.weeklyTarget` is a target count of the same thing, so 1/2
+    /// was a fraction that meant something. What was wrong was drawing it as a
+    /// GAUGE, one line under the last bout's `avg bpm`: a filled bar under a
+    /// heart rate reads as a heart-rate bar, and `cardio_logs` has an `avg_hr`
+    /// column and no zone column, so there was no reading behind that promise
+    /// and never could be. The rail is gone and the count is a caption on the
+    /// header, which is what a count of sessions this week has always been.
+    ///
+    /// ponytail: the caption still says "Zone 2" for a rule that is purely
+    /// about duration. That name is the app's vocabulary — `Zone2` in OnyxCore
+    /// and the widget face both — so renaming it is a change to four surfaces
+    /// and a founder's word, not to this card.
+    ///
+    /// The figures the bout DOES know now speak the session page's vocabulary
+    /// exactly — `MetaTagRow.Capsule`, the same glyphs, the same `cardio`
+    /// tint — because the ledger's own bout card (W4) says the same four facts
+    /// about the same row, and two drawings of one reading is how they come to
+    /// disagree.
     private var cardioCard: some View {
         VStack(alignment: .leading, spacing: OnyxSpace.s) {
             HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
-                OnyxSectionHeader("Cardio", .body)
+                VStack(alignment: .leading, spacing: 2) {
+                    OnyxSectionHeader("Cardio", .body)
+                    zone2Caption
+                }
                 Spacer(minLength: 0)
                 Button { loggingCardio = true } label: {
                     Image(systemName: "plus")
                         .onyxType(.body).fontWeight(.semibold)
-                        .foregroundStyle(OnyxDomain.body.accent)
+                        .foregroundStyle(Color.onyx.cardio)
                         .frame(width: 44, height: 44)
                         .contentShape(.rect)
                 }
@@ -939,7 +957,7 @@ struct WorkoutTabView: View {
             if let bout = week?.snapshot.lastCardio {
                 lastBout(bout)
                 if trail.count >= 2 {
-                    Sparkline(points: trail, color: OnyxDomain.body.accent)
+                    Sparkline(points: trail, color: Color.onyx.cardio)
                         .frame(height: 22)
                         .accessibilityHidden(true)
                     Text("last \(trail.count) bouts · minutes")
@@ -951,9 +969,6 @@ struct WorkoutTabView: View {
                     .onyxType(.caption)
                     .foregroundStyle(Color.onyx.textSecondary)
             }
-
-            Divider().overlay(Color.onyx.hairline)
-            zone2Row
         }
         .padding(OnyxSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -961,61 +976,99 @@ struct WorkoutTabView: View {
         .accessibilityElement(children: .contain)
     }
 
-    /// Date · type on one line, then the numbers that describe the effort.
+    /// Type and when on one line, then every reading the bout carries.
     private func lastBout(_ bout: CardioLogRow) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: OnyxSpace.xs) {
-                Image(systemName: CardioKind(bout.kind).symbol)
-                    .onyxType(.caption)
-                    .foregroundStyle(OnyxDomain.body.accent)
-                    .accessibilityHidden(true)
-                Text(CardioKind(bout.kind).label)
-                    .onyxType(.body)
-                    .foregroundStyle(Color.onyx.textPrimary)
-                Spacer(minLength: OnyxSpace.s)
-                Text(boutWhen(bout))
-                    .onyxType(.caption)
-                    .foregroundStyle(Color.onyx.textTertiary)
-            }
-            HStack(spacing: OnyxSpace.m) {
-                ForEach(boutFigures(bout), id: \.0) { label, value in
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(value)
-                            .onyxType(.secondary).onyxNumeral()
-                            .foregroundStyle(Color.onyx.textPrimary)
-                            .lineLimit(1).minimumScaleFactor(0.7)
-                        Text(label)
-                            .onyxType(.micro)
-                            .foregroundStyle(Color.onyx.textTertiary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: OnyxSpace.s) {
+            // The masthead's own rule: at the accessibility sizes there is no
+            // arrangement of "Outdoor Cycling" and "Sun 6 Sep · 08:00" that
+            // fits across a 375 pt line, so the stamp takes its own.
+            Shoulders {
+                HStack(spacing: OnyxSpace.xs) {
+                    Image(systemName: CardioKind(bout.kind).symbol)
+                        .onyxType(.caption)
+                        .foregroundStyle(Color.onyx.cardio)
+                        .accessibilityHidden(true)
+                    Text(CardioKind(bout.kind).label)
+                        .onyxType(.body)
+                        .foregroundStyle(Color.onyx.textPrimary)
+                        .lineLimit(2)
                 }
+            } trailing: {
+                Text(boutStamp(bout))
+                    .onyxType(.caption).onyxNumeral()
+                    .foregroundStyle(Color.onyx.textTertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
+            MetaTagRow(tags: boutTags(bout))
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Last bout")
-        .accessibilityValue(
-            ([CardioKind(bout.kind).label, boutWhen(bout)] + boutFigures(bout).map { "\($0.1) \($0.0)" })
-                .joined(separator: ", ")
-        )
+        // `.combine` and not `.ignore` plus a hand-built string: `MetaTagRow`
+        // already says what each of its capsules is, including the one whose
+        // glyph is the reading, and a second spelling of that list here is one
+        // more place for the screen and the reader to come apart.
+        .accessibilityElement(children: .combine)
     }
 
-    /// Every figure a logged bout can carry, and only the ones it does. A
-    /// reserved slot drawn as an em dash says "we measured nothing"; an absent
-    /// one says the bout never had it.
-    private func boutFigures(_ bout: CardioLogRow) -> [(String, String)] {
-        var out: [(String, String)] = []
-        if let m = bout.distanceM, m > 0 { out.append(("km", jsToFixed1(m / 1000))) }
-        if let min = bout.durationMin, min > 0 { out.append(("min", jsIntegerString(jsRound(min)))) }
-        if let pace = CardioMetrics.paceMinPerKm(distanceM: bout.distanceM, durationMin: bout.durationMin) {
-            // `formatPace` returns "8:20 /km" — the label under it names the
-            // measure, not the unit, or the row reads "8:20 /km · /km".
-            out.append(("pace", CardioMetrics.formatPace(pace)))
+    /// Every reading a logged bout can carry, and only the ones it does — in
+    /// the session page's own vocabulary (`SessionDetailView.cardioTags`, W4),
+    /// because that card describes THIS row and the two must agree.
+    ///
+    /// An absent capsule says the bout never had the figure. Nothing here ever
+    /// prints an em dash: `formatPace` answers `"—"` for anything it cannot
+    /// divide, and a capsule holding an em dash is a reserved slot pretending
+    /// to be a reading.
+    private func boutTags(_ bout: CardioLogRow) -> [MetaTagRow.Tag] {
+        var tags: [MetaTagRow.Tag] = []
+        if let min = bout.durationMin, min > 0 {
+            tags.append(.init("\(jsIntegerString(jsRound(min))) min",
+                              symbol: "timer", tint: Color.onyx.cardio))
+        }
+        if let m = bout.distanceM, m > 0 {
+            tags.append(.init("\(jsToFixed1(m / 1000)) km",
+                              symbol: "figure.run", tint: Color.onyx.cardio))
+        }
+        // The OPTIONAL is the guard, not a comparison against `formatPace`'s
+        // em-dash: the sentinel is one character in another file and a capsule
+        // holding an em dash is the reserved slot this function refuses to draw.
+        if let pace = CardioMetrics.paceMinPerKm(
+            distanceM: bout.distanceM, durationMin: bout.durationMin
+        ) {
+            tags.append(.init(CardioMetrics.formatPace(pace),
+                              symbol: "speedometer", tint: Color.onyx.cardio))
         }
         // A heart rate is a whole number: the column is a Double and printed
         // "131.0", which reads as a precision the sensor does not have.
-        if let hr = bout.avgHr, hr > 0 { out.append(("avg bpm", jsIntegerString(jsRound(hr)))) }
-        return out
+        if let hr = bout.avgHr, hr > 0 {
+            tags.append(.init("\(jsIntegerString(jsRound(hr))) bpm",
+                              symbol: "heart.fill", tint: Color.onyx.cardio))
+        }
+        // The app's own glyph for "this came from Apple Health", and the
+        // session page's own words for it.
+        if bout.fromHealthkit == true {
+            tags.append(.init("Automatically logged",
+                              symbol: "heart.text.square", tint: Color.onyx.textSecondary))
+        }
+        return tags
+    }
+
+    /// `Today · 08:00`, or just the day.
+    ///
+    /// ── THE TIME IS PRINTED ONLY FOR AN IMPORTED BOUT ───────────────────────
+    /// `cardio_logs` has no start-time column, so `created_at` carries two
+    /// different facts and `CardioImport` is where they are told apart: on a
+    /// row HealthKit filed it is the bout's own START, and on a row the founder
+    /// typed it is the moment they typed it. A walk done at 08:00 and entered
+    /// at 21:00 would be stamped 21:00, which is a time the bout never had.
+    ///
+    /// So the clock appears on exactly the rows that earned it — the same rows
+    /// the "Automatically logged" capsule appears on, which is what makes the
+    /// pair legible: a bout that says when it was also says who timed it.
+    private func boutStamp(_ bout: CardioLogRow) -> String {
+        var parts = [boutWhen(bout)]
+        if bout.fromHealthkit == true, let start = bout.createdAt {
+            parts.append(start.formatted(date: .omitted, time: .shortened))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func boutWhen(_ bout: CardioLogRow) -> String {
@@ -1025,44 +1078,37 @@ struct WorkoutTabView: View {
     }
 
     /// The eight most recent bouts, in minutes. Minutes rather than distance
-    /// because Zone 2 — the rail directly under this — is a rule about
+    /// because Zone 2 — the count in this card's header — is a rule about
     /// duration, and a walk with no distance still counts towards it.
     private var trail: [Double] {
         (week?.snapshot.recentCardio ?? []).compactMap { $0.durationMin }.filter { $0 > 0 }
     }
 
-    /// 36 pt: a label, a count and a rail. Zone 2 is a COUNT of sessions over
-    /// the minute floor, never a minute total — `Zone2` says so and the widget
-    /// face already draws it that way.
-    private var zone2Row: some View {
+    /// The week's Zone 2, as a caption on the section's own title.
+    ///
+    /// Zone 2 is a COUNT of sessions over the minute floor, never a minute
+    /// total — `Zone2` says so and the widget face already draws it that way.
+    /// A count against its target is a fraction that means something, which is
+    /// exactly what the rail this replaces was not: there, `2` was the
+    /// constant `Zone2.weeklyTarget` and the figure a line above it was the
+    /// last bout's average heart rate.
+    ///
+    /// Under the title rather than beside it: three objects on the header's one
+    /// line are the "Cardio", the count and a 44 pt button, and at AX5 that is
+    /// the collision no `ViewThatFits` can measure its way out of.
+    private var zone2Caption: some View {
         let done = week?.snapshot.zone2Done ?? 0
         let target = Zone2.weeklyTarget
-        return HStack(spacing: OnyxSpace.s) {
-            Text("Zone 2")
-                .onyxType(.caption)
-                .foregroundStyle(Color.onyx.textSecondary)
-            Capsule()
-                .fill(Color.onyx.hairline)
-                .frame(height: 3)
-                .overlay(alignment: .leading) {
-                    GeometryReader { geometry in
-                        Capsule()
-                            .fill(OnyxDomain.body.accent)
-                            .frame(
-                                width: geometry.size.width * min(Double(done) / Double(max(target, 1)), 1),
-                                height: 3
-                            )
-                    }
-                    .frame(height: 3)
-                }
-            Text("\(done)/\(target)")
-                .onyxType(.caption).onyxNumeral()
-                .foregroundStyle(done >= target ? Color.onyx.good : Color.onyx.textSecondary)
-        }
-        .frame(height: 36)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Zone 2 this week")
-        .accessibilityValue("\(done) of \(target) sessions")
+        return Text("Zone 2 · \(done)/\(target) this week")
+            .onyxType(.caption).onyxNumeral()
+            .foregroundStyle(done >= target ? Color.onyx.good : Color.onyx.textTertiary)
+            // Two lines and not one: at AX5 this string is wider than the space
+            // left beside a 44 pt button, and `minimumScaleFactor` alone would
+            // spend its whole budget and then truncate the count — the half of
+            // the sentence the caption exists for.
+            .lineLimit(2)
+            .minimumScaleFactor(0.8)
+            .accessibilityLabel("Zone 2 this week, \(done) of \(target) sessions")
     }
 
     // MARK: - The door

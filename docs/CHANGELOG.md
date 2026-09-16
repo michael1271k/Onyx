@@ -44,6 +44,48 @@ _Nothing yet._
 
 ---
 
+## [3.14.0] — 2026-09-16 · Cardio and the Banners
+
+### Added
+- **The cardio card says when the bout was.** The last bout on the Train tab
+  now prints its day and, for a bout Apple Health filed, the clock time it
+  actually started at — alongside its duration, distance, pace and average
+  heart rate, and an **Automatically logged** badge. A bout typed in by hand
+  shows no time, because the column that carries the start on an imported row
+  carries the moment of typing on a hand-entered one, and 21:00 is not when the
+  walk happened.
+- The bout's readings are now the **same four capsules, the same glyphs and the
+  same colour** the post-workout ledger draws for the same row, so the two
+  screens describing one walk can no longer come to disagree about it.
+- Two screenshot screens: `train-cardio`, which parks the tab at the bottom so
+  the card is reviewable at an accessibility text size for the first time, and
+  `train-pending`, which holds the done card on its stand-in.
+
+### Changed
+- **The Zone-2 rail is gone.** A filled bar drawn one line under the last bout's
+  average heart rate reads as a heart-rate bar — and it was not one, nor could
+  it ever be: the app stores a bout's average heart rate and no zone at all. The
+  fraction behind it was sound (bouts this week over twenty minutes, against a
+  target of two); drawing it as a gauge there was not. The count survives as a
+  caption on the section's own title, where a count of sessions belongs.
+- **Both grey session banners joined the app.** The stand-in the Train tab and
+  the Pulse day draw while a finished session's masthead loads was a title and a
+  line of numbers on plain glass. It is now one shared card wearing the day's
+  own wash, the day's own ink and the session's muscle capsules — so it differs
+  from the real masthead in what it says (no career number, no plan tags) and
+  not in how it looks, and nothing jumps when the read lands.
+
+### Fixed
+- **A chip wider than its row was drawn off the edge of the card.** The wrapping
+  chip layout measured every chip unconstrained, so one whose ideal width
+  exceeded the container was placed at that width and clipped mid-word — its own
+  wrapping and scaling rules never consulted. At an accessibility text size the
+  bout's **Automatically logged** badge read "Automatically lo" and ran past the
+  glass, on the ledger as well as on the Train tab. Chips that already fitted are
+  unchanged.
+
+---
+
 ## [3.13.0] — 2026-09-16 · The Ledger Stops Shouting
 
 ### Added

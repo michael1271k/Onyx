@@ -62,13 +62,9 @@ extension SessionHeader {
 /// A finished session reads the same everywhere now, and a change to the
 /// masthead is one edit rather than three that drift.
 ///
-/// ── WHY A WASH AND NOT A COLOURED CARD ──────────────────────────────────────
-/// A tinted panel makes the glass under it read as a different material and
-/// puts a hard edge across the top of the screen — the "gradient header" look
-/// the whole mandate exists to avoid. A 22 %→0 wash behind transparent content
-/// says the same thing (this is a leg day) and leaves the surface alone. The
-/// title carries the same hue at full strength, which is where the colour is
-/// actually legible.
+/// The day hue arrives as a wash rather than as a tinted panel — see
+/// `sessionDayWash(_:)` at the bottom of this file, which `SessionFallbackCard`
+/// also wears so the stand-in and the card differ in content, not in character.
 struct SessionHeaderCard: View {
     let header: SessionHeader
     /// The session page's one sentence of opinion. Absent everywhere else: it
@@ -79,8 +75,6 @@ struct SessionHeaderCard: View {
     /// says all four with units and deltas.
     var totals: String?
 
-    @Environment(\.dynamicTypeSize) private var typeSize
-
     var body: some View {
         VStack(alignment: .leading, spacing: OnyxSpace.s) {
             // ── ROW 1 · WHICH SESSION THIS IS ──────────────────────────────
@@ -88,7 +82,7 @@ struct SessionHeaderCard: View {
             // the two halves of one fact and they take the two ends of one
             // line, which is what makes the band read as a masthead rather
             // than as a stack of captions.
-            shoulders(.firstTextBaseline) {
+            Shoulders(.firstTextBaseline) {
                 Text(header.label)
                     .onyxType(.hero)
                     .foregroundStyle(Color.onyx.dayLabel(header.dayKey))
@@ -104,7 +98,7 @@ struct SessionHeaderCard: View {
             // ── ROW 2 · WHICH PLAN, AND WHEN ───────────────────────────────
             // Calendar facts, both sides: what the programme called this day on
             // the left, what the clock called it on the right.
-            shoulders(.top) {
+            Shoulders(.top) {
                 planTags
             } trailing: {
                 Text(header.stamp)
@@ -141,44 +135,8 @@ struct SessionHeaderCard: View {
         }
         .padding(OnyxSpace.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(alignment: .top) {
-            LinearGradient(
-                colors: [Color.onyx.day(header.dayKey).opacity(0.22), .clear],
-                startPoint: .top, endPoint: .bottom
-            )
-            .frame(height: 72)
-        }
+        .sessionDayWash(header.dayKey)
         .onyxGlass(.tile)
-    }
-
-    /// Two things at the two ends of one line — until the type size says a line
-    /// cannot hold two of anything.
-    ///
-    /// ── WHY THE BREAK IS A BRANCH AND NOT A `ViewThatFits` ──────────────────
-    /// `ViewThatFits` cannot stack a flexible child (memory: `w1b-week-detail`)
-    /// and a `Spacer` cannot wrap — which is how the ledger header once had its
-    /// chips and its prescription dividing a 375 pt line four ways. At the
-    /// accessibility sizes there is no arrangement of two long strings that
-    /// fits across, so the second one takes its own line and nothing is
-    /// measured at all.
-    @ViewBuilder
-    private func shoulders(
-        _ alignment: VerticalAlignment,
-        @ViewBuilder leading: () -> some View,
-        @ViewBuilder trailing: () -> some View
-    ) -> some View {
-        if typeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                leading()
-                trailing()
-            }
-        } else {
-            HStack(alignment: alignment, spacing: OnyxSpace.s) {
-                leading()
-                Spacer(minLength: OnyxSpace.xs)
-                trailing()
-            }
-        }
     }
 
     /// The session's place in the whole career — `#45` — and, when it produced
@@ -257,29 +215,7 @@ struct SessionHeaderCard: View {
     /// ties, built in the loader off the main actor. A `body` that sorted would
     /// be re-sorting on every redraw of a row a scroll view recycles.
     private var muscleRow: some View {
-        FlowRow(spacing: OnyxSpace.xs) {
-            ForEach(header.muscles, id: \.self) { muscle in
-                // The muscle's OWN hue (W3): sixteen muscles, one colour each,
-                // so the band, the ramp, the legend and the atlas figure all
-                // call one muscle by one colour — and a tag keeps its colour
-                // when the session's ranking changes underneath it.
-                muscleTag(muscle)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    /// A muscle capsule. Named rather than numbered: the share is the Muscle
-    /// focus card's job, and a capsule carrying "Quads 6.5" would put the
-    /// session's longest number in its smallest type.
-    private func muscleTag(_ muscle: LandmarkMuscle) -> some View {
-        let tint = Color.onyx.muscle(muscle)
-        return Text(muscle.displayName)
-            .onyxType(.micro)
-            .foregroundStyle(tint)
-            .padding(.horizontal, OnyxSpace.s)
-            .padding(.vertical, 3)
-            .background(tint.opacity(0.16), in: .capsule)
+        MuscleTagRow(muscles: header.muscles)
     }
 
     private func tag(_ text: String, _ domain: OnyxDomain) -> some View {
@@ -289,5 +225,117 @@ struct SessionHeaderCard: View {
             .padding(.horizontal, OnyxSpace.s)
             .padding(.vertical, 3)
             .background(domain.accent.opacity(0.16), in: .capsule)
+    }
+}
+
+// MARK: - The three things the stand-in and the cardio card borrow (W5)
+
+/// Two things at the two ends of one line — until the type size says a line
+/// cannot hold two of anything.
+///
+/// ── WHY THE BREAK IS A BRANCH AND NOT A `ViewThatFits` ──────────────────────
+/// `ViewThatFits` cannot stack a flexible child (memory: `w1b-week-detail`) and
+/// a `Spacer` cannot wrap — which is how the ledger header once had its chips
+/// and its prescription dividing a 375 pt line four ways. At the accessibility
+/// sizes there is no arrangement of two long strings that fits across, so the
+/// second one takes its own line and nothing is measured at all.
+///
+/// Shared since W5: the cardio card's bout puts its kind on one shoulder and
+/// its stamp on the other, which is the same line with the same failure at AX5.
+struct Shoulders<Leading: View, Trailing: View>: View {
+    let alignment: VerticalAlignment
+    let leading: () -> Leading
+    let trailing: () -> Trailing
+
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    init(
+        _ alignment: VerticalAlignment = .firstTextBaseline,
+        @ViewBuilder leading: @escaping () -> Leading,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) {
+        self.alignment = alignment
+        self.leading = leading
+        self.trailing = trailing
+    }
+
+    var body: some View {
+        if typeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+                leading()
+                trailing()
+            }
+        } else {
+            HStack(alignment: alignment, spacing: OnyxSpace.s) {
+                leading()
+                Spacer(minLength: OnyxSpace.xs)
+                trailing()
+            }
+        }
+    }
+}
+
+/// What a session was FOR, as capsules — the muscle's OWN hue (W3): sixteen
+/// muscles, one colour each, so the band, the ramp, the legend and the atlas
+/// figure all call one muscle by one colour, and a tag keeps its colour when
+/// the session's ranking changes underneath it.
+///
+/// Named rather than numbered: the share is the Muscle focus card's job, and a
+/// capsule carrying "Quads 6.5" would put the session's longest number in its
+/// smallest type.
+///
+/// ── WHY IT LEFT THE CARD (W5) ───────────────────────────────────────────────
+/// `SessionFallbackCard` draws the same capsules while this card's career-wide
+/// read is in flight, and a second drawing of a muscle capsule is how a hue or
+/// a padding comes to differ between the card and the card that stands in for
+/// it — for the half-second a reader is looking at exactly that difference.
+/// One row, two callers.
+struct MuscleTagRow: View {
+    let muscles: [LandmarkMuscle]
+
+    var body: some View {
+        // Wrapping, not an `HStack`: at AX5 a row of capsules on one line
+        // becomes a row of vertical blobs one letter wide.
+        FlowRow(spacing: OnyxSpace.xs) {
+            ForEach(muscles, id: \.self) { muscle in
+                let tint = Color.onyx.muscle(muscle)
+                Text(muscle.displayName)
+                    .onyxType(.micro)
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, OnyxSpace.s)
+                    .padding(.vertical, 3)
+                    .background(tint.opacity(0.16), in: .capsule)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+extension View {
+    /// The masthead's day wash: 22 %→0 of the split's hue over the top 72 pt.
+    ///
+    /// ── WHY A WASH AND NOT A COLOURED CARD ──────────────────────────────────
+    /// A tinted panel makes the glass under it read as a different material and
+    /// puts a hard edge across the top of the screen — the "gradient header"
+    /// look the whole mandate exists to avoid. A 22 %→0 wash behind transparent
+    /// content says the same thing (this is a leg day) and leaves the surface
+    /// alone. The title carries the same hue at full strength, which is where
+    /// the colour is actually legible.
+    ///
+    /// Applied INSIDE `onyxGlass(.tile)`, always: the glass clips it to the
+    /// card's own corner, and a wash outside that clip paints a rectangle with
+    /// square corners behind a rounded card.
+    ///
+    /// Not `onyxMuscleWash` (OnyxUI), which is a different fact: that one is
+    /// 6 %→2 % of a MOVEMENT's family over a whole card, plus a 3 pt rail. This
+    /// is a session's DAY, at the head of the card and nowhere else.
+    func sessionDayWash(_ dayKey: String?) -> some View {
+        background(alignment: .top) {
+            LinearGradient(
+                colors: [Color.onyx.day(dayKey).opacity(0.22), .clear],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: 72)
+        }
     }
 }

@@ -81,28 +81,22 @@ struct PulseSessionCard: View {
         return parts.joined(separator: " · ")
     }
 
-    /// The header is a career-wide read. These two facts are already in the
-    /// day's window, so the card states them immediately rather than blinking
-    /// an empty box in on every open of the tab — the same stand-in the Train
-    /// tab draws for the same read.
+    /// The header is a career-wide read. The label, the numbers and the day's
+    /// three muscles are already in the day's window, so the card states them
+    /// immediately rather than blinking an empty box in on every open of the
+    /// tab — and it is literally the same stand-in the Train tab draws for the
+    /// same read (W5), so the two screens cannot drift apart in the one state
+    /// neither of them was reviewed in.
+    ///
+    /// The day-hue DOT went with it: the wash behind the card and the title's
+    /// own ink are both the day's hue, and an 8 pt disc saying it a third time
+    /// was the only part of this card that the real masthead does not draw.
     private var placeholder: some View {
-        VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-            HStack(spacing: OnyxSpace.s) {
-                Circle()
-                    .fill(Color.onyx.day(session.dayKey))
-                    .frame(width: 8, height: 8)
-                Text(session.label ?? "Session")
-                    .onyxDisplay()
-                    .foregroundStyle(Color.onyx.dayLabel(session.dayKey))
-                    .lineLimit(1)
-                Spacer(minLength: OnyxSpace.s)
-            }
-            Text(totals)
-                .onyxType(.secondary).onyxNumeral()
-                .foregroundStyle(Color.onyx.textSecondary)
-        }
-        .padding(OnyxSpace.l)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .onyxGlass(.tile)
+        SessionFallbackCard(
+            dayKey: session.dayKey,
+            label: session.label ?? "Session",
+            totals: totals,
+            muscles: session.muscles
+        )
     }
 }

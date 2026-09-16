@@ -291,9 +291,25 @@ final class DayModel {
         let muscles: [LandmarkMuscle]
     }
 
-    /// The session's top muscles by weighted sets — the same accumulator the
-    /// session page's Muscle focus card reads, so the door and the room agree
-    /// about what the session was for.
+    /// The session's top muscles — the first three of the SAME order the
+    /// masthead's capsules are in, so the door and the room agree about what
+    /// the session was for.
+    ///
+    /// ── WHY IT IS `primaryLandmarks` AND NOT `weightedSets` (W5) ────────────
+    /// It used to fold `MuscleCredit.weightedSets` itself. That is the
+    /// distribution chart's accumulator and it answers a different question:
+    /// it pays a SECONDARY mover half a set and it counts warm-ups, both of
+    /// which are right for "where did this session land" and wrong for a flat
+    /// capsule carrying no number. `SessionHeader.muscles` is
+    /// `primaryLandmarks` — whole working sets per PRIMARY mover — so the two
+    /// could disagree, and a muscle that is only ever an assistor could take a
+    /// capsule here and then have no capsule at all once the header landed.
+    ///
+    /// That mattered the moment `SessionFallbackCard` started drawing them: a
+    /// stand-in whose capsules DISAPPEAR on load is exactly what the card was
+    /// rebuilt to stop. Same function, truncated — so this list is a prefix of
+    /// the real one by construction, and the only thing a read can do is make
+    /// it longer.
     ///
     /// Three at most. The wash behind the card is 64 pt tall and a gradient of
     /// four hues at 22 % is a smear; three is where the stops are still
@@ -302,17 +318,7 @@ final class DayModel {
     /// that builds the window, off the main actor — the same rule every other
     /// pure helper in this model follows.
     nonisolated static func focus(_ rows: [HistorySetRow]) -> [LandmarkMuscle] {
-        let byExercise = Dictionary(grouping: rows) { ExerciseAliases.canonicalName($0.exerciseName) }
-        let credit = MuscleCredit.weightedSets(byExercise.map { name, sets in
-            MuscleCredit.Contribution(
-                physicalSets: SessionDetail.toRows(sets.map(SessionAnalysis.detailSet)).count,
-                movers: MuscleMap.resolveMovers(name)
-            )
-        })
-        return credit
-            .sorted { a, b in a.value != b.value ? a.value > b.value : a.key.rawValue < b.key.rawValue }
-            .prefix(3)
-            .map(\.key)
+        Array(SessionAnalysis.primaryLandmarks(SessionAnalysis.grouped(rows)).prefix(3))
     }
 
     /// One detached read of `daily_logs` over the fortnight, plus the day's
