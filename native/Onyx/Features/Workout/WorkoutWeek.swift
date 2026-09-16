@@ -124,6 +124,18 @@ final class WorkoutWeek {
         var liftsTracked = 0
         /// Finished sessions in the CALENDAR month — the History door's.
         var sessionsThisMonth = 0
+        /// What today's FINISHED session was for, biggest share first, at most
+        /// three — the capsules `SessionFallbackCard` wears while the done
+        /// card's career-wide read is in flight (W5). Empty unless `state` is
+        /// `.done`.
+        ///
+        /// Folded off the rows that branch has already read to count the
+        /// session's sets, through `DayModel.focus` — which is
+        /// `SessionAnalysis.primaryLandmarks` truncated to three, the same
+        /// function `SessionHeader.muscles` is built from. So the stand-in's
+        /// capsules are a PREFIX of the masthead's and the read that replaces
+        /// them can only append.
+        var doneMuscles: [LandmarkMuscle] = []
         var lastCardio: CardioLogRow?
         var todayCardio: [CardioLogRow] = []
         /// The last eight bouts, oldest first, for the card's trail.
@@ -578,6 +590,12 @@ final class WorkoutWeek {
                     minutes: closed.durationMin,
                     prCount: pr.prCount
                 )
+                // On `Snapshot` and not inside the `.done` payload: `State` is
+                // `Equatable` and is compared on every yield to decide whether
+                // the tab redraws, and a list of muscles in it would make the
+                // comparison a list comparison for a fact no branch of the
+                // screen switches on.
+                out.doneMuscles = DayModel.focus(rows)
             }
         }
 

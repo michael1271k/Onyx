@@ -127,6 +127,37 @@ enum HistoryPreviews {
                 WorkoutTabView(seededDay: PlanTemplates.program("onyx5")?.day(key: "cb_a"), seededToday: "2026-09-02")
             }
             .environment(environment())
+        // ── W5: the cardio card, reachable ──────────────────────────────────
+        // The card is the last thing on a REST day — `progressionCard` is
+        // keyed on today's split and a rest day has none — so at AX5 it is
+        // three screens below the fold and `train-empty`'s shot is a picture of
+        // a rest card. On a training day the progression box sits under it and
+        // this anchor would park on that instead.
+        // `.defaultScrollAnchor` rides the ENVIRONMENT down to the tab's own
+        // `ScrollView`, so the harness can park it at the bottom without the
+        // screen growing a seed for it — which is the whole reason the bout's
+        // capsules and the Zone-2 caption have never been reviewed at an
+        // accessibility size.
+        case "train-cardio":
+            NavigationStack { WorkoutTabView(seededToday: "2026-09-05") }
+                .defaultScrollAnchor(.bottom)
+                .environment(environment())
+        // ── W5: the same Wednesday, caught before the masthead lands ────────
+        // `SessionAnalysis.headers` is a career-wide walk, and on this fixture
+        // it finishes faster than the screenshot — so the stand-in is a state
+        // no shot has ever photographed, which is how it stayed a grey box
+        // through four waves. `seededHeaderPending` holds it there. Everything
+        // else on the screen is `train-done`'s, so the pair IS the review: the
+        // two cards have to differ in what they say and in nothing else.
+        case "train-pending":
+            NavigationStack {
+                WorkoutTabView(
+                    seededDay: PlanTemplates.program("onyx5")?.day(key: "cb_a"),
+                    seededToday: "2026-09-02",
+                    seededHeaderPending: true
+                )
+            }
+            .environment(environment())
         case "train-empty":
             // A REST day: no session card, no footer CTA, and the cardio card
             // sits where the deck would be — which is the only way to
