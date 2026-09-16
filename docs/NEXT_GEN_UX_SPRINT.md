@@ -2079,3 +2079,104 @@ already has, and an account that has never written one reads as "everything visi
 
 **Founder's manual steps still outstanding:** none for W7. The two SQL pastes
 the sprint still owes are W9's and W11's, unchanged.
+
+
+---
+
+### W8 Wave Record — shipped 2026-09-16 as 3.17.0
+
+**Drift from the plan, on purpose:**
+
+- **A10's five lines do not exist.** `.tint()` is not a `TabContent` modifier.
+  `SwiftUI.Tab` conforms to `TabContent`, and the SDK declares exactly these on
+  it: `badge`, `hidden`, `disabled`, `tabPlacement`, `customizationBehavior`,
+  `defaultVisibility`, `defaultSectionExpansion`, `sectionActions`, `help`, the
+  accessibility set, and the gesture/menu set (`swipeActions`, `contextMenu`,
+  `popover`, `draggable`, `dropDestination`). No `tint`. Applying `.tint()` to
+  the *content* inside a `Tab` compiles and tints that screen's controls, and
+  never reaches the bar item — which is the half W8.1 is about. Shipped instead
+  as ONE `.tint(Self.domain(for: selection.wrappedValue)?.accent)` on the
+  `TabView`, plus a `domain(for:)` switch. A tab bar only ever colours its
+  selected item, so a selection-driven tint says exactly what five per-tab
+  tints would have, and `nil` for Settings restores the system tint.
+- **A12's assertion is inert as specified, so it gained a second half.** "Fire
+  a DEBUG assertion when the suite is nil" cannot catch this bug:
+  `UserDefaults(suiteName:)` returns a suite for any name that is not the main
+  bundle id or the global domain, so it is never nil here. The condition that
+  actually bites is `containerURL(forSecurityApplicationGroupIdentifier:)`
+  returning nil. Both shipped — `assertionFailure` on the nil suite (a
+  build-configuration mistake, correctly a trap) and a once-per-process DEBUG
+  `print` on the missing container. The print is NOT an assert on purpose: the
+  entitlement is unsigned on this free team, so the condition is true on every
+  simulator launch and a trap would take the shot loop down on every run
+  instead of making the condition visible in it.
+- **~45 was ~105.** The plan counted the `.white`/`.black` reads on the faces
+  the wave named; the real count of unconditional ones across the eleven tile
+  files plus `Shared/WorkoutActivityCard.swift` (the Live Activity, a widget
+  face by any other name) is 105 lines. All converted.
+- **One new token, `Color.onyx.ink(_:)`.** `textPrimary` and `base` cover the
+  type and the ground, but the atlas's unworked silhouette and the Vitals
+  baseline tick are ink at weights the three text tokens do not name
+  (0.05/0.09/0.12/0.13/0.20/0.30). Deliberately `Color.white.opacity(_:)` and
+  not `textPrimary.opacity(_:)`, which would compound 0.92 into every caller
+  and make 0.08 here mean something other than 0.08 in `hairline`.
+- **A harness screen was added.** `tabs-today` … `tabs-you`
+  (`PreviewHarness.tabsEnvironment`). Every other harness screen renders one
+  tab's CONTENT with the shell removed, so the tab tint appears in none of
+  them — W8.1 was unphotographable before this. `SignedInTabs` dropped
+  `private` for it; `RootView` gates on `auth`, and a preview environment is
+  never signed in.
+
+**Root causes that were not where the plan guessed:**
+
+- **The first `AppearanceCoverageTests` could not fail.** It looked for
+  `.onyxScreen` anywhere in the file text. Commenting the ground out of
+  `SyncStatusView` left the string in the comment and the test stayed green —
+  the exact failure the suite exists to catch, walking straight through it. It
+  now applies `TokenDisciplineTests`' `//` rule per line. **Any file-walk test
+  added to this repo must be proved to fail before it is believed.**
+- **`DaySheet` is why seven "ungrounded" sheets were fine.** `SwapDaySheet`,
+  `StressBreakdownSheet`, `FatigueSheet`, `SleepEditSheet`, `InBodyEntryView`,
+  `CardioLogSheet` and `WeekOverrideSheet` apply no ground of their own because
+  the shared sheet chrome in `PulseTabView:716` applies `.onyxScreen(domain)`
+  or `.onyxFormBackground(domain)` for them. `DaySheet(` is therefore the third
+  ground marker in the test, not an allowlist entry — requiring those sheets to
+  ground themselves would stack two meshes.
+
+**Constraints discovered that the next wave must respect:**
+
+- **`Mutex` is not available in OnyxData.** The package declares `.macOS(.v14)`
+  and `Synchronization` needs 15. The once-guard in `AppDatabase` is a lazy
+  `static let`, which the runtime serialises. Same applies to OnyxCore.
+- **`RootView.swift` now imports OnyxUI.** It had been using
+  `\.onyxBatteryLevel` through the extension-member leak (Swift resolves
+  members of extensions in transitively-loaded modules; it does not resolve
+  named types like `OnyxDomain`). Anything that reaches for a type from OnyxUI
+  in the shell needs the explicit import.
+- **`.standard` is still the fallback.** `appGroupDefaults()` centralises and
+  names it; it does not remove it. On a device without the signed App Group
+  entitlement the widget palette is still stale, by construction. Carries a
+  `ponytail:` note. Gate 0 is what closes it.
+- **The `mono ? .white` branch in the tiles is deliberate and stays.** Roughly
+  140 sites. In accessory and tinted rendering the system flattens the face to
+  one colour; that white is the rendering MODE's ink and must not follow the
+  theme. A future wave that widens `TokenDisciplineTests` to ban raw
+  `.white`/`.black` has to give those a token of their own first.
+
+**Left open on purpose:**
+
+- `native/Onyx/Features/Logger/AtlasFigure.swift` (5 reads) and
+  `WeeklyShareCard.swift` (3) spell ink by hand for the same reason the tiles
+  did. They are app screens, not widget faces, so they were outside this wave's
+  scope; `Color.onyx.ink(_:)` now exists for whoever takes them.
+- `AppearanceCoverageTests` matches the ground per FILE, not per declared type.
+  A file declaring two root screens where only one is grounded passes. Marked
+  with a `ponytail:` comment naming the ceiling; the fix is to split the file.
+- The Live Activity card was brought in (it is a widget face); the watch's own
+  `WatchInk` was not (it has its own token file and takes the spec over the
+  bridge).
+
+**Founder's manual steps still outstanding:** none new. The App Group
+entitlement (Gate 0, paid Developer Program) remains the one thing that makes
+the widget's theme actually shared — everything else about it now works and
+says so out loud when it cannot.
