@@ -1875,11 +1875,12 @@ setting, no App Store step.
 **Ships `4.0.1`** — PATCH, because a purge ships no capability. Branch
 `onyx/w5-purge-merge`, cut from `main` at `ba0c62fe`.
 
-**Status at the time of writing: committed on the branch, NOT merged.** A second
-Claude session went live in a worktree partway through this wave (see *Failed*),
-and the founder asked for a stable stopping point until it finishes. Everything
-below is done and green; the merge, the branch deletion and the push are the only
-steps left.
+**Landed as `94e6fcf6` on `main`, branch deleted, pushed.** It landed in two
+sittings: a second Claude session went live in a worktree partway through this
+wave (see *Failed*) and the founder asked for a stable stopping point, so the
+work was committed on the branch and held there until that session was idle. The
+push needed `ONYX_DEPLOY=1` — the guard greps the COMMAND, and `git push` carries
+neither `[skip ci]` nor the flag however the commit is worded.
 
 ## What was done
 
