@@ -86,6 +86,31 @@ public enum OKLCHConvert {
         return self.hex(from: colour)
     }
 
+    /// Scale a hex's chroma and offset its lightness, at fixed HUE.
+    ///
+    /// The second operation a theme needs, and the mood knob's whole
+    /// implementation: `rotate` says WHICH colour, this says how deep and how
+    /// loud. Hue is untouched, so a palette moved by this keeps every measured
+    /// offset between its stops — the same promise rotation makes.
+    ///
+    /// A neutral knob (scale 1, offset 0) returns the SAME bits, for exactly
+    /// the reason `rotate` short-circuits a zero delta: the default spec must
+    /// mean "today's palette" and not "today's palette after a trip through a
+    /// cube root and back".
+    ///
+    /// There is no contrast guard HERE. A colour that carries text goes back
+    /// through `OnyxThemeSpec.guarded` afterwards — one guard, in the file that
+    /// documents the measurements — and a gradient stop that is allowed to go
+    /// dark skips it. Scaling is clamped to ≤ 1 rather than trusted from the
+    /// caller: this is the only place a chroma could grow, and it must not.
+    public static func mood(_ hex: UInt32, chroma scale: Double, lift: Double) -> UInt32 {
+        guard abs(scale - 1) >= 1e-9 || abs(lift) >= 1e-9 else { return hex }
+        var colour = oklch(fromHex: hex)
+        colour.c *= min(max(scale, 0), 1)
+        colour.l = min(max(colour.l + lift, 0), 1)
+        return self.hex(from: colour)
+    }
+
     // MARK: - Pieces
 
     @inlinable static func wrap(_ degrees: Double) -> Double {

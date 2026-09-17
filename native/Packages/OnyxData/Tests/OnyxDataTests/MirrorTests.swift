@@ -139,7 +139,7 @@ struct MirrorTests {
             }
             // Spot-check a wide one, column for column against the fixture.
             let columns = try conn.columns(in: "daily_logs").map(\.name)
-            #expect(columns.count == 51)
+            #expect(columns.count == 52)
             #expect(columns.contains("sleep_onset_trouble"))
             #expect(columns.contains("estimated_waist_to_hip_ratio"))
             // The 51st, added by `v20.sleepInaccurate`. A fresh install runs the
@@ -147,6 +147,10 @@ struct MirrorTests {
             // migration ran on a database that never had the column — which is
             // the case an edited create-table would silently break.
             #expect(columns.contains("sleep_inaccurate"))
+            // The 52nd, added by `v30.waistCm` (W3, 2026-09-17). The one tape
+            // measurement in the app: a COLUMN on the day, not the
+            // `body_measurements` table two lines up, which stays absent.
+            #expect(columns.contains("waist_cm"))
         }
     }
 

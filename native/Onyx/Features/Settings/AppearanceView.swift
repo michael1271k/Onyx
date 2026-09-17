@@ -3,7 +3,7 @@ import OnyxCore
 import OnyxData
 import OnyxUI
 
-/// Two hues, and the twenty-six colours the app derives from them.
+/// Two hues, a mood, and the twenty-six colours the app derives from them.
 ///
 /// ── WHY THIS IS A SCREEN AND NOT A SECTION ──────────────────────────────────
 /// The chips and the pickers were meant to sit inline on the Settings hub. They
@@ -40,12 +40,21 @@ struct AppearanceView: View {
     /// The swatch grows with the type and then stops: at AX5 an unclamped
     /// `@ScaledMetric` is a 68 pt disc that pushes the name out of its own chip.
     @ScaledMetric(relativeTo: .body) private var swatchSize: CGFloat = 22
-    /// The grid's own adaptive minimum grows with the type, so three columns
-    /// become two and then one — the escape `OnyxFieldCell` documents, and the
-    /// reason there is no horizontal scroll view here. A row of chips that ran
-    /// off the right edge would be unreachable to VoiceOver and invisible in a
-    /// screenshot.
-    @ScaledMetric(relativeTo: .body) private var chipWidth: CGFloat = 100
+    /// The grid's own adaptive minimum grows with the type, so two columns
+    /// become one — the escape `OnyxFieldCell` documents, and the reason there
+    /// is no horizontal scroll view here. A row of chips that ran off the right
+    /// edge would be unreachable to VoiceOver and invisible in a screenshot.
+    ///
+    /// ── WHY 126 AND NOT 100 (W3) ────────────────────────────────────────────
+    /// 100 fitted three columns and the old table's longest name was five
+    /// characters. "Terracotta" is ten: at `.caption` semibold that is ~67 pt of
+    /// text, and with the 22 pt swatch, its 8 pt gap and 12 pt of padding each
+    /// side the chip needs ~121. Three columns cannot be made to hold that on a
+    /// 393 pt phone, so the grid is TWO columns and five rows. The alternative
+    /// was `.lineLimit(1)` doing its job — truncating the name — and a theme
+    /// picker whose chips read "Terracot…" is a picker that has stopped naming
+    /// its themes.
+    @ScaledMetric(relativeTo: .body) private var chipWidth: CGFloat = 126
 
     private var locked: Bool { environment.isSessionLive }
     private var swatch: CGFloat { min(max(swatchSize, 22), 34) }
@@ -58,6 +67,7 @@ struct AppearanceView: View {
                     .disabled(locked)
                 ColorPicker("Secondary", selection: OnyxTheme.picked($draft.secondary), supportsOpacity: false)
                     .disabled(locked)
+                mood
                 derived
                 // Enabled even on Ion: `OnyxTheme.set` returns early on a spec
                 // that has not moved, so the write is idempotent and a second
@@ -93,11 +103,11 @@ struct AppearanceView: View {
 
     // MARK: - The presets
 
-    /// Six pairs, wrapped rather than scrolled.
+    /// Nine pairs, wrapped rather than scrolled.
     ///
     /// Selection is DERIVED — `draft == preset.spec` — so the moment either
-    /// picker moves, no chip is lit and the row has told the truth without a
-    /// seventh "Custom" chip to maintain.
+    /// picker moves — or either mood slider — no chip is lit and the row has
+    /// told the truth without a tenth "Custom" chip to maintain.
     ///
     /// ── LOCKED, THE CHIPS KEEP THEIR INK ────────────────────────────────────
     /// `.disabled` on the section desaturated the swatches, and a grey swatch
@@ -192,6 +202,66 @@ struct AppearanceView: View {
         .contentShape(Capsule())
     }
 
+    // MARK: - The mood
+
+    /// The second axis. Two hues say WHICH colours; these two say how deep and
+    /// how loud the twenty-four derived ones are.
+    ///
+    /// They edit the DRAFT like everything else here — `commit()` is still the
+    /// one writer — and the `derived` preview below renders from that same
+    /// uncommitted draft, so moving either slider shows its effect on all four
+    /// ramps for free.
+    ///
+    /// ── WHY THE TWO SWATCHES ABOVE DO NOT MOVE ──────────────────────────────
+    /// Neither knob touches the two chosen accents, and that is not an
+    /// oversight: `OnyxTheme` holds them at exactly the hexes the pickers show,
+    /// because a picker whose swatch disagreed with the screen would be a
+    /// broken control. What moves is everything the app DERIVES — see the
+    /// derivation note on `OnyxTheme`.
+    @ViewBuilder
+    private var mood: some View {
+        knob(
+            "Saturation",
+            value: $draft.chroma,
+            range: OnyxThemeSpec.chromaScale,
+            step: 0.02,
+            reading: "\(Int((draft.chroma * 100).rounded())) %"
+        )
+        knob(
+            "Lift",
+            value: $draft.lift,
+            range: OnyxThemeSpec.liftOffset,
+            step: 0.01,
+            // The stored value is an OKLCH lightness offset — 0.03 means
+            // nothing to anyone. Shown ×100 and signed, it reads as the small
+            // dial it is.
+            reading: draft.lift == 0 ? "0" : String(format: "%+d", Int((draft.lift * 100).rounded()))
+        )
+    }
+
+    private func knob(
+        _ label: String, value: Binding<Double>,
+        range: ClosedRange<Double>, step: Double, reading: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: OnyxSpace.s) {
+                Text(label)
+                Spacer(minLength: OnyxSpace.s)
+                Text(reading)
+                    .onyxType(.caption).onyxNumeral()
+                    .foregroundStyle(Color.onyx.textSecondary)
+            }
+            Slider(value: value, in: range, step: step)
+                // The label above is the accessible one; without this the
+                // slider announces itself a second time with no name.
+                .labelsHidden()
+        }
+        .disabled(locked)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(label)
+        .accessibilityValue(reading)
+    }
+
     // MARK: - What the two hues become
 
     /// The four ramps, resolved from the DRAFT rather than from `current`.
@@ -231,10 +301,12 @@ struct AppearanceView: View {
         let what = """
             Primary is the training accent; secondary is the nutrition one. \
             Body, recovery and all sixteen muscle colours are rotated from the \
-            primary, so moving it moves most of the app. A colour too dark to \
-            read on black, or louder than the muscle palette, is pulled back to \
-            the nearest one that is not. Widgets and the watch follow on their \
-            next refresh.
+            primary, so moving it moves most of the app. Saturation and lift \
+            then set the mood of those derived colours — the two you picked \
+            above stay exactly as you picked them. A colour too dark to read on \
+            black, or louder than the muscle palette, is pulled back to the \
+            nearest one that is not. Widgets and the watch follow on their next \
+            refresh.
             """
         guard locked else { return what }
         return what + "\n\n" + """

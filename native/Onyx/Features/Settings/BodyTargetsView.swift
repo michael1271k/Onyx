@@ -11,9 +11,14 @@ import OnyxCore
 /// reports and the only one of the three a person can set a target for, because
 /// the other two are derived.
 ///
-/// ── AND WHY THERE ARE NO TAPE MEASUREMENTS ──────────────────────────────────
-/// No waist, no hips, no limb girths. That has been removed from this app twice.
-/// Every number on this screen comes off the scale.
+/// ── AND WHY THERE ARE STILL NO TAPE MEASUREMENTS *HERE* ─────────────────────
+/// This said "no waist, no hips, no limb girths" until 2026-09-17 (W3). The
+/// waist now has a column and a field — in the InBody sheet, where a reading is
+/// TAKEN. It is deliberately absent from this screen, which is about where the
+/// plan is GOING: a waist target is a number you cannot train toward directly,
+/// only arrive at, and the three here are the three the plan actually steers.
+/// No hips, no limb girths, anywhere. Every target on this screen comes off the
+/// scale.
 struct BodyTargetsView: View {
     let model: SettingsModel
 

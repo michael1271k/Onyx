@@ -12,9 +12,13 @@
     "that gets to erase the distinction.",
     "",
     "FOUR live tables are deliberately absent:",
-    "  · body_measurements — the tape table. Onyx does not do manual waist/limb",
-    "    measuring; it has been removed from the product twice. Mirroring it would",
-    "    put the fields back within reach of the next screen that goes looking.",
+    "  · body_measurements — the tape TABLE. It stays out: a table of girths is a",
+    "    screen of girths, and that has been removed from the product twice.",
+    "    REVISED 2026-09-17 (W3): the ONE measurement the athlete actually takes",
+    "    is now a column, `daily_logs.waist_cm`, beside the weight it belongs",
+    "    with. A column on the day is not a tape table — there is one number, it",
+    "    sits in the reading it was taken with, and there is still nowhere for",
+    "    hips, thighs or arms to land.",
     "  · notion_credentials, notion_exports — the Notion integration was deleted on",
     "    2026-08-22 and these two are waiting on drop-SQL.",
     "  · widget_tokens — dies with the token-authenticated snapshot endpoint the",
@@ -52,7 +56,7 @@
         "id"
       ],
       "cursor": "updated_at",
-      "cols": "id:uuid,user_id:uuid,date:date,steps:int4?,water_ml:numeric?,sleep_minutes:int4?,carbs_g:numeric?,protein_g:numeric?,fats_g:numeric?,weight_kg:numeric?,lean_mass_kg:numeric?,bmi:numeric?,training_minutes:int4?,active_energy:numeric?,body_fat_pct:numeric?,standing_minutes:int4?,avg_heart_rate:int4?,avg_rest_heart_rate:int4?,respiratory_rate:numeric?,blood_oxygen:numeric?,muscle_percent:numeric?,water_percent:numeric?,bone_mineral:numeric?,visceral_fat:numeric?,bmr:numeric?,created_at:timestamptz,updated_at:timestamptz,hrv_ms:numeric?,exercise_minutes:int4?,stand_hours:int4?,vo2max:numeric?,wrist_temp_delta:numeric?,time_in_daylight_min:int4?,effort_rating:int2?,mood:int2?,journal_md:text?,distance_m:numeric?,protein_percent:numeric?,muscle_mass_kg:numeric?,water_mass_kg:numeric?,fat_mass_kg:numeric?,bone_mineral_kg:numeric?,protein_mass_kg:numeric?,fat_free_mass_kg:numeric?,weighin_skip_reason:text?,skeletal_muscle_mass_kg:numeric?,estimated_waist_to_hip_ratio:numeric?,nutrition_exception:text?,nutrition_estimated:bool,sleep_onset_trouble:bool,sleep_inaccurate:bool?"
+      "cols": "id:uuid,user_id:uuid,date:date,steps:int4?,water_ml:numeric?,sleep_minutes:int4?,carbs_g:numeric?,protein_g:numeric?,fats_g:numeric?,weight_kg:numeric?,lean_mass_kg:numeric?,bmi:numeric?,training_minutes:int4?,active_energy:numeric?,body_fat_pct:numeric?,standing_minutes:int4?,avg_heart_rate:int4?,avg_rest_heart_rate:int4?,respiratory_rate:numeric?,blood_oxygen:numeric?,muscle_percent:numeric?,water_percent:numeric?,bone_mineral:numeric?,visceral_fat:numeric?,bmr:numeric?,created_at:timestamptz,updated_at:timestamptz,hrv_ms:numeric?,exercise_minutes:int4?,stand_hours:int4?,vo2max:numeric?,wrist_temp_delta:numeric?,time_in_daylight_min:int4?,effort_rating:int2?,mood:int2?,journal_md:text?,distance_m:numeric?,protein_percent:numeric?,muscle_mass_kg:numeric?,water_mass_kg:numeric?,fat_mass_kg:numeric?,bone_mineral_kg:numeric?,protein_mass_kg:numeric?,fat_free_mass_kg:numeric?,weighin_skip_reason:text?,skeletal_muscle_mass_kg:numeric?,estimated_waist_to_hip_ratio:numeric?,waist_cm:numeric?,nutrition_exception:text?,nutrition_estimated:bool,sleep_onset_trouble:bool,sleep_inaccurate:bool?"
     },
     "daily_metrics": {
       "group": "daily",

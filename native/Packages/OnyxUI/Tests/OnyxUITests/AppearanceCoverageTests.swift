@@ -11,7 +11,7 @@ import Testing
 /// That failure is invisible in every way the other one is: it compiles, it
 /// renders, and under the default theme a flat dark screen beside a meshed one
 /// reads as a design choice rather than as an omission. It only announces
-/// itself when the user picks Ember and one screen out of thirty stays grey.
+/// itself when the user picks Obsidian and one screen out of thirty stays grey.
 ///
 /// The ground is also where the domain tint reaches the screen — the mesh
 /// bleed behind the title is `domain.start`/`domain.end` — so a screen with no

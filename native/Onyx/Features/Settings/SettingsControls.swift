@@ -343,11 +343,15 @@ struct OnyxHeldRow: View {
     let label: String
     let value: Double?
     var unit: String?
+    /// Whole by default — a rung's calorie or step goal has no decimals. The
+    /// InBody sheet passes 1: a body mass moves by a few hundred grams between
+    /// readings and a figure rounded to the kilogram cannot show that at all.
+    var fraction: Int = 0
 
     var body: some View {
         LabeledContent {
             HStack(spacing: 6) {
-                Text(value.map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "—")
+                Text(value.map { $0.formatted(.number.precision(.fractionLength(0...fraction))) } ?? "—")
                     .onyxNumeral()
                     .foregroundStyle(Color.onyx.textPrimary)
                 if let unit {

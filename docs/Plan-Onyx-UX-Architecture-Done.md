@@ -1237,3 +1237,389 @@ catalogue row has not been pulled. That is the 2026-09-14 false-trophy case the 
 -record tier was invented for. It now agrees with `record` and with a replay, both of
 which read `workout_sets` only, so the behaviour is right and the gap is a documentation
 item, not a code one.
+
+---
+# Wave Record — W3 · InBody & Appearance overhaul
+
+**Shipped `3.24.0` from `onyx/w3-inbody-appearance`, 2026-09-17.**
+
+## What was done
+
+**GOAL 1 — the theme spec grew a mood knob.**
+
+| File:line | Change |
+|---|---|
+| `OnyxCore/Design/OnyxThemeSpec.swift:24-26` | `chroma: Double` (a SCALE, 0.6…1.0) and `lift: Double` (an OFFSET, −0.06…+0.06). |
+| `…/OnyxThemeSpec.swift:47-53` | A hand-written `init(from:)`, `decodeIfPresent` on the two new keys. **This is the wave's one silent-catastrophe guard** — see below. |
+| `…/OnyxThemeSpec.swift:92-99, 121-128` | `normalised()` clamps the knobs too, through `bounded(_:_:fallback:)`, which refuses a non-finite value rather than clamping it. `clamp(_ hex:)` was renamed `guarded(_ hex:)` and made **public**: OnyxUI now derives two more accents and they must go through the same guard. |
+| `OnyxCore/Design/OKLCH.swift:89-112` | `OKLCHConvert.mood(_:chroma:lift:)` — the whole knob, at fixed hue. Short-circuits to the same bits on a neutral knob, exactly as `rotate` does for a zero delta, which is what keeps the default palette bit-identical. |
+| `OnyxUI/DesignSystem/OnyxTheme.swift:52-84` | The derivation. |
+
+**Which colours the knob moves, and why not the others.** The brief said "the
+derived stops — `end[domain]`, the washes, the surfaces". There are no tokens
+actually named *wash* or *surface*; the derived set in `OnyxTheme` is the four
+ends, the two derived starts, and the sixteen muscles. Each got a different rule,
+and each rule came out of measurement rather than out of the brief:
+
+- **The two chosen accents are untouched.** `start[.train]` is the primary and
+  `start[.fuel]` is the secondary, exactly as picked. The Appearance swatch draws
+  those two hexes, so a knob that moved them would make the control disagree with
+  the screen.
+- **The two derived accents** — `start[.body]`, `start[.recover]` — take the knob
+  and then go back through `OnyxThemeSpec.guarded`. They tint section headers and
+  gauges, so they carry text. Measured: Body sits at L 0.698 and Recover at
+  0.729, so a −0.06 lift lands at 0.638 and 0.669 and the guard never bites; the
+  guard is there for the theme nobody has picked yet.
+- **The four ends take the knob and then `OnyxThemeSpec.floored`** — the L ≥ 0.60
+  half of the guard and nothing else. This was "unguarded, they are gradient
+  stops" until code review measured it, and the premise was false:
+  `OnyxDomain.body.end` is the ink of the LEAN SOFT TISSUE numeral on two widget
+  faces (`OnyxComposition.swift:157`, `OnyxLifestyle.swift:796`), a 12–14 pt
+  figure on black. A primary of `0xE3A650` — the app's own Solar accent, on
+  which `normalised()` is the identity — at chroma 1.0 and lift −0.06 put it at
+  **4.46:1**. The floor and nothing more, because an end is also allowed to be
+  *light*: `recover.end` sits at L 0.868 and the full `guarded` would crush it
+  to the 0.78 saturation ceiling.
+- **The sixteen muscles take the CHROMA SCALE ONLY.** This is a deviation from
+  the brief and it is load-bearing. Measured, the palette's lightness ladder *is*
+  the family ramp: the five legs run L 0.830 · 0.766 · 0.699 · 0.636 · 0.569 in
+  even steps, and **Calves is already at 4.99:1 on black — 0.03 of L above AA**.
+  A lift either flattens the ladder (if floored at 0.60) or drops Calves to about
+  4.15:1 (if not). Muting or saturating the data palette is the whole mood the
+  knob owes them, and chroma does that without touching a measured ordering.
+
+**Why `lift` could not have been applied to the accents at all.** A negative lift
+on an accent already at the 0.60 floor is clamped straight back by the contrast
+guard and does nothing; a positive one caps at 0.78. The knob would have read as
+dead on exactly the themes it was added for. Documented in the guard's own
+header, in the register the existing comments use.
+
+**The decode trap, measured rather than assumed.** Swift's synthesised
+`Decodable` requires a key for every non-Optional property — a default value on
+the property does not save it. Every install written before this wave holds
+`{"primary":…,"secondary":…}` at `OnyxTheme.key`, and `OnyxTheme.apply(json:)`
+falls back to `.default` on **any** decode failure, silently. With the
+synthesised conformance, adding two stored properties would have reset every
+themed install to Ion on the next launch, with no error and nothing to notice.
+The test holds the literal old two-key blob.
+
+**The widget and the watch were verified, not re-fixed.**
+`WatchPayloads.WatchContext:52` carries `theme: OnyxThemeSpec?` whole, and
+`OnyxProvider.theme():96-100` reloads from the App Group defaults on every
+timeline build. Both already work, and the new `init(from:)` makes the cross-
+version cases work in both directions: an old phone's two-key spec decodes on a
+new watch as the neutral knob, and a new phone's four-key spec decodes on an old
+watch because the old synthesised decoder ignores keys it does not know.
+
+**GOAL 2 — eight new presets, nine in all.**
+
+`OnyxTheme.presets:138-166`. Ion stays first and is still `OnyxThemeSpec.default`
+(the plan's own correction on the founder's behalf, and it is right: `AppearanceView`
+says "Reset to Ion" and `SettingsTabView` names the current theme by matching
+against this array).
+
+Every pair was **solved**, not picked. A throwaway test inside `OnyxCoreTests`
+ran `OKLCHConvert.hex(from: OKLCH(l:c:h:))` over a chosen (L, C, h) inside the
+guard box, put the secondary at h + 120°, and printed three things per candidate:
+the round-tripped hex, whether `normalised()` was the identity on it, and its
+contrast on black. The first hue table it produced was rejected by its own
+pairwise-separation check — Ion vs Basalt came out 21° apart and Obsidian vs
+Meridian 25° — so the hues were re-spread and re-solved. The scratch test was
+deleted before the merge; `swift:core` is back to its 575.
+
+| Theme | primary | secondary | h° | chroma | lift | on black |
+|---|---|---|---|---|---|---|
+| Ion | `0x6B78F0` | `0xE3A650` | 275.3 | 1.00 | 0.00 | 5.57 / 9.84 |
+| Obsidian | `0x3C90B8` | `0xB46C8C` | 232.3 | 0.62 | −0.05 | 5.87 / 5.46 |
+| Solstice | `0xE5A323` | `0x30C8CC` | 77.7 | 0.94 | +0.03 | 9.59 / 10.26 |
+| Meridian | `0x19BCB9` | `0xC18BDE` | 192.7 | 0.86 | 0.00 | 8.94 / 8.02 |
+| Basalt | `0xB58194` | `0x909866` | 355.5 | 0.66 | −0.03 | 6.53 / 6.87 |
+| Aurora | `0x31D96D` | `0x9CB4FE` | 149.9 | 1.00 | +0.05 | 11.28 / 10.37 |
+| Terracotta | `0xE57255` | `0x32B36E` | 40.3 | 0.80 | −0.02 | 6.87 / 7.81 |
+| Vesper | `0xAA72C2` | `0xBA7F14` | 309.8 | 0.72 | −0.04 | 5.90 / 6.13 |
+| Halcyon | `0xAAB354` | `0x51B7EB` | 113.8 | 0.88 | +0.04 | 9.29 / 9.32 |
+
+Minimum pairwise separation across the nine primaries is **36°**, measured, not
+assumed from list order. Every one is a `normalised()` fixed point, so the source
+shows exactly what ships.
+
+**The chip re-layout.** `AppearanceView.swift:43-57`. The brief flagged
+`.lineLimit(1)` as a tripwire rather than a fix, and it was right: at `.caption`
+semibold "Terracotta" is ~67 pt of text, and with the 22 pt swatch, its 8 pt gap
+and 12 pt of padding each side the chip needs ~121 pt. Three columns cannot hold
+that on a 393 pt phone, so `chipWidth` went 100 → **126** and the grid is two
+columns and five rows — one column at the accessibility sizes, where the shot
+shows every name in full.
+
+**The sliders.** `AppearanceView.swift:196-263`. "Saturation" reads as a
+percentage; "Lift" reads ×100 and signed, because the stored value is an OKLCH
+lightness offset and `0.03` means nothing to anyone. They edit the draft like
+every other control here, and the `derived` preview at `:271` already renders
+from the uncommitted draft, so it shows the knobs working for free.
+
+**GOAL 3 — the waist.**
+
+**The founder had already pasted the DDL.** `schema-truth-checker` introspected
+the live database before any edit: `daily_logs.waist_cm` **already exists** —
+`numeric`, nullable, no default, 0 of 167 rows populated. `body_measurements`
+does not exist. So the wave's one blocking dependency was never blocking.
+
+| File:line | Change |
+|---|---|
+| `native/schema/supabase.json:55` | `waist_cm:numeric?` added to `daily_logs`, after `estimated_waist_to_hip_ratio`. |
+| `OnyxData/Mirror/MirrorModels.swift` | **Regenerated** — `npm run mirror`, never hand-edited. `check:mirror` is green. |
+| `OnyxData/Database/AppDatabase.swift:1265-1289` | `v30.waistCm` — the guarded ALTER for stores that already exist, the shape `v20.sleepInaccurate` uses. |
+| `OnyxData/Day/DayEditing.swift:158-160` | `waist_cm` added to `latestBodyReading`'s `IS NOT NULL` list. Without it a waist-only day was invisible to the carry-forward and the next weigh-in would have opened blank. |
+
+The three "never" comments were **replaced with the decision and its date**,
+not deleted:
+
+- `OnyxCore/Body/Composition.swift:10-21` — the rule is narrowed rather than
+  reversed. Nothing in that file computes a girth, infers one, or turns one into
+  a body-fat estimate; the waist is stored and shown and the arithmetic never
+  reads it. In particular the W:H ratio is **not** recomputed from `waist_cm` —
+  there is no hip measurement and there is not going to be one.
+- `native/schema/supabase.json:15-21` — the tape TABLE stays out. A column on the
+  day is not a tape table: there is one number, it sits in the reading it was
+  taken with, and there is still nowhere for hips, thighs or arms to land.
+- `Onyx/Features/Settings/BodyTargetsView.swift:14-21` — and the waist is
+  deliberately still absent from *this* screen, which is about where the plan is
+  going. A waist target is a number you cannot train toward directly, only
+  arrive at.
+- `OnyxData/Day/DayEditing.swift:83-90` — a fourth one the brief did not name,
+  and the one that would actually have misled the next reader, since it sat on
+  the write path. The waist rides the day row only: `body_composition` is the
+  HealthKit twin and HealthKit has no waist type, so mirroring it there would
+  invent a column the other writer could never fill.
+
+**GOAL 4 — InBody, Concept A.** `native/Onyx/Features/Pulse/PulseScale.swift`.
+
+- **The hero** (`:325-375`): body fat as the headline numeral, weight and
+  skeletal muscle as satellites, each with a ▲/▼ against `latestBodyReading()`.
+  The AX5 collapse is the `typeSize.isAccessibilitySize` switch `WeekHeroCard`
+  uses and deliberately **not** `ViewThatFits` — both satellites carry
+  `.frame(maxWidth: .infinity)`, which tells `ViewThatFits` the row fits any
+  width, so the stacked branch would be dead code (the W4 defect).
+- **Four accordions** (`:452-480`) replacing the three-group grid: Mass,
+  Composition, Water & protein, Minerals & derived. A shut group still says
+  "3 of 4", so nobody has to open all four to find the field the scale did not
+  report.
+- **`derivedSection` is gone.** All six derived masses now sit in the group each
+  was computed inside — fat and fat-free under Mass, water and protein masses
+  under Water & protein, bone mineral mass and lean soft tissue under Minerals.
+- **`fillSection` and `fillFooter` are deleted** — two buttons, a disabled state
+  and three sentences of footer copy spent asking a question with one sensible
+  answer. The form arrives full: previous reading first, Apple Health over the
+  top of it for the three fields Health can answer.
+- **The provenance caption is free.** `OnyxFieldCell`'s hint line was already
+  reserved, so `Health` / `Last` / `You` costs no layout. The old `= 12.4 kg`
+  live-mass hint was retired with it, because the mass it named is now a visible
+  row in the same accordion.
+
+**The trap, and the state shape it forced.** `DaySheet(… primary: ("Save",
+!pending.isEmpty, save))` gates Save on there being something to write. The seed
+is therefore a **separate layer**: `draft` is what the day holds plus what the
+user typed, `seed` is only what the sheet offered, and `touched` records the
+fields the user has operated so that clearing a pre-filled field sticks. The rule
+is lifted out of the view into `InBodySaveGate.pendingFields` (`:96-118`) — with
+a reading on the day, only real edits count; with no reading, the seeded figures
+are offered too, because there is nothing to duplicate and a weigh-in that needed
+no corrections still has to be recorded.
+
+`RowPush`'s nil-omitting merge is intact and now has a test that says so: a day
+with no waist does not send the key at all.
+
+## Succeeded
+
+- **`npm run check`** green — version `3.24.0 (32400)` in sync, atlas, mirror and
+  doms all up to date. **`check:swift`** green. **`swift:core`** 575 tests (same
+  as W2 — the scratch solver was deleted). **`swift:data`** 583 tests (581 + the
+  two new waist tests). **`swift:ui`** 27 tests (21 + six new).
+- The **app / widget / watch** `xcodebuild` for `generic/platform=iOS`: **BUILD
+  SUCCEEDED**, no new warnings.
+- **OnyxTests is exactly at baseline.** Recorded from a clean `main` worktree
+  before any edit: **10 issues across 4 tests in 3 suites** — History weeks (3),
+  Workout week (5), Session summary — the hotfix (2). After the wave: the same
+  10, the same suites, nothing new. This matches W2's recorded figure exactly.
+- New tests, **all written to fail first**:
+  - `OnyxThemeTests` (+6): an old two-key blob keeps its theme and lands on the
+    neutral knob; the neutral knob is today's palette and a turned one is not;
+    **no knob puts a themed ink under AA anywhere a user can go** — the hue
+    circle at 10°, both corners of the guard box, four chroma values and five
+    lifts, reporting the worst ink found; the sixteen muscles keep their
+    lightness ladder under every knob; the knob is clamped on the way in, a NaN
+    falls back and a slider's `-0.019999999999999997` lands on `-0.02`; every
+    preset declares a knob inside the published ranges, with at least one preset
+    each side of neutral.
+  - `InBodySaveGateTests` (+9, `native/OnyxTests/`): the untouched-sheet case,
+    the single-edit case, the fresh-day case, the cleared-seed case, the
+    cleared-stored case, the typed-on-empty case, the re-typed-identical case,
+    and the two that hold the mass rule — a seeded percentage never reaches a
+    mass column, and a typed one overrides the day's own.
+  - `RowPushTests` (+2): a waist lands on the day, survives the mirror and rides
+    the push — and a day with no waist does not send the key.
+  - `MirrorTests`: `daily_logs` is 52 columns, and the 52nd is `waist_cm`.
+- **Two arithmetic slips were caught by the tests rather than by review.** The
+  old-blob test was first written with a hand-converted decimal (`15036501` for
+  `0xE57255`) and failed; the JSON now interpolates the hexes so the literal
+  cannot drift from the theme it claims to assert. And the first preset hue table
+  failed its own separation check before it was ever written to source.
+- Screenshots, `SHOT_DERIVED=$HOME/Library/Caches/onyx-swift/shot-w3`:
+  `scale`, `scale-first`, `appearance`, `appearance-locked`, `day`,
+  `body-trends`, each at the default size and at AX5, plus
+  `scale-accessibility-extra-extra-extra-large` for the hero re-check. Nine
+  per-theme sets (`day`, `train`, `appearance`) under `themes/<Name>/`.
+
+**Three defects found by `code-reviewer`, all fixed, all now covered by a test
+that fails without the fix:**
+
+1. **[HIGH] The echo guard compared the wrong two values.** The guard added for
+   defect 1 below was `new != value(spec)`. But `OnyxNumberField` does not echo
+   the value — it echoes the value put through the FIELD's own precision:
+   `format` uses `.fractionLength(0...fractionLength)` and `parse` reads that
+   rounded text back. `DailyLogIngest.swift:154` writes `weight_kg` straight off
+   HealthKit at full precision, so a seed of `64.8347` renders "64.8", echoes
+   back `64.8`, fails the equality test and lands in `draft` — arming Save on an
+   untouched sheet of a day that already holds a reading, which is the exact
+   duplicate write the two-layer design exists to prevent. Both sides now go
+   through the same rounding the field does (`PulseScale.swift:265-271`). The
+   shot loop could not have caught this: every value in the preview fixture is
+   exactly representable at its field's precision.
+2. **[HIGH] `save()` wrote six mass columns the gate had refused.** `derived`
+   reads `value(_:)`, which falls through to the seed, and `save()` wrote all
+   six masses outside `patch`. On a day holding a weight and nothing else,
+   correcting the WAIST and pressing Save wrote `fat_mass_kg`,
+   `fat_free_mass_kg`, `muscle_mass_kg`, `water_mass_kg`, `bone_mineral_kg` and
+   `protein_mass_kg` computed from LAST WEEK's percentages, while the percentage
+   columns on that row stayed null — a composition point with nothing behind it,
+   which Body trends and both `OnyxComposition` widget faces then draw. A W3
+   regression: on `main` `derived` read `draft` only. The rule is now
+   `InBodySaveGate.massInputs` — the day's own values with the fields actually
+   being written laid over them, never the seed — and the screen keeps its own
+   `derived` so the read-only rows still show what the numbers in front of you
+   are worth.
+3. **[MEDIUM] The contrast guarantee was false, and the test could not see it.**
+   Covered above under GOAL 1. The test that missed it was wrong in three
+   separate ways, all instructive: it pinned `chroma: 0.6` on the reasoning that
+   the lowest saturation was the harshest case (measured, it is the SAFEST —
+   lowering chroma at fixed L moves toward that lightness's neutral, 5.3:1 on
+   black); it read only `theme.start`, never `theme.end`; and it swept the nine
+   PRESET hues, while the failing band is 114°–160° of rotation where no preset
+   sits — but the screen has a `ColorPicker`, so every hue in the guard box is
+   reachable. The replacement sweeps the hue circle at 10°, both corners of the
+   guard box, four chroma values and five lifts, and reports the worst ink it
+   found. Verified failing-first by removing the floor.
+
+Two lower findings were accepted as correct and deliberately not changed —
+see **Left open**. One was fixed: the slider's own floating-point arithmetic
+(`Slider(value:in:step:)` snaps to `lowerBound + n × step`, so the Terracotta
+position on the lift slider is `-0.019999999999999997`, and `AppearanceView`
+lights a chip by exact equality). `bounded` now rounds both knobs onto the
+two-decimal grid every preset is written on.
+
+**Four defects the brief did not name, all found by the shot loop:**
+
+1. **`OnyxNumberField` writes back through its binding on the first frame.**
+   `.onAppear` sets `text` from the value, and `.onChange(of: text)` writes the
+   parsed result straight back out. For its other eleven callers that is a no-op
+   — their binding *is* the source of truth. Here it collapsed the two layers on
+   the first render: every seeded value moved into `draft`, the captions read
+   "You" on numbers carried in from last week, and the save gate had become a
+   function of a render. Fixed with an echo guard in the binding's setter
+   (`PulseScale.swift:493-506`) — a write carrying the value the getter just
+   produced is dropped, anything else is the user, including a clear to nil.
+   Fixed in *this* binding rather than in the shared control, because the
+   write-back is correct behaviour for a binding that owns its value.
+2. **The derived masses rendered whole.** `OnyxHeldRow` hard-coded
+   `fractionLength(0)`, so fat mass read "10 kg" where the figure is 10.2 and the
+   week-to-week move is three or four hundred grams. It has a `fraction`
+   parameter now, defaulting to 0 so the five levers rows are untouched.
+3. **Three "level" chips on an untouched form.** A pre-filled field holds the
+   previous reading itself, so a delta drawn against it is level *by
+   construction* — the hero was announcing three times that a weigh-in which had
+   not happened yet had changed nothing. The chip is now drawn only for a figure
+   the day owns or the user has typed, and appears live as the numbers go in.
+4. **Two AX5 defects in the hero.** "SKELETAL MUSCLE" truncated to "SKELETAL
+   MUSC…" under `.lineLimit(1)` — a register label is uppercase and tracked out,
+   and at AX5 it is wider than the phone even with the whole row to itself. And
+   the blank line reserved to keep two side-by-side satellites the same height
+   was still being reserved when they were stacked, putting 22 pt of nothing in
+   the middle of the card. Both fixed at `PulseScale.swift:389-421`.
+
+## Failed
+
+- **The brief's screenshot command names a screen that does not exist.**
+  `SHOT_THEME=Obsidian scripts/native-shot.sh tabs` — there is no `tabs` screen
+  in `PreviewHarness.Screen`, and an unknown name renders a visible error rather
+  than failing, so the run would have produced nine PNGs of an error message.
+  Substituted `day train appearance`, which between them draw all four domain
+  ramps, the muscle palette, the sparkline series and the preset chips.
+- **The first attempt to record the OnyxTests baseline measured nothing.** The
+  command was `xcodebuild … | tail -80 > file`, so the file held the last test
+  bundle's summary and the pipeline's exit code was `tail`'s. Re-run properly in
+  a `git worktree` at `main` with the full log captured — which then failed with
+  `'Onyx.xcodeproj' does not exist`, because `xcodegen` refuses a worktree whose
+  `native/Onyx/Support/Secrets.xcconfig` is absent (it is not tracked). Copying
+  that one file in was enough. Worth knowing before the next wave cuts a
+  worktree to measure something.
+- **`InBodySaveGateTests` crashed with `signal trap` on its first run**, not a
+  compile error — `Field` and the gate were nested inside `InBodyEntryView`, and
+  a `View` is `@MainActor`-isolated along with everything declared in it,
+  including a `CaseIterable` witness. This is the trap `w1a-week-wrapped`
+  records. Both moved to file scope as `InBodyField` and `InBodySaveGate`, which
+  is where the gate belonged anyway.
+
+## Left open
+
+**The founder's manual checklist — one item, and it is already done:**
+
+- **The DDL was already pasted.** `ALTER TABLE daily_logs ADD COLUMN waist_cm
+  numeric;` is live as of the introspection on 2026-09-17 — `numeric`, nullable,
+  no default. **Nothing is required of the founder for this wave.**
+- **`npm run check:mirror` is green**, and `MirrorModels.swift` was regenerated
+  rather than hand-edited.
+
+**Seams W4+ inherits:**
+
+- **`daily_logs.hrv_overnight` is live but unmirrored.** The introspection turned
+  up a 53rd column on the live table — `boolean NOT NULL DEFAULT false` — that
+  `native/schema/supabase.json` does not list. Pre-existing drift, unrelated to
+  this wave, and harmless while nothing reads it; but the fixture's claim to be a
+  faithful introspection is now one column short. Add it or document why not.
+- **The muscle palette takes chroma but not lift, and that asymmetry is not
+  visible anywhere in the UI.** A user who drags Lift to −0.06 moves the ramps
+  and the two derived accents and sees the sixteen data colours stay where they
+  are. That is the right behaviour and it is documented in `OnyxTheme`'s header
+  and defended by a test, but the Appearance footer does not say it. If W4 or W5
+  touches that copy, it is one clause.
+- **The `derived` preview shows ramps only.** It draws the four domain ramps from
+  the uncommitted draft, which is what makes the knobs legible — but the muscle
+  palette is sixteen of the twenty-six colours a theme moves and none of them is
+  previewed. A sixteen-swatch row under the ramps would make Saturation's effect
+  obvious; it was out of scope here.
+- **Nothing in `npm run check` runs `OnyxTests`.** `scripts/swift-ui-test.sh`
+  passes `-only-testing:OnyxUITests`, so `InBodySaveGateTests` — written
+  precisely because there is no screenshot that can show the save gate is right
+  — is executed by nothing in the gate. It was run by hand for this wave (9/9).
+  Wiring it in is not a one-line change: the bundle carries the 10 baseline
+  failures below, so adding it turns `npm run check` red on `main`. That is a
+  sprint-level decision and W5's audit is where it belongs.
+- **On a day that already holds a reading, a seeded field the athlete AGREES
+  with cannot be committed.** Save only counts real edits, so the only way to
+  accept a carried-forward figure is to type a different value and type it back.
+  The `Last` caption is the only signal that the number on screen is not on the
+  row. This is the specified behaviour — it is what stops the duplicate write —
+  but a tap-to-accept affordance would close the gap honestly.
+- **An install on Ember, Moss, Rose, Gold or Sea keeps its colours and loses its
+  name.** The decode is correct and the hexes are untouched, but
+  `SettingsTabView` matches by SPEC against `presets`, so the Settings row now
+  reads "Custom" and no chip lights. There is no old-preset → new-preset
+  mapping and this wave does not invent one; the release notes say so.
+- **`OnyxTests` still has its 10 baseline issues** in History weeks (3), Workout
+  week (5) and Session summary — the hotfix (2). Unchanged by this wave and still
+  ungated. W5's audit inherits them.
+- **One environment-only failure** shows up when the suites are run through
+  `xcodebuild` rather than `swift test`: `AppDatabaseTests` "stores, retrieves
+  and removes a session blob" throws a Keychain error in the simulator. It passes
+  under `npm run swift:data`. Present on clean `main` too — recorded here so the
+  next wave does not adopt it as new.

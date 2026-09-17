@@ -95,7 +95,10 @@ shoot() {
   # set is worse than a missing one: every PNG looks plausible.
   sleep 1
   # `SHOT_THEME` photographs a screen under a theme: a preset by name
-  # (`SHOT_THEME=Ember`) or a custom pair of hexes (`SHOT_THEME=E0645A,4FD1C5`).
+  # (`SHOT_THEME=Obsidian`) or a custom pair of hexes
+  # (`SHOT_THEME=E0645A,4FD1C5`). The NAME must be one `OnyxTheme.presets`
+  # actually holds — an unknown one leaves the default in place and the run
+  # photographs Ion under whatever filename you asked for.
   # It is a launch argument, so it dies with the process and cannot leave the
   # simulator's container holding a colour the next run would inherit.
   if [ -n "${SHOT_THEME:-}" ]; then
