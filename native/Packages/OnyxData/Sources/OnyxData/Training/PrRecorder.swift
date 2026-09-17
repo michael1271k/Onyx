@@ -66,7 +66,8 @@ public enum PrRecorder {
         let program = try programOwning(db, userId: userId, date: date)
 
         let baselines = try baselines(
-            db, exerciseIds: exerciseIds, excluding: sessionId, dayKey: dayKey, program: program, name: name
+            db, userId: userId, exerciseIds: exerciseIds, excluding: sessionId,
+            dayKey: dayKey, program: program, name: name
         )
         let candidates = Self.candidates(sets, dayKey: dayKey, date: date, program: program, name: name)
         let result = PrEngine.detectSessionPrs(candidates, baselines)
@@ -153,7 +154,7 @@ public enum PrRecorder {
         let userId = try WorkoutSession.fetchOne(db, key: sessionId)?.userId ?? ""
         let program = try programOwning(db, userId: userId, date: date)
         let baselines = try baselines(
-            db, exerciseIds: Set(sets.map(\.exerciseId)), excluding: sessionId,
+            db, userId: userId, exerciseIds: Set(sets.map(\.exerciseId)), excluding: sessionId,
             dayKey: dayKey, program: program, name: name
         )
         return PrEngine.detectSessionPrs(
@@ -184,7 +185,7 @@ public enum PrRecorder {
     /// date lives on `workout_sessions`, so the bound is a subquery; nil keeps
     /// the old behaviour exactly, which is what the live logger wants.
     static func baselines(
-        _ db: Database, exerciseIds: Set<String>, excluding sessionId: String?,
+        _ db: Database, userId: String, exerciseIds: Set<String>, excluding sessionId: String?,
         before: String? = nil,
         dayKey: String?, program: Program, name: @escaping (String) -> String,
         standingRecordFloors: Bool = false
@@ -193,7 +194,7 @@ public enum PrRecorder {
         // Off for every rebuild path; the live deck is the one caller that
         // passes true. `floors`' header says why.
         let floors = try floors(
-            db, standingRecords: standingRecordFloors, excludingSession: sessionId
+            db, userId: userId, standingRecords: standingRecordFloors, excludingSession: sessionId
         )
         // ── EVERY ID THAT IS THIS MOVEMENT, NOT JUST THE ONE IN HAND ────────
         //
@@ -232,11 +233,18 @@ public enum PrRecorder {
         let keyByName = Dictionary(
             exerciseIds.map { (name($0), $0) }, uniquingKeysWith: { first, _ in first }
         )
-        let siblings = try String.fetchAll(db, sql: "SELECT DISTINCT exercise_id FROM workout_sets")
-            .filter { keyByName[name($0)] != nil }
+        // THIS user's ledger, and only it (W11). `workout_sets` has no
+        // `user_id` locally, so ownership rides on the session — the same
+        // subquery `before` already uses for the date.
+        let own = "session_id IN (SELECT id FROM workout_sessions WHERE user_id = ?)"
+        let siblings = try String.fetchAll(
+            db, sql: "SELECT DISTINCT exercise_id FROM workout_sets WHERE " + own, arguments: [userId]
+        ).filter { keyByName[name($0)] != nil }
         let lookup = Set(exerciseIds).union(siblings)
 
-        var query = WorkoutSet.filter(lookup.contains(Column("exercise_id")))
+        var query = WorkoutSet
+            .filter(lookup.contains(Column("exercise_id")))
+            .filter(sql: own, arguments: [userId])
         if let sessionId { query = query.filter(Column("session_id") != sessionId) }
         if let before {
             query = query.filter(
@@ -319,10 +327,10 @@ public enum PrRecorder {
     /// exclude. The tier itself is untouched — this is not the deck opting out
     /// of the floor, it is the floor being asked the question the caller meant.
     static func floors(
-        _ db: Database, standingRecords: Bool = false, excludingSession: String? = nil
+        _ db: Database, userId: String, standingRecords: Bool = false, excludingSession: String? = nil
     ) throws -> [String: PrFloor] {
         var out: [String: PrFloor] = [:]
-        for row in try PersonalRecordRow.fetchAll(db) {
+        for row in try PersonalRecordRow.filter(Column("user_id") == userId).fetchAll(db) {
             // A floor is a session-less row's value, or the `floor_value` a
             // session's record carries from the floor row it replaced —
             // the natural key holds ONE row per axis, so a beaten floor
@@ -464,7 +472,7 @@ public enum PrRecorder {
         let timed = TimedExercise.isTimed(exerciseKey)
         // Read BEFORE the retract below: the floor rows live in the same
         // table, and `retract` leaves them alone precisely so this can.
-        let floor = try floors(db)[exerciseKey]
+        let floor = try floors(db, userId: userId)[exerciseKey]
         let ctx = try AppDatabase.scheduleContext(db, userId: userId)
 
         // Clear the slate — locally AND on the wire. Every axis is queued for
@@ -617,13 +625,13 @@ extension AppDatabase {
     /// record anyway. Matching `record` exactly is the requirement; being
     /// cleverer than it would light a trophy the close then refuses to file.
     public func livePrBaselines(
-        exerciseIds: [String], excluding sessionId: String?, before: String? = nil, dayKey: String?,
-        program: Program
+        userId: String, exerciseIds: [String], excluding sessionId: String?, before: String? = nil,
+        dayKey: String?, program: Program
     ) throws -> PrBaselines {
         try writer.read { db in
             let name = try PrRecorder.nameResolver(db)
             return try PrRecorder.baselines(
-                db, exerciseIds: Set(exerciseIds), excluding: sessionId,
+                db, userId: userId, exerciseIds: Set(exerciseIds), excluding: sessionId,
                 before: before, dayKey: dayKey, program: program, name: name,
                 // The ONE place this is on — see `PrRecorder.floors`. The deck
                 // is the surface that shows a record the instant it happens,

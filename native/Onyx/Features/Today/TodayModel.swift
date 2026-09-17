@@ -142,7 +142,7 @@ final class TodayModel {
     var todaySessionId: String? {
         guard feed?.snapshot.workout.logged == true else { return nil }
         let date = feed?.snapshot.date ?? LogicalDay.today()
-        let sessions = (try? database.sessions(on: date)) ?? []
+        let sessions = (try? database.sessions(on: date, userId: userId)) ?? []
         return sessions.max { ($0.durationMin ?? 0) < ($1.durationMin ?? 0) }?.id
     }
 

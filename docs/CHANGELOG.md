@@ -44,6 +44,61 @@ _Nothing yet._
 
 ---
 
+## [5.0.0] — 2026-09-17 · One Store, One User
+
+**A MAJOR release: the founder must paste one SQL file, and signing into a
+second account on a device now erases the first account's local data before the
+first sync.**
+
+### Added
+- **Row Level Security for all 34 tables (`docs/sql/w11-isolation-rls.sql`).**
+  Until now no policy was checked into the repo — isolation was asserted in
+  prose only, and the live database granted every table to the anonymous role
+  `to public`. This file, generated from a live introspection and proved on a
+  throwaway Postgres 17 cluster, enables RLS on every table and gives each four
+  policies on `(select auth.uid()) = user_id` — the initplan form, evaluated
+  once per query. `workout_sets` and `set_events` are additionally checked on
+  write against their session's owner; `set_events` is append-only, so it has
+  no update policy; the founder's admin reads are preserved; `profiles.role`
+  becomes read-only to the user (a column grant replaces the table UPDATE that
+  let any account promote itself to admin); TRUNCATE is revoked from the API
+  roles. **The founder pastes this once in the Supabase SQL editor — nothing in
+  the app can apply it.**
+- **`TwoUserIsolationTests`.** Two accounts seeded into one store, with every
+  scoped reader asserted to return one account's rows and never the other's —
+  sessions, sets, the ledger, records, cardio, bodyweight, reports, the weekly
+  export, the scorer and the widget snapshot. The exhaustive proof of the wave.
+
+### Changed
+- **Signing into a different account erases the previous one's data first.**
+  A sign-in whose user differs from the store's owner now clears the local
+  store before the first sync, using the same erase sign-out runs, and reports
+  the previous account's unsynced-change count exactly as sign-out does.
+  Before this a sign-in with no sign-out before it inherited the previous
+  account's rows until its own sync landed — and the widget kept drawing them.
+- **Every local read is scoped to its user.** The personal-record engine, the
+  session history, the weekly export, the day scorer, the widget builder, the
+  live/finished session readers, the session editors, the event reprojection,
+  cardio, bodyweight and the training puller all now filter on `user_id`
+  (through the session join where the row carries none). The store was already
+  one user's mirror; this is the second lock, so a row that outlives its owner
+  is never handed to the next account.
+
+### Fixed
+- **A new account can no longer land on a configured app.** Onboarding stopped
+  being offered whenever the local `exercises` catalogue held any row — but
+  that table has no `user_id`, so one leftover row from a previous account
+  suppressed onboarding for a brand-new one. The catalogue check is deleted:
+  local `exercises` proves a catalogue was pulled, not that this account was
+  set up.
+
+### Unchanged, on purpose
+- **No score, record or golden vector moves.** Scoping a single-user store's
+  reads by that user returns exactly the same rows; all 591 OnyxData, 581
+  OnyxCore and every UI test pass byte-for-byte.
+
+---
+
 ## [4.1.0] — 2026-09-17 · Fatigue Reads The Clock
 
 ### Changed

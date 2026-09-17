@@ -576,7 +576,7 @@ enum SessionAnalysis {
         let userId = database.localUserId()
         return Context(
             schedule: (try? database.scheduleContext(userId: userId)) ?? Context.empty.schedule,
-            floors: (try? database.prFloors()) ?? [:]
+            floors: (try? database.prFloors(userId: userId)) ?? [:]
         )
     }
 

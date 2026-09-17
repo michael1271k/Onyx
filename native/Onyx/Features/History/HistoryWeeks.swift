@@ -141,8 +141,9 @@ enum HistoryWeeks {
         // An empty string is not a selection — the same read `WeeklyExportBuilder`
         // makes, because `isLeverId("")` would say otherwise.
 
-        let sessions = (try? database.sessionHistory()) ?? []
-        let ledger = (try? database.historySets()) ?? []
+        let owner = database.localUserId()
+        let sessions = (try? database.sessionHistory(userId: owner)) ?? []
+        let ledger = (try? database.historySets(userId: owner)) ?? []
         let summaries = SessionAnalysis.summaries(sessions, ledger: ledger, in: context.analysis)
         let byDate = Dictionary(summaries.map { ($0.date, $0) }, uniquingKeysWith: { first, _ in first })
         let finishedIds = Set(sessions.filter { $0.endedAt != nil }.map(\.id))
@@ -219,8 +220,9 @@ enum HistoryWeeks {
         database: AppDatabase, window: WeekWindow, today: String = LogicalDay.today()
     ) -> WeekDetail {
         let context = scheduleContext(database: database)
-        let sessions = (try? database.sessionHistory()) ?? []
-        let ledger = (try? database.historySets()) ?? []
+        let owner = database.localUserId()
+        let sessions = (try? database.sessionHistory(userId: owner)) ?? []
+        let ledger = (try? database.historySets(userId: owner)) ?? []
         let byDate = Dictionary(
             SessionAnalysis.summaries(sessions, ledger: ledger, in: context.analysis).map { ($0.date, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -378,7 +380,7 @@ enum HistoryWeeks {
             schedule,
             goals,
             (try? database.leverLadder(userId: userId)) ?? .empty,
-            SessionAnalysis.Context(schedule: schedule, floors: (try? database.prFloors()) ?? [:])
+            SessionAnalysis.Context(schedule: schedule, floors: (try? database.prFloors(userId: userId)) ?? [:])
         )
     }
 

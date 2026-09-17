@@ -80,7 +80,7 @@ struct ExerciseLibraryView: View {
             // The trails first, so a row never appears without its sparkline
             // and then grows one under the reader's finger.
             sparks = await Task.detached(priority: .userInitiated) {
-                let ledger = (try? database.historySets()) ?? []
+                let ledger = (try? database.historySets(userId: database.localUserId())) ?? []
                 return Dictionary(grouping: ledger, by: \.exerciseId)
                     .mapValues { SessionAnalysis.sparkline($0) }
             }.value

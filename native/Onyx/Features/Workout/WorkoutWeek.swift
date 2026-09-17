@@ -423,7 +423,7 @@ final class WorkoutWeek {
     }
 
     func deleteCardio(_ id: String) {
-        try? database.deleteCardio(id: id)
+        try? database.deleteCardio(id: id, userId: userId)
         Task { await refresh() }
     }
 
@@ -505,7 +505,7 @@ final class WorkoutWeek {
         // prescription, and that is a different question from what was lifted.
         var tonnage = 0.0
         for session in finished.values {
-            let rows = (try? database.historySets(sessionId: session.id)) ?? []
+            let rows = (try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? []
             tonnage += SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet))
         }
         out.weekTonnageKg = jsRound(tonnage)
@@ -738,25 +738,25 @@ final class WorkoutWeek {
         if let key = out.todayKey {
             let open = sessions.first { $0.date == today && $0.dayKey == key && $0.endedAt == nil }
             let openWorking = open.map { session in
-                ((try? database.historySets(sessionId: session.id)) ?? [])
+                ((try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? [])
                     .filter { SetTags.isWorkingSet($0.setType) }
             } ?? []
             if let live = open, !openWorking.isEmpty || finished[today] == nil {
-                let rows = (try? database.historySets(sessionId: live.id)) ?? []
+                let rows = (try? database.historySets(sessionId: live.id, userId: database.localUserId())) ?? []
                 let working = rows.filter { SetTags.isWorkingSet($0.setType) }
                 out.state = .live(
                     sets: SessionDetail.toRows(working.map(SessionAnalysis.detailSet)).filter { $0.num != nil }.count,
                     volumeKg: SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet))
                 )
             } else if let closed = finished[today], closed.dayKey == key {
-                let rows = (try? database.historySets(sessionId: closed.id)) ?? []
+                let rows = (try? database.historySets(sessionId: closed.id, userId: database.localUserId())) ?? []
                 let working = rows.filter { SetTags.isWorkingSet($0.setType) }
                 let groups = SessionAnalysis.grouped(rows)
                 // Records replayed against everything logged before this
                 // session, exactly as the save path asked on the day —
                 // `personal_records` is a current-best table and would answer
                 // "none" for any session whose records have since been beaten.
-                let prior = ((try? database.historySets(exerciseIds: groups.map(\.exerciseId))) ?? [])
+                let prior = ((try? database.historySets(exerciseIds: groups.map(\.exerciseId), userId: database.localUserId())) ?? [])
                     .filter { $0.sessionId != closed.id }
                 let pr = SessionAnalysis.detect(groups: groups, prior: prior, dayKey: closed.dayKey, date: closed.date, in: analysis)
                 out.state = .done(
@@ -846,7 +846,7 @@ final class WorkoutWeek {
         _ database: AppDatabase, _ finished: [String: WorkoutSession]
     ) -> [String: Double] {
         finished.mapValues { session in
-            let rows = (try? database.historySets(sessionId: session.id)) ?? []
+            let rows = (try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? []
             return SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet))
         }
     }
@@ -898,7 +898,7 @@ final class WorkoutWeek {
             var tonnageKg = 0.0
             var rows: [HistorySetRow] = []
             for session in finished.values {
-                let sets = (try? database.historySets(sessionId: session.id)) ?? []
+                let sets = (try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? []
                 rows += sets
                 // The one tonnage rule, the one `tonnageByDate` applies: every
                 // non-ghost row, warm-ups included, a pair scored once at its
@@ -981,7 +981,7 @@ final class WorkoutWeek {
         // the same one `build` takes its own tonnage by.
         func tonnage(_ sessions: [String: WorkoutSession]) -> Double {
             sessions.values.reduce(0) { total, session in
-                let rows = (try? database.historySets(sessionId: session.id)) ?? []
+                let rows = (try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? []
                 return total + SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet))
             }
         }
@@ -1049,7 +1049,7 @@ final class WorkoutWeek {
         // equal volume would otherwise name a different "biggest" between two
         // refreshes of a week whose data never changed.
         for session in finished.keys.sorted().compactMap({ finished[$0] }) {
-            let all = (try? database.historySets(sessionId: session.id)) ?? []
+            let all = (try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? []
             // ── THE SAME VOLUME RULE AS THE WEEK'S OWN TONNAGE ──────────────
             // Every non-ghost row, warm-ups included — `SessionVolume`'s rule.
             // Taken off `all` BEFORE the working-set filter below, because the
@@ -1070,7 +1070,7 @@ final class WorkoutWeek {
             guard !rows.isEmpty else { continue }
             let groups = SessionAnalysis.grouped(rows)
 
-            let prior = ((try? database.historySets(exerciseIds: groups.map(\.exerciseId))) ?? [])
+            let prior = ((try? database.historySets(exerciseIds: groups.map(\.exerciseId), userId: database.localUserId())) ?? [])
                 .filter { $0.sessionId != session.id }
             prCount += SessionAnalysis.detect(
                 groups: groups, prior: prior, dayKey: session.dayKey, date: session.date, in: analysis
@@ -1110,8 +1110,9 @@ final class WorkoutWeek {
         // The weigh-ins that BOUND the week: the last one in it, and the last
         // one before it. A delta taken inside the week would report a Friday
         // against a Wednesday and call it a week's change.
-        let weight = try? database.bodyweight(onOrBefore: dates.last ?? weekStart)
-        let before = ISODate.addDays(weekStart, -1).flatMap { try? database.bodyweight(onOrBefore: $0) }
+        let owner = database.localUserId()
+        let weight = try? database.bodyweight(onOrBefore: dates.last ?? weekStart, userId: owner)
+        let before = ISODate.addDays(weekStart, -1).flatMap { try? database.bodyweight(onOrBefore: $0, userId: owner) }
 
         // ── WHERE THE WEEK'S WORK LANDED, VIA THE ONE ACCUMULATOR (W1a) ─────
         // `TodayFeedBuilder.muscleFocus` and nothing else. The tile, the muscle
@@ -1227,11 +1228,11 @@ final class WorkoutWeek {
         _ database: AppDatabase, dayKey: String?, before today: String
     ) -> Previous? {
         guard let dayKey else { return nil }
-        let session = ((try? database.sessionHistory()) ?? [])
+        let session = ((try? database.sessionHistory(userId: database.localUserId())) ?? [])
             .first { $0.dayKey == dayKey && $0.endedAt != nil && $0.date < today }
         // `sessionHistory` is already newest-first, so `first` IS the latest.
         guard let session else { return nil }
-        let rows = ((try? database.historySets(sessionId: session.id)) ?? [])
+        let rows = ((try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? [])
             .filter { SetTags.isWorkingSet($0.setType) }
         guard !rows.isEmpty else { return nil }
 

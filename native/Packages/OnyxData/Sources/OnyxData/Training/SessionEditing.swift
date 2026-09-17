@@ -138,6 +138,7 @@ public extension AppDatabase {
     @discardableResult
     func updateMetrics(
         sessionId: String,
+        userId: String,
         durationMin: Double? = nil,
         avgBpm: Int? = nil,
         calories: Int? = nil,
@@ -145,7 +146,7 @@ public extension AppDatabase {
         measured: Bool = true
     ) throws -> SessionEditing.Outcome? {
         try writer.write { db in
-            guard var session = try WorkoutSession.fetchOne(db, key: sessionId) else { return nil }
+            guard var session = try Self.ownedSession(db, id: sessionId, userId: userId) else { return nil }
             // ── WHY THE EFFORT IS HERE AND NOT IN `closeSession` ────────────
             // `closeSession` writes it because closing is when it is first
             // asked. Re-opening a finished session for editing (§U4.5) asks
@@ -216,6 +217,7 @@ public extension AppDatabase {
     /// the patch is the only way to say so.
     func amendSet(
         sessionId: String,
+        userId: String,
         setId: String,
         weightKg: Double? = nil,
         reps: Int? = nil,
@@ -254,7 +256,7 @@ public extension AppDatabase {
         // can tell "I retyped 40" from "I changed 40 to 60".
         guard !patch.isEmpty else { return nil }
         guard try changesSomething(patch, sessionId: sessionId, setId: setId) else { return nil }
-        return try edit(sessionId: sessionId) { db, _ in
+        return try edit(sessionId: sessionId, userId: userId) { db, _ in
             guard let existing = try WorkoutSet.fetchOne(db, key: setId), existing.sessionId == sessionId
             else { throw SessionEditing.EditError.noSuchSet(setId) }
             try Self.appendEvent(db, sessionId: sessionId, setId: setId, body: .amend(patch))
@@ -269,10 +271,11 @@ public extension AppDatabase {
     @discardableResult
     func addSet(
         sessionId: String,
+        userId: String,
         _ snapshot: SetSnapshot,
         setId: String = newOnyxID()
     ) throws -> SessionEditing.Outcome? {
-        try edit(sessionId: sessionId) { db, _ in
+        try edit(sessionId: sessionId, userId: userId) { db, _ in
             try Self.appendEvent(db, sessionId: sessionId, setId: setId, body: .append(snapshot))
             return [snapshot.exerciseId]
         }
@@ -284,8 +287,8 @@ public extension AppDatabase {
     /// device may not have heard about the deletion, and when its append finally
     /// arrives the tombstone is what stops the set coming back.
     @discardableResult
-    func deleteSet(sessionId: String, setId: String) throws -> SessionEditing.Outcome? {
-        try edit(sessionId: sessionId) { db, _ in
+    func deleteSet(sessionId: String, userId: String, setId: String) throws -> SessionEditing.Outcome? {
+        try edit(sessionId: sessionId, userId: userId) { db, _ in
             guard let existing = try WorkoutSet.fetchOne(db, key: setId), existing.sessionId == sessionId
             else { throw SessionEditing.EditError.noSuchSet(setId) }
             try Self.appendEvent(db, sessionId: sessionId, setId: setId, body: .void)
@@ -308,10 +311,15 @@ public extension AppDatabase {
     /// `apply` returns the `exercise_id`s it touched; they become ledger keys.
     private func edit(
         sessionId: String,
+        userId: String,
         _ apply: (Database, WorkoutSession) throws -> [String]
     ) throws -> SessionEditing.Outcome? {
         try writer.write { db in
-            guard var session = try WorkoutSession.fetchOne(db, key: sessionId) else {
+            // Another account's session is not "live" and not "yours to edit";
+            // it does not exist from here (W11). `seedEventLog`, `reproject`
+            // and the recount below run inside this transaction on a session
+            // this line has already claimed, which is why none of them asks.
+            guard var session = try Self.ownedSession(db, id: sessionId, userId: userId) else {
                 throw SessionEditing.EditError.noSuchSession(sessionId)
             }
             // A live session belongs to the logger, which appends through
@@ -864,7 +872,7 @@ public extension AppDatabase {
     /// transaction. A revert that half-happened is a session no reader could
     /// describe.
     @discardableResult
-    func revertSessionEdits(sessionId: String) throws -> SessionEditing.Outcome? {
+    func revertSessionEdits(sessionId: String, userId: String) throws -> SessionEditing.Outcome? {
         let worthDoing = try writer.read { db -> Bool in
             guard let mark = try Self.editMark(db, sessionId: sessionId) else { return false }
             // `kind` is filtered because `pause` / `resume` are in this log too
@@ -882,7 +890,7 @@ public extension AppDatabase {
             return nil
         }
 
-        return try edit(sessionId: sessionId) { db, _ in
+        return try edit(sessionId: sessionId, userId: userId) { db, _ in
             guard let mark = try Self.editMark(db, sessionId: sessionId) else { return [] }
             let events = try SetEvent
                 .filter(SetEvent.Columns.sessionId == sessionId)

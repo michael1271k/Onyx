@@ -85,7 +85,7 @@ struct ExerciseDetailView: View {
             #endif
             let database = environment.database, id = shown.id
             ledger = await Task.detached(priority: .userInitiated) {
-                (try? database.historySets(exerciseIds: [id])) ?? []
+                (try? database.historySets(exerciseIds: [id], userId: database.localUserId())) ?? []
             }.value
             loaded = true
         }

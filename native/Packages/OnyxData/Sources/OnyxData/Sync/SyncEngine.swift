@@ -90,9 +90,16 @@ public actor SyncEngine {
     private let rows: (any MirrorPushRemote)?
     private let catalogue: [String: MirrorTable]
     private var isDraining = false
+    /// Whose rows this engine pushes. The coordinator always passes the
+    /// signed-in user; nil asks the store whose it is (`knownUserId`), which
+    /// is the one-user-per-store invariant read back — for tests and for
+    /// nothing else. A session the store holds for anyone else is not pushed:
+    /// RLS would refuse it, and the drainer would retry it forever.
+    private let userId: String?
 
     public init(
         database: AppDatabase,
+        userId: String? = nil,
         remote: any SyncRemote,
         rows: (any MirrorPushRemote)? = nil,
         // `pushable`, not `byName`: the generated catalogue plus the tables
@@ -105,10 +112,13 @@ public actor SyncEngine {
         catalogue: [String: MirrorTable] = MirrorCatalogue.pushable
     ) {
         self.database = database
+        self.userId = userId
         self.remote = remote
         self.rows = rows
         self.catalogue = catalogue
     }
+
+    private var owner: String { userId ?? (try? database.knownUserId()) ?? "" }
 
     /// Push everything the queue is ready to push.
     ///
@@ -256,7 +266,7 @@ public actor SyncEngine {
     ) async throws -> (pushed: Int, failed: Int) {
         var failed = 0
 
-        guard let session = try database.session(id: sessionId) else {
+        guard let session = try database.session(id: sessionId, userId: owner) else {
             // The session was deleted locally after the item was queued. There
             // is nothing to push and nothing to retry, but the row is kept:
             // deleting it would make a queued set vanish with no trace, and
@@ -273,7 +283,7 @@ public actor SyncEngine {
         // movement that cannot be matched costs its own rows and nothing else.
         // The session row and every other set still upload.
         let projected = Dictionary(
-            try database.sets(sessionId: sessionId).map { ($0.id, $0) },
+            try database.sets(sessionId: sessionId, userId: session.userId).map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
         var upserts: [RemoteSetRow] = []

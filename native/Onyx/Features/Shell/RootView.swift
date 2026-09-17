@@ -144,7 +144,8 @@ struct SignedInTabs: View {
         // uses to decide whether to say "Resume workout".
         .task {
             guard environment.selectedTab.isEmpty,
-                  (try? environment.database.liveWorkoutInProgress(date: LogicalDay.today())) == true
+                  (try? environment.database.liveWorkoutInProgress(
+                      date: LogicalDay.today(), userId: environment.database.localUserId())) == true
             else { return }
             selection.wrappedValue = .train
         }

@@ -1878,7 +1878,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         if !isEditing { LiveSessionStart.write(startedAt, dayKey: day.key, date: LogicalDay.today()) }
         guard let store, let sessionId else { return }
         do {
-            try store.setSessionStart(id: sessionId, startedAt: startedAt)
+            try store.setSessionStart(id: sessionId, startedAt: startedAt, userId: userId)
             storeError = nil
         } catch {
             storeError = String(describing: error)
@@ -1946,7 +1946,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     func finishEdit(sessionRpe: Double? = nil) -> String? {
         guard let store, let sessionId, let editing else { return nil }
         do {
-            try store.updateMetrics(sessionId: sessionId, sessionRpe: sessionRpe)
+            try store.updateMetrics(sessionId: sessionId, userId: userId, sessionRpe: sessionRpe)
             // ── SAVING IS WHAT MAKES THE EDIT UNREVERTABLE ──────────────────
             // The watermark is the one thing that makes `cancelEdit` possible,
             // so Save is where it stops being true: these changes are now the
@@ -1994,7 +1994,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // the caller DISMISSES on a `true`. Reporting one here would close
             // the screen telling the athlete their session was restored, after
             // a dialog promised exactly that and nothing happened.
-            guard try store.revertSessionEdits(sessionId: sessionId) != nil else {
+            guard try store.revertSessionEdits(sessionId: sessionId, userId: userId) != nil else {
                 storeError = nil
                 return false
             }
@@ -2050,7 +2050,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     func cancel() -> Bool {
         guard let store, let sessionId else { return true }
         do {
-            try store.discardSession(id: sessionId)
+            try store.discardSession(id: sessionId, userId: userId)
             self.sessionId = nil
             // The deck goes back to its prescription. Leaving the ticks on
             // screen after the events behind them are gone is the projection
@@ -2089,7 +2089,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// moment it is drawn, and "—" when nothing is yet.
     var sessionRow: WorkoutSession? {
         guard let store, let sessionId else { return nil }
-        return try? store.session(id: sessionId)
+        return try? store.session(id: sessionId, userId: userId)
     }
 
     /// The three figures you can supply when the watch did not.
@@ -2104,7 +2104,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         guard let store, let sessionId else { return }
         do {
             try store.setSessionMetrics(
-                id: sessionId, durationMin: durationMin, avgBpm: avgBpm, caloriesBurned: calories,
+                id: sessionId, userId: userId, durationMin: durationMin, avgBpm: avgBpm, caloriesBurned: calories,
                 measured: measured
             )
             storeError = nil
@@ -2204,6 +2204,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     private func buildLiveBaselines(store: AppDatabase) throws {
         let ids = baselineIds()
         baselines = try store.livePrBaselines(
+            userId: userId,
             exerciseIds: Array(ids),
             excluding: sessionId,
             before: editing?.date,
@@ -2249,7 +2250,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // already holds, which is a duplicated set in the projection and in
             // the upload. Everything is read into locals first.
             let today = LogicalDay.today()
-            let session = try store.liveSession(dayKey: day.key, date: today)
+            let session = try store.liveSession(dayKey: day.key, date: today, userId: userId)
             let live = session?.id
             // Rejoining a session that was paused when the app was killed: the
             // log knows, and the wall clock has kept running. SPLIT rather than
@@ -2492,7 +2493,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// become extra rows, which is exactly what they are.
     private func restoreLoggedSets() throws {
         guard let store, let sessionId else { return }
-        let logged = try store.sets(sessionId: sessionId)
+        let logged = try store.sets(sessionId: sessionId, userId: userId)
         guard !logged.isEmpty else { return }
 
         // ── MATCHED BY NAME, NOT BY ID ──────────────────────────────────────
@@ -2822,7 +2823,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
                 // what a tap into a field and a tap away produces. Flagging the
                 // edit dirty on one of those schedules a forty-nine-day cascade
                 // for a session nobody touched.
-                if try store.addSet(sessionId: sessionId, snapshot(row, in: exercise), setId: row.storeId) != nil {
+                if try store.addSet(sessionId: sessionId, userId: userId, snapshot(row, in: exercise), setId: row.storeId) != nil {
                     markDirty()
                 }
             } else {
@@ -2859,7 +2860,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
                 // session's stored tonnage. `EventStore.amendSet` does none of
                 // the three and claims a pencil nothing is holding.
                 if try store.amendSet(
-                    sessionId: sessionId, setId: row.storeId,
+                    sessionId: sessionId, userId: userId, setId: row.storeId,
                     weightKg: next.weightKg, reps: next.reps, rpe: next.rpe,
                     setType: next.setType,
                     quality: next.quality ?? SetPatch.clearedQuality,
@@ -2895,7 +2896,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         guard let store, let sessionId else { return }
         do {
             if isEditing {
-                if try store.deleteSet(sessionId: sessionId, setId: row.storeId) != nil {
+                if try store.deleteSet(sessionId: sessionId, userId: userId, setId: row.storeId) != nil {
                     markDirty()
                 }
             } else {

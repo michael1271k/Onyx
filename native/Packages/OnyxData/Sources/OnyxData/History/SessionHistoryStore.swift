@@ -112,6 +112,7 @@ public extension AppDatabase {
         JOIN workout_sessions sess ON sess.id = s.session_id
         LEFT JOIN exercises e ON e.id = s.exercise_id
             LEFT JOIN exercises es ON es.slug = s.exercise_id
+        WHERE sess.user_id = ?
         """
 
     /// Ledger order: by day, then by session start, then as the fold arrived.
@@ -119,59 +120,73 @@ public extension AppDatabase {
     /// server's `set_number`, and the logger appends in performed order.
     private static let setOrder = " ORDER BY sess.date, sess.started_at, s.session_id, s.fold_order, s.set_index"
 
-    /// Every session, newest first.
-    func sessionHistory() throws -> [WorkoutSession] {
+    /// Every session of one user, newest first.
+    ///
+    /// ── WHY EVERY READER HERE TAKES A `userId` (W11) ────────────────────────
+    /// The local store holds one user's mirror, and that used to be the whole
+    /// argument for reading it unfiltered. It is still one user's mirror — the
+    /// account-switch erase (`prepareForUser`) is what makes it so — but the
+    /// filter is the second lock: a row that outlives its owner, however it
+    /// got there, is never handed to the next account. `setSelect` carries
+    /// the clause, so no reader below can forget it.
+    func sessionHistory(userId: String) throws -> [WorkoutSession] {
         try read { db in
-            try WorkoutSession.fetchAll(db, sql: "SELECT * FROM workout_sessions ORDER BY date DESC, started_at DESC")
+            try WorkoutSession.fetchAll(
+                db,
+                sql: "SELECT * FROM workout_sessions WHERE user_id = ? ORDER BY date DESC, started_at DESC",
+                arguments: [userId]
+            )
         }
     }
 
     /// One session's sets in performed order.
-    func historySets(sessionId: String) throws -> [HistorySetRow] {
+    func historySets(sessionId: String, userId: String) throws -> [HistorySetRow] {
         try read { db in
-            try HistorySetRow.fetchAll(db, sql: Self.setSelect + " WHERE s.session_id = ?" + Self.setOrder, arguments: [sessionId])
+            try HistorySetRow.fetchAll(
+                db, sql: Self.setSelect + " AND s.session_id = ?" + Self.setOrder, arguments: [userId, sessionId]
+            )
         }
     }
 
     /// The whole ledger in performed order. The session list needs it all (a
     /// PR count per session is a chronological replay) and it is a few thousand
     /// rows at most.
-    func historySets() throws -> [HistorySetRow] {
-        try read { db in try HistorySetRow.fetchAll(db, sql: Self.setSelect + Self.setOrder) }
+    func historySets(userId: String) throws -> [HistorySetRow] {
+        try read { db in try HistorySetRow.fetchAll(db, sql: Self.setSelect + Self.setOrder, arguments: [userId]) }
     }
 
     /// Every set of the given exercises, performed order, oldest first.
-    func historySets(exerciseIds: [String]) throws -> [HistorySetRow] {
+    func historySets(exerciseIds: [String], userId: String) throws -> [HistorySetRow] {
         guard !exerciseIds.isEmpty else { return [] }
         let marks = Array(repeating: "?", count: exerciseIds.count).joined(separator: ",")
         return try read { db in
             try HistorySetRow.fetchAll(
                 db,
-                sql: Self.setSelect + " WHERE s.exercise_id IN (\(marks))" + Self.setOrder,
-                arguments: StatementArguments(exerciseIds)
+                sql: Self.setSelect + " AND s.exercise_id IN (\(marks))" + Self.setOrder,
+                arguments: StatementArguments([userId] + exerciseIds)
             )
         }
     }
 
     /// The record book for one exercise, keyed as `personal_records` keys it:
     /// by canonical display NAME, not id.
-    func personalRecords(exerciseKey: String) throws -> [PersonalRecordRow] {
+    func personalRecords(exerciseKey: String, userId: String) throws -> [PersonalRecordRow] {
         try read { db in
             try PersonalRecordRow.fetchAll(
                 db,
-                sql: "SELECT * FROM personal_records WHERE exercise_key = ? ORDER BY axis",
-                arguments: [exerciseKey]
+                sql: "SELECT * FROM personal_records WHERE user_id = ? AND exercise_key = ? ORDER BY axis",
+                arguments: [userId, exerciseKey]
             )
         }
     }
 
     /// Cardio that belongs to a session: filed against it, or logged on its day.
-    func cardio(sessionId: String, date: String) throws -> [CardioLogRow] {
+    func cardio(sessionId: String, date: String, userId: String) throws -> [CardioLogRow] {
         try read { db in
             try CardioLogRow.fetchAll(
                 db,
-                sql: "SELECT * FROM cardio_logs WHERE session_id = ? OR date = ? ORDER BY created_at",
-                arguments: [sessionId, date]
+                sql: "SELECT * FROM cardio_logs WHERE user_id = ? AND (session_id = ? OR date = ?) ORDER BY created_at",
+                arguments: [userId, sessionId, date]
             )
         }
     }
@@ -239,8 +254,10 @@ public extension AppDatabase {
             let ladder = try Self.leverLadder(db, userId: owner, goals: .some(goals))
             let ctx = try Self.scheduleContext(db, userId: owner, goals: .some(goals))
             let instant = Self.instantFormatter()
+            // The OWNER's sessions only (W11): a seed is a proposal built from
+            // history, and the one history it may read is this account's.
             let all = try WorkoutSession
-                .filter(Column("day_key") == dayKey)
+                .filter(Column("user_id") == owner && Column("day_key") == dayKey)
                 .fetchAll(db)
                 .map { s in
                     SeedSession(
