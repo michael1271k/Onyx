@@ -44,6 +44,45 @@ _Nothing yet._
 
 ---
 
+## [3.22.0] — 2026-09-17 · A Powder Is Food
+
+Wave 1 of the UX/UI architecture sprint: the Stack editor, the day's calorie
+ring, and the one numeral in the logger that would not hold still.
+
+### Added
+- **A supplement's time is set on a clock, not typed.** The Stack editor's time
+  row was a free-text field asking for "22:00" in words. It is a wheel now —
+  the same `.wheel` `DatePicker` the rest timer uses, hour and minute only — and
+  a "Set a time" toggle beside it, because a wheel cannot express *no time* and
+  an item without one is a real state that sorts to the top of the day.
+- **Supplements carry calories, and the day's ring counts them.** A row's
+  `micros` payload may now name `kcal`, `carbs`, `fat` and `protein`, and
+  `StackCredit` resolves them from the same doses, under the same credit rule,
+  as the micronutrients it already resolved. Five grams of psyllium husk is
+  17 kcal and 4.4 g of carbohydrate; until now the tab showed the fibre arriving
+  and pretended the scoop had not happened.
+- **Psyllium Husk Powder** (Now Foods), 5 g at 18:30, seeded with its label
+  payload — and `scripts/add-supplement.mjs`, which writes a row like it
+  idempotently, keyed on the log key so a re-run can never mint a twin.
+
+### Fixed
+- **`18.75` is the same size as `20`.** A load rendered smaller than its
+  neighbours the moment it reached five glyphs, on any text size above the
+  default. The scale factor everyone would blame was not the cause: the load
+  column's floor was the constant `56`, which is six monospaced glyphs at body's
+  17 pt **and at no other size**, so above the default the field ran out of room
+  mid-string and shrank the strings that crossed it. The floor now scales with
+  the body text style, in the row and in the column header alike, so the table
+  stays a table and the numerals stay one size.
+
+### Changed
+- The Nutrition tab's `eaten` total is food plus the credited stack. The edit
+  sheet still opens on **food alone** — seeded from a stack-inclusive figure, a
+  save would have written the supplement's calories into a food row and counted
+  the same scoop twice from then on.
+
+---
+
 ## [3.21.1] — 2026-09-17 · One Week, One Name
 
 Closes the UX/UI refinement sprint (3.20.0 → 3.21.0 → 3.21.1).

@@ -521,6 +521,24 @@ enum PulsePreviews {
         case "stack-add":
             Presenting(model: stackDay()) { SupplementEditSheet(model: $0, editing: nil) }
                 .environment(AppEnvironment.preview)
+        // ── THE SAME SHEET ON A ROW THAT HAS A TIME ─────────────────────────
+        // `stack-add` cannot photograph the clock: a new item has no time, so
+        // the toggle sits off and the wheel is not on screen. W1 replaced a
+        // free-text field with that wheel, and a control whose only shot is of
+        // its absence is a control nobody reviewed. The row is built here
+        // rather than read back from `stackDay`, so the shot is of one fixed
+        // 18:30 and not of whatever the seed happens to order first.
+        case "stack-edit":
+            Presenting(model: stackDay()) {
+                SupplementEditSheet(model: $0, editing: CustomSupplement(
+                    id: "preview-psyllium", name: "Psyllium Husk Powder", dose: "5 g",
+                    color: "#8E9AAC", form: SupplementForm.powder.rawValue, time: "18:30",
+                    schedule: CustomSchedule(key: "psyllium", slot: "Evening"),
+                    micros: ["kcal": 16.7, "carbs": 4.4, "fiber": 3.9],
+                    doseAmount: 5, doseUnit: DoseUnit.g.rawValue
+                ))
+            }
+            .environment(AppEnvironment.preview)
         // The night's own editor, over the tile it changes. `fullDay` seeds a
         // real night with stages, so the sheet opens on a window worth trimming
         // rather than on the mint-a-night path.

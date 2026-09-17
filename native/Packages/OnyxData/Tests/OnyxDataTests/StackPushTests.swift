@@ -225,6 +225,95 @@ struct StackPushTests {
         #expect(after.nutrients["vitaminD"] == before.nutrients["vitaminD"])
     }
 
+    // MARK: - W1: a powder is food
+
+    /// The founder's psyllium row: 5 g of a 9 g serving, stored per dose in the
+    /// same `micros` jsonb that already carries the potassium.
+    @discardableResult
+    private func seedPsyllium(_ db: AppDatabase) throws -> String {
+        try db.addCustomSupplement(
+            userId: user, name: "Psyllium Husk Powder", dose: "5 g", color: "#8E9AAC", form: "powder",
+            time: "18:30", schedule: CustomSchedule(key: "psyllium", slot: "Evening"),
+            micros: [
+                "kcal": 16.7, "carbs": 4.4, "fiber": 3.9, "protein": 0, "fat": 0,
+                "sodium": 5.6, "iron": 0.83, "potassium": 50,
+            ]
+        )
+    }
+
+    /// The whole of W1's nutrition half, end to end: the row's macros reach the
+    /// day's ring while its fibre reaches the grid, off ONE resolution of the
+    /// day's doses.
+    @Test("a credited powder delivers macros to the ring and fibre to the grid")
+    func stackCreditCarriesMacros() throws {
+        let db = try store()
+        try seedPsyllium(db)
+        try db.editUserGoals(userId: user) { $0.activePlan = "onyx5"; $0.activePhase = ProgramPhase.cut.rawValue }
+
+        let credit = try db.stackCredit(userId: user, date: "2026-09-01", today: "2026-09-05")
+        #expect(credit.doses.contains { $0.key == "psyllium" && $0.state == .due })
+        #expect(abs(credit.macros.kcal - 16.7) < 0.001)
+        #expect(abs(credit.macros.carbs - 4.4) < 0.001)
+        #expect(credit.macros.protein == 0)
+        #expect(credit.macros.fat == 0)
+        // The grid's half of the same scoop.
+        #expect(abs((credit.nutrients["fiber"] ?? 0) - 3.9) < 0.001)
+        #expect(abs((credit.nutrients["potassium"] ?? 0) - 50) < 0.001)
+    }
+
+    /// The rule the ring and the grid share. A skip must take the CALORIES out
+    /// too — the day the two diverged, the nutrient row would drop the
+    /// potassium while the ring kept charging for the carbohydrate.
+    @Test("a skipped powder leaves the ring as well as the grid")
+    func skippedPowderLeavesBothTotals() throws {
+        let db = try store()
+        try seedPsyllium(db)
+        try db.editUserGoals(userId: user) { $0.activePlan = "onyx5"; $0.activePhase = ProgramPhase.cut.rawValue }
+
+        try db.markSupplement(userId: user, date: "2026-09-01", itemKey: "psyllium", mark: .skipped)
+        let after = try db.stackCredit(userId: user, date: "2026-09-01", today: "2026-09-05")
+        #expect(after.macros.isZero)
+        #expect(after.nutrients["fiber"] == nil)
+    }
+
+    /// A stack that predates this wave carries no macro keys, so the ring must
+    /// not move for it — the regression that would turn every existing user's
+    /// calorie total into a different number on upgrade.
+    @Test("a micronutrient-only stack leaves the ring at zero")
+    func legacyStackDoesNotMoveTheRing() throws {
+        let db = try store()
+        try seedNightStack(db)
+        try db.editUserGoals(userId: user) { $0.activePlan = "onyx5"; $0.activePhase = ProgramPhase.cut.rawValue }
+
+        let credit = try db.stackCredit(userId: user, date: "2026-09-01", today: "2026-09-05")
+        #expect((credit.nutrients["magnesium"] ?? 0) > 0)
+        #expect(credit.macros.isZero)
+    }
+
+    /// The exact call the new time wheel's toggle makes — the editor hands an
+    /// EMPTY STRING, not a nil, and the row has to land in the "—" bucket.
+    /// `editCustomSupplement`'s own null test (above) covers the nil; this one
+    /// covers the spelling the UI actually uses.
+    @Test("the editor's empty time clears the column and moves the slot")
+    func emptyTimeFromTheEditorClears() throws {
+        let db = try store()
+        let id = try seedPsyllium(db)
+        try db.editUserGoals(userId: user) { $0.activePlan = "onyx5"; $0.activePhase = ProgramPhase.cut.rawValue }
+
+        let before = try db.stackCredit(userId: user, date: "2026-09-01", today: "2026-09-05")
+        #expect(before.doses.first?.slotTime == "18:30")
+
+        try db.updateCustomSupplement(
+            id: id, userId: user, name: "Psyllium Husk Powder", dose: "5 g",
+            doseAmount: 5, doseUnit: "g", form: "powder", time: "", days: [], trainingOnly: false
+        )
+
+        let after = try db.stackCredit(userId: user, date: "2026-09-01", today: "2026-09-05")
+        #expect(after.doses.first?.slotTime == "—")
+        // And the schedule's key survived the merge, so the history still joins.
+        #expect(after.doses.first?.key == "psyllium")
+    }
+
     @Test("the archived row still reads back through the core's own type")
     func archivedRowDecodes() throws {
         let db = try store()

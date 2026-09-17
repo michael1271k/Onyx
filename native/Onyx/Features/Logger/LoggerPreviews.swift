@@ -53,6 +53,18 @@ enum LoggerPreviews {
             let _ = {
                 while exercise.rows.count < 5 { model.addSet(to: exercise) }
                 exercise.rows[0].kind = .warmup
+                // ── TWO, FOUR AND FIVE GLYPHS, ON THREE ADJACENT ROWS ───────
+                // W1's defect, kept photographable. A `monospacedDigit` load
+                // advances at ~0.6 em and its decimal point at ~0.26, so the
+                // three strings below are ~2.0, ~2.7 and ~3.3 em wide — and a
+                // load column whose floor does not scale with the type runs out
+                // of room between the fourth glyph and the fifth. `18.75` then
+                // came out visibly smaller than `17.5` and `20` on the same
+                // card. They are the founder's own three numbers, and they must
+                // render at ONE size at every text setting.
+                exercise.rows[0].weightKg = 20
+                exercise.rows[1].weightKg = 17.5
+                exercise.rows[2].weightKg = 18.75
                 exercise.rows[2].isRecord = true
                 exercise.rows[3].weightKg = 42.5
                 exercise.rows[3].reps = 8

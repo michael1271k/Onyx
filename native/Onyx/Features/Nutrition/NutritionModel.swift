@@ -233,8 +233,44 @@ final class NutritionModel {
         var kcal = 0.0, protein = 0.0, carbs = 0.0, fat = 0.0
     }
 
-    /// Summed over the day's rows. `nil` when nothing is logged — never a zero.
+    /// Summed over the day's rows, PLUS what the stack delivered. `nil` when
+    /// nothing is logged — never a zero.
+    ///
+    /// ── WHY THE STACK IS IN HERE AND NOT ONLY IN THE GRID ───────────────────
+    /// A powder is food. Five grams of psyllium husk is 17 kcal and 4.4 g of
+    /// carbohydrate, and until this fold they reached the nutrient grid (which
+    /// reads `stack.nutrients`) and nothing else — so the tab could show the
+    /// fibre arriving while the calorie ring pretended the scoop had not
+    /// happened. `StackCredit.macros` resolves them from the same doses under
+    /// the same credit rule, so the two surfaces cannot disagree.
+    ///
+    /// ── AND WHY `nil` STILL MEANS WHAT IT MEANT ─────────────────────────────
+    /// `entries == nil` is the LOADING state and stays `nil` whatever the stack
+    /// says; a supplement total flashed under a ring that has not read the
+    /// day's food yet is a wrong number, not an early one. Past that, a day
+    /// with no food and a credited dose is no longer "nothing logged" — you
+    /// consumed 17 kcal — so it resolves rather than staying blank.
     var eaten: Eaten? {
+        // Still loading: whatever the stack says, a supplement total under a
+        // ring that has not read the day's food yet is a wrong number.
+        guard entries != nil else { return nil }
+        let supplements = stack.macros
+        guard var sum = eatenFood ?? (supplements.isZero ? nil : Eaten()) else { return nil }
+        sum.kcal += supplements.kcal
+        sum.protein += supplements.protein
+        sum.carbs += supplements.carbs
+        sum.fat += supplements.fat
+        return sum
+    }
+
+    /// The day's FOOD ROWS alone — what `nutrition_entries` holds and what the
+    /// edit sheet is allowed to write back.
+    ///
+    /// Separate from `eaten` because the edit sheet round-trips its own
+    /// starting values: seeded from a stack-inclusive total, "Save" would
+    /// commit the supplement's calories into a food row, and the next render
+    /// would add the same scoop on top of the copy it had just made permanent.
+    private var eatenFood: Eaten? {
         guard let entries, !entries.isEmpty else { return nil }
         return entries.reduce(into: Eaten()) { sum, row in
             sum.kcal += row.calories
@@ -255,12 +291,15 @@ final class NutritionModel {
     /// grades: `nutrition_entries` has no nullable macro column, so correcting
     /// the day means stating all of it — "not graded" is about the scoring, not
     /// about whether the carbohydrate was eaten.
+    /// FOOD only — `eatenFood`, never `eaten`. See that property for why a
+    /// stack-inclusive seed here would make the supplement permanent.
     var macrosForEditing: MacroMath.Macros {
-        MacroMath.Macros(
-            kcal: eaten?.kcal ?? 0,
-            protein: eaten?.protein ?? 0,
-            carbs: eaten?.carbs ?? 0,
-            fat: eaten?.fat ?? 0
+        let food = eatenFood
+        return MacroMath.Macros(
+            kcal: food?.kcal ?? 0,
+            protein: food?.protein ?? 0,
+            carbs: food?.carbs ?? 0,
+            fat: food?.fat ?? 0
         )
     }
 

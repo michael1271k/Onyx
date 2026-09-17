@@ -21,11 +21,28 @@ public struct StackCredit: Sendable, Equatable {
     public var doses: [SupplementDose]
     /// The micronutrients the CREDITED ones deliver.
     public var nutrients: [String: Double]
+    /// What those same doses deliver to the day's MACRO ring — a powder has
+    /// calories, and a fibre supplement has most of a meal's worth of
+    /// carbohydrate. Resolved here, from the same doses, so the grid and the
+    /// ring cannot disagree about one scoop.
+    public var macros: SupplementNutrients.StackMacros
     /// Whether the plan calls the day a training day — a rest day drops the
     /// training-only items entirely.
     public var isTraining: Bool
 
-    public static let empty = StackCredit(doses: [], nutrients: [:], isTraining: false)
+    public init(
+        doses: [SupplementDose],
+        nutrients: [String: Double],
+        macros: SupplementNutrients.StackMacros = .zero,
+        isTraining: Bool
+    ) {
+        self.doses = doses
+        self.nutrients = nutrients
+        self.macros = macros
+        self.isTraining = isTraining
+    }
+
+    public static let empty = StackCredit(doses: [], nutrients: [:], macros: .zero, isTraining: false)
 }
 
 public extension AppDatabase {
@@ -57,9 +74,13 @@ public extension AppDatabase {
                 ? .today(minutes: Self.minutesOfDay(now, calendar: calendar))
                 : (date < today ? .past : .future)
             let doses = Supplements.doses(slots: slots, log: log, clock: clock)
+            // One payload table, read twice: the grid's micronutrients and the
+            // ring's macros come off the same rows with the same credit rule.
+            let payloads = SupplementNutrients.payloads(active)
             return StackCredit(
                 doses: doses,
-                nutrients: SupplementNutrients.credit(doses, payloads: SupplementNutrients.payloads(active)),
+                nutrients: SupplementNutrients.credit(doses, payloads: payloads),
+                macros: SupplementNutrients.macros(doses, payloads: payloads),
                 isTraining: isTraining
             )
         }

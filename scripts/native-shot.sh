@@ -139,6 +139,20 @@ fi
 for s in "${SCREENS[@]}"; do
   [ -z "$s" ] && continue
   echo "$s"
+  # ── SHOT_SIZE: THE FOUR SIZES THE PAIR SKIPS ───────────────────────────────
+  # The default pass and the AX5 pass BRACKET Dynamic Type — 17 pt and the
+  # largest accessibility size — and photograph neither of the four ordinary
+  # sizes between them. That gap hid W1's load column for a release: a floor of
+  # 56 pt fits six monospaced glyphs at 17 pt and five at 23, so `18.75` shrank
+  # for every reader above the default and for nobody the loop looked at.
+  #
+  #   SHOT_SIZE=extra-extra-extra-large scripts/native-shot.sh set-row
+  #
+  # One pass, suffixed with the size, so it never overwrites the pair.
+  if [ -n "${SHOT_SIZE:-}" ]; then
+    shoot "$s" "$SHOT_SIZE" "-$SHOT_SIZE"
+    continue
+  fi
   shoot "$s" medium ""
   # Tiles set their type in points, as WidgetKit does; Dynamic Type never
   # reaches them, so the AX5 shot would be the same PNG twice.

@@ -104,4 +104,61 @@ public enum SupplementNutrients {
         for (k, v) in stack { out[k, default: 0] += v }
         return out
     }
+
+    // MARK: - Macros
+
+    /// The four figures a supplement can move on the day's macro ring.
+    ///
+    /// ── WHY A STRUCT AND NOT `MacroMath.Macros` ─────────────────────────────
+    /// That type's three gram fields are optional, because a nutrition row may
+    /// genuinely not state them. A SUM has no such state: nothing credited is
+    /// zero, not unknown, and summing optionals would need a `??` at every
+    /// `+=` and then decide what `nil + 3` means. Four plain doubles, and the
+    /// caller folds them into whatever shape its own total wears.
+    public struct StackMacros: Equatable, Sendable {
+        public var kcal: Double
+        public var protein: Double
+        public var carbs: Double
+        public var fat: Double
+
+        public init(kcal: Double = 0, protein: Double = 0, carbs: Double = 0, fat: Double = 0) {
+            self.kcal = kcal; self.protein = protein; self.carbs = carbs; self.fat = fat
+        }
+
+        public static let zero = StackMacros()
+        /// Nothing credited. Distinct from "a day with no food", which is the
+        /// caller's question and not this one's.
+        public var isZero: Bool { self == .zero }
+    }
+
+    /// What the CREDITED doses deliver to the macro ring.
+    ///
+    /// Same doses, same `credited` rule and same count multiplier as `credit`
+    /// — a dose whose micronutrients count is a dose whose calories count, and
+    /// the day the two rules diverged the nutrient grid would credit a psyllium
+    /// husk's potassium while the ring refused its carbohydrate, for the same
+    /// scoop, at the same minute. One rule, read twice.
+    ///
+    /// ── AND WHY `credit` IS NOT FILTERED ────────────────────────────────────
+    /// A payload carrying `kcal`/`carbs`/`fat` hands those keys to `credit` as
+    /// well, where they are inert: the grid reads `NutrientTargets.all` and
+    /// those three are not in it. `protein` and `fiber` ARE grid rows and are
+    /// credited there on purpose — the same way food protein already counts in
+    /// both places, because a grid row and a ring are two readings of one
+    /// mouthful, not two helpings of it.
+    public static func macros(
+        _ doses: [SupplementDose],
+        payloads overrides: [String: [String: Double]] = [:]
+    ) -> StackMacros {
+        var out = StackMacros()
+        for dose in doses where dose.credited {
+            guard let payload = overrides[dose.key] ?? table[dose.key] else { continue }
+            let units = doseUnits(dose.dose)
+            out.kcal    += (payload["kcal"]    ?? 0) * units
+            out.protein += (payload["protein"] ?? 0) * units
+            out.carbs   += (payload["carbs"]   ?? 0) * units
+            out.fat     += (payload["fat"]     ?? 0) * units
+        }
+        return out
+    }
 }
