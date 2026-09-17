@@ -321,6 +321,10 @@ struct FatigueCard: View {
     private var slots: [FatigueSlot] { model.fatigueSlots }
     private var latest: FatigueReading? { Fatigue.latest(day) }
     private var logged: Int { slots.filter { day[$0] != nil }.count }
+    /// The slot the day is asking for now (W10) — before the session, after
+    /// it, or the rest day's hour. The verb says it, and the empty dot for it
+    /// is drawn in the accent, so the card asks one question at a time.
+    private var ask: FatigueSlot { model.fatigueAsk }
 
     var body: some View {
         PulseCard("Fatigue", .recover, trailing: "\(logged) of \(slots.count)") {
@@ -330,7 +334,7 @@ struct FatigueCard: View {
             // pages share a height floor, and a gap between a word and the dots
             // that explain it reads as a missing row.
             Spacer(minLength: 0)
-            PulseCardAction(symbol: "battery.50", title: "Rate fatigue", action: onRate)
+            PulseCardAction(symbol: "battery.50", title: "Rate \(ask.label.lowercased())", action: onRate)
         }
     }
 
@@ -392,7 +396,10 @@ struct FatigueCard: View {
                 HStack(spacing: OnyxSpace.xs) {
                     Circle()
                         .fill(day[slot] != nil ? Color.onyx.fatigue(day[slot]) : .clear)
-                        .strokeBorder(day[slot] != nil ? .clear : Color.onyx.textTertiary, lineWidth: 1)
+                        .strokeBorder(
+                            day[slot] != nil ? .clear : (slot == ask ? Color.onyx.accent(.recover) : Color.onyx.textTertiary),
+                            lineWidth: slot == ask ? 1.5 : 1
+                        )
                         .frame(width: 7, height: 7)
                     // ── THE WORDS GO FIRST AT AX5 ───────────────────────────
                     // Three named dots across 340 pt is 100 pt each, and
@@ -416,9 +423,10 @@ struct FatigueCard: View {
         .accessibilityHidden(true)
     }
 
-    /// What the session cost, `post` − `pre`. Absent on a rest day and on a
-    /// training day missing either end — a delta against an unrated slot looks
-    /// like a measurement and is not one.
+    /// What the session cost, `post` − `pre`. Absent on a rest day — a delta
+    /// against an unrated slot looks like a measurement and is not one — and
+    /// on a training day with ONE end logged it names the end that is missing
+    /// instead (W10), so "no cost" and "no cost yet" are not the same blank.
     @ViewBuilder
     private var cost: some View {
         if let delta = Fatigue.delta(day) {
@@ -428,10 +436,23 @@ struct FatigueCard: View {
                 .padding(.horizontal, OnyxSpace.s)
                 .padding(.vertical, 2)
                 .background(Capsule().fill(Color.onyx.hairline))
+        } else if let missing = Fatigue.deltaMissing(day), slots.contains(missing), !typeSize.isAccessibilitySize {
+            // Hidden at the accessibility sizes for the reason `slotRow` hides
+            // its words: "Exhausted" and "Post not rated" cannot share the row
+            // at AX5, and VoiceOver already reads it from `costSpoken`. The
+            // `slots` guard: a modern `pre` row written before the day was
+            // swapped to rest folds through unchanged, and naming "Post" on a
+            // day that has no Post would ask for a slot the sheet cannot offer.
+            Text("\(missing.short) not rated")
+                .onyxType(.caption)
+                .foregroundStyle(Color.onyx.textTertiary)
+                .lineLimit(1)
         }
     }
 
     private var costSpoken: String {
-        Fatigue.delta(day).map { ", session cost \($0 >= 0 ? "+" : "")\($0)" } ?? ""
+        if let delta = Fatigue.delta(day) { return ", session cost \(delta >= 0 ? "+" : "")\(delta)" }
+        if let missing = Fatigue.deltaMissing(day), slots.contains(missing) { return ", \(missing.label.lowercased()) not rated" }
+        return ""
     }
 }

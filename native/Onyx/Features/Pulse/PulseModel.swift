@@ -47,6 +47,8 @@ final class DayModel {
     /// Whether the date carries a session — the other half of the day's kind.
     /// See `isTraining`.
     private(set) var sessionLogged = false
+    /// When the date's last session ended; nil while none has (W10).
+    private(set) var sessionEndedAt: Date?
     private(set) var doms: [DomsLogRow] = []
     private(set) var supplementLog: [SupplementLogRow] = []
     private(set) var cardio: [CardioLogRow] = []
@@ -156,7 +158,7 @@ final class DayModel {
         // Cleared, not left standing: these belong to the previous day until the
         // new streams' first yield, and a stale row under a new title is a lie.
         log = nil; fatigueRows = []; stressRows = []; doms = []; supplementLog = []; cardio = []; night = nil; nights = []
-        sessionLogged = false
+        sessionLogged = false; sessionEndedAt = nil
         swapNote = nil
         let d = date
         let from = ISODate.addDays(d, -(SleepDebt.windowDays - 1)) ?? d
@@ -178,6 +180,7 @@ final class DayModel {
             watch(database.fatigueStream(userId: userId, date: d), into: \.fatigueRows),
             watch(database.stressStream(userId: userId, date: d), into: \.stressRows),
             watch(database.sessionLoggedStream(userId: userId, date: d), into: \.sessionLogged),
+            watch(database.sessionEndedStream(userId: userId, date: d), into: \.sessionEndedAt),
             watch(database.domsStream(userId: userId, date: d), into: \.doms),
             watch(database.supplementLogStream(userId: userId, date: d), into: \.supplementLog),
             watch(database.cardioStream(userId: userId, date: d), into: \.cardio),
@@ -606,6 +609,17 @@ final class DayModel {
 
     var fatigue: FatigueDay {
         Fatigue.foldRows(fatigueRows.map { FatigueRow(slot: $0.slot, level: $0.level) }, isTraining: isTraining)
+    }
+
+    /// The slot the card is asking for NOW — and the one the sheet opens on,
+    /// so the question on the card and the segment under the words agree.
+    /// The clock is `clock` (pinned in the shot loop) and the session's end
+    /// is the stored row's, read as minutes of the day; `Date()` is not read.
+    var fatigueAsk: FatigueSlot {
+        Fatigue.askingSlot(
+            isTraining: isTraining, clock: clock,
+            sessionEndedMinutes: sessionEndedAt.map { PsychStress.minuteOfDay($0) }
+        )
     }
 
     /// The STORED keys this slot stands in for, the modern key excluded — the

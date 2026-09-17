@@ -44,6 +44,35 @@ _Nothing yet._
 
 ---
 
+## [4.1.0] — 2026-09-17 · Fatigue Reads The Clock
+
+### Changed
+- **The fatigue card asks one question at a time.** On the Pulse tab the card's
+  verb now names the slot the day is asking for — **Rate before training** until
+  the session ends and **Rate after training** from the minute it does (or from
+  18:30 on a training day with no session logged); **Rate waking · midday ·
+  night** at 11:00 and 18:30 on a rest day, which never asks the pre-session
+  question. The empty dot for that slot is drawn in the Recover accent. The
+  fatigue sheet opens on the same slot, so the question on the card and the
+  segment under the five words agree. A day already over asks its last slot.
+- **A session cost is never printed against a blank.** `post − pre` still shows
+  only when both ends exist; with exactly one end logged the card now says
+  **Pre not rated** or **Post not rated** instead of nothing, so "no cost" and
+  "no cost yet" stop looking the same. VoiceOver reads the same words.
+- **The clock is read from one place.** The card, the sheet and the stack's
+  Due/Later split all read `DayModel.clock` — pinned in the screenshot loop —
+  and the session's end from the stored row, never the wall clock. The `day`,
+  `day-rows`, `day-past` and `day-session` shot screens are pinned to 13:00.
+
+### Unchanged, on purpose
+- **The stress index's self-report input did not move.** `Fatigue.dayMean` is
+  still the mean of every slot the day holds (`STRESS_MODEL.md` §2); the
+  battery still reads the latest slot. `FatigueClockTests` asserts the mean
+  over two slots is the same whichever slot is being asked for, and every
+  battery, readiness and stress golden vector is byte-identical.
+
+---
+
 ## [4.0.1] — 2026-09-17 · Putting The Tools Away
 
 **PATCH: nothing in the app changed.** The closing wave of the UX/UI

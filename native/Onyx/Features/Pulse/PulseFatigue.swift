@@ -57,11 +57,11 @@ struct FatigueSheet: View {
                 if level != nil { clearSection }
             }
         }
-        .onAppear { if slot == nil { slot = Self.slotForNow(slots, clock: model.clock) } }
+        .onAppear { if slot == nil { slot = model.fatigueAsk } }
         // The day can change kind under the sheet — a session started while it
         // was open swaps Midday for Before training. Land on a slot that exists.
         .onChange(of: slots) { _, next in
-            if let slot, !next.contains(slot) { self.slot = Self.slotForNow(next, clock: model.clock) }
+            if let slot, !next.contains(slot) { self.slot = model.fatigueAsk }
         }
     }
 
@@ -154,18 +154,5 @@ struct FatigueSheet: View {
                 .foregroundStyle(Color.onyx.textSecondary)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         }
-    }
-
-    /// The slot the clock suggests. A day that has already happened opens on
-    /// its LAST slot — the day ended, and the reading being entered late is
-    /// about how it finished.
-    static func slotForNow(_ slots: [FatigueSlot], clock: DayClock) -> FatigueSlot? {
-        guard !slots.isEmpty else { return nil }
-        guard let minutes = clock.nowMinutes else { return slots.last }
-        // 11:00 and 17:00: a waking reading is a morning one, and the middle
-        // slot is "before training" on a training day, which is an afternoon
-        // question more often than an evening one.
-        let index = minutes < 11 * 60 ? 0 : (minutes < 17 * 60 ? 1 : 2)
-        return slots[min(index, slots.count - 1)]
     }
 }

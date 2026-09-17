@@ -974,6 +974,25 @@ public extension AppDatabase {
         })
     }
 
+    /// When the date's LAST session ended — nil while none has, and nil while
+    /// ANY is still running. The fatigue card's question flips on it
+    /// (`Fatigue.askingSlot`). A running session has `ended_at` NULL, and
+    /// SQL's MAX skips NULLs across rows, so a bare MAX on a two-a-day would
+    /// answer the morning's finish while the afternoon is mid-set; the COUNT
+    /// guard makes an open session win over any closed one.
+    func sessionEndedStream(userId: String, date: String) -> AsyncThrowingStream<Date?, any Error> {
+        stream(ValueObservation.tracking { db in
+            try Date.fetchOne(
+                db,
+                sql: """
+                SELECT CASE WHEN COUNT(*) > COUNT(ended_at) THEN NULL ELSE MAX(ended_at) END
+                FROM workout_sessions WHERE user_id = ? AND date = ?
+                """,
+                arguments: [userId, date]
+            )
+        })
+    }
+
     // MARK: - Helpers
 
     /// `<date>T<hour>:00:00Z` — the fixed UTC stamps the web writes for a manual
