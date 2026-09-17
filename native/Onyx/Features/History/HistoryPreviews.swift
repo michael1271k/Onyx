@@ -735,7 +735,13 @@ private var wrapSummary: WeeklyWrap.Summary {
         ],
         bodyweightKg: 64.2, bodyweightDeltaKg: -0.4,
         muscle: wrapMuscle,
-        topSession: .init(dayKey: "legs_a", date: "2026-09-04", volumeKg: 12_480)
+        topSession: .init(dayKey: "legs_a", date: "2026-09-04", volumeKg: 12_480),
+        // `Week.label(ofWeekStart: "2026-08-30", anchor: "2026-07-12", …)` — the
+        // number the BUILDER would have answered for this week (§W3). A hand-
+        // built summary is the one shape that can carry no label, and this shot
+        // would otherwise photograph the date fallback on a fixture standing in
+        // for a real week.
+        label: "Week 7"
     )
 }
 

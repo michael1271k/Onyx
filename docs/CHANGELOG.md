@@ -44,6 +44,67 @@ _Nothing yet._
 
 ---
 
+## [3.21.1] — 2026-09-17 · One Week, One Name
+
+Closes the UX/UI refinement sprint (3.20.0 → 3.21.0 → 3.21.1).
+
+### Fixed
+- **A week is called the same thing by every door that opens it.** Four screens
+  open a week's wrap-up in a sheet — the This-week tile, History, the Today tab
+  and the Past Weeks shelf — and three of them headed it `Week of Sun 16 Aug`
+  while every other surface in the app called that week `Week 5`. The sheet
+  could not do better: naming a week needs the phase table and the plan's
+  week-zero anchor, and a view holding a `WeeklyWrap.Summary` has neither. The
+  BUILDER has both, so the summary now carries its own label and the four doors
+  agree. A summary assembled by hand in a preview still falls back to the date.
+
+### Removed
+- `WeeklyWrapView(title:)`, the per-call-site override W1 added to make the
+  shelf and its sheet agree. One name on the summary makes it unnecessary, and
+  an override that only one of four callers passed was the disagreement waiting
+  to come back.
+
+---
+
+## The sprint's six corrected premises
+
+Six briefs opened this sprint and **all six named a symptom whose cause sat
+somewhere else.** Kept here because the plan that recorded them is deleted with
+this release, and the corrections are the part worth keeping.
+
+1. **"Delta arrows sit BELOW the set metrics, creating an ugly empty row."**
+   There was no row. Each delta is the second line of its OWN column, and three
+   of them align into what looks like one. The line is reserved on purpose so a
+   card cannot change height between two sessions. The real waste was a card
+   with **no previous session at all**, reserving a comparison that cannot
+   exist — fixed in 3.21.0 as a card's decision, not a row's.
+2. **"Tags take up 3 cluttered rows."** They were already ONE `FlowRow`. The
+   three rows were wraps, and the wrap point moved with the text size. The fix
+   was not fewer tags but a fixed ROW ASSIGNMENT: what was asked of the movement
+   on row 1, what it produced on row 2.
+3. **"Reduce the mini-graph height by a few pixels."** The sparkline was 40×16
+   inside a header line whose box is ~22 pt. Shrinking it bought **0 pt**. It
+   was the WIDTH that was wrong, and the line it was on: it went to 56×16 on the
+   row below, off the movement's name.
+4. **"Merge identical L/R sets into one row."** `SetPairLayout.resolve` had
+   implemented exactly that for a year. Only the LOGGER consumed it, and
+   `.unified` was deliberately killed there on 2026-09-11 because a merged row
+   left no way to rate one side. That dead end is an EDITING dead end; the
+   ledger is read-only, so the ledger merges and the deck still does not.
+5. **"Sept 10 pushdown is missing the right-side RPE."** Not a bug — a reachable
+   state. `workout_sets.rpe` is nullable by design and `SetPatch` cannot write a
+   null back, so rating one side and skipping the other left the second side
+   null permanently. Nothing backfills it. 3.20.0 stopped the leak (rating one
+   arm seeds the other) and made the ledger say so (`L 8 · R —`); the row
+   already in the log is still repaired by editing that session.
+6. **"Number past weeks correctly and colour them by phase."** The numbering
+   already existed — `Week.label(ofWeekStart:anchor:phases:)` — and the Train
+   tab simply never called it. The COLOURS did not exist: `Color.onyx.phase`
+   took `ProgramPhase` (two cases) while `PhaseKind` has four. Both landed in
+   3.20.0; this release finished the numbering at the last three doors.
+
+---
+
 ## [3.21.0] — 2026-09-17 · Seven Figures, Two Rows
 
 ### Changed
