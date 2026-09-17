@@ -44,6 +44,14 @@ struct SessionDetailView: View {
     /// The gesture that opens it is a long press, which a shot script cannot
     /// perform.
     var startAtRecord = false
+    /// Opens every ledger card on its assisting muscles — the harness only.
+    ///
+    /// Row 2 swaps IN PLACE and the claim this wave makes about it is that the
+    /// card does not move when it does. A shot script cannot tap a chip, so the
+    /// two states are photographed as two screens and the review is that they
+    /// are the same height — the same trick `seededExpandedWeek` used for the
+    /// row W1 deleted.
+    var startWithAssists = false
 
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -440,24 +448,50 @@ struct SessionDetailView: View {
         // know the day. One session, two names, on two screens the reader moves
         // between with a tap.
         let label = SessionAnalysis.dayLabel(page.report.session.dayKey, in: page.program) ?? "Session"
+        let verdict = delta(page.tonnageDelta, unit: "kg", higherIsBetter: true)
         return SessionHeaderCard(
             header: SessionHeader(page: page, label: label),
-            headline: page.headline(label)
+            headline: page.headline(label),
+            // Volume left the metric grid for the masthead (§W2 A): it was the
+            // first of seven equal `.display` figures under this card, which is
+            // seven answers to "how did that go" and no hero.
+            //
+            // ── AND A SESSION THAT LIFTED NOTHING HAS NO HERO ───────────────
+            // `0.0 kg` at 28 pt over a treadmill-only day is the same category
+            // error `headerTags` already refuses for the tonnage capsule: the
+            // work carried no load, so there is no tonnage to be zero of. With
+            // no hero the split's own name takes the role back — one hero per
+            // screen, and on that screen the subject is the bout.
+            hero: page.report.tonnageKg > 0 ? .init(
+                value: OnyxFormat.volumeExact(page.report.tonnageKg), unit: "kg",
+                sub: verdict.text, subTint: verdict.color, symbol: volumeSymbol(page)
+            ) : nil
         )
     }
 
 
     // MARK: - 2 · The metric grid
 
-    /// Seven figures in two rows, each with a reserved line under it.
+    /// Six figures in one 3×2 grid, each with a reserved line under it and
+    /// eight weeks of itself behind it.
     ///
-    /// ── WHY THE SECOND LINE IS ALWAYS THERE ─────────────────────────────────
+    /// ── IT WAS A 3-UP OVER A 4-UP, AND THE SEAM WAS VISIBLE ─────────────────
+    /// Seven readings split across two grids of different column counts, so the
+    /// cells in the top row were 117 pt and the ones under them 84 pt — two
+    /// tables about one session, with the four narrow cells breaking their own
+    /// labels ("Difficu…") at exactly the width the split created. Volume was
+    /// the first of the seven and is now the masthead's hero figure, which
+    /// leaves SIX: one grid, one column width, one table.
+    ///
+    /// ── WHY THE SECOND LINE IS STILL ALWAYS THERE ───────────────────────────
     /// §3.6: "every number has a unit and a reserved delta line". A delta that
-    /// appears only when there is one to show makes the whole grid change height
-    /// between two sessions, and a cell that is silent about its comparison is
-    /// indistinguishable from one that has none. So the line is always drawn:
-    /// the change when there is a previous session of this split, and "first of
-    /// this split" when there is not.
+    /// appears only when there is one to show makes the whole grid change
+    /// height between two sessions, and a cell that is silent about its
+    /// comparison is indistinguishable from one that has none. `OnyxStatCell`
+    /// reserves it; what changed is that the two cells whose line said
+    /// "measured" or "estimated" — a restatement of provenance, not a
+    /// comparison — now say it to VoiceOver only, and their trail says the
+    /// thing the line was taking up room to not say.
     private func metrics(_ page: SessionAnalysis.Page) -> some View {
         let report = page.report
         return VStack(spacing: OnyxSpace.grid) {
@@ -467,15 +501,14 @@ struct SessionDetailView: View {
                 // for a burn is what the Live Stats card has drawn since U3, so
                 // the screen you finish on and the screen you review say the
                 // same two readings in the same two colours. Nothing new is
-                // spent here: effort takes `Color.onyx.effort`, records take
-                // the record gold, and the volume arrow takes the verdict —
-                // every one of them a function that already exists because
-                // something else asks it the same question.
-                cell("Volume", OnyxFormat.volumeExact(report.tonnageKg), "kg",
-                     sub: delta(page.tonnageDelta, unit: "kg", higherIsBetter: true),
-                     tint: volumeTint(page), symbol: volumeSymbol(page))
-                cell("Duration", report.session.durationMin.map { jsIntegerString(jsRound($0)) } ?? "—", "min",
-                     sub: delta(page.durationDelta, unit: "min", higherIsBetter: nil))
+                // spent here: effort takes `Color.onyx.effort` and records take
+                // the record gold — every one of them a function that already
+                // exists because something else asks it the same question.
+                OnyxStatCell(
+                    "Duration", report.session.durationMin.map { jsIntegerString(jsRound($0)) } ?? "—",
+                    unit: "min", sub: delta(page.durationDelta, unit: "min", higherIsBetter: nil),
+                    spark: page.trail { $0.durationMin }
+                )
                 // ── EVERY SET PERFORMED, NOT THE WORKING ONES ──────────────
                 // `Report.sets` sums `workingSets`, so a session that opened
                 // with a treadmill bout and a leg-press warm-up headlined 20
@@ -489,36 +522,51 @@ struct SessionDetailView: View {
                 // somebody who has just done them. The composition line under
                 // it — `3 warm-up · 1 drop` — is what says how many were which,
                 // and it is why the bigger number does not mislead.
-                cell("Sets", "\(report.physicalSets)", nil, sub: composition(report) ?? delta(page.setsDelta.map(Double.init), unit: "", higherIsBetter: true))
-            }
-            LazyVGrid(columns: columns(4), spacing: OnyxSpace.grid) {
-                cell("Difficulty", report.session.sessionRpe.map { "\(OnyxFormat.rpe($0))/10" } ?? "—", nil,
-                     sub: .init(report.session.sessionRpe.map { Effort.rpeLabel($0) } ?? "not rated", Color.onyx.textTertiary),
-                     // An unrated session takes no colour: `effort(_:)` starts
-                     // at secondary ink and only leaves it when the work was
-                     // genuinely hard, and a grey dash tinted amber would be a
-                     // verdict on a reading nobody gave.
-                     // No glyph: at four cells across, 84 pt each, the 11 pt
-                     // symbol and its 4 pt gap were exactly what turned
-                     // "Difficulty" into "Difficu…". The tint says the same
-                     // thing here — `Color.onyx.effort` IS the effort ramp —
-                     // and a label that cannot be read is worse than a cell
-                     // with one mark instead of two.
-                     tint: report.session.sessionRpe.map { Color.onyx.effort($0) })
-                cell("Records", "\(report.prCount)", nil,
-                     sub: recordsDelta(page),
-                     tint: report.prCount > 0 ? Color.onyx.record : nil,
-                     // Only when there is one. A permanent trophy over a zero is
-                     // how gold stops meaning a personal record — the same rule
-                     // the Lock Screen card's `N PR` already follows.
-                     symbol: report.prCount > 0 ? "trophy.fill" : nil)
-                cell("Avg HR", page.avgBpm.map { jsIntegerString($0) } ?? "—", page.avgBpm == nil ? nil : "bpm",
-                     sub: .init(bpmBasis(page), Color.onyx.textTertiary),
-                     tint: page.avgBpm == nil ? nil : Color.onyx.danger, symbol: "heart.fill")
-                cell("Calories", page.calories.map { jsIntegerString($0) } ?? "—",
-                     page.calories == nil ? nil : "kcal",
-                     sub: .init(basis(page), Color.onyx.textTertiary),
-                     tint: page.calories == nil ? nil : Color.onyx.calories, symbol: "flame.fill")
+                //
+                // The TRAIL behind it is `Summary.sets`, which counts working
+                // sets — one scale below the figure it sits under. That is the
+                // right trade and not an oversight: the curve is a shape, not a
+                // reading, and the alternative is replaying every session of
+                // the split through `physicalSets` to draw eight points.
+                OnyxStatCell(
+                    "Sets", "\(report.physicalSets)",
+                    sub: composition(report) ?? delta(page.setsDelta.map(Double.init), unit: "", higherIsBetter: true),
+                    spark: page.trail { Double($0.sets) }
+                )
+                OnyxStatCell(
+                    "Difficulty", report.session.sessionRpe.map { "\(OnyxFormat.rpe($0))/10" } ?? "—",
+                    sub: .init(report.session.sessionRpe.map { Effort.rpeLabel($0) } ?? "not rated", Color.onyx.textTertiary),
+                    // An unrated session takes no colour: `effort(_:)` starts
+                    // at secondary ink and only leaves it when the work was
+                    // genuinely hard, and a grey dash tinted amber would be a
+                    // verdict on a reading nobody gave.
+                    tint: report.session.sessionRpe.map { Color.onyx.effort($0) },
+                    spark: page.trail { $0.sessionRpe }
+                )
+                OnyxStatCell(
+                    "Records", "\(report.prCount)", sub: recordsDelta(page),
+                    tint: report.prCount > 0 ? Color.onyx.record : nil,
+                    // Only when there is one. A permanent trophy over a zero is
+                    // how gold stops meaning a personal record — the same rule
+                    // the Lock Screen card's `N PR` already follows.
+                    symbol: report.prCount > 0 ? "trophy.fill" : nil,
+                    spark: page.trail { Double($0.prCount) }
+                )
+                // `sub: nil` on both of these, and the provenance moved into
+                // `detail` — see the type header. "measured" is not a
+                // comparison, and it was taking the line a comparison lives on.
+                OnyxStatCell(
+                    "Avg HR", page.avgBpm.map { jsIntegerString($0) } ?? "—",
+                    unit: page.avgBpm == nil ? nil : "bpm",
+                    tint: page.avgBpm == nil ? nil : Color.onyx.danger, symbol: "heart.fill",
+                    spark: page.trail { $0.avgBpm }, detail: bpmBasis(page)
+                )
+                OnyxStatCell(
+                    "Calories", page.calories.map { jsIntegerString($0) } ?? "—",
+                    unit: page.calories == nil ? nil : "kcal",
+                    tint: page.calories == nil ? nil : Color.onyx.calories, symbol: "flame.fill",
+                    spark: page.trail { $0.calories }, detail: basis(page)
+                )
             }
             IntensityBar(values: report.intensity)
         }
@@ -535,88 +583,10 @@ struct SessionDetailView: View {
               count: typeSize.isAccessibilitySize ? 1 : count)
     }
 
-    private struct Sub {
-        let text: String
-        let color: Color
-        init(_ text: String, _ color: Color) { self.text = text; self.color = color }
-    }
-
-    /// ── FOUR ACROSS ON A 375 pt PHONE IS 84 pt A CELL ───────────────────────
-    /// Which is what the Calories cell broke on. `383` in `.display` beside
-    /// `kcal` beside a raised `calc` needed ~110 pt; the value obeyed its
-    /// `minimumScaleFactor` and stopped, and the two unconstrained `Text`es
-    /// behind it did the only other thing they can — wrapped. `kcal` on its own
-    /// line, `calc` on a third, and a tile two lines taller than the three
-    /// beside it.
-    ///
-    /// Three changes, and the first is the one that matters:
-    ///
-    ///  · The `calc` superscript is GONE. The sub-line under the figure already
-    ///    reads "estimated" or "measured" — it is the same fact, in a word
-    ///    rather than an abbreviation, on the line that exists to carry it, in
-    ///    the 24 pt the cell does not have to spare. Two marks for one claim,
-    ///    and the one that cost the layout was the one nobody has to be taught.
-    ///  · The unit is held to one line and allowed to scale, like the value it
-    ///    sits beside. A unit that wraps is a unit that has left its number.
-    ///  · The stack no longer lets the unit push the value: `layoutPriority`
-    ///    gives the figure the width first, which is the right order — `38…`
-    ///    beside `kcal` is worse than `383` beside a slightly smaller `kcal`.
-    private func cell(
-        _ label: String, _ value: String, _ unit: String?, sub: Sub,
-        tint: Color? = nil, symbol: String? = nil
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            // ── THE GLYPH SITS WITH THE LABEL, NOT WITH THE FIGURE ──────────
-            // Four cells across is 84 pt each on a 375 pt phone (see below),
-            // and a symbol beside the value takes that width from the one thing
-            // in the cell that must not shrink. Beside the register label it
-            // costs 14 pt of a line that is already short, and it is the half
-            // of the cell the eye uses to FIND the reading rather than to read
-            // it.
-            //
-            // `.hierarchical` rather than flat: the flame's inner lobe and the
-            // trophy's base separate at 11 pt, which is what makes them read as
-            // objects instead of as blobs, and it takes the tint the label is
-            // already spending.
-            HStack(spacing: 4) {
-                if let symbol {
-                    Image(systemName: symbol)
-                        .symbolRenderingMode(.hierarchical)
-                        .onyxType(.micro)
-                        .foregroundStyle(tint ?? Color.onyx.textTertiary)
-                        .accessibilityHidden(true)
-                }
-                Text(label)
-                    .onyxMicro()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .onyxType(.display).onyxNumeral()
-                    .foregroundStyle(tint ?? Color.onyx.textPrimary)
-                    .lineLimit(1).minimumScaleFactor(0.7)
-                    .layoutPriority(1)
-                if let unit {
-                    Text(unit)
-                        .onyxType(.caption)
-                        .foregroundStyle(Color.onyx.textTertiary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-            }
-            Text(sub.text)
-                .onyxType(.caption).onyxNumeral()
-                .foregroundStyle(sub.color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(OnyxSpace.s)
-        .onyxGlass(.row)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label), \(value) \(unit ?? ""), \(sub.text)")
-    }
+    /// The sub-line, now `OnyxUI`'s (§W2 C). A typealias rather than a rename
+    /// at forty call sites: the shape is identical and always was, which is the
+    /// whole reason the two squares merged.
+    private typealias Sub = OnyxStatCell.Sub
 
     /// Up, down, or nothing at all — the session's tonnage against the previous
     /// session of the same split.
@@ -755,10 +725,19 @@ struct SessionDetailView: View {
                     ))
                     .frame(height: 96)
 
-                    VStack(alignment: .leading, spacing: OnyxSpace.s) {
-                        ramp(report.muscles, total: total)
-                        legend(report.muscles)
-                    }
+                    // ── ONE FACT, TWO DRAWINGS, NOT THREE (§W2 D) ───────
+                    // The card encoded the same distribution three ways: the
+                    // atlas figure paints it on a body, the legend names the
+                    // top four with their shares, and a 100 % ramp sat between
+                    // them saying the legend's numbers again as lengths — in
+                    // 6 pt of stacked capsule where a 4.5 and a 4.0 are one
+                    // pixel apart and the sixteenth muscle is a `max(2, …)`
+                    // sliver that is wider than its share. A bar that cannot
+                    // be measured is not a comparison, it is a decoration of
+                    // the numbers beside it.
+                    //
+                    // The figure is the shape and the legend is the reading.
+                    legend(report.muscles)
                 }
             }
             .padding(OnyxSpace.l)
@@ -778,23 +757,6 @@ struct SessionDetailView: View {
         // to be readable when the card was not a control.
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the body you can turn over")
-    }
-
-    /// One bar, split by share. It is the legend's numbers as a length, which
-    /// is the comparison the reader is actually making.
-    private func ramp(_ rows: [(muscle: LandmarkMuscle, sets: Double)], total: Double) -> some View {
-        GeometryReader { proxy in
-            HStack(spacing: 1) {
-                ForEach(Array(rows.enumerated()), id: \.element.muscle) { i, row in
-                    Rectangle()
-                        .fill(Color.onyx.muscle(row.muscle))
-                        .frame(width: total > 0 ? max(2, proxy.size.width * row.sets / total) : 0)
-                }
-            }
-            .clipShape(Capsule())
-        }
-        .frame(height: 6)
-        .accessibilityHidden(true)
     }
 
     /// The four biggest, named. The rest are one row, because a legend of
@@ -845,6 +807,20 @@ struct SessionDetailView: View {
         // Asked ONCE, here, and handed to the heading and to every row — see
         // `SetRow.SetLayout` for why this is not a per-row decision.
         let layout = SetRow.layout(ex)
+        // ── THE RESERVATION IS A CARD'S DECISION, NOT A ROW'S (§W2 F) ───────
+        // §3.6 reserves the delta line so a row cannot change height between
+        // two sessions — which is the right rule and says nothing about a
+        // movement that has NEVER been trained before. On a first-ever card
+        // every one of three columns on every row reserved a line for a
+        // comparison that cannot exist: 11 pt × N sets of guaranteed blank,
+        // on the one card where there is nothing to compare and never was.
+        //
+        // Asked ONCE per card, like `layout`: within a card the reservation is
+        // unchanged, so the height still cannot move between two sessions of a
+        // movement that HAS a history — which is the property the rule is for.
+        let comparable = ex.rows.contains {
+            Self.previousSet(ex, row: $0) != nil || Self.previousUnitVolume(ex, row: $0) != nil
+        }
         return VStack(alignment: .leading, spacing: 0) {
             ledgerHeader(ex, family: family)
             if !layout.heads.isEmpty, !typeSize.isAccessibilitySize {
@@ -879,7 +855,10 @@ struct SessionDetailView: View {
                     // comparison a unilateral set can honestly carry.
                     prevUnitKg: Self.previousUnitVolume(ex, row: row),
                     position: index + 1,
-                    layout: layout
+                    layout: layout,
+                    // Whether ANY row on this card has a counterpart — see
+                    // `comparable` above.
+                    cardComparable: comparable
                 )
             }
         }
@@ -987,159 +966,27 @@ struct SessionDetailView: View {
     }
 
     /// The header IS the exercise's report: what the movement is FOR, what was
-    /// prescribed, how much of it landed on the ceiling, what it produced, and
-    /// the trail of estimated 1RM behind it. The rows underneath are the
-    /// evidence.
+    /// prescribed, how much of it landed on the ceiling, and what it produced.
+    /// The rows underneath are the evidence.
     ///
-    /// Three lines, in the order the questions are asked: which movement, which
-    /// muscles, what came out of it.
+    /// The DRAWING is `LedgerHeader`, below, because it now holds state — the
+    /// muscle chip is a control. This is the derivation, which is the half that
+    /// needs the page.
     private func ledgerHeader(_ ex: SessionAnalysis.ExerciseReport, family: Color) -> some View {
         let domain = MuscleGroup.forExercise(ex.canonical).domain
-        let chips = movers(ex.canonical)
+        let all = movers(ex.canonical)
         let tags = headerTags(ex, domain: domain, family: family)
-        return VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-            HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
-                // ── THE MOVEMENT'S OWN NAME, AT THE SIZE OF A TITLE ────────
-                // It was 13 pt and uppercased by the `List`'s own header style
-                // — the same treatment as the word "Cardio" two sections down,
-                // which is a heading and not a subject. This section IS the
-                // movement: the name is what the reader is looking for when
-                // they scroll, and `SessionAnalysis.displayName` is what makes
-                // it "Incline DB Press" rather than `helix5-incline-db-press`
-                // on a session this phone logged.
-                Text(ex.canonical)
-                    .onyxType(.display)
-                    .textCase(nil)
-                    .foregroundStyle(Color.onyx.textPrimary)
-                    // One line, until one line cannot hold it: at AX5 on a
-                    // 375 pt phone "Incline DB Press" scaled to its floor and
-                    // still came out "Incline DB Pr…", and a movement whose
-                    // name is cut off is a card about nothing.
-                    .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
-                    .minimumScaleFactor(0.7)
-                    .layoutPriority(1)
-                // ── WHAT WAS ASKED OF IT, BESIDE ITS NAME ──────────────────
-                // The prescription used to be an arithmetic capsule two rows
-                // down — `2/3 @ 10–12` — where the reader had to find the
-                // window before they could judge the reps in the table. The
-                // window is not a result, it is the movement's brief, so it
-                // belongs beside the movement.
-                //
-                // Deliberately NOT set like the title: one step down, rounded,
-                // medium weight and in the movement's own hue, so "@ 10–12"
-                // reads as metadata attached to the name rather than as part
-                // of it. `layoutPriority` above gives the name the width
-                // first — "Incline DB Pr… @ 10–12" would be the wrong trade.
-                //
-                // `family`, not `domain.accent`, for the reason the sparkline
-                // two lines down already gives: the domain fold collapses
-                // sixteen landmarks onto four accents, so the brief on a CHEST
-                // card came out violet beside a red rail, red chips and a red
-                // trail. This is the sixth surface on the card answering "which
-                // movement" and it takes the same answer as the other five.
-                //
-                // The `2/3` half stays a capsule: how much of the brief landed
-                // IS a result, and it belongs with the other results.
-                // Dropped at the accessibility sizes, on the same rule the
-                // sparkline below takes: at AX5 the name alone needs three
-                // lines, and what the window did with the width left over was
-                // render as a lone red ellipsis. It is still said in full by
-                // the `1/3 @ 8–12` capsule two rows down, which is the reading
-                // that survives at every size.
-                if let window = ex.window, !typeSize.isAccessibilitySize {
-                    Text("@ \(window)")
-                        .onyxType(.secondary).onyxNumeral()
-                        .fontWeight(.medium)
-                        .foregroundStyle(family)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .accessibilityLabel("Target \(window)")
-                }
-                Spacer(minLength: OnyxSpace.xs)
-                // 40×16, no axis, no label: it is there to say "this has been
-                // going up" in the space a number would take. Blank under two
-                // sessions — `Sparkline`'s own empty caption is written for a
-                // widget face and truncates to "not en…" at this width — and
-                // blank at the accessibility sizes, where 40 pt of unlabelled
-                // decoration is 40 pt the name needs.
-                if ex.spark.count >= 2, !typeSize.isAccessibilitySize {
-                    // `family`, not `domain.accent`: the domain fold collapses
-                    // sixteen landmarks onto four hues, so a chest day and a
-                    // shoulder day drew the same blue trail beside two
-                    // differently-coloured cards. Fifth surface on this page to
-                    // answer "which muscle" — it takes the same answer.
-                    Sparkline(points: ex.spark, color: family, zeroBased: false)
-                        .frame(width: 40, height: 16)
-                        // A `Path` has no baseline of its own, so in a
-                        // `.firstTextBaseline` row it was aligned by its own
-                        // centre and floated above the type beside it. Its
-                        // BOTTOM is the trail's zero line — sitting that on the
-                        // text baseline is what makes the graphic read as part
-                        // of the line rather than as a sticker on it.
-                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
-                        .accessibilityHidden(true)
-                }
-            }
-            // ── ONE FLOW, NOT TWO STACKED ONES (W4 · A4) ──────────────────
-            // `FlowRow` and no `Spacer` anywhere in it: a `Spacer` cannot wrap,
-            // and one pushing the last item to the far edge is what made the
-            // chips and the prescription divide a 375 pt line four ways at AX5.
-            // The line simply becomes two when it has to, which is what a flow
-            // layout is for.
-            //
-            // The chips were their own `FlowRow` and the readings were a
-            // `MetaTagRow`, which is a `FlowRow` too, stacked underneath. Two
-            // flow layouts cannot share a line even when the first one ends
-            // with half a phone to spare, so a two-mover movement spent a whole
-            // capsule line saying "Chest · Triceps" and the readings began
-            // under it regardless. Three lines for a header whose content is
-            // two, on every card, which is the height the founder called
-            // terrible.
-            //
-            // One layout, and the wrap now happens where the CONTENT runs out
-            // rather than where the type boundary is. Chips first — what the
-            // movement IS, before what it produced.
-            //
-            // ── AND THE VERDICT MOVED TO THE END ───────────────────────────
-            // `headerTags` used to lead with it, because on a row of its own it
-            // was the only tinted item and, when five capsules wrapped, it was
-            // the one that ended up orphaned at the far left of a second line.
-            // On a row that OPENS with coloured chips it no longer needs the
-            // first slot to be found — and a conclusion belongs after the
-            // evidence it is drawn from.
-            FlowRow(spacing: OnyxSpace.xs) {
-                ForEach(chips, id: \.name) { mover in
-                    muscleChip(mover, family: family)
-                }
-                ForEach(tags, id: \.text) { tag in
-                    MetaTagRow.Capsule(tag)
-                }
-            }
-            // One element, because it is one line: `MetaTagRow` combined its
-            // own and the chips combined theirs, and merging the layouts
-            // without merging the labels would have left VoiceOver reading two
-            // groups off one row.
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel((chips.map(\.name) + tags.map(\.spoken)).joined(separator: ", "))
-        }
-        .padding(.horizontal, OnyxSpace.l)
-        .padding(.vertical, OnyxSpace.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // ── A WASH IN THE MUSCLE'S OWN HUE, NOT THE DOMAIN'S ───────────────
-        // `MuscleGroup.domain` collapses sixteen landmarks onto four accents,
-        // so a chest day and a shoulder day drew the identical bar. The atlas,
-        // the ramp and the legend on this same page are all already keyed on
-        // `Color.onyx.muscle`, and this is the fourth surface answering the
-        // same question — it takes the same colour or it is decoration.
-        //
-        // ── THE BAND NO LONGER PAINTS ITSELF ───────────────────────────────
-        // It used to carry a 28 %→4 % gradient left-to-right and a 3 pt rail of
-        // its own, which is exactly what made it read as a coloured header
-        // BOLTED TO a black list rather than as the top of one card. Both moved
-        // up to `onyxMuscleWash` on the card, where one gradient covers the
-        // header and the rows in a single run and the rail spans the whole
-        // movement. Nothing is drawn here now: the colour arrives through the
-        // card, which is the only way header and rows can agree on it.
+        return LedgerHeader(
+            name: ex.canonical,
+            window: ex.window,
+            spark: ex.spark,
+            family: family,
+            primary: all.filter(\.primary),
+            secondary: all.filter { !$0.primary },
+            brief: tags.brief,
+            results: tags.results,
+            seededOpen: startWithAssists
+        )
     }
 
     /// Primary and assisting movers, deduped, capped at what a 375 pt line
@@ -1153,10 +1000,20 @@ struct SessionDetailView: View {
     /// once as a primary and once as an assist — and read as double credit that
     /// `MuscleCredit` never gives.
     private func movers(_ canonical: String) -> [Mover] {
-        // At AX5 a chip is a line, so three of them is three lines of "also
-        // worked" above the numbers the reader came for. The primaries are what
-        // the movement IS; the assists are the first thing to go.
-        let limit = typeSize.isAccessibilitySize ? 1 : 3
+        // ── THE AX5 CAP IS GONE (§W2 E) ─────────────────────────────────────
+        // It was 1 at the accessibility sizes and 3 otherwise, because a chip
+        // was a LINE there: three of them meant three lines of "also worked"
+        // above the numbers the reader came for. The assists do not share a row
+        // with anything any more — they are row 2's other state, behind the
+        // chip's own `+N` — so at AX5 the cap was no longer buying a line, it
+        // was removing the feature from exactly the readers who most need a
+        // card that is not three screens tall.
+        //
+        // Three stays, at every size, and it is the same three the READINGS row
+        // holds (tonnage, top set, effort). That is what keeps the swap free:
+        // two states with the same number of capsules wrap to the same number
+        // of lines, so the card cannot change height when it is tapped.
+        let limit = 3
         // ── AND A BOUT NAMES MUSCLES TOO (W4 · F6) ──────────────────────────
         // `MuscleMap.dict` holds no cardio entry and must not: it is the input
         // to `MuscleCredit.weightedSets`, and therefore to the weekly MEV/MAV
@@ -1185,43 +1042,6 @@ struct SessionDetailView: View {
         return out
     }
 
-    private struct Mover {
-        let name: String
-        let primary: Bool
-    }
-
-    /// ── ONE HUE, TWO WEIGHTS ────────────────────────────────────────────────
-    /// The primary chip wears the movement's own muscle colour — the same
-    /// `Color.onyx.muscle` value the card's rule, wash, sparkline family and the
-    /// atlas below all take. An assist is the SAME colour at less than full
-    /// strength, not a second colour: a distinct hue for "also worked" would be
-    /// a fifth accent nobody designed, and the difference the reader needs is
-    /// how much this movement is about that muscle, which is a weight.
-    private func muscleChip(_ mover: Mover, family: Color) -> some View {
-        HStack(spacing: OnyxSpace.xs) {
-            Circle()
-                .fill(family.opacity(mover.primary ? 1 : 0.5))
-                .frame(width: 6, height: 6)
-            Text(mover.name)
-                // `.onyxType(.micro)`, never `onyxMicro()`: this is a name, and
-                // the register role would set "Upper back" as UPPER BACK.
-                .onyxType(.micro)
-                .textCase(nil)
-                .foregroundStyle(mover.primary ? family : family.opacity(0.7))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .padding(.horizontal, OnyxSpace.s)
-        // 3 pt, not 2: the value line is two columns and two arrows now rather
-        // than one string, and the row that was legible as `42kg × 10` reads as
-        // a table when it holds four objects. The height floor below took the
-        // same change, in the same commit, for the same reason — they are one
-        // measurement in two places.
-        .padding(.vertical, 3)
-        .background(family.opacity(mover.primary ? 0.16 : 0.08), in: .capsule)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(mover.primary ? "\(mover.name), primary" : "\(mover.name), assisting")
-    }
 
     /// The hue of the movement's FIRST primary mover — the same key
     /// `Color.onyx.muscle` uses everywhere else on this page. Falls back to the
@@ -1307,19 +1127,37 @@ struct SessionDetailView: View {
     /// glyph and a number in its own. The two are told apart by SHAPE, which
     /// survives being adjacent; they were told apart by POSITION, which cost a
     /// line of the card to say.
+    /// ── TWO ROWS, AND WHICH READING BELONGS ON WHICH (§W2 E) ────────────────
+    /// They were one `FlowRow` of everything, so the wrap point moved with the
+    /// text size and no reading had a place — `RPE 8.0` was on line one on one
+    /// card and line two on the next. The split is by REGISTER and not by
+    /// width:
+    ///
+    ///  · `brief`   — what was asked of this movement and how it went against
+    ///                the last time: the progression percentage, how much of
+    ///                the prescription landed inside its window, and the cue.
+    ///  · `results` — what it produced today: tonnage, top set, effort. On a
+    ///                BOUT every one of those is guarded off (a treadmill
+    ///                carries no load and an imported walk is unrated), so the
+    ///                bout's own readings take the row instead — which is why
+    ///                `cardioTags` leads the results and not the brief.
+    ///
+    /// The row each one lands on is therefore the same on every card, at every
+    /// text size, which is what "two deterministic rows" means.
     private func headerTags(
         _ ex: SessionAnalysis.ExerciseReport, domain: OnyxDomain, family: Color
-    ) -> [MetaTagRow.Tag] {
+    ) -> (brief: [MetaTagRow.Tag], results: [MetaTagRow.Tag]) {
         // A BOUT'S OWN READINGS FIRST, where a lift's would be. See
         // `cardioTags` — on a treadmill every capsule below this line is
         // guarded off, and the row came out empty.
-        var tags: [MetaTagRow.Tag] = Self.cardioTags(ex, bout: page?.bout)
+        var results: [MetaTagRow.Tag] = Self.cardioTags(ex, bout: page?.bout)
+        var brief: [MetaTagRow.Tag] = []
         // "Top" is a claim about the WORKING sets, so an exercise that has none
         // does not get to make it. It used to print `Top 0 reps` — the same lie
         // as `0kg × 0` — on any all-warm-up movement, which the treadmill block
         // is by construction.
         if ex.stats.topKg > 0 || ex.stats.topReps > 0 {
-            tags.append(.init(
+            results.append(.init(
                 "Top " + SetFormat.format(weightKg: ex.stats.topKg, reps: ex.stats.topReps, timed: ex.timed),
                 symbol: "arrow.up.to.line",
                 tint: family
@@ -1331,27 +1169,27 @@ struct SessionDetailView: View {
         // load, so there is no tonnage to be zero of. The pill is absent rather
         // than zero, exactly as "Top" is one line above.
         if ex.detail.volumeKg > 0 {
-            tags.append(.init(
+            results.append(.init(
                 "\(OnyxFormat.volume(ex.detail.volumeKg)) kg",
                 symbol: "scalemass.fill",
                 tint: volumeTone(ex)
             ))
         }
         if let rpe = ex.stats.avgRpe {
-            tags.append(.init("RPE \(jsToFixed1(rpe))", symbol: "bolt.fill", tint: Color.onyx.effort(rpe)))
+            results.append(.init("RPE \(jsToFixed1(rpe))", symbol: "bolt.fill", tint: Color.onyx.effort(rpe)))
         }
         // How much of the prescription landed inside its window. The window
         // itself has moved up beside the movement's name — this is the half
         // that is a RESULT, and results live here.
         if let window = ex.window {
-            tags.append(.init(
+            brief.append(.init(
                 "\(ex.atCeiling)/\(Int(ex.detail.workingSets)) @ \(window)",
                 symbol: "target",
                 tint: Color.onyx.textSecondary
             ))
         }
-        if let cue = ex.cue { tags.append(.init(cue.short, tint: domain.accent)) }
-        // ── THE VERDICT GOES LAST, AND IT CARRIES ITS OWN MAGNITUDE ─────────
+        if let cue = ex.cue { brief.append(.init(cue.short, tint: domain.accent)) }
+        // ── THE VERDICT LEADS THE BRIEF, AND CARRIES ITS OWN MAGNITUDE ─────
         // It led this list until W4, for a reason that was true of the row it
         // used to live on: five capsules do not fit 402 pt, so one wrapped, and
         // it was this one — alone on a second line at the far left, the only
@@ -1373,16 +1211,20 @@ struct SessionDetailView: View {
             // Under half a percent there is no arrow: a triangle over a
             // rounding error is noise with a direction.
             if abs(percent) < 0.5 {
-                tags.append(.init("level", tint: Color.onyx.textTertiary))
+                brief.insert(.init("level", tint: Color.onyx.textTertiary), at: 0)
             } else {
-                tags.append(.init(
+                brief.insert(.init(
                     "\(percent > 0 ? "+" : "−")\(jsIntegerString(jsRound(abs(percent))))%",
                     symbol: percent > 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill",
                     tint: percent > 0 ? Color.onyx.good : Color.onyx.danger
-                ))
+                ), at: 0)
             }
         }
-        return tags
+        // The verdict LEADS the brief (it is inserted at 0 above): the row now
+        // opens with the movement's own muscle chip, so a tinted capsule beside
+        // it is no longer the odd one out, and "how did this go" is the first
+        // thing asked of a card you are scrolling past.
+        return (brief, results)
     }
 
     /// A bout's own readings — distance, pace, heart rate, and where the row
@@ -1481,6 +1323,289 @@ struct SessionDetailView: View {
         return "\(day) · \(date.formatted(.dateTime.day().month(.abbreviated)))"
     }
 
+}
+
+// MARK: - One movement's masthead
+
+/// The floor both header rows stand on — `MetaTagRow.Capsule`'s own
+/// `minHeight`, spelled once.
+///
+/// It is what makes the swap honest. Row 2 holds readings in one state and
+/// muscle names in the other, and a row whose height is set by its CONTENT
+/// would move the card — and everything under it — every time the chip is
+/// tapped. It is also what keeps a movement with no readings at all (an
+/// unrated bodyweight hold, a bout with no `cardio_logs` row behind it) from
+/// drawing a row of zero height and collapsing the card by a line.
+enum OnyxLedgerRowFloor {
+    static let height: CGFloat = 24
+}
+
+private extension View {
+    func rowFloor() -> some View {
+        frame(maxWidth: .infinity, minHeight: OnyxLedgerRowFloor.height, alignment: .leading)
+            .accessibilityElement(children: .contain)
+    }
+}
+
+
+/// Primary or assisting, by name — `MuscleMap`'s answer for one movement.
+struct Mover {
+    let name: String
+    let primary: Bool
+}
+
+/// A ledger card's heading: the movement, and two rows that never move.
+///
+/// ── WHY IT IS TWO FIXED ROWS AND NOT ONE FLOW (§W2 E) ───────────────────────
+/// It was a single `FlowRow` holding the muscle chips and every reading, so the
+/// wrap point was wherever the text size put it: `RPE 8.0` opened line two on
+/// one card and closed line one on the next, three rows of chips on a
+/// three-mover movement, and ~74 pt of wrapped capsules above ~36 pt per set —
+/// a screen of scrolling per movement.
+///
+/// Now the register decides the row and the row never changes:
+///
+///   row 1 · the primary muscle · how it went · what was asked · the cue
+///   row 2 · what it produced — tonnage, top set, effort
+///
+/// ── AND WHY ROW 2 IS A SWAP RATHER THAN A DISCLOSURE ────────────────────────
+/// The assisting muscles are worth having and are not worth a row: they were
+/// two more chips on the line the readings needed, and on a three-mover
+/// movement they took the line on their own. A disclosure that ADDS a row makes
+/// the card grow under the thumb that opened it and pushes the sets out of
+/// frame — which is the shape this whole wave exists to end. So tapping the
+/// primary chip replaces row 2 IN PLACE: the assists arrive where the readings
+/// were, the card's height does not move, and tapping again puts them back.
+/// `+2` on the chip is the affordance and the count at once.
+private struct LedgerHeader: View {
+    let name: String
+    let window: String?
+    let spark: [Double]
+    let family: Color
+    let primary: [Mover]
+    let secondary: [Mover]
+    let brief: [MetaTagRow.Tag]
+    let results: [MetaTagRow.Tag]
+    /// See `SessionDetailView.startWithAssists`.
+    var seededOpen = false
+
+    /// Whether row 2 is showing the assists instead of the readings. Per CARD,
+    /// which is why this view exists at all: the header used to be a function
+    /// on the page, and a page-level dictionary keyed by movement would be the
+    /// same state with a lookup in front of it.
+    @State private var showingSecondaries = false
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+            title
+            // ── THE TRAIL EARNS ITS WIDTH ON THE ROW BELOW THE NAME (§W2 G) ─
+            // It was 40×16 on the TITLE line, competing with the movement's
+            // own name for a 375 pt line — so the name lost 44 pt to a graphic
+            // with no label. On the brief's row it is beside four capsules that
+            // are none of them the subject, and 56 pt is where eight sessions
+            // stop reading as one wobble. The height never moves: 16 pt inside
+            // a 24 pt row costs nothing, which is why it never cost anything.
+            //
+            // `HStack` outside the flow and not an item inside it: a `FlowRow`
+            // places subviews in order and would wrap the trail to a second
+            // line the moment the brief filled the first, which is a sparkline
+            // alone under four capsules.
+            HStack(alignment: .center, spacing: OnyxSpace.s) {
+                briefRow
+                if spark.count >= 2, !typeSize.isAccessibilitySize {
+                    // `family`, not the domain accent: the domain fold
+                    // collapses sixteen landmarks onto four hues, so a chest
+                    // day and a shoulder day drew the same blue trail beside
+                    // two differently-coloured cards.
+                    Sparkline(points: spark, color: family, zeroBased: false)
+                        .frame(width: 56, height: 16)
+                        .accessibilityHidden(true)
+                }
+            }
+            resultsRow
+                .animation(OnyxMotion.move, value: showingSecondaries)
+                .task { if seededOpen { showingSecondaries = true } }
+        }
+        .padding(.horizontal, OnyxSpace.l)
+        .padding(.vertical, OnyxSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // ── A WASH IN THE MUSCLE'S OWN HUE, NOT THE DOMAIN'S ───────────────
+        // Nothing is drawn here: `onyxMuscleWash` on the CARD covers the header
+        // and the rows in a single run and carries the rail the whole length of
+        // the movement, which is the only way header and rows can agree on a
+        // colour. The band used to paint its own 28 %→4 % gradient and its own
+        // 3 pt rail, which is exactly what made it read as a coloured header
+        // bolted to a black list rather than as the top of one card.
+    }
+
+    // MARK: - Line 0 · which movement
+
+    private var title: some View {
+        HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
+            // ── THE MOVEMENT'S OWN NAME, AT THE SIZE OF A TITLE ────────────
+            // It was 13 pt and uppercased by the `List`'s own header style —
+            // the same treatment as the word "Cardio" two sections down, which
+            // is a heading and not a subject. This card IS the movement.
+            Text(name)
+                .onyxType(.display)
+                .textCase(nil)
+                .foregroundStyle(Color.onyx.textPrimary)
+                // One line, until one line cannot hold it: at AX5 on a 375 pt
+                // phone "Incline DB Press" scaled to its floor and still came
+                // out "Incline DB Pr…", and a movement whose name is cut off is
+                // a card about nothing.
+                .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
+                .minimumScaleFactor(0.7)
+                .layoutPriority(1)
+            // ── WHAT WAS ASKED OF IT, BESIDE ITS NAME ──────────────────────
+            // The window is not a result, it is the movement's brief, so it
+            // belongs beside the movement. Deliberately NOT set like the title:
+            // one step down, medium weight, in the movement's own hue, so
+            // "@ 10–12" reads as metadata attached to the name rather than as
+            // part of it. Dropped at the accessibility sizes, where the name
+            // alone needs three lines and what the window did with the width
+            // left over was render as a lone red ellipsis — it is still said in
+            // full by the ceiling capsule on row 1.
+            if let window, !typeSize.isAccessibilitySize {
+                Text("@ \(window)")
+                    .onyxType(.secondary).onyxNumeral()
+                    .fontWeight(.medium)
+                    .foregroundStyle(family)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityLabel("Target \(window)")
+            }
+            Spacer(minLength: OnyxSpace.xs)
+        }
+    }
+
+    // MARK: - The two rows
+
+    /// Row 1 · which muscle, and how the movement went against last time.
+    private var briefRow: some View {
+        FlowRow(spacing: OnyxSpace.xs) {
+            if let lead = primary.first { primaryChip(lead) }
+            ForEach(brief, id: \.text) { MetaTagRow.Capsule($0) }
+        }
+        .rowFloor()
+    }
+
+    /// Row 2 · what the movement produced — or, once the chip is tapped, what
+    /// else it worked.
+    ///
+    /// ── THE TWO STATES ARE THE SAME OBJECT ON PURPOSE ───────────────────────
+    /// A flow of `MetaTagRow.Capsule`s either way, on the same floor. The
+    /// assists could have been drawn as CHIPS, in the primary's own shape, and
+    /// that is exactly what would have broken the swap: a chip is 17 pt and a
+    /// capsule is 24, so the card would have jumped 7 pt every time the muscle
+    /// was tapped. The dot is what marks the primary out as the control, and
+    /// there is exactly one of those.
+    private var resultsRow: some View {
+        // ── BOTH STATES, ALWAYS LAID OUT; ONE OF THEM DRAWN ─────────────────
+        // A `ZStack` and not an `if`, and this is the whole of the height
+        // guarantee. At the default sizes both states are one line and a branch
+        // would have been enough. At AX5 every capsule takes a line of its own,
+        // so three readings are three lines and two assists are two — and a
+        // branch made the card, and everything under it, jump by a line every
+        // time the chip was tapped, at exactly the text size where the reader
+        // can least afford the page to move.
+        //
+        // Stacked, the row is as tall as the TALLER state in both of them, so
+        // the swap is free at every size and costs a line only where a line was
+        // going to be needed anyway. The inactive state is faded rather than
+        // removed, which is also what gives `OnyxMotion.move` something to
+        // cross-fade; it is taken out of the hit-testing and out of VoiceOver
+        // so it is invisible to everything except the layout.
+        ZStack(alignment: .topLeading) {
+            capsules(results.map { ($0.text, $0) })
+                .opacity(showingSecondaries ? 0 : 1)
+                .allowsHitTesting(!showingSecondaries)
+                .accessibilityHidden(showingSecondaries)
+            capsules(secondary.map {
+                ($0.name, MetaTagRow.Tag($0.name, tint: family.opacity(0.7)))
+            })
+                .opacity(showingSecondaries ? 1 : 0)
+                .allowsHitTesting(showingSecondaries)
+                .accessibilityHidden(!showingSecondaries)
+        }
+        .rowFloor()
+    }
+
+    private func capsules(_ tags: [(id: String, tag: MetaTagRow.Tag)]) -> some View {
+        FlowRow(spacing: OnyxSpace.xs) {
+            ForEach(tags, id: \.id) { MetaTagRow.Capsule($0.tag) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - The chip that is a control
+
+    /// ── ONE HUE, TWO WEIGHTS ────────────────────────────────────────────────
+    /// The primary chip wears the movement's own muscle colour — the same
+    /// `Color.onyx.muscle` value the card's rule, wash, sparkline family and the
+    /// atlas below all take. An assist is the SAME colour at less than full
+    /// strength, not a second colour: a distinct hue for "also worked" would be
+    /// a fifth accent nobody designed, and the difference the reader needs is
+    /// how much this movement is about that muscle, which is a weight.
+    private func primaryChip(_ mover: Mover) -> some View {
+        Button {
+            withAnimation(OnyxMotion.move) { showingSecondaries.toggle() }
+        } label: {
+            HStack(spacing: OnyxSpace.xs) {
+                Circle()
+                    .fill(family)
+                    .frame(width: 6, height: 6)
+                Text(mover.name)
+                    // `.onyxType(.micro)`, never `onyxMicro()`: this is a name,
+                    // and the register role would set "Upper back" as UPPER BACK.
+                    .onyxType(.micro)
+                    .textCase(nil)
+                    .foregroundStyle(family)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                if !secondary.isEmpty {
+                    // `.caption` and not `.micro`, and this is the token's own
+                    // rule rather than a taste: `micro` is "a register label —
+                    // uppercase, tracked out, NEVER carrying a number". `+2` is
+                    // a number, so it takes the next role up and sits a step
+                    // larger than the name beside it, which is also what makes
+                    // the affordance findable.
+                    Text(showingSecondaries ? "×" : "+\(secondary.count)")
+                        .onyxType(.caption).onyxNumeral()
+                        .foregroundStyle(family.opacity(0.7))
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, OnyxSpace.s)
+            .padding(.vertical, OnyxSpace.xs)
+            .frame(minHeight: OnyxLedgerRowFloor.height)
+            .background(family.opacity(0.16), in: SwiftUI.Capsule())
+            // ── 24 pt DRAWN, 44 pt TAPPED ──────────────────────────────────
+            // The target floor is 44 and the row is 24, and growing the row to
+            // meet it would put 20 pt back on every card this wave just took
+            // 20 pt off. So the padding that makes the target is added, the
+            // hit shape is taken from it, and the layout is given its height
+            // back — the chip draws 24 pt tall inside a 44 pt touch area.
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+            .padding(.vertical, -10)
+        }
+        .buttonStyle(.plain)
+        // NOT `.disabled()`. A movement with nothing assisting has nothing to
+        // swap to, and disabling the button greys its label — so the one chip
+        // that says which muscle this card is about came out dimmed, reading as
+        // "unavailable" on a fact that is neither missing nor uncertain. The
+        // gesture simply does nothing instead, and the chip keeps its ink.
+        .allowsHitTesting(!secondary.isEmpty)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(mover.name), primary")
+        .accessibilityValue(secondary.isEmpty ? "" : "\(secondary.count) assisting")
+        .accessibilityHint(secondary.isEmpty ? "" :
+            (showingSecondaries ? "Shows this movement's readings" : "Shows the assisting muscles"))
+        .accessibilityAddTraits(secondary.isEmpty ? [] : .isButton)
+    }
 }
 
 // MARK: - The session's fingerprint
@@ -1729,6 +1854,12 @@ struct SetRow: View {
     /// Which columns this movement's card puts its sets in — decided ONCE for
     /// the whole card and handed down. See `SetLayout`.
     var layout: SetLayout = .whole
+    /// Whether this CARD has anything to compare against — decided once, the
+    /// same way `layout` is, and for the same reason: a first-ever movement
+    /// reserving a delta line on every column of every row is a card of
+    /// guaranteed blanks. Defaulted true, which is the behaviour every caller
+    /// that does not know had before.
+    var cardComparable: Bool = true
 
     /// The badge's side in the ledger, named because two things depend on it
     /// being the same number: the row's own gutter and the column heads' empty
@@ -1961,7 +2092,7 @@ struct SetRow: View {
                     // and its arrows are carried by `spoken` — a fourth line on
                     // an AX5 row that is already two is not a comparison, it is
                     // a scroll.
-                    if layout == .pair { deltaLine(unitDelta, unit: "kg") }
+                    if layout == .pair, cardComparable { deltaLine(unitDelta, unit: "kg") }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 // A split pair has already drawn its one effort, centred
@@ -2152,7 +2283,9 @@ struct SetRow: View {
                 .foregroundStyle(figure.tint ?? Color.onyx.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-            if layout.comparable { deltaLine(figure.delta, upIsGood: figure.upIsGood) }
+            if layout.comparable, cardComparable {
+                deltaLine(figure.delta, upIsGood: figure.upIsGood)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)

@@ -475,6 +475,8 @@ enum PreviewHarness {
             TodayPreviews.view(screen)
         case "history", "history-week", "history-week-live", "history-week-wrapped",
              "history-week-wrap-open", "session", "session-ledger", "exercise-history",
+             // W2 (refinement): the ledger header's row 2, swapped.
+             "session-ledger-assists",
              "session-atlas", "session-edit", "session-records",
              // W4: the pair table, and a day that is only a bout.
              // W1 (refinement): the same table with its agreeing pairs merged.

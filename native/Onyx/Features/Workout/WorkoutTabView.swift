@@ -110,6 +110,16 @@ struct WorkoutTabView: View {
     /// in the app; this reaches one property.
     struct Review: Identifiable { let id: String }
 
+    /// The id both ends of the done card's zoom agree on.
+    ///
+    /// Spelled once, for the reason `MiniPlayerCard.transitionID` states:
+    /// `.matchedTransitionSource(id:in:)` and `.navigationTransition(.zoom)`
+    /// match on a `Hashable` whose TYPE has to match as well as its value, so
+    /// two literals in two places are two chances to typo a transition that
+    /// then silently does not happen — with no build error and nothing in the
+    /// console.
+    static let doneTransitionID = "onyx.session.done"
+
     /// The closed week being read, in a sheet from the This-week tile.
     @State private var wrapped: WrapDoor?
 
@@ -621,7 +631,23 @@ struct WorkoutTabView: View {
             // its metric grid is the next thing down, and this card is the only
             // place they are said at all.
             let summary = doneSummary(sets: sets, volumeKg: volumeKg, minutes: minutes, prCount: prCount)
-            NavigationLink { SessionDetailView(sessionId: id) } label: {
+            NavigationLink {
+                SessionDetailView(sessionId: id)
+                    // ── THE CARD GROWS INTO THE PAGE (§W2 H) ────────────────
+                    // The card and the page open with the SAME masthead
+                    // (`SessionHeaderCard`), so the push was the one animation
+                    // that could not be read: an identical band slid in from
+                    // the right over an identical band. A zoom says what
+                    // actually happened — this card became that page — and the
+                    // exit travels the same path, which is the rule the whole
+                    // sprint's spatial consistency rests on.
+                    //
+                    // On the destination itself and not on the stack, the same
+                    // placement the logger cover takes: the modifier's own
+                    // documentation says the view that appears within the
+                    // stack, outside of any containers.
+                    .navigationTransition(.zoom(sourceID: Self.doneTransitionID, in: zoom))
+            } label: {
                 if let header = doneHeader, header.id == id {
                     SessionHeaderCard(header: header, totals: summary)
                 } else {
@@ -639,6 +665,15 @@ struct WorkoutTabView: View {
             }
             .buttonStyle(.plain)
             .onyxPress(scale: 0.98)
+            // OUTERMOST, and after `.onyxPress`: the source rect is this view's
+            // bounds, so a press transform still applied at tap-up would start
+            // the zoom from a shrunken rectangle. The clip shape is spelled
+            // because the configuration only accepts a `RoundedRectangle` and
+            // the default is square — the tile's own corner has to be said out
+            // loud or the zoom begins from a box the card never was.
+            .matchedTransitionSource(id: Self.doneTransitionID, in: zoom) {
+                $0.clipShape(RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous))
+            }
             // ── ONE BUTTON, NOT A CONTAINER OF FOUR LABELS ──────────────────
             // The card is a whole `NavigationLink` here, and its rows would
             // otherwise be exposed as four separate elements — a title, a

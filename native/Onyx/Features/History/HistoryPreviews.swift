@@ -78,6 +78,16 @@ enum HistoryPreviews {
         // §U4.4's flip, opened. A sheet cannot be photographed by launching
         // the screen under it, so the harness presents it directly — the same
         // trick `day-swap` uses, and the reason `Presenting` exists.
+        // ── W2 (refinement): row 2, swapped in place ────────────────────────
+        // The twin of `session-ledger`, and the pair IS the review: tapping the
+        // muscle chip replaces the readings with the assisting muscles, and the
+        // claim is that nothing else on the card moves. Two shots at the same
+        // scroll position is the only way to see a height that did not change.
+        case "session-ledger-assists":
+            NavigationStack {
+                SessionDetailView(sessionId: lastSession, startAtLedger: true, startWithAssists: true)
+            }
+            .environment(environment())
         case "session-atlas":
             NavigationStack { SessionDetailView(sessionId: lastSession, startAtAtlas: true) }
                 .environment(environment())
