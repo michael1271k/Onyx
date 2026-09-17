@@ -3410,7 +3410,7 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1789668730.3410234,
+    "mtime": 1789669884.6278622,
     "ast_hash": "21fbeea27fd620d74755d95625bc0901",
     "semantic_hash": ""
   },
@@ -3475,7 +3475,7 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1789667989.372424,
+    "mtime": 1789669884.6110003,
     "ast_hash": "866114a3a4c7c56a68e6758e04b55f03",
     "semantic_hash": ""
   },
@@ -3510,7 +3510,7 @@
     "semantic_hash": ""
   },
   "native/project.yml": {
-    "mtime": 1789668730.7441037,
+    "mtime": 1789669884.6275058,
     "ast_hash": "cd979a405ff291d19574a495ec7913d9",
     "semantic_hash": ""
   },
@@ -3860,8 +3860,8 @@
     "semantic_hash": ""
   },
   "docs/Plan-Onyx-UX-Architecture-Done.md": {
-    "mtime": 1789669214.797716,
-    "ast_hash": "c2aa62424ca420fbef05122220ab6f69",
+    "mtime": 1789669906.995209,
+    "ast_hash": "323033a3611dfc13f85361b61bf75334",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/SupplementMacroTests.swift": {
