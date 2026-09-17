@@ -44,6 +44,33 @@ _Nothing yet._
 
 ---
 
+## [4.0.1] — 2026-09-17 · Putting The Tools Away
+
+**PATCH: nothing in the app changed.** The closing wave of the UX/UI
+architecture sprint — `3.22.0` A Powder Is Food, `3.23.0` The Trophy Lights On
+The First Tick, `3.24.0` Nine Moods And A Form That Arrives Full, `4.0.0` The
+Week Is A Place — which was housekeeping by design: the trunk confirmed whole,
+the derived data purged, the gate re-run on a cold cache.
+
+### Changed
+- **68 GB of regenerable data removed from this machine**, none of it tracked
+  and none of it read by any gate: the graph's dated snapshots and its stat
+  cache, a duplicate graph under `native/`, the screenshot archive (untracked
+  since `3.8.0`), every wave's Swift scratch path, and the Xcode derived data
+  for this project. The code graph was then rebuilt from a cold cache, which is
+  also the proof that the purge left nothing that could not be rebuilt.
+- The whole gate — `check`, `check:swift`, `swift:core`, `swift:data`, and the
+  app / widget / watch build — was re-run from scratch rather than from a warm
+  cache, so the green it reports is a green from source.
+
+### Note
+`native/OnyxTests` is still executed by nothing in `npm run check`, and still
+carries the ten baseline issues it carried at the start of the sprint. Both
+facts are recorded in the sprint's Wave Records rather than fixed here: turning
+that bundle on is a sprint of its own, not the tail of this one.
+
+---
+
 ## [4.0.0] — 2026-09-17 · The Week Is A Place
 
 **MAJOR because a screen was removed.** The weekly wrap-up sheet is gone. Every
@@ -201,6 +228,14 @@ to adopt a name again.
   changes", and it still says so.
 - A seeded bout carries its minutes, incline and distance, so a treadmill card
   built from history is a bout rather than a lift of nothing.
+
+### What Cancel Edit does not cover
+It undoes **this phone's** edits to that session, from the moment the editor
+opened. Another device's edits to the same session are not this device's to
+take back, and a set that was deleted and then restored comes back under a new
+id — so if you restore one half of a split pair, that half moves to the end of
+its position group. The figures are all correct; only the order inside a tie
+changes.
 
 ---
 

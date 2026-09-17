@@ -1867,3 +1867,248 @@ setting, no App Store step.
   detent".** It is shot with `.defaultScrollAnchor(.bottom)`. The name is kept so
   the pair with `train-wrap` still reads as one review, but it no longer means
   what it says.
+
+---
+
+# Wave Record — W5 · The Great Purge & Merge
+
+**Ships `4.0.1`** — PATCH, because a purge ships no capability. Branch
+`onyx/w5-purge-merge`, cut from `main` at `ba0c62fe`.
+
+**Status at the time of writing: committed on the branch, NOT merged.** A second
+Claude session went live in a worktree partway through this wave (see *Failed*),
+and the founder asked for a stable stopping point until it finishes. Everything
+below is done and green; the merge, the branch deletion and the push are the only
+steps left.
+
+## What was done
+
+### STEP 1 — the trunk was whole, and then it was not alone.
+
+At the branch cut (20:56): `git branch -a` listed `main` and `origin/main` and
+nothing else, `git worktree list` held one entry — the primary checkout — and
+`main` and `origin/main` were the same commit, 0 ahead and 0 behind. Every wave
+had deleted its own branch. **Nothing was force-deleted, because there was
+nothing to delete.** With no unmerged diff there was no cumulative
+`main…origin/main` for `code-reviewer` to read, so that pass was skipped rather
+than run against an empty range.
+
+The one dirty thing was six tracked files under `graphify-out/` — `graph.json`,
+`graph.html`, `GRAPH_REPORT.md`, `manifest.json` and the two label files — left
+modified by the post-W4 graph rebuild. They were carried onto the wave branch
+and are committed here, which is the only place they can land now that W4 is
+merged.
+
+**A correction to the brief: there are SEVEN tracked files at the root of
+`graphify-out/`, not nine.** `git ls-files graphify-out` returns
+`.graphify_labels.json`, `.graphify_labels.json.sig`, `.graphify_root`,
+`GRAPH_REPORT.md`, `graph.html`, `graph.json` and `manifest.json`. The two the
+count was presumably reaching for — `.rebuild.lock` and `.pending_changes` — are
+named in `.gitignore:130-132` as machine-local scratch and were never tracked.
+All four purge targets were confirmed untracked with `git ls-files` **before**
+the `rm`, which is the check that separates a cache purge from a deletion.
+
+### STEP 2 — 68.1 GB reclaimed.
+
+Measured with `du -sk` across the five targets immediately before and after:
+**71,470,956 KB → 21,432 KB, i.e. 69,774 MB ≈ 68.1 GB.**
+
+| Target | Reclaimed | Note |
+|---|---|---|
+| `$HOME/Library/Caches/onyx-swift/*` | **~64 GB** | 27 directories — every wave's scratch and derived path back to `shot-w1`, plus `dd-w2`, `w4-base-derived`, `w6-main-derived`, `shots-w3`/`shots-w8`. This is the number the brief did not know about. |
+| Xcode DerivedData for this project | 4.0 GB | `Onyx-fwuafknlmczojfefflrcfwbxhzaf` |
+| `native/graphify-out/` | 93 MB | the duplicate graph `.gitignore:120` exists to refuse |
+| `native/__screenshots__/` | 86 MB | not 63 — it has grown since 3.8.0 |
+| `graphify-out/cache/` | 70 MB | stat index, rebuilt on demand |
+| `graphify-out/2026-09-{15,16,17}/` | 58 MB | three dated snapshots, nothing reads them |
+
+`graphify-out/.rebuild.lock` and `.pending_changes` were already absent.
+The brief's figures were one wave stale in both directions: `graphify-out` was
+150 MB rather than 134, `__screenshots__` 86 MB rather than 63.
+
+Then `graphify update .` on a **cold cache** — 774 files re-extracted, 12,718
+nodes, 34,608 edges, 484 communities — which reported *"No code-graph topology
+changes detected; outputs left untouched."* That is the purge's own proof: the
+seven tracked files regenerate to the same graph the repository already held.
+`graphify-out/` now stands at 49 MB, of which 28 MB is the cache that regrew
+during the rebuild and is ignored, and 20 MB is the tracked `graph.json`.
+
+### STEP 3 — the whole gate, from cold caches.
+
+Every scratch path had just been deleted, so nothing below was a warm rebuild.
+
+| Gate | Result |
+|---|---|
+| `npm run check` | green — `4.0.1 (40001)` in sync, `tsc` clean, atlas / mirror / doms all matching |
+| `swift:ui` (inside `check`) | **27 tests in 7 suites**, passed |
+| `npm run check:swift` | green — project regenerated, OnyxUI + OnyxCore build for the iOS simulator |
+| `npm run swift:core` | **575 tests in 119 suites**, passed — golden vectors unchanged |
+| `npm run swift:data` | **583 tests in 72 suites**, passed |
+| `xcodebuild -scheme Onyx -destination 'generic/platform=iOS'` | **BUILD SUCCEEDED** — app, widget and watch, 0 errors, 28 warnings, all pre-existing |
+
+**`OnyxTests` is exactly at baseline: 10 issues, 4 tests, 3 suites.** No fifth
+test, no sixth suite, nothing this sprint left behind:
+
+- History weeks (3) — `weekZero` at `HistoryWeeksTests.swift:75`, and the capsule
+  test's missed/rest counts at `:117-118`.
+- Workout week (5) — "ready to progress fires only after the ceiling is cleared
+  twice", `WorkoutWeekTests.swift:176-185`.
+- Session summary — the hotfix (2) — the treadmill's canonical title,
+  `SessionSummaryHotfixTests.swift:131-132`.
+
+**Where "five baseline failures" came from.** The run's final line reads
+`✘ Test run with 64 tests in 6 suites failed after 3.743 seconds with 5 issues` —
+while the same log prints **24 suite results, 186 test results and ten issues**.
+The roll-up line is not the run's total; the per-suite `✘ Suite … failed … with
+N issues` lines are. Read those. The plan's "five" and W1's "one" are both
+artefacts of trusting a summary line over the suites, and W2's 10 / 4 / 3 is the
+figure that has now held across W2, W3, W4 and W5.
+
+### STEP 4 — version and changelog.
+
+`package.json` → **`4.0.1`**, `npm run version:sync` → `native/project.yml`
+(`40001`, derived), `cd native && xcodegen generate`, and `npm run version:check`
+green inside a re-run of `npm run check`.
+
+`docs/CHANGELOG.md` gained **[4.0.1] — Putting The Tools Away**, written from the
+template: what was removed, that the gate was re-run from source rather than from
+a cache, and a note that `native/OnyxTests` is still ungated and still carries its
+ten.
+
+### STEP 5 — the harvest.
+
+The four wave records were read against the four changelog entries they belong
+to. **Three needed nothing** — `3.22.0`, `3.24.0` and `4.0.0` already carry their
+wave's user-facing findings, including 3.24.0's "Note for anyone on an older
+theme", which is the one consequence a reader could otherwise be surprised by.
+`3.23.0` was one short and now carries **"What Cancel Edit does not cover"**: the
+watermark is per `(session, device)`, so another device's edits are not this
+device's to take back, and a restored set returns under a new id and therefore
+moves to the end of its `setIndex` tie group. The entry promised "every set goes
+back to the way it was"; those are the two ways that sentence is not literally
+true.
+
+One memory file was written —
+`memory/ux-architecture-sprint.md`, pointer added to `MEMORY.md`. It carries the
+five things the brief named and two the wave files did not already hold: that
+every new `ContentState` field must be Optional (and why a nil-check is not a
+zero-check for a cardio bout), and that adding a stored property to a persisted
+`Codable` spec silently resets every install unless `init(from:)` is written by
+hand. The per-wave detail stays in `live-logger-w2`,
+`next-gen-w3-theme-inbody` and `w4-weekly-report` rather than being copied.
+
+`docs/Plan-Onyx-UX-Architecture-Done.md` is **kept**, as instructed.
+
+## Succeeded
+
+- **68.1 GB reclaimed and nothing lost.** Every target was proven untracked
+  before deletion, and the cold rebuild that followed reproduced the graph
+  byte-for-byte as far as the topology check can see it.
+- **The entire gate is green from cold caches** — which is a stronger claim than
+  the one the waves made from warm ones, and it cost one afternoon of rebuild to
+  earn.
+- **`OnyxTests` did not move.** Four waves of feature work, and the failing set
+  is the same four tests it was at W2.
+- **The trunk was whole.** Four waves, four self-deleted branches, no orphan
+  commits, `main` identical to `origin/main`.
+- **The roll-up line was caught lying**, which retires a number that has been
+  wrong in this plan since W1.
+
+## Failed
+
+- **The trunk did not stay alone, and this wave cannot close the way the brief
+  imagined.** At 20:59 — three minutes after Step 1 measured the repository — a
+  second Claude session created the worktree
+  `.claude/worktrees/sprint-next-gen-w10` on a new branch
+  `onyx/sprint-next-gen-w10`, and at 21:10 started an `xcodebuild test` in it.
+  The branch is at `ba0c62fe`, **0 commits ahead of `main`**, so it holds nothing
+  `main` does not — but it is a live session's workspace, not a stale one.
+  Nothing of it was touched: not the branch, not the worktree, not the process.
+  "Delete all open UI/UX branches" is satisfied by the four waves that cleaned up
+  after themselves; `onyx/sprint-next-gen-w10` is not one of them and is not
+  this wave's to remove.
+- **The purge deleted a cache out from under that session.**
+  `rm -rf $HOME/Library/Caches/onyx-swift/*` ran at ~20:57, a minute before the
+  other worktree appeared, and `ui-test-derived` is a SHARED path —
+  `scripts/swift-ui-test.sh` hardcodes it. No harm resulted (the other session
+  rebuilt it, and its test run is what then held the lock), but a machine-wide
+  cache purge is not a per-session operation and this one was run as if it were.
+  **If a purge wave ever runs again, check for other worktrees and other
+  `xcodebuild` processes first — `git worktree list` at the start of the wave is
+  not enough, because a session can start after it.**
+- **`npm run swift:ui` cannot run beside another session and failed here**:
+  `error: unable to attach DB: … build.db: database is locked. Possibly there
+  are two concurrent builds running in the same filesystem location.` The script
+  offers no way to override its `-derivedDataPath`, so the suite was run by hand
+  against `onyx-swift/w5-ui-test` — 27 tests in 7 suites, passed. Same for
+  `OnyxTests`, run against `onyx-swift/w5-tests`. Teaching `swift-ui-test.sh` to
+  honour a `UI_TEST_DERIVED` environment variable is a one-line change and the
+  next wave that shares this machine will want it (memory:
+  `concurrent-waves-shared-checkout`).
+- **The brief's file count was wrong** (nine tracked root files; there are seven)
+  and **its size figures were stale** (134 MB / 63 MB; measured 150 MB / 86 MB).
+  Neither changed what was deleted, because the `git ls-files` check does not
+  depend on knowing the number in advance.
+
+## Left open
+
+This is the sprint's final state of the world, for someone who was not here.
+
+**The merge itself.** `onyx/w5-purge-merge` is committed and green but **not
+merged, not deleted and not pushed** — paused at the founder's request while the
+other session runs. Resuming is: `git checkout main && git merge --no-ff
+onyx/w5-purge-merge`, delete the branch, push. The push guard reads the COMMAND
+and not the message, so it is `[skip ci]` in the merge message **or**
+`ONYX_DEPLOY=1 git push`; Netlify publishes `site/` as-is either way (memory:
+`next-gen-ux-sprint`). Be aware that `onyx/sprint-next-gen-w10` was cut from
+`ba0c62fe` and will therefore merge into a `main` that has moved — the collisions
+to expect are `package.json`'s version, `docs/CHANGELOG.md`'s top entry and the
+seven `graphify-out/` files, all of them semantic rather than textual (memory:
+`hotfix-ui-data-sep11`).
+
+**`native/OnyxTests` is run by nothing in `npm run check`.** Unchanged since W3
+named it, and it is now three waves of new tests deep — `InBodySaveGateTests`,
+`LivePrIdentityTests`, `LiveActivityCardioTests`, `SessionRevertTests` and W4's
+six — all of them ungated. Wiring it in turns `npm run check` red on `main`
+until the ten baseline issues are fixed, which is why no wave has done it. The
+honest sequence is: fix or delete the four failing tests first, then add
+`-only-testing:OnyxTests` to the gate. Two of the four are known to be stale
+tests rather than product defects (`HistoryWeeksTests.weekZero` asserts against a
+`WeekWindow` that has no anchor and whose `number` is therefore always 0; every
+real caller passes `weekZero`).
+
+**What is still unproven on a device, not in a test.** The end-to-end list at the
+top of this document is the list, and none of it has been walked on hardware:
+the Dynamic Island cannot be rendered by a simulator at all, the watch card at
+40 mm was verified through previews, and `session-edit` is not a screen the shot
+harness knows — the Cancel button has never been photographed at any text size.
+The single highest-value one is W2's: run `recomputeAllPrs` against the founder's
+own store and diff it against `personal_records`. The risk direction is the safe
+one — the identity fix can only widen a bar, and a wider bar removes false
+trophies rather than inventing them — but it is the one claim in this sprint
+that was never checked against the founder's full history.
+
+**Known and deliberately not fixed:**
+
+- `daily_logs.hrv_overnight` is live (`boolean NOT NULL DEFAULT false`) and
+  absent from `native/schema/supabase.json`. Pre-existing drift; harmless while
+  nothing reads it, but the fixture is one column short of the introspection it
+  claims to be.
+- The preview store seeds no `daily_logs` calories and no `battery_pct`, so
+  `train-wrap*` can only ever photograph the Nutrition and Recovery rails empty.
+  Seeding a week in `HistoryPreviews.environment()` closes it for every screen
+  that reads nutrition, not only that one.
+- A maintenance week inside a cut block wears the cut hue under a reel headed
+  "Deload week". Both halves are correct about what they describe.
+- The muscle palette takes `chroma` but not `lift`, and no copy on the Appearance
+  screen says so.
+- An install on Ember, Moss, Rose, Gold or Sea keeps its colours and loses its
+  name — Settings reads "Custom". The release note says so; there is no
+  old-preset → new-preset mapping and this sprint did not invent one.
+- `PulseModel.stackNutrients:786` still has no consumer. W1 left it for "W5's
+  kind of work"; W5 did not delete it, because a purge wave that also removes
+  live code is two waves wearing one commit.
+
+**Founder's manual checklist: empty.** No DDL (W3's `waist_cm` was already
+live), no Supabase setting, no App Store Connect step, nothing to paste. The
+only outstanding actions are the merge above and the device walk-through.
