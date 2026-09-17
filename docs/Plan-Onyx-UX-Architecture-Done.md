@@ -994,3 +994,167 @@ carries no macro payloads).
   fibre row by 3.9 g.
 - **W3 still needs its DDL** — `ALTER TABLE daily_logs ADD COLUMN waist_cm numeric;`
   — before that wave can run.
+
+---
+
+# Wave Record — W2
+
+**Shipped `3.23.0` from `onyx/w2-live-logger-edit`, 2026-09-17.**
+
+## What was done
+
+**GOAL 1 — the live PR cup.** Root cause, as the brief framed it, plus two layers
+under it that the brief could not have known about.
+
+The identity a live candidate carries and the identity the bar is keyed on are now
+the same value by construction. `LoggerModel.baselineIds()` resolves exactly ONE id
+per card — `storedId(for:)`, the same call `refreshLivePrs` keys a candidate with —
+and `rebuildBaselinesIfDeckMoved()` rebuilds the bar whenever that set moves. It is
+called at the top of `refreshLivePrs`, which is the one place all eight tick paths
+pass through. `buildLiveBaselines` lost its `excluding:`/`before:` parameters and
+derives them from `sessionId` and `editing?.date`, which were the same two
+expressions at both original call sites and are now correct at every later one.
+
+Three things the brief asked about, answered:
+
+- **(c)** `restoreLoggedSets` returning early on `sessionId == nil` is not a defect.
+  A fresh workout has nothing logged to restore. Its real consequence — a slug-only
+  baseline id set — is the same condition as (b) and the rebuild covers it.
+- **(d)** `rebuildForPhase` now ends with `refreshLivePrs()`. It replaced `exercises`
+  wholesale and recomputed neither the bar nor `prsThisSession`.
+- **(e)** The rep-window `floor` local was **deleted**, not plumbed through.
+  `PrCandidateSet` has no field to receive it, and passing this deck's phase would
+  gate the e1RM axis by a different window than `PrRecorder.record` uses at close —
+  a trophy the close path then refuses to file. The comment now says so.
+
+**Two root causes the brief did not name, both found by making its own test pass:**
+
+1. **Widening the baseline id set does not work, and would have looked like it did.**
+   `PrRecorder.baselines:229` re-keys every gathered row to `keyByName[name(id)]`,
+   built by uniquing on FIRST over a `Set` — whose iteration order is a hash. Hand it
+   both the slug and the uuid for one movement and the bar lands under whichever the
+   hash visited first. That is why the symptom came and went between launches. One
+   resolved id per card is the fix; `baselines` gathers the movement's other ids by
+   canonical name itself (`siblings`), so nothing narrowed.
+
+2. **A minted catalogue row erased the movement's history.** `createExercise` wrote
+   `slug: nil` on principle ("a row created now has no such history and never will").
+   False for its one important caller: `storedIdCreatingCatalogueRow` mints EXACTLY
+   when the catalogue has never heard of a movement, which is exactly when the deck
+   has been writing that movement's sets under `ExerciseSlug.id(name)`. With the
+   column nil, `nameBySlug` cannot resolve those rows, the sibling gather misses them
+   by name, and the whole history drops out of the bar the instant the movement gets
+   a row. `createExercise` now claims the slug **when, and only when, `workout_sets`
+   already holds rows under it** (`slugWithHistory`).
+
+**GOAL 2 — treadmill in the Dynamic Island and on the Lock Screen.** `ContentState`
+gained `cardioElapsedSec: Int?` and `cardioDistanceKm: Double?` — optionals only, per
+the load-bearing rule at `OnyxWorkoutAttributes.swift:114-121`. One formatter,
+`cardioLine(sec:km:pace:)` in the shared `WorkoutActivityCard.swift`, serves the lock
+card, the island and the watch; it reuses `SetFormat.cardio` and
+`CardioMetrics.paceMinPerKm`, both of which already refuse zero, negative and
+non-finite input, so there is no new divide to guard. `LiveActivityController` now
+branches on `row.isCardio` BEFORE the `if let kg, let reps` that the treadmill's
+non-nil zeros were satisfying. `OnyxWidgets.swift:296` got a real branch, not a real
+field: the compact slot needs one number and the wire already carries it.
+
+**GOAL 3 — the Cardio tag.** `ProgramExercise.movers` falls back to
+`MuscleMap.cardioMovers` after `dict` has had its say. `MuscleMap.dict` did not learn
+a treadmill and cannot: the fallback is read at the display layer and reaches no
+accumulator. `SeedSet` and `SeedRow` gained `durationSec`/`incline`/`distanceKm`,
+`SessionHistoryStore` fills them and `LoggerModel.setRow(SeedRow)` forwards them, so a
+seeded bout is a bout. The card draws an explicit **Cardio** chip in place of the
+muscle chip — `family` now answers "Quads" for a treadmill, which is true and is not
+what the card is about, and the header line is already full at 375 pt.
+
+**GOAL 4 — performed order on an edit deck.** `LoggerModel.init` gained
+`openingForEdit`, passed only by `SessionDetailView.openEditor`. An edit deck does not
+read `storedDeckOrder` and does not prepend the warm-up bout; the `removeAll` in
+`attach(editing:)` that used to undo the prepend is gone.
+
+**GOAL 5 — the finish tiles.** Records is fixed by GOAL 1 and by the floor change
+below. Sets reads the performed count alone on an edit deck.
+
+**GOAL 6 — Cancel Edit.** A `session_edit_marks` table (migration `v29`) persists a
+`(device_id, seq)` watermark stamped by `attach(editing:)`. `revertSessionEdits`
+folds the session's events twice — once whole, once with this device's post-watermark
+events excluded — diffs the two projections and appends compensating events, then
+reprojects, replays the PR ledger and recounts. Nothing is deleted. Save and the
+chevron both clear the mark.
+
+## Succeeded
+
+- **The live PR path and the ledger agree, three ways, across the flip.** A set that
+  beats a standing record now lights `isRecord` on the FIRST tick with the catalogue
+  row minted mid-session; the deck's `recordCount`, the `pr_count` `closeSession`
+  writes, and the same session re-opened for editing all report the same number.
+- A phase switch mid-session keeps every trophy already awarded.
+- `npm run check`, `check:swift`, `swift:core` (575 tests, PR golden vectors
+  **unchanged**), `swift:data` (581 tests) and the `xcodebuild` app/widget/watch build
+  are all green.
+- **OnyxTests is exactly at baseline.** Recorded before any edit: **10 issues across 4
+  tests in 3 suites** — History weeks (3), Workout week (5), Session summary — the
+  hotfix (2). After the wave: the same 10, same suites, nothing new. *(The plan's
+  "five known baseline failures" undercounts: 5 is the issue count of two of the three
+  suites. The number to compare against next wave is 10 issues / 4 tests.)*
+- Verified by eye, simulator: `set-row-cardio` draws the **Cardio** chip, the cardio
+  rail and `13:31 /km`; `widgets-activity` draws
+  `Treadmill · 12:30 · 2.19 km · 5:42 /km` on the lock card.
+- New tests, all failing first: `LivePrIdentityTests` (6), `LiveActivityCardioTests`
+  (8), `SessionRevertTests` (9).
+
+## Failed
+
+- **Nothing was reverted, but one brief premise was wrong and is recorded as such.**
+  GOAL 4(a) — "the warm-up/treadmill card must be written with an `exercise_order`
+  like every other card; find why the cardio row misses it" — has no defect behind it.
+  `snapshot` writes `deckOrder(of:)`, `SetEventFold` carries it, `SyncTranslation`
+  sends it (`v16.exerciseOrder`), and the live table agrees: **of 8 cardio rows in
+  Supabase, 8 carry `exercise_order = 0` and none is null.** The real cause of
+  "treadmill drops to the bottom on edit" is `inDeckOrder` ranking the edited session
+  against `deckOrder(dayKey:)` — the template left by the most recent session on that
+  day key, which is almost never the one being edited — where an unranked movement
+  sorts to `count + index`, i.e. last. Fixed there instead.
+- The brief's example cardio line, `12:30 · 0.37 km · 5:42/km`, does not close
+  arithmetically (750 s over 0.37 km is 33:47/km). The fixture uses 750 s over
+  2.19 km, which is 5:42/km, so the shot can be checked against itself.
+
+## Left open
+
+- **Do the live PR path and `SessionAnalysis` agree on the founder's FULL history?
+  Not proven, and not provable from here.** What is proven is the three-way agreement
+  described above on a session constructed to contain the exact failure — slug
+  history, empty-of-that-movement catalogue, a mint at the first commit — plus
+  575 + 581 package tests including the hand-maintained PR golden vectors, which were
+  not regenerated. A real answer needs `recomputeAllPrs` run against the founder's own
+  store on the device and its output diffed against `personal_records`; that is a
+  device-side write and was not run. **It is the first thing to do on the next
+  device build.** Note the direction of the remaining risk is the safe one: the slug
+  fix and the sibling gather can only widen a bar, and a wider bar removes false
+  trophies rather than inventing them.
+- **The `exercise_order` backfill was NOT run, deliberately.** The live database has
+  **18 rows with a null `exercise_order`, all in one session** (`8a780ded…`,
+  2026-09-06, `cb_a`), and **none of them is cardio**. An order is technically
+  derivable from `created_at` (15 distinct instants, 7 distinct movements by first
+  appearance) but the session interleaves — three movements recur later in the log —
+  so any single `exercise_order` per movement is a reconstruction, not a record. With
+  the reported symptom fixed at its real cause and no cardio row affected, writing
+  invented history to production for one session is the worse trade.
+- **`revertSessionEdits` has four named limitations**, all in the code: a restored set
+  gets a new id and so moves to the end of its `setIndex` tie group (visible only for
+  a split pair where one side was restored); the PR ledger returns in `replay`'s frame
+  rather than `record`'s (pre-existing — the first `amendSet` of any sitting already
+  does this); a permanently-poisoned void outbox item leaves both the old and the new
+  server row (pre-existing for every void); and the watermark is per `(session,
+  device)`, so a revert cannot and does not undo another device's edits.
+- **The delete-on-reconcile claim behind Cancel is read from `SyncEngine:305-310` and
+  `PostgRESTRemote:57-65`, not from Supabase.** Worth one manual check: edit a synced
+  session, Cancel, drain, confirm the old `workout_sets` row is gone and the new id is
+  present.
+- **No Dynamic Island was photographed.** A simulator cannot render one. The lock card
+  and the compact/expanded island were verified through the widget preview screens
+  (`widgets-activity`, `widgets-island`); the real island, and the watch card at
+  40 mm, want one device glance.
+- `session-edit` is not a screen the shot harness knows. The edit deck was verified by
+  test, not by pixel; the new Cancel button (`arrow.uturn.backward`, leading group,
+  beside the chevron) has never been photographed at any text size.

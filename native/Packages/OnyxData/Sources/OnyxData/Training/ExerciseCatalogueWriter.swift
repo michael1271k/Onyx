@@ -138,20 +138,55 @@ public extension AppDatabase {
             equipment: equipment,
             isUnilateral: Unilateral.isUnilateral(trimmed),
             isBodyweight: Bodyweight.isBodyweight(trimmed),
-            // ── NO SLUG ON A NEW ROW (W6) ───────────────────────────────────
+            // ── NO SLUG ON A NEW ROW (W6), UNLESS THERE IS HISTORY (W2) ─────
             // The column is an alias for the legacy id a pre-W6 build wrote
             // into `workout_sets.exercise_id`, and it is answered for by rows
-            // that already existed when that build ran. A row created now has
-            // no such history and never will: the logger resolves this id
-            // before it writes. Stamping one would put the retired prefix into
-            // new server data for a lookup nothing will ever perform.
-            slug: nil
+            // that already existed when that build ran. Stamping one on a row
+            // with no such history would put the retired prefix into new server
+            // data for a lookup nothing will ever perform, which is why this
+            // was flatly `nil`.
+            //
+            // The claim under that — "a row created now has no such history and
+            // never will: the logger resolves this id before it writes" — is
+            // false for the one caller that matters. `storedIdCreatingCatalogueRow`
+            // mints EXACTLY when the catalogue has never heard of a movement,
+            // and that is also exactly when the deck has been writing its sets
+            // under `ExerciseSlug.id(name)` — for as long as the catalogue row
+            // was missing, which on a generic account is every session so far.
+            //
+            // With the column nil, `ExerciseSlug.nameBySlug` cannot resolve
+            // those rows, `PrRecorder.nameResolver` falls back to the raw slug
+            // string, and `baselines`' sibling gather — which matches on
+            // canonical NAME — does not see them. The movement's whole history
+            // drops out of the bar the instant it gets a catalogue row, and
+            // `detectSetPrs` awards nothing against the empty index that
+            // leaves. The live deck and the ledger then disagree about the same
+            // workout, which is the thing they are not allowed to do.
+            //
+            // So: claimed only when rows ACTUALLY exist under it. That keeps the
+            // retired prefix out of new data in every case the W6 note was
+            // about, and restores the history in the one case it was not.
+            slug: try slugWithHistory(db, name: trimmed)
         )
         try row.insert(db)
         try Self.enqueueRowUpsert(
             table: "exercises", id: Self.rowID([userId, rowId]), in: db
         )
         return rowId
+    }
+
+    /// The legacy id this new row is taking over from, or nil when it is not
+    /// taking over from anything.
+    ///
+    /// Read from `workout_sets` rather than asserted: the slug is only worth
+    /// carrying when sets are actually filed under it. See `createExercise`.
+    private static func slugWithHistory(_ db: Database, name: String) throws -> String? {
+        let slug = ExerciseSlug.id(name)
+        let count = try Int.fetchOne(
+            db, sql: "SELECT count(*) FROM workout_sets WHERE exercise_id = ? LIMIT 1",
+            arguments: [slug]
+        ) ?? 0
+        return count > 0 ? slug : nil
     }
 
     static func jsonArray(_ values: [String]) -> String {

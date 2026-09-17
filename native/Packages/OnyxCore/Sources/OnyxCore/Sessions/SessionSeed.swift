@@ -65,11 +65,24 @@ public struct SeedSet: Codable, Sendable, Equatable {
     public var setType: String?
     public var side: String?
     public var pairId: String?
+    /// ── THE CONTENT OF A BOUT, WHICH IS NOT WEIGHT AND REPS (W2) ────────────
+    /// A treadmill set's entire content is `duration_sec`, `incline` and
+    /// `distance_km`; its `weight_kg` and `reps` are the non-nil ZEROS
+    /// `withWarmupCardio` mints. Carried nowhere, a seeded bout came back to the
+    /// deck as a lift of nothing — `SetRow.isCardio` false, so the card drew no
+    /// Cardio tag, `primaryMuscle`'s row test found nothing to fall back to, and
+    /// `withWarmupCardio` could not see that the deck already held a treadmill.
+    /// The note in `withWarmupCardio` named "SeedRow has no such fields" as the
+    /// cause; these are the fields.
+    public var durationSec: Int?
+    public var incline: Double?
+    public var distanceKm: Double?
 
     public init(
         sessionId: String, exerciseName: String, order: Int,
         weightKg: Double, reps: Int, rpe: Double? = nil,
-        setType: String? = nil, side: String? = nil, pairId: String? = nil
+        setType: String? = nil, side: String? = nil, pairId: String? = nil,
+        durationSec: Int? = nil, incline: Double? = nil, distanceKm: Double? = nil
     ) {
         self.sessionId = sessionId
         self.exerciseName = exerciseName
@@ -80,6 +93,9 @@ public struct SeedSet: Codable, Sendable, Equatable {
         self.setType = setType
         self.side = side
         self.pairId = pairId
+        self.durationSec = durationSec
+        self.incline = incline
+        self.distanceKm = distanceKm
     }
 }
 
@@ -152,6 +168,11 @@ public struct SeedRow: Codable, Sendable, Equatable {
     public var previous: String?
     /// This row carries a progression bump — the chip.
     public var progressed: Bool
+    /// What a BOUT is made of. Nil on every lifted row, which is what they are
+    /// on a lifted set — `SeedSet`'s own note says why they have to travel.
+    public var durationSec: Int?
+    public var incline: Double?
+    public var distanceKm: Double?
 }
 
 public struct SeedExercise: Codable, Sendable, Equatable {
@@ -418,7 +439,7 @@ public enum SessionSeedBuilder {
                 // it is not one of the sets the program counts — `prescribed`
                 // is working sets only.
                 rows: warmups.map {
-                    row(.warmup, $0.weightKg, $0.reps, nil, previousLabel(weightKg: $0.weightKg, reps: $0.reps), false)
+                    row(.warmup, $0.weightKg, $0.reps, nil, previousLabel(weightKg: $0.weightKg, reps: $0.reps), false, $0)
                 } + workingRows(working, prescribed: prescribed, floor: floor, bump: bump)
             )
         }
@@ -485,7 +506,8 @@ public enum SessionSeedBuilder {
                 bump != nil || carried ? (floor ?? src.reps) : src.reps,
                 seedOf(weightKg: src.weightKg, reps: src.reps, rpe: src.rpe, setType: src.setType),
                 previousLabel(weightKg: src.weightKg, reps: src.reps),
-                bump != nil
+                bump != nil,
+                src
             ))
         }
         return out
@@ -500,13 +522,18 @@ public enum SessionSeedBuilder {
     /// A seeded row, with the rating resolved against the numbers it opens on.
     private static func row(
         _ kind: SeedRow.Kind, _ weightKg: Double?, _ reps: Int?,
-        _ seed: RpeSeed?, _ previous: String?, _ progressed: Bool
+        _ seed: RpeSeed?, _ previous: String?, _ progressed: Bool,
+        _ bout: SeedSet? = nil
     ) -> SeedRow {
         let resolved = RpeMemory.resolveSeededRpe(seed, weightKg: weightKg ?? 0, reps: Double(reps ?? 0))
         return SeedRow(
             kind: kind, weightKg: weightKg, reps: reps,
             rpe: resolved.rpe, rpeStale: resolved.stale,
-            previous: previous, progressed: progressed
+            previous: previous, progressed: progressed,
+            // Only the HISTORY tier can carry these: a template row and the
+            // program's cold start describe sets and reps and have no bout in
+            // them to copy. Nil there is the honest answer, not a gap.
+            durationSec: bout?.durationSec, incline: bout?.incline, distanceKm: bout?.distanceKm
         )
     }
 

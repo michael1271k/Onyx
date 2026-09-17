@@ -44,6 +44,56 @@ _Nothing yet._
 
 ---
 
+## [3.23.0] — 2026-09-17 · The Trophy Lights On The First Tick
+
+### Fixed
+- **The live PR cup appears the moment you earn it.** The logger built its
+  record bar once, when the screen opened, and then quietly changed the key it
+  judged sets under: the first set of a movement the catalogue had not heard of
+  mints a catalogue row, and the key flipped from a slug to a uuid while the bar
+  stayed on the slug. A record needs an existing bar to beat, so the deck awarded
+  nothing — on sets whose own session page, one screen later, showed two. The
+  deck now resolves one identity per card, rebuilds the bar whenever that
+  identity moves, and a set that beats a standing record lights gold on the tick
+  that logs it.
+- **A phase switch mid-session no longer drops the trophies you already won.**
+- **Records stop vanishing to "—" on a re-opened session.** An edit deck was
+  measuring a workout against the personal records that same workout had set, so
+  a session with three PRs reported none of them. The standing-record floor now
+  excludes the session being corrected.
+- **A movement's history survives getting a catalogue row.** The row minted for a
+  lift you have been logging under a legacy id now claims that id, so the sets
+  behind it stay part of the bar instead of dropping out of it.
+- **The treadmill reads as a treadmill on the Lock Screen and in the Dynamic
+  Island.** It said `0 kg × 0` — literally, because a bout's load and reps are
+  real zeros and the producer only checked for nil. The running-workout card now
+  shows the live bout on the phone and the watch: `12:30 · 2.19 km · 5:42 /km`,
+  and the compact island shows the bout's clock instead of a barbell.
+- **The Cardio tag is back on the exercise card**, with the bout's pace beside
+  it. The deck now resolves a cardio movement's muscles from the cardio table —
+  the muscle dictionary still refuses to learn a treadmill, which is what keeps
+  walking out of your weekly volume.
+- **An edit deck opens in the order you trained in.** A re-opened session was
+  being re-ranked against a different session's running order, which sent the
+  treadmill to the bottom every time, and the deck offered a warm-up bout nobody
+  had walked. Both decisions now happen when the deck is built.
+- **The finish sheet stops claiming a finished session is unfinished.** Editing a
+  complete workout read "18/19 sets"; it now reads "18 sets", because a session
+  that has ended has no target left to hit.
+
+### Added
+- **Cancel Edit.** Re-opening a finished workout now has a way out. Every set
+  edit commits as you make it — that has not changed — so cancelling is a real
+  undo: the deck marks where your log stood when the editor opened and writes the
+  events that get back to it, restoring the sets, the tonnage, the set count and
+  the PR ledger. Nothing is deleted; the undo is itself history, so it survives a
+  sync and a crash mid-edit. Leaving by the chevron still means "keep my
+  changes", and it still says so.
+- A seeded bout carries its minutes, incline and distance, so a treadmill card
+  built from history is a bout rather than a lift of nothing.
+
+---
+
 ## [3.22.0] — 2026-09-17 · A Powder Is Food
 
 Wave 1 of the UX/UI architecture sprint: the Stack editor, the day's calorie

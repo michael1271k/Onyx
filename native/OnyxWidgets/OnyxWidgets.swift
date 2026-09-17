@@ -292,6 +292,22 @@ struct OnyxWorkoutActivityWidget: Widget {
                                 WorkoutMuscleTag.tint(context.state.primaryMuscle)
                                     ?? Color.onyx.day(context.state.dayKey)
                             )
+                    } else if let sec = context.state.cardioElapsedSec {
+                        // ── A REAL BRANCH, BECAUSE THE HACK BELOW CANNOT ────
+                        // The `else` is a string surgery on a load the producer
+                        // composed ("42.5 kg × 12" minus its unit), and a bout
+                        // has no " kg " in it to cut — it would have printed
+                        // the whole line into a ~44 pt slot, or, before the
+                        // producer learned what cardio was, "0 kg × 0" with the
+                        // middle removed. The bout's own clock is the one
+                        // number that fits, and it is the axis a treadmill
+                        // block is prescribed in.
+                        Text(SetFormat.clock(Double(sec)))
+                            .monospacedDigit()
+                            .frame(minWidth: 44, maxWidth: 44, alignment: .trailing)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .foregroundStyle(Color.onyx.cardio)
                     } else {
                         Text(context.state.load.replacingOccurrences(of: " kg ", with: ""))
                             .foregroundStyle(Color.onyx.day(context.state.dayKey))
@@ -299,8 +315,11 @@ struct OnyxWorkoutActivityWidget: Widget {
                 }
                 .font(OnyxWidgetType.figure(12))
             } minimal: {
-                Image(systemName: context.state.restEndsAt == nil
-                      ? "figure.strengthtraining.traditional" : "timer")
+                // One glyph for the whole activity, so it says what is
+                // happening and not what the app is: resting, walking, or
+                // lifting. A bout under a barbell was the one reading of the
+                // three that was simply untrue.
+                Image(systemName: minimalGlyph(context.state))
                     .font(OnyxWidgetType.label(12, weight: .bold))
                     .foregroundStyle(Color.onyx.day(context.state.dayKey))
             }
@@ -310,6 +329,22 @@ struct OnyxWorkoutActivityWidget: Widget {
         // content closure. This is the fix for the Smart Stack rendering the
         // Dynamic Island's compact slots on a face with room for four lines.
         .supplementalActivityFamilies([.small])
+    }
+
+    /// The minimal presentation's one glyph, in the order the states shadow
+    /// each other: resting beats walking beats lifting, because a rest clock is
+    /// running on top of whichever of the other two you are between.
+    ///
+    /// Lifted out rather than left a nested ternary in the `minimal` closure:
+    /// the third case is what pushed it past one, and a view builder is the one
+    /// place a mis-parenthesised ternary reports as an unrelated type error.
+    private func minimalGlyph(_ state: OnyxWorkoutAttributes.ContentState) -> String {
+        if state.restEndsAt != nil { return "timer" }
+        // `figure.run` is the symbol the app already draws a bout with — the
+        // Quick Log spoke, the session ledger's cardio card and the Workout
+        // tab all pick it. See `WorkoutTabView`.
+        if state.cardioElapsedSec != nil || state.cardioDistanceKm != nil { return "figure.run" }
+        return "figure.strengthtraining.traditional"
     }
 }
 

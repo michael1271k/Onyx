@@ -59,6 +59,44 @@ func restCountdown(_ endsAt: Date?, total: Int? = nil) -> ClosedRange<Date>? {
     return lowerBound...endsAt
 }
 
+/// The bout, as a line: `12:30 · 0.37 km · 5:42 /km`. `nil` when the set on the
+/// card is a lift, which is what hands the slot back to `load`.
+///
+/// ── WHY THE PACE IS DERIVED HERE AND NOT SENT ───────────────────────────────
+/// `ContentState` carries the two numbers for the reason that field documents:
+/// pace is a ratio, and the surfaces do not all have the width for it. This is
+/// the one place the line is composed, so the Lock Screen, the island and the
+/// wrist cannot disagree about a rounding — and it is composed out of the two
+/// formatters the rest of the app already draws bouts with (`SetFormat.cardio`
+/// for the duration and the distance, `CardioMetrics` for the pace), so a
+/// session ledger and a Lock Screen cannot disagree either.
+///
+/// ── AND WHY THERE IS NO DIVIDE TO GUARD HERE ────────────────────────────────
+/// There was, in the obvious first draft: `minutes / km` with a zero denominator
+/// is `inf`, and the first state EVERY treadmill block is in is a bout that has
+/// started and not moved — 0.00 km. `paceMinPerKm` refuses a distance or a
+/// duration that is zero, negative or non-finite and answers nil, and
+/// `formatPace` refuses a ratio above 100 min/km as a typo. Both already
+/// existed; re-deriving either here would be a second opinion about the same
+/// arithmetic.
+///
+/// `pace: false` is the 40 mm Smart Stack's: three components at figure(15) is
+/// ~210 pt of a ~150 pt face, and the pace is the one of the three that can be
+/// re-derived by eye from the other two.
+func cardioLine(sec: Int?, km: Double?, pace: Bool = true) -> String? {
+    guard let line = SetFormat.cardio(
+        durationSec: sec.map(Double.init), distanceKm: km, incline: nil, elevationM: nil
+    ) else { return nil }
+    guard pace else { return line }
+    let text = CardioMetrics.formatPace(CardioMetrics.paceMinPerKm(
+        distanceM: km.map { $0 * 1000 }, durationMin: sec.map { Double($0) / 60 }
+    ))
+    // `formatPace` answers "—" for a ratio it will not stand behind. An em dash
+    // is a fact in a table column and noise on a Lock Screen, so the component
+    // is dropped rather than drawn empty.
+    return text == "—" ? line : "\(line) · \(text)"
+}
+
 // MARK: - The Lock Screen
 
 /// The card on the Lock Screen and in the Notification Centre.
@@ -157,6 +195,18 @@ struct WorkoutWatchCard: View {
                     // The MOVEMENT's colour, not the split's — the same rule
                     // the Lock Screen's band follows. See `WorkoutRestBand`.
                     .foregroundStyle(WorkoutMuscleTag.tint(state.primaryMuscle) ?? accent)
+            } else if let bout = cardioLine(
+                // No pace on this face: three components at figure(15) measure
+                // ~210 pt of a 40 mm card's ~150, and this is the surface whose
+                // whole lesson is "Onyx 1/2 75x13" — a line that has to be
+                // abbreviated to fit is a line that should have been shorter.
+                sec: state.cardioElapsedSec, km: state.cardioDistanceKm, pace: false
+            ) {
+                Text(bout)
+                    .font(OnyxWidgetType.figure(15))
+                    .foregroundStyle(Color.onyx.cardio)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             } else if !state.load.isEmpty {
                 Text(state.load)
                     .font(OnyxWidgetType.figure(15))
@@ -445,7 +495,22 @@ struct WorkoutCurrentSet: View {
             // different widths ("42.5 kg × 12" over "RPE 8.5"), and a ragged right
             // edge against the card's own right edge is what reads as a column.
             VStack(alignment: .trailing, spacing: 3) {
-                if !state.load.isEmpty {
+                // ── A BOUT TAKES THE LOAD'S SLOT, FOUR POINTS SMALLER ───────
+                // It IS this set's content — the same question "42.5 kg × 12"
+                // answers — and `load` is empty while it is on the wire, so the
+                // two can never both draw. The size is width, not hierarchy:
+                // `12:30 · 0.37 km · 5:42 /km` is ~26 characters against the
+                // ~12 of a load, and the column only has the room because the
+                // name beside it is "Treadmill" rather than a 28-character
+                // movement. The scale floor is what covers the bout that runs
+                // past an hour.
+                if let bout = cardioLine(sec: state.cardioElapsedSec, km: state.cardioDistanceKm) {
+                    Text(bout)
+                        .font(OnyxWidgetType.figure(13))
+                        .foregroundStyle(Color.onyx.cardio)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                } else if !state.load.isEmpty {
                     Text(state.load)
                         .font(OnyxWidgetType.figure(17))
                         .foregroundStyle(Color.onyx.textPrimary)

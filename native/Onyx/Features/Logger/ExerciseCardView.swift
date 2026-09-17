@@ -87,11 +87,19 @@ struct ExerciseCardView: View {
     }
 
     private var rail: Color {
-        // A bout has no primary mover to be coloured by, and the day's accent
-        // is not a substitute: it made one treadmill teal on Legs and indigo on
-        // Upper A — the same movement, two colours, on one deck.
+        // ── THE BOUT IS TESTED FIRST, AND IT HAS TO BE ──────────────────────
+        // This read "a bout has no primary mover to be coloured by" and fell
+        // through to `Color.onyx.cardio`. Since W2 it HAS one — `ProgramExercise`
+        // resolves `MuscleMap.cardioMovers` when `dict` answers nothing — so
+        // `family` now returns quadriceps for a treadmill and the rail would
+        // have quietly turned into a leg colour on a surface nobody asked to
+        // change. The mover is wanted (`primaryMuscle`, the ledger); the colour
+        // is not. The day's accent is still not a substitute either: it made one
+        // treadmill teal on Legs and indigo on Upper A — the same movement, two
+        // colours, on one deck.
+        if isCardio { return Color.onyx.cardio }
         if let family { return Color.onyx.muscle(family) }
-        return isCardio ? Color.onyx.cardio : Color.onyx.day(model.day.key)
+        return Color.onyx.day(model.day.key)
     }
 
     /// The bottom half of the rail — the movement's first ASSISTING mover.
@@ -464,7 +472,18 @@ struct ExerciseCardView: View {
                 // accessibility size, and for the same reason: "Compound" is
                 // not worth pushing a countdown off the screen.
                 if liveRest == nil {
-                    if let family {
+                    // ── ONE TAG SLOT, AND A BOUT SPENDS IT SAYING SO ────────
+                    // `family` answers for a treadmill since W2 gave
+                    // `ProgramExercise` the cardio table as a fallback, so this
+                    // would now print "Quads" on a walk. That is true and it is
+                    // not what the card is about — and the line is already full
+                    // at 375 pt, so "Quads · Cardio · 5:42/km" is how a figure
+                    // gets truncated. The mover is still resolved, for
+                    // `primaryMuscle`, the rail and the session ledger; the
+                    // header just spends its one slot on the useful word.
+                    if isCardio {
+                        tag("Cardio", Color.onyx.cardio)
+                    } else if let family {
                         tag(family.displayName, Color.onyx.muscle(family))
                     }
                     // ── NOT ON A BOUT ───────────────────────────────────────

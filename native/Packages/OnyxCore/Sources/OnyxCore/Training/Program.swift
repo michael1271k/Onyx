@@ -118,7 +118,22 @@ public struct ProgramExercise: Identifiable, Sendable, Equatable, Codable {
         // holds it to that. The empty fallback exists so a typo in a NEW lift's
         // name is a failing test rather than a compile error nobody can fix
         // without inventing anatomy.
-        self.movers = movers ?? MuscleMap.movers(name) ?? MoverTokens(primary: [])
+        //
+        // ── AND THE CARDIO TABLE ANSWERS FOR A BOUT (W2) ────────────────────
+        // `MuscleMap.dict` does not name a treadmill and MUST NOT LEARN TO: it
+        // is the input to `MuscleCredit.weightedSets`, so teaching it that
+        // walking trains calves starts paying muscle credit for a warm-up in
+        // five accumulators nobody asked to change, and breaks two golden
+        // fixtures on the way. `cardioMovers` is the separate DISPLAY table
+        // written for exactly this question, and it is empty for anything that
+        // is not a bout — a bench press can never reach it.
+        //
+        // Without this rung `plan.movers.primary` was empty for "Treadmill",
+        // `ExerciseCardView.family` was nil, and the card drew no muscle tag at
+        // all — the "missing Cardio tag" report. Read as a FALLBACK, after
+        // `dict` has had its say, so nothing that `dict` already answers for
+        // can be re-answered here.
+        self.movers = movers ?? MuscleMap.movers(name) ?? MuscleMap.cardioMovers(name) ?? MoverTokens(primary: [])
         self.isCompound = compound
         self.note = note
     }
