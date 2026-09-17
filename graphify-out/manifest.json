@@ -35,7 +35,7 @@
     "semantic_hash": ""
   },
   "native/Onyx/App/PreviewHarness.swift": {
-    "mtime": 1789640670.3097098,
+    "mtime": 1789642353.779607,
     "ast_hash": "b565a23b9fb36b1c470f98fcd21d7bee",
     "semantic_hash": ""
   },
@@ -115,8 +115,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/History/HistoryPreviews.swift": {
-    "mtime": 1789640670.3095875,
-    "ast_hash": "cf72386b23d5eaadb4a0da5033ef18ab",
+    "mtime": 1789643122.3259003,
+    "ast_hash": "0e6967ef5bf33207d4e6c05e7d78dd57",
     "semantic_hash": ""
   },
   "native/Onyx/Features/History/HistoryView.swift": {
@@ -135,17 +135,17 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/History/SessionAnalysis.swift": {
-    "mtime": 1789641449.6611807,
+    "mtime": 1789642353.7814589,
     "ast_hash": "eea744514c2a42359735532aca9fc19c",
     "semantic_hash": ""
   },
   "native/Onyx/Features/History/SessionDetailView.swift": {
-    "mtime": 1789641074.8314855,
+    "mtime": 1789642353.7826545,
     "ast_hash": "ad970a62309ad9a0425f8b3b61f99096",
     "semantic_hash": ""
   },
   "native/Onyx/Features/History/SessionPage.swift": {
-    "mtime": 1789640036.0960069,
+    "mtime": 1789642353.7858508,
     "ast_hash": "de40161f530b92c53bc7509527cb7e21",
     "semantic_hash": ""
   },
@@ -545,18 +545,18 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Workout/WeeklyWrapView.swift": {
-    "mtime": 1789640078.9916196,
-    "ast_hash": "8df16bea3c2848f7b484511481beaa08",
+    "mtime": 1789642908.4079034,
+    "ast_hash": "36b2c551e16012cb27e25d8900648d3e",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Workout/WorkoutTabView.swift": {
-    "mtime": 1789640216.7224827,
+    "mtime": 1789642353.7894666,
     "ast_hash": "05467ae9fbb1e1c08adc76abe0b94af0",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Workout/WorkoutWeek.swift": {
-    "mtime": 1789639531.8991933,
-    "ast_hash": "9cc88429e06ee8e76afdd09e63718d59",
+    "mtime": 1789642908.407661,
+    "ast_hash": "5932195d2ac6f79eb184aaf51ab826c9",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json": {
@@ -1235,8 +1235,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Training/WeeklyWrap.swift": {
-    "mtime": 1789224287.0797875,
-    "ast_hash": "29b46cdd4e6960be3361a4a234bce2e1",
+    "mtime": 1789642908.4071095,
+    "ast_hash": "a613276b4e537b192518b503f20839bf",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Utils/Format.swift": {
@@ -3420,8 +3420,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1789642064.4676485,
-    "ast_hash": "b1ea7c1a294ded83be89cfb1d610f1d2",
+    "mtime": 1789643220.061733,
+    "ast_hash": "1a02a1ef165a06a0070e26976edce296",
     "semantic_hash": ""
   },
   "scripts/check-swift.sh": {
@@ -3485,8 +3485,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1789642064.4681287,
-    "ast_hash": "0ecbe890e5375d75630997c05d70f860",
+    "mtime": 1789643220.0622911,
+    "ast_hash": "6e12100560cb5e53daede04b209490c7",
     "semantic_hash": ""
   },
   "docs/EPIC_SPRINT_PLAN.md": {
@@ -3520,8 +3520,8 @@
     "semantic_hash": ""
   },
   "native/project.yml": {
-    "mtime": 1789642064.7060251,
-    "ast_hash": "13879c81629c715e9dc498ba11e4ca96",
+    "mtime": 1789643220.293203,
+    "ast_hash": "1a29c46fd5da7016cda12706046300d4",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png": {
@@ -3670,7 +3670,7 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/History/SessionHeaderCard.swift": {
-    "mtime": 1789641289.4769642,
+    "mtime": 1789642353.7834165,
     "ast_hash": "9e38e810eaee71736898e659055d93d1",
     "semantic_hash": ""
   },
@@ -3859,18 +3859,13 @@
     "ast_hash": "82e1eb334b9d9f020affccd6f14576d5",
     "semantic_hash": ""
   },
-  "docs/UX_UI_REFINEMENT_SPRINT.md": {
-    "mtime": 1789642322.0242105,
-    "ast_hash": "a360c03ea910c6b5a9cda5d1fe49c781",
-    "semantic_hash": ""
-  },
   "native/Onyx/Features/Workout/PastWeeksLibrary.swift": {
-    "mtime": 1789640216.7226205,
-    "ast_hash": "64a3b9a76000d2f1ac0f4d671653e2f5",
+    "mtime": 1789642908.4080276,
+    "ast_hash": "80a3050c882c2f336bd4ba448f051b9e",
     "semantic_hash": ""
   },
   "native/Packages/OnyxUI/Sources/OnyxUI/DesignSystem/OnyxStatCell.swift": {
-    "mtime": 1789640091.0124345,
+    "mtime": 1789642353.7913764,
     "ast_hash": "f6a1af602fe6c61d66215517df83a589",
     "semantic_hash": ""
   }

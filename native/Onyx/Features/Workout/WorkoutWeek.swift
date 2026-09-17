@@ -647,7 +647,8 @@ final class WorkoutWeek {
         out.wrap = wrap(
             database, weekStart: weekStart, dates: dates, finished: finished,
             base: out.weekBase, tonnageKg: out.weekTonnageKg, deltaKg: wrapDeltaKg,
-            phases: context.phases, analysis: analysis, userId: database.localUserId(),
+            phases: context.phases, anchor: context.weekZeroStart,
+            analysis: analysis, userId: database.localUserId(),
             programId: context.programId, phase: context.phase
         )
 
@@ -998,6 +999,7 @@ final class WorkoutWeek {
             database, weekStart: weekStart, dates: dates, finished: finished,
             base: Swap.weekAssignment(of: weekStart, resolve: { Schedule.scheduleDayIn(bare, $0) }),
             tonnageKg: weekTonnage, deltaKg: delta, phases: context.phases,
+            anchor: context.weekZeroStart,
             analysis: SessionAnalysis.context(database: database), userId: userId,
             programId: context.programId, phase: context.phase,
             requireComplete: requireComplete
@@ -1021,7 +1023,7 @@ final class WorkoutWeek {
     private nonisolated static func wrap(
         _ database: AppDatabase, weekStart: String, dates: [String],
         finished: [String: WorkoutSession], base: WeekAssignment,
-        tonnageKg: Double, deltaKg: Double?, phases: [PhaseDef],
+        tonnageKg: Double, deltaKg: Double?, phases: [PhaseDef], anchor: String?,
         analysis: SessionAnalysis.Context, userId: String,
         programId: String, phase: ProgramPhase,
         requireComplete: Bool = true
@@ -1175,7 +1177,12 @@ final class WorkoutWeek {
             movements: movements.values.sorted { $0.name < $1.name },
             bodyweightKg: weight,
             bodyweightDeltaKg: (weight != nil && before != nil) ? jsRound1(weight! - before!) : nil,
-            muscle: muscle, topSession: topSession
+            muscle: muscle, topSession: topSession,
+            // Named ONCE, here, where the phase table and the week-zero anchor
+            // both are (§W3). Four screens open this summary in a sheet and all
+            // four used to name the week by its date, because a view holding a
+            // `Summary` has neither input — see `Summary.label`.
+            label: Week.label(ofWeekStart: weekStart, anchor: anchor, phases: phases)
         )
     }
 

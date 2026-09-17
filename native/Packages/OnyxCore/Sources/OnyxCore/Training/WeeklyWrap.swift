@@ -175,11 +175,31 @@ public enum WeeklyWrap {
         /// kilograms is not the biggest anything.
         public var topSession: TopSession?
 
+        /// What to CALL this week — `Week 5`, or the phase's own label for a
+        /// week before the plan's Week 0.
+        ///
+        /// ── WHY THE SUMMARY CARRIES ITS NAME (§W3) ──────────────────────────
+        /// `Week.label(ofWeekStart:anchor:phases:)` is the one counter the app
+        /// numbers a week with — History's capsules, the session masthead and
+        /// the weekly export all take it — and it needs a phase table and a
+        /// week-zero anchor, neither of which a VIEW holding a summary has. So
+        /// the four screens that open this summary in a sheet all named the
+        /// week by its DATE instead, out of a string built from `weekStart`,
+        /// and W1's Past Weeks shelf then put `Week 5` directly above a sheet
+        /// headed `Week of Sun 16 Aug`.
+        ///
+        /// The builder has both inputs, so it answers once and every door
+        /// agrees. Nil for a summary assembled by hand (a preview, a test),
+        /// where `WeeklyWrapContent.title` falls back to the date it always
+        /// drew.
+        public var label: String?
+
         public init(
             weekStart: String, sessions: Int, tonnageKg: Double, tonnageDeltaKg: Double? = nil,
             prCount: Int = 0, isDeload: Bool = false, movements: [Movement] = [],
             bodyweightKg: Double? = nil, bodyweightDeltaKg: Double? = nil,
-            muscle: MuscleFocusSummary? = nil, topSession: TopSession? = nil
+            muscle: MuscleFocusSummary? = nil, topSession: TopSession? = nil,
+            label: String? = nil
         ) {
             self.bodyweightKg = bodyweightKg
             self.bodyweightDeltaKg = bodyweightDeltaKg
@@ -192,6 +212,7 @@ public enum WeeklyWrap {
             self.movements = movements
             self.muscle = muscle
             self.topSession = topSession
+            self.label = label
         }
 
         public func movements(_ verdict: Verdict) -> [Movement] {

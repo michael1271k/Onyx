@@ -61,9 +61,6 @@ struct PastWeeksLibrary: View {
     /// sheets in the queue.
     @State private var loading: String?
 
-    /// The weeks as read, flat — what the wrap-up sheet is named from.
-    private var weeks: [WorkoutWeek.PastWeek] { library?.weeks ?? [] }
-
     /// A summary the wrap-up sheet can be presented BY — the same box, for the
     /// same reason, as `WorkoutTabView.WrapDoor`: `WeeklyWrap.Summary` is an
     /// OnyxCore value and making it `Identifiable` to present one sheet would
@@ -116,13 +113,11 @@ struct PastWeeksLibrary: View {
         // `WeeklyWrapView`), so this is the whole of the presentation — the
         // same call `WorkoutTabView` makes from the This-week tile.
         .sheet(item: $opened) { door in
-            // Named by the BANNER that opened it. The sheet's own default is
-            // the week's date, and a shelf of `Week 5` opening a sheet headed
-            // `Week of Sun 16 Aug` is one week with two names, a drag apart.
-            WeeklyWrapView(
-                summary: door.summary, program: program,
-                title: weeks.first { $0.weekStart == door.summary.weekStart }?.label
-            )
+            // No name passed. W1 handed the banner's own label down because
+            // the sheet could not work one out; the SUMMARY carries it now
+            // (§W3), which is what makes the other three doors into this sheet
+            // agree with the shelf rather than only this one.
+            WeeklyWrapView(summary: door.summary, program: program)
             // The sheet and the cover go through one presentation bridge in
             // SwiftUI, which is why a zoom works out of `.sheet(item:)` at all
             // — the same reason the logger's full-screen cover can take one.
