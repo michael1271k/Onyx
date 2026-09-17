@@ -1,0 +1,805 @@
+# Onyx UX/UI Architecture Sprint — the plan
+
+**Status:** approved 2026-09-17 · step 0 done (this file). W1 next.
+
+**From:** `main` @ `3.21.1` (`dba8f351`). **Ships as:** five sequential waves, `3.22.0 → 4.0.1`.
+**Branches:** `onyx/w<N>-<slug>`, each cut from current `main`, merged `--no-ff` back into it,
+then deleted (`docs/GIT.md`). One branch at a time — two sessions share the git index
+(memory: `concurrent-waves-shared-checkout`).
+
+---
+
+## Context
+
+Six briefs across five surfaces: an InBody form nobody wants to fill twice, a theme system
+that can only turn a hue, a weekly report trapped in a 560 pt sheet behind a donut, three
+live-logger defects that are one state-management bug wearing three hats, an edit deck with
+no way out, and a supplement the app cannot yet describe.
+
+Exploration measured every brief against the source and the **live** Supabase schema before
+this plan was written. Four briefs name a symptom whose root cause sits elsewhere, and one
+names work the data already supports.
+
+| Brief | What is actually true |
+|---|---|
+| "Live PR cup only appears after finishing" | `LoggerModel.baselines:548` is snapshotted once at `attach()` and never rebuilt. Worse: the live candidate key comes from `storedId:2470` while the commit path uses `storedIdCreatingCatalogueRow:2502`, which **mints a catalogue row and rewrites `idByCanonicalName:2510`**. After the first set the candidate key flips slug→uuid while `baselines` is still slug-keyed, and `PrEngine.detectSetPrs:382` awards nothing against a missing index entry. |
+| "Treadmill shows 0 kg × 0" | Literal. `withWarmupCardio:1033` mints the row with `weightKg: 0, reps: 0` — **non-nil**, so `if let kg, let reps` at `LiveActivityController.swift:149` succeeds. `ContentState` has **no** duration/distance/incline field at all (`OnyxWorkoutAttributes.swift:33`). |
+| "Missing Cardio tag" | Two causes. `LoggerModel.setRow(SeedRow):1134` drops `durationSec/incline/distanceKm`, so a seeded treadmill card fails `isCardio`. And `Program.swift:121` reads `MuscleMap.movers`, never `cardioMovers:367`, so `plan.movers.primary` is empty for "Treadmill" and `family == nil`. |
+| "18.75 renders smaller" | `ExerciseCardView.swift:2390` — `.minimumScaleFactor(0.6)`. `monospacedDigit()` equalises digit advance but **not** the decimal point, and the weight field sits in a flexible track whose leftover width is the real budget. |
+| "Treadmill drops to the bottom on edit" | `SessionAnalysis.grouped:540` orders by `sets.compactMap(\.exerciseOrder).min()`, and nil sorts **after** everything placed (`:512-530`). Memory `hotfix-polish-sprint`: phone sessions upload no `exercise_order`. `editorDay:333-354` then reproduces that order. |
+| "Records vanish to —" | `FinishSheet.swift:251` reads `model.recordCount` = `prsThisSession`, written only by `refreshLivePrs`. `attach(editing:):2204` **swallows** a failed baseline build in a bare `catch`, leaving `baselines == .empty` → 0 PRs → `"—"`. Same root cause as the live PR bug. |
+| "Sets show 18/19" | `completedSets:646` counts working sets in the deck; `plannedSets:647` is `day.plannedSets(for:)` where `day` is `editorDay`'s synthetic day that appends **every unperformed plan movement** (`SessionDetailView.swift:356`). A finished session has no planned sets left to hit. |
+| "Add Week 0" | Not missing data. Plan `onyx5` started `2026-07-15`, `user_goals.week_end_day = 6` → weeks start Sunday → anchor week = **`2026-07-12`**, which holds **two complete sessions** (17 and 19 sets). `Week.label:53` already returns `"Week 0"` for it. The backward walk in `WorkoutWeek.pastWeeks:890` `break`s below the anchor. |
+| "Ugly bottom sheet" | `WeeklyWrapView.swift:40` is a `.sheet` with `PresentationDetent.height(560)`. Its body is already split into `WeeklyWrapContent:121` **so it can sit inline** — that is the seam a full page pushes through. |
+
+### Live schema facts (introspected, not read from `types.ts`)
+
+- The InBody reading writes to **`daily_logs`**, not `body_composition`. `body_composition` is the HealthKit-sourced twin.
+- `daily_logs` has **no waist column** — only `estimated_waist_to_hip_ratio`. The `body_measurements` table **no longer exists** in the live database.
+- `custom_supplements` has `micros jsonb`, `dose_amount`, `dose_unit`, `time text` — and **no macro columns**.
+- `plan_phases` already carries `kind ∈ {bulk, cut, peak, deload}` and `era_tag` per block — the banner hue and the report's era capsule both have a real source.
+- `lever_periods.profile_key` is the **nutrition** rung schedule (`baseline`, `lever-1`, `maintenance-week`), *not* the training phase. Do not conflate.
+
+### Founder decisions (2026-09-17)
+
+1. **InBody = Concept A.** Gradient hero (body-fat headline, weight + SMM satellites, deltas), then four accordions — Mass · Composition · Water & Protein · Minerals & Derived. Everything pre-filled on open; a per-row caption names the source.
+2. **Themes gain a mood knob.** `OnyxThemeSpec` grows `chroma` and `lift` so a theme can read deep-and-muted or bright-and-vivid, not just rotated.
+3. **Report hero = Phase Band + Three Rails.** Phase-hued gradient band with the week numeral, era capsule and date range; three horizontal rails (Training · Nutrition · Recovery) replace the donut.
+4. **Psyllium macros live in `custom_supplements.micros`.** No DDL; the day total learns to fold supplement macros.
+5. **Waist gets a real column.** `daily_logs.waist_cm`, and the three "no tape measurements, ever" comments are struck.
+6. **Cancel Edit reverts via `set_events` replay.** A watermark at attach, compensating events on cancel, then reproject + rescore.
+7. **Week 0 only.** Make the anchor week draw its banner; the PPL era (March–July) stays out of Past Weeks.
+8. **Treadmill Live Activity shows the live bout** — elapsed · km · pace.
+
+### One correction this plan makes on the founder's behalf
+
+**Ion cannot be dropped.** `OnyxThemeSpec.default` is Ion, `AppearanceView.swift:65` says "Reset to Ion", and `SettingsTabView.swift:320-323` names the current theme by matching it against `presets`. Remove Ion and every default install reads "Custom". So: **Ion stays first, the other five are replaced by the eight new ones → nine presets.** Say so if you would rather rename Ion than keep it.
+
+### A note on the skill list in the brief
+
+`capacitor-apple-review-preflight`, `capacitor-offline-first`, `capacitor-performance`,
+`capacitor-security`, `report`, `visual-check`, `tanstack-query`, `nextjs-best-practices`,
+`react-best-practices` and `ux-researcher-desginer` **do not exist** — they are web-era names,
+retired with the web app on 2026-09-12. Every wave prompt below names only skills and agents
+that are installed.
+
+---
+
+## Waves
+
+| Wave | Scope | Ships |
+|---|---|---|
+| W1 | Nutrition, Stack UI & Typography | `3.22.0` |
+| W2 | Live Logger & Edit Mode core fixes | `3.23.0` |
+| W3 | InBody & Appearance overhaul | `3.24.0` |
+| W4 | Train tab & the weekly report | `4.0.0` — a removed screen is MAJOR here |
+| W5 | The Great Purge & Merge | `4.0.1` |
+
+**The gate, every wave.** There is no CI; these commands are the whole of it.
+
+```bash
+npm run check          # version + atlas + mirror + doms in sync
+npm run check:swift    # OnyxCore + OnyxUI cross-build
+npm run swift:core     # golden vectors + invariants
+npm run swift:data     # store, sync, migrations
+cd native && xcodegen generate && xcodebuild -project Onyx.xcodeproj -scheme Onyx \
+  -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
+```
+
+A green `check:swift` hides a broken app target — run the `xcodebuild` line (memory:
+`xcodeproj-drift-and-swift6`). **`OnyxTests` has five known baseline failures on `main`**
+(memory: `refinement-ux-w1`): record the count before you start and compare after; a sixth
+is yours.
+
+---
+
+# WAVE 1 — Nutrition, Stack UI & Typography
+
+**Ships `3.22.0`. Branch `onyx/w1-nutrition-stack-type`.**
+
+### The exact prompt
+
+````
+Execute Wave 1 of docs/Plan-Onyx-UX-Architecture-Done.md. Read that file first — the
+Context table and the Founder decisions are binding.
+
+Branch: cut `onyx/w1-nutrition-stack-type` from current `main`.
+
+LOAD FIRST
+  Skills:  native (the runbook — read before touching anything under native/ or scripts/src/)
+           schema (introspect LIVE Supabase before any claim about a column)
+           ponytail (the ladder: reuse before writing)
+           apple-design, ui-ux-pro-max (the wheel and the row typography)
+  Agents:  ios-developer or swift-expert for the SwiftUI work
+           schema-truth-checker before writing the supplement row
+           code-reviewer at the end, on the diff
+
+GOAL 1 — The Stack time editor becomes a native clock.
+  Today: `native/Onyx/Features/Pulse/StackView.swift:387-389` is a plain
+  `TextField("Time", text: $time)` inside `SupplementEditSheet:315`.
+
+  Replace it with a wheel `DatePicker`. The component to copy is
+  `native/Onyx/Features/Logger/TimerSheet.swift:331-341` — `.datePickerStyle(.wheel)`,
+  `displayedComponents: [.hourAndMinute]`, `.labelsHidden()`, a clamped height. The Sleep
+  sheet's twin is `native/Onyx/Features/Pulse/SleepEditSheet.swift:350-364`; it carries
+  `.date` as well because a night straddles midnight — a supplement dose does not, so take
+  TimerSheet's shape, not SleepEditSheet's. Do NOT extract a shared component for two
+  call sites that want different `displayedComponents`.
+
+  THE TRAP THAT WILL BITE: `SupplementStack.customSlotsForDate:344-375` GROUPS BY THE TIME
+  STRING and orders by it, with a "—" bucket first. The wheel must emit exactly zero-padded
+  24-hour `HH:mm`. A `DateFormatter` on the user's locale emits "6:30 PM" and silently mints
+  a new slot bucket. Use `Locale(identifier: "en_US_POSIX")` and `dateFormat = "HH:mm"`.
+
+  Keep the "no set time" affordance the TextField had (blank → the "—" bucket). Clearing it
+  must still clear server-side: `SupplementEditing.editCustomSupplement:111-141` uses `nulls:`
+  for exactly this. Verify a cleared time round-trips.
+
+GOAL 2 — Psyllium Husk, and supplement macros that reach the day total.
+  Product: "Psyllium Husk Powder, by Now Foods". Base 9 g serving: 30 kcal, 0 g fat,
+  10 mg sodium, 8 g carbs, 7 g fiber, 0 g protein, 1.5 mg iron, 90 mg potassium.
+  The founder takes 5 g at 18:30. 5/9 = 0.5556, so the PER-DOSE payload is:
+
+      kcal 16.7 · fat 0 · sodium 5.6 mg · carbs 4.4 g · fiber 3.9 g
+      protein 0 · iron 0.83 mg · potassium 50.0 mg
+
+  Store it in `custom_supplements.micros` (jsonb) alongside the existing micro keys — the
+  decision is recorded in the plan. `dose_amount: 5`, `dose_unit: "g"`, `time: "18:30"`,
+  `form: "powder"`. NOTE: `g` is not a count unit
+  (`SupplementNutrients.countUnit:45-49`), so the payload is NOT multiplied — the numbers
+  above are what gets stored, exactly as the existing caffeine row stores `200`.
+
+  Then teach the day total to fold supplement MACROS, not just micros. Today
+  `NutrientsView.swift:50,156-157,193` folds stack micros into the nutrient grid, but the
+  macro ring reads `nutrition_entries` via `NutritionWeek`/`NutritionModel`. The fold belongs
+  in `native/Packages/OnyxData/Sources/OnyxData/Day/StackCredit.swift` — the day-level credit
+  resolver that already exists.
+
+  TWO RULES, both testable:
+    · Fold a dose's macros ONLY when `supplement_log.taken` is true. A planned dose must not
+      inflate the total.
+    · Fold exactly once. `sodium`, `iron` and `potassium` may already be nutrient-grid keys —
+      adding `kcal/carbs/fiber/protein/fat` must not double-count anything already counted.
+
+  Write the row with a small idempotent one-shot under `scripts/` using the service-role key
+  from `.env.local`, keyed on `schedule.key = "psyllium"` so a re-run updates rather than
+  duplicates. Run it once. Record the returned row id in the wave log.
+
+GOAL 3 — Standardise the set-row numeral size.
+  Symptom: typing `18.75` renders smaller than `17.5` or `20`. The founder wants everything
+  at the size `20` renders at.
+
+  Root cause: `native/Onyx/Features/Logger/ExerciseCardView.swift:2390` —
+  `.minimumScaleFactor(0.6)` on `NumericField:2340`. `.onyxNumeral()`
+  (`OnyxUI/DesignSystem/OnyxType.swift:167-172`) applies `monospacedDigit()`, which equalises
+  DIGIT advance but leaves the decimal separator proportional. The weight field is inside a
+  FLEXIBLE track (`fills: !typeSize.isAccessibilitySize`, `:1579-1592`), so its rendered width
+  is the layout-pass leftover, and the scale factor then shrinks per-string.
+
+  DO NOT just delete the scale factor. The comment at `:2376-2388` records why it is there:
+  at 375 pt `11.25` and `13.75` both rendered `11…`. Fix the BUDGET, then the modifier:
+    1. `SetColumn` is at `:990-1042`. `weightFloor = 56` claims to fit six glyphs (`123.75`);
+       measure whether it actually does at 375 pt. Raise it, and/or trim `step = 32`, until
+       the widest legal load string renders at full size.
+    2. Only then raise `minimumScaleFactor` to 1.0 for the non-accessibility case. KEEP a
+       scale factor at accessibility sizes — that is a different, legitimate squeeze.
+    3. The column headers at `:875-933` must squeeze identically (the note at `:915-932`).
+
+  Leave the other scale factors alone unless they show the same defect, but NAME them in the
+  log: `SetBadge.swift:131` (0.5), `ExerciseCardView.swift:355`, `:591`, `:1900` (0.7).
+
+VERIFICATION PROTOCOL — run all of it, read the counts, "no output" is not a pass.
+  1. Record the OnyxTests baseline failure count BEFORE any edit (five are known on main).
+  2. npm run check && npm run check:swift && npm run swift:core && npm run swift:data
+  3. cd native && xcodegen generate && xcodebuild -project Onyx.xcodeproj -scheme Onyx \
+       -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
+  4. New unit tests, all of which must fail before your change and pass after:
+       · a wheel `Date` at 18:30 in a non-POSIX locale still serialises to "18:30"
+       · a cleared time round-trips to NULL through `editCustomSupplement`
+       · a taken 5 g psyllium dose adds 16.7 kcal / 4.4 g carbs / 3.9 g fiber to the day
+       · an UNTAKEN dose adds nothing
+       · sodium/iron/potassium are counted exactly once
+  5. Screenshots — ALWAYS pass SHOT_DERIVED (memory: concurrent-waves-shared-checkout):
+       SHOT_DERIVED=$HOME/Library/Caches/onyx-swift/shot-w1 \
+         scripts/native-shot.sh stack && … stack-add && … fuel && … nutrients \
+         && … set-row && … set-row-cardio && … logger
+     Shoot at BOTH sizes (the script does default + AX5). Look at them. The typography fix
+     is only done when `18.75`, `17.5` and `20` are visibly the same size in `set-row.png`
+     AND in `set-row-ax5.png`.
+  6. Version: set package.json to 3.22.0, `npm run version:sync`,
+     `cd native && xcodegen generate`, append the release section to docs/CHANGELOG.md,
+     confirm `npm run version:check` passes.
+
+DOCUMENTATION REQUIREMENT — before the merge commit, append a "Wave Record — W1" section to
+docs/Plan-Onyx-UX-Architecture-Done.md with these exact four headings:
+  · **What was done** — file:line for every change, and why that file and not another.
+  · **Succeeded** — with the evidence: test names, counts, screenshot filenames.
+  · **Failed** — anything you tried that did not work, and what you learned from it.
+  · **Left open** — every seam W2+ inherits, named precisely. Include the founder's manual
+    checklist (anything they must click or paste).
+
+Then merge --no-ff into main, delete the branch, push with [skip ci] in the message.
+````
+
+---
+
+# WAVE 2 — Live Logger & Edit Mode core fixes
+
+**Ships `3.23.0`. Branch `onyx/w2-live-logger-edit`.** The heaviest wave; it is one
+state-management bug wearing three hats plus two independent defects.
+
+### The exact prompt
+
+````
+Execute Wave 2 of docs/Plan-Onyx-UX-Architecture-Done.md. Read that file first — the
+Context table is binding, and its root-cause claims were measured against the source.
+
+Branch: cut `onyx/w2-live-logger-edit` from current `main`.
+
+LOAD FIRST
+  Skills:  native, schema, ponytail
+           superpowers:systematic-debugging — use it on GOAL 1 before you edit anything
+           superpowers:test-driven-development — GOAL 1 and GOAL 5 get failing tests first
+  Agents:  swift-expert (concurrency + the model), ios-developer (the SwiftUI + ActivityKit)
+           invariant-auditor AFTER the PR change — it checks src domain math against the
+             invariants each module states in its own header
+           debugger if a symptom does not reproduce
+           code-reviewer on the final diff
+
+GOAL 1 — The live PR cup. ROOT CAUSE ONLY. No patches, no second code path.
+  The chain: `LoggerModel.toggleDone:1435` → `appendInStore` → `refreshLivePrs:1470`.
+  `refreshLivePrs:1560-1633` builds candidates keyed by `storedId(for:):2470` and runs
+  `PrEngine.detectSessionPrs:1612` against `baselines`.
+
+  THE BUG, in two parts:
+    (a) `baselines:548` is built ONCE at `attach()` (`:2116`) / `attach(editing:)` (`:2201`)
+        and is never rebuilt for the life of the model. The comment at `:534-548` says so.
+    (b) The live candidate key comes from `storedId:2470` = `catalogueIndex()[canonicalKey]
+        ?? ExerciseSlug.id(name)`. The COMMIT path uses
+        `storedIdCreatingCatalogueRow:2502`, which MINTS a catalogue row and writes
+        `idByCanonicalName[key] = created` at `:2510`. `catalogueIndex():2396` reads that same
+        dictionary. So after the first append the candidate key flips slug → uuid while
+        `baselines` is still slug-keyed, and `PrEngine.detectSetPrs:382` — which requires an
+        EXISTING index entry for every axis — awards nothing.
+
+  Also confirm and fix, in the same pass, because they are the same seam:
+    (c) `attach():2092` calls `restoreLoggedSets()` before `buildLiveBaselines`, but it
+        returns early when `sessionId == nil` (`:2218-2219`). On a fresh workout
+        `storedExerciseId` is nil for every card, so the baseline id set is slugs only.
+    (d) `rebuildForPhase:862` can replace `exercises` mid-session with no baseline rebuild
+        and no `refreshLivePrs`.
+    (e) `:1577` computes a rep-window `floor` and never passes it into the candidate.
+        Decide deliberately: pass it or delete the dead local. Do NOT leave it.
+
+  THE FIX SHAPE: resolve exercise identity ONCE, before the baselines are built, and make the
+  live candidate key and the commit key the same value by construction. Then rebuild the
+  baselines whenever the deck changes. One guard in the shared resolver beats a guard in every
+  caller. Respect memory `exercise-identity-uuid` — the watch never mints an id, so the
+  resolver must tolerate a row that has none.
+
+  DO NOT touch these on-purpose asymmetries:
+    · `PrEngine.buildBaselines:329-331` — a floor only RAISES keys already present in `rows`.
+      A brand-new exercise gets no floor. That is deliberate (memory: auto-fixes-w7).
+    · `PrRecorder.floors:264-290` `standingRecordFloors: true` is the LIVE tier only
+      (`AppDatabase.livePrBaselines:599-614` is its one caller).
+    · `SessionAnalysis:590,609` recomputes PRs from the ledger per session. It is allowed to
+      be a second, independent answer — but after your fix the two MUST agree on the founder's
+      history. Prove it.
+
+GOAL 2 — Treadmill in the Dynamic Island and on the Lock Screen.
+  Decision: show the live bout — `12:30 · 0.37 km · 5:42/km`.
+
+  `native/Shared/OnyxWorkoutAttributes.swift:33` `ContentState` has no cardio field at all.
+  THE RULE AT `:114-121` IS LOAD-BEARING: every field added after first release must be
+  Optional, or a running Live Activity fails to decode and the user's in-flight workout dies.
+  Add optionals only.
+
+  Carry the two NUMBERS (`cardioElapsedSec: Int?`, `cardioDistanceKm: Double?`) and derive the
+  pace string in the view — `native/Shared/WorkoutActivityCard.swift` is shared by the lock
+  card (`:448-452`) and the watch card (`:160-161`), so one formatter serves both. Guard the
+  divide: distance can be 0.
+
+  `LiveActivityController.swift:147-156` is the only producer of `ContentState.load`. It reads
+  `if let kg = row.weightKg, let reps = row.reps` — and the treadmill row has non-nil ZEROS
+  (`LoggerModel.withWarmupCardio:1033-1048`), so the guard succeeds and the string is literally
+  "0 kg × 0". Branch on `row.isCardio:241` FIRST, not on nil.
+
+  `OnyxWidgets.swift:296` does
+  `state.load.replacingOccurrences(of: " kg ", with: "")` for compactTrailing. That string hack
+  cannot survive a cardio payload — give it a real field or a real branch.
+
+GOAL 3 — The missing "Cardio" tag in-app. Two root causes, fix both.
+  (a) `LoggerModel.setRow(SeedRow):1134-1143` constructs the row with no
+      `durationSec/incline/distanceKm`, so a SEEDED treadmill card fails `isCardio:241`. The
+      code already knows: see its own note at `:1013-1029`.
+  (b) `Program.swift:121` does `movers ?? MuscleMap.movers(name) ?? MoverTokens(primary: [])`
+      — it never consults `MuscleMap.cardioMovers:367`. So `plan.movers.primary` is empty for
+      "Treadmill", `ExerciseCardView.family:520` is nil, and `LoggerModel.primaryMuscle:696-703`
+      falls back to the row test that (a) just broke.
+
+  ⚠️ `MuscleMap.dict` MUST NEVER LEARN A TREADMILL (memory: next-gen-w4-ledger). The cardio
+  table at `MuscleMap.swift:345-401` is separate ON PURPOSE. Read `cardioDict`/`cardioMovers`
+  as a FALLBACK; do not merge them into `dict`.
+
+  Draw the tag at `ExerciseCardView.swift:467-475`. Do NOT un-gate the lift tagger there — the
+  comment records that `ExerciseTags` labelled a treadmill "Isolation". Add an explicit Cardio
+  tag in that branch. The Live Activity's own chip already resolves from the "cardio" token
+  (`WorkoutActivityCard.swift:517-523`) and will light once (b) is fixed.
+
+GOAL 4 — Edit mode keeps the performed order.
+  `SessionAnalysis.grouped:531-552` DOES read `exercise_order` (`:540`), and nil sorts after
+  everything placed (`:512-530`). `editorDay:333-354` then walks `report.exercises` in that
+  order. Memory `hotfix-polish-sprint`: phone sessions upload no `exercise_order`.
+
+  Two parts:
+    (a) The warm-up/treadmill card must be written with an `exercise_order` like every other
+        card. `snapshot:2426` writes `deckOrder(of:):2446-2458`; find why the cardio row misses it.
+    (b) `withWarmupCardio` runs at `init` (`:930-931`) and PREPENDS the treadmill (`:1031,1050`);
+        `attach(editing:):2176-2178` then deletes it only if it has no done rows. Skip the
+        prepend entirely when the model is being built for an edit — one guard at construction
+        beats a delete-after.
+
+  A backfill for historical sessions with null `exercise_order` is IN SCOPE but OPTIONAL: use
+  the `backfill` skill, scope it to the founder's user_id, dry-run it, and only run it if the
+  dry run is clean. If you skip it, say so under "Left open".
+
+GOAL 5 — The Finish tiles stop lying.
+  (a) Records "—": `FinishSheet.swift:251` reads `model.recordCount:655` = `prsThisSession`,
+      and `attach(editing:):2204` swallows a failed baseline build in a bare `catch`. GOAL 1
+      fixes the cause; ALSO stop swallowing — surface the failure.
+  (b) "18/19": `completedSets:646` counts working sets in the deck; `plannedSets:647` is
+      `day.plannedSets(for:)` over `editorDay`'s synthetic day, which appends EVERY unperformed
+      plan movement (`SessionDetailView.swift:356`). Fix at the TILE, not at the day: on an
+      edit deck show the performed count alone ("18 sets"). A finished session has no planned
+      sets left to hit, and `editorDay` keeps appending plan movements ON PURPOSE so a
+      forgotten exercise can still be added.
+
+GOAL 6 — Cancel Edit, via set_events replay.
+  There is no discard path today, and `LiveLoggerView.swift:378-388` documents the refusal
+  ("AND WHY EDIT MODE HAS NO TRASH"): every set edit already commits to `set_events` +
+  projection + outbox before Save (`LoggerModel.swift:2543,2580,2622`;
+  `SessionEditing.swift:552`).
+
+  FIRST run `/schema` and introspect `set_events` live. Do not assume its columns.
+
+  Build:
+    · `attach(editing:):2144` stamps a watermark (the session's max event id / created_at) into
+      `EditContext`. Persist it — a crash mid-edit must not lose the ability to revert.
+    · A revert writer in `native/Packages/OnyxData/Sources/OnyxData/Training/SessionEditing.swift`,
+      near `reproject:552` and `recount:561-586`. It appends COMPENSATING events back to the
+      watermark, reprojects, recounts, and enqueues the outbox upsert. It does not DELETE
+      history.
+    · The button at `LiveLoggerView.swift:388` — open the `if !model.isEditing` gate, with a
+      confirmation dialog modelled on `:228-240`. REWRITE the `:378-388` comment to explain the
+      new revert; do not delete it silently.
+    · Cancel then runs `requestRescore():722-726` with `.sessionEdit`, same as Save.
+    · The chevron path keeps its current meaning — leave, keep changes
+      (`:247 .onDisappear { requestRescore() }`, hint at `:372-376`).
+
+VERIFICATION PROTOCOL
+  1. Record the OnyxTests baseline failure count BEFORE any edit.
+  2. The full gate: npm run check && check:swift && swift:core && swift:data && the xcodebuild line.
+  3. `npm run swift:core` covers PrGoldenTests — the golden vectors are hand-maintained and
+     MUST NOT be regenerated to make a test pass (memory: hotfix-live-state-3-10-0).
+  4. Run the invariant-auditor agent on the PR diff.
+  5. New tests, failing first:
+       · a set that beats a standing record lights `isRecord` on the FIRST tick, with the
+         catalogue row minted mid-session (the slug→uuid flip)
+       · `rebuildForPhase` mid-session does not lose a already-awarded PR
+       · an edit deck's `recordCount` matches `SessionAnalysis`'s `prCount` for the same session
+       · a treadmill `ContentState` decodes in an activity built from the PREVIOUS schema
+         (the Optional rule)
+       · a seeded treadmill card reports `isCardio` and resolves a cardio mover
+       · an edit deck preserves performed order with the treadmill in position 1
+       · Cancel returns every aggregate to its pre-edit value; Save does not
+  6. Screenshots, SHOT_DERIVED=$HOME/Library/Caches/onyx-swift/shot-w2:
+       logger, logger-finish, set-row, set-row-cardio, set-row-records, session-edit,
+       session-cardio, widgets (the Live Activity faces)
+     A simulator cannot photograph a real Dynamic Island — use the widget preview screens and
+     say in the log which surfaces were verified by eye on a device and which were not.
+  7. Version 3.23.0 + version:sync + xcodegen + CHANGELOG + version:check.
+
+DOCUMENTATION REQUIREMENT — append "Wave Record — W2" to
+docs/Plan-Onyx-UX-Architecture-Done.md with the four headings: What was done / Succeeded /
+Failed / Left open. Under "Left open", state explicitly whether the live PR path and
+SessionAnalysis now agree on the founder's full history, and whether the exercise_order
+backfill ran.
+
+Then merge --no-ff into main, delete the branch, push with [skip ci].
+````
+
+---
+
+# WAVE 3 — InBody & Appearance overhaul
+
+**Ships `3.24.0`. Branch `onyx/w3-inbody-appearance`.** Contains the one piece of DDL the
+founder must paste.
+
+### The exact prompt
+
+````
+Execute Wave 3 of docs/Plan-Onyx-UX-Architecture-Done.md. Read that file first.
+
+Branch: cut `onyx/w3-inbody-appearance` from current `main`.
+
+LOAD FIRST
+  Skills:  native, schema, ponytail
+           apple-design (the hero, the accordions, the motion)
+           ui-ux-pro-max + ui-design-system (the palette work)
+           frontend-design (visual direction — resist the templated default)
+  Agents:  ios-developer, swift-expert
+           schema-truth-checker BEFORE and AFTER the waist DDL
+           ui-ux-designer on the screenshots
+           code-reviewer on the diff
+
+GOAL 1 — The theme spec grows a mood knob.
+  Today `native/Packages/OnyxCore/Sources/OnyxCore/Design/OnyxThemeSpec.swift:9` is two
+  UInt32s, and `OnyxTheme.init(spec:):26-52` derives the ENTIRE palette — four domain ramps,
+  sixteen muscle hexes, ~1,250 static tokens — by OKLCH HUE ROTATION only. Lightness and
+  chroma are pinned to the default literals, so every theme is Ion turned.
+
+  Add: `chroma: Double` (0.6…1.0, a SCALE on the derived C) and `lift: Double` (−0.06…+0.06,
+  an OFFSET on the derived L).
+
+  ⚠️ TWO TRAPS, both silent:
+
+  (a) DECODE. Swift's synthesized Decodable REQUIRES a key unless the property is Optional —
+      a default value does not save it. Every existing install has a stored blob of
+      `{"primary":…,"secondary":…}`, and `OnyxTheme.apply(json:):102` falls back to `.default`
+      on a decode failure. Ship a custom `init(from:)` using `decodeIfPresent` with
+      `chroma = 1.0, lift = 0.0`, or every user silently loses their theme. Test the old blob.
+
+  (b) CONTRAST. `normalised():45-57` clamps L to 0.60…0.78 and C to ≤ 0.20 because THE ACCENT
+      CARRIES TEXT at ≥ 4.5:1 on black — the header at `:26-44` shows the measurements and why
+      a white-on-accent ceiling is arithmetically impossible. A negative `lift` applied to the
+      accent is clamped straight back and does nothing.
+
+      So: `lift` applies to the DERIVED stops — `end[domain]`, the washes, the surfaces — and
+      NOT to `start[.train]` (the primary) or `start[.fuel]` (the secondary), which stay the
+      chosen hexes. `chroma` scales DOWN only, so it can never break the ceiling. Document
+      this in the file, in the register the existing comments use.
+
+  The default spec (chroma 1.0, lift 0.0) must remain BIT-FOR-BIT identical to today —
+  `OnyxThemeTests` already holds that line for the hue rotation; extend it.
+
+  The spec rides to the widget and the watch automatically (`WatchPayloads.WatchContext:37`
+  carries the whole spec; `OnyxProvider.theme():89-100` reloads per timeline). Verify — do not
+  re-fix; the staleness bug is already solved there.
+
+GOAL 2 — Eight new presets.
+  `OnyxTheme.presets:121-128`. KEEP Ion first — it is `OnyxThemeSpec.default`,
+  `AppearanceView.swift:65` says "Reset to Ion", and `SettingsTabView.swift:320-323` names the
+  current theme by matching against this array. Drop it and every default install reads
+  "Custom". Replace the other five with these eight → nine presets:
+
+      Obsidian · Solstice · Meridian · Basalt · Aurora · Terracotta · Vesper · Halcyon
+
+  Unisex, modern, no two adjacent in hue. Secondaries roughly 120° from their primaries, as
+  the existing set does. SOLVE the hexes with `OKLCHConvert` inside the guard box — do not
+  hand-pick literals and hope. `OnyxThemeTests` asserts `normalised()` is the IDENTITY on
+  every preset; that assertion is your acceptance test. Give each a distinct `chroma`/`lift`
+  so the mood knob earns its place — Obsidian deep and muted, Aurora vivid.
+
+  ⚠️ `AppearanceView.swift:176-180` notes preset names are 3–5 characters and `.lineLimit(1)`
+  is a tripwire, not a fix. "Terracotta" is ten. Re-lay-out the chip (the grid is
+  `.adaptive(minimum: chipWidth = 100)` at `:111-117`) rather than truncating.
+
+  Add two sliders for chroma and lift under the pickers at `:57-59`. They edit the DRAFT — the
+  header at `:1-31` explains why nothing here writes live, and `commit():255-263` is the one
+  writer. The `derived` preview at `:204-226` already renders from the uncommitted draft, so it
+  shows the knobs working for free.
+
+GOAL 3 — Waist. THE FOUNDER MUST PASTE THIS FIRST; the wave cannot run DDL from this machine.
+
+      ALTER TABLE daily_logs ADD COLUMN waist_cm numeric;
+
+  Then: add the column to `native/schema/supabase.json`, run `npm run mirror` (NEVER hand-edit
+  `MirrorModels.swift` — it is generated), and confirm `npm run check:mirror` passes.
+
+  Then strike the three places that say this is forbidden, replacing each with the new
+  decision and its date — do not delete them silently:
+      · `OnyxCore/Body/Composition.swift:10-13`  "NO TAPE MEASUREMENTS, EVER"
+      · `native/schema/supabase.json:15-17`       "removed from the product twice"
+      · `Onyx/Features/Settings/BodyTargetsView.swift:14-16`  "No waist, no hips, no limb girths"
+
+GOAL 4 — InBody, Concept A.
+  Screen: `native/Onyx/Features/Pulse/PulseScale.swift:96` `InBodyEntryView`. It writes to
+  `daily_logs` (NOT `body_composition` — that is the HealthKit twin) via
+  `PulseModel.saveBody:1089` → `DayEditing.saveBodyMetrics:85-97`.
+
+  Build:
+    · A gradient HERO card: body-fat % as the headline numeral, weight and skeletal muscle
+      mass as satellites, each with a delta chip against `PulseModel.latestBodyReading:1096`.
+    · FOUR accordions replacing the three-group grid. `FieldGroup:127-138` and the `Spec` table
+      `:150-162` are the things to rework:
+        Mass — weight, waist, fat mass, fat-free mass
+        Composition — body fat %, muscle %, skeletal muscle mass, visceral fat
+        Water & Protein — water %, water mass, protein %, protein mass
+        Minerals & Derived — bone mineral, BMI, BMR, W:H ratio, and the read-only derived rows
+      Fold `derivedSection:350-385` into the last one.
+    · Keep `OnyxFieldCell` (`SettingsControls.swift:282`) as the cell. Its hint line is ALREADY
+      reserved (`:308-321`) — put the provenance caption there, free: `Health` / `Last` / `You`.
+    · DELETE `fillSection:282-310` and `fillFooter:336-346`. Fill on appear instead: seed every
+      empty field from `latestBodyReading()`, then overlay `healthFillable:324-334` (Health
+      offers only weight, bmi and bodyFat). Fine-tuning is typing over a filled field.
+
+  ⚠️ THE TRAP: `DaySheet(… primary: ("Save", !edits.isEmpty, save))` at `:212` gates Save on
+  `edits`. If auto-fill writes into `edits`, Save is live the instant the sheet opens and an
+  untouched screen writes a duplicate reading. Keep the seeded values in a SEPARATE layer from
+  user edits; Save stays disabled until the user actually changes something, or until there is
+  no reading for today at all.
+
+  `RowPush:104-121` pushes a merge with nil optionals omitted, so a HealthKit push cannot blank
+  a hand-entered value. Do not break that.
+
+VERIFICATION PROTOCOL
+  1. OnyxTests baseline count before; the full gate after.
+  2. schema-truth-checker BEFORE (confirm waist_cm absent) and AFTER (confirm present, numeric,
+     nullable).
+  3. New tests, failing first:
+       · an old two-key theme JSON decodes to chroma 1.0 / lift 0.0, NOT to .default
+       · the default spec renders bit-for-bit identical colours to today
+       · every one of the nine presets is a `normalised()` fixed point
+       · a lift of −0.06 never pushes an accent below L 0.60
+       · opening the InBody sheet on a day with a reading leaves Save DISABLED
+       · a waist value round-trips daily_logs → mirror → push
+  4. Screenshots, SHOT_DERIVED=$HOME/Library/Caches/onyx-swift/shot-w3:
+       scale, scale-first, appearance, appearance-locked, day, body-trends
+     AND every new theme through the theme harness, which already exists:
+       SHOT_THEME=Obsidian scripts/native-shot.sh tabs
+       … repeat for all nine, plus one `appearance` shot per theme.
+     Check contrast BY EYE at AX5 as well as default. A theme that looks good at 17 pt and
+     fails at AX5 is not done.
+  5. Version 3.24.0 + sync + xcodegen + CHANGELOG + version:check.
+
+DOCUMENTATION REQUIREMENT — append "Wave Record — W3" with the four headings. Under
+"Left open", state whether the founder pasted the DDL and whether check:mirror is green.
+
+Then merge --no-ff into main, delete the branch, push with [skip ci].
+````
+
+---
+
+# WAVE 4 — Train tab & the weekly report
+
+**Ships `4.0.0`.** MAJOR by this repo's own rule — the wrap sheet is a removed screen.
+**Branch `onyx/w4-week-report`.**
+
+### The exact prompt
+
+````
+Execute Wave 4 of docs/Plan-Onyx-UX-Architecture-Done.md. Read that file first.
+
+Branch: cut `onyx/w4-week-report` from current `main`.
+
+LOAD FIRST
+  Skills:  native, ponytail, apple-design, ui-ux-pro-max, frontend-design
+  Agents:  ios-developer, swift-expert, ui-ux-designer, code-reviewer
+           architect-reviewer on the navigation change — four doors move at once
+
+GOAL 1 — Week 0 draws its banner.
+  DO NOT ASSUME IT IS BROKEN THE WAY YOU EXPECT. The data says it should already work:
+  plan `onyx5` started 2026-07-15, `user_goals.week_end_day = 6` → weeks start Sunday →
+  `weekZeroStart` = 2026-07-12, which holds two complete sessions (17 and 19 sets), and
+  `Week.label:53` returns "Week 0" for n = 0.
+
+  So: REPRODUCE FIRST. Write a failing test against
+  `WorkoutWeek.pastWeeks:880` with anchor 2026-07-12 and two finished sessions in that week,
+  asserting a `PastWeek(weekStart: "2026-07-12", label: "Week 0")` is emitted. Then find out
+  why it is not, and fix THAT.
+
+  The two candidates: `Schedule.isPlannable:191-194` is `dateISO >= ctx.weekZeroStart` and the
+  walk `break`s below it (`WorkoutWeek.swift:890`) — an off-by-one there hides the anchor week
+  itself; and `guard !finished.isEmpty else { continue }` at `:893`.
+
+  DECISION: keep the break at the anchor. The PPL era (March–July, a different plan) stays out
+  of Past Weeks.
+
+GOAL 2 — Compact the banners and colour them by phase.
+  `PastWeeksLibrary.banner(_:kind:):281` has NO fixed height — it is intrinsic, roughly
+  120–140 pt at default type: hero label + date range, `MuscleTagRow`, then a two-line totals
+  string, all at `.padding(OnyxSpace.l)`.
+
+  Target ≤ 88 pt at default type. Collapse the totals to one line, tighten the tag row, keep
+  the date range.
+
+  The phase hue is ALREADY THERE and unused: `kind: PhaseKind?` is passed in at `:281` and
+  resolved at `:180` via `Phases.span(for:in:)?.def`. Drive `.onyxTopWash(hue)` (`:314-320`)
+  from it — cut, bulk, peak, deload each get their own. Use tokens only; `TokenDisciplineTests`
+  fails the build on a raw hex outside the three token files.
+
+  Respect the rules earlier waves discovered (memory: refinement-ux-sprint): one hero per
+  screen, ZStack not `if` for a swap, and `.disabled()` greys ink — do not use it for state.
+
+GOAL 3 — Destroy the bottom sheet. Build a pushed full-page report.
+  `WeeklyWrapView.swift:40` is a `.sheet` with `PresentationDetent.height(560)` (`:47`),
+  `.presentationDetents([reel, .large])` (`:94`) and its own NavigationStack (`:66`).
+
+  THE SEAM IS ALREADY CUT: its body is split into `WeeklyWrapContent:121` precisely so it can
+  sit inline (`:168-175` is a LazyVStack of headline / bestsCard / ringCard / topThree /
+  breakdown / shareSection). Reuse that; do not rewrite it.
+
+  New `WeeklyReportView`, pushed by `NavigationLink`, matching the pattern at
+  `WeekDaysView.swift:12` (pushed from `HistoryView.swift:140-142`) — that is the closest
+  existing full-page week screen, and the Train tab is already a
+  `NavigationStack` (`RootView.swift:97-99`).
+
+  ⚠️ ALL FOUR DOORS MOVE. Miss one and the sheet survives:
+      · `WorkoutTabView.swift:319` (.sheet item: $wrapped) and its button at `:438`
+      · `PastWeeksLibrary.swift:115`
+      · `WeekDaysView.swift:158`
+      · the Today tab, via `TodayFeedBuilder.weeklySummaryReady`
+
+  ⚠️ THE LIST CONSTRAINT (`WeekDaysView.swift:148-153`): in a `.plain` List every presentation
+  must hang off the LIST, not off a row — a lazy List tears rows down and takes the
+  presentation with it. Any new destination obeys this.
+
+  The zoom transition at `PastWeeksLibrary.swift:51/338/124` (`matchedTransitionSource` +
+  `.navigationTransition(.zoom)`) was built for a push and keeps working. Keep it.
+
+  DELETE `WeeklyMuscleRing.swift:41` and the `ringCard` at `WeeklyWrapView.swift:344-347`.
+  The founder's words: "destroy the ugly Where-the-work-went ring."
+
+GOAL 4 — The hero: Phase Band + Three Rails.
+  BAND — full-bleed gradient in the phase hue, the week numeral large, the `era_tag` capsule
+  (`PhaseDef.eraTag`, `Phases.swift:30`), and the date range. `Phases.weekPhase:113` is how a
+  week knows its phase.
+
+  RAILS — three horizontal progress rails with percentages, replacing the donut:
+      Training · Nutrition · Recovery
+
+  USE WHAT EXISTS. Do not invent a fourth score:
+      Nutrition → `MacroAdherenceSeries.build:249` (Series.swift), verdicts hit/miss/
+                  exception/ungraded/untracked, ±10 % tolerance at `:236`
+      Training  → `WeeklyWrap.Summary.sessions` / `tonnageKg` / `tonnageDeltaKg`
+      Recovery  → the readiness/sleep source already in the tree; read
+                  docs/READINESS_MODEL.md and pick, do not define a new one
+
+GOAL 5 — The report body. EVERY source already exists — reuse, do not re-query.
+  The whole-week payload is ONE call: `WeeklyExportBuilder.input(weekStart:today:):57` returns
+  `WeeklyExportInput` (`ExportTypes.swift:372`) with everything below. Build the page from
+  that, not from six new queries.
+
+      Metadata      — dates, era tag, phase, session count, duration
+      Nutrition     — macros hit/missed via `MacroAdherenceSeries.build:249`;
+                      water via `WaterTruth.ml(log:ledger:):32` — THE one rule reconciling
+                      daily_logs.water_ml against the water_intake ledger; goal from
+                      `user_goals.water_goal_ml`
+      New PRs       — sorted BY EXERCISE. Range query already written at
+                      `WeeklyExportBuilder.swift:536`
+      Strongest     — `TopLifts.swift:13`, roles hardest / heaviest / oneRM
+      Weight        — `Summary.bodyweightDeltaKg`, built at `WorkoutWeek.swift:1113-1116`
+
+VERIFICATION PROTOCOL
+  1. OnyxTests baseline count before; the full gate after.
+  2. New tests, failing first:
+       · pastWeeks emits Week 0 for the founder's anchor
+       · pastWeeks still stops below the anchor (PPL stays hidden)
+       · a banner's wash hue follows PhaseKind
+       · every one of the four doors reaches WeeklyReportView and none opens a sheet
+       · the three rails agree with the sources they claim to summarise
+  3. `grep -rn "WeeklyWrapView\|WeeklyMuscleRing" native --include=*.swift` returns only the
+     deletions you intended. A surviving reference is a surviving sheet.
+  4. Screenshots, SHOT_DERIVED=$HOME/Library/Caches/onyx-swift/shot-w4:
+       train, train-past, train-past-open, train-wrap, train-wrap-large, train-wrap-deload,
+       history-week, history-week-wrapped, history-week-wrap-open, session
+     Add a harness case for the new report in `native/Onyx/App/PreviewHarness.swift` (the
+     screen registry, `:360-500`) — a new screen with no shot case is a screen nobody reviewed.
+     MEASURE the banner height in the screenshot; "looks shorter" is not ≤ 88 pt.
+  5. Version 4.0.0 — MAJOR, because a screen was removed (docs/CHANGELOG.md's own rule).
+     The changelog entry must tell the reader the wrap sheet is gone and what replaced it.
+  6. version:sync + xcodegen + version:check.
+
+DOCUMENTATION REQUIREMENT — append "Wave Record — W4" with the four headings.
+
+Then merge --no-ff into main, delete the branch, push with [skip ci].
+````
+
+---
+
+# WAVE 5 — The Great Purge & Merge
+
+**Ships `4.0.1`. Branch `onyx/w5-purge-merge`.**
+
+### The exact prompt
+
+````
+Execute Wave 5 — the final wave — of docs/Plan-Onyx-UX-Architecture-Done.md.
+
+Branch: cut `onyx/w5-purge-merge` from current `main`.
+
+LOAD FIRST
+  Skills:  ship (the landing runbook), native, git-commit-helper, graphify
+  Agents:  code-reviewer on the cumulative diff main…origin/main if anything is unmerged
+
+CONTEXT YOU NEED
+  · W1–W4 each already merged themselves into main and deleted their own branch. At the start
+    of this wave `git branch -a` should list `main` and `origin/main` and nothing else. If it
+    lists more, find out why BEFORE deleting anything.
+  · There were no stale UI/UX branches when this sprint began — only `main` existed. "Delete
+    all open UI/UX branches" therefore means: confirm each wave cleaned up after itself.
+
+STEP 1 — Confirm the trunk is whole.
+  git branch -a && git worktree list && git status
+  Nothing uncommitted, no worktrees, no wave branches. Report what you find; do not
+  force-delete a branch that still holds commits main does not.
+
+STEP 2 — Purge derived data and caches.
+  ⚠️ READ .gitignore:72-132 BEFORE DELETING. The DATED SNAPSHOTS and the cache are ignored,
+  but the NINE LIVE FILES at the root of graphify-out/ ARE TRACKED (`.gitignore:83`). Deleting
+  those is a tracked-file deletion, not a cache purge.
+
+  Safe to remove outright:
+      graphify-out/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]/   (dated snapshots)
+      graphify-out/cache/
+      graphify-out/.rebuild.lock  graphify-out/.pending_changes
+      native/graphify-out/
+      native/__screenshots__/                 (63 MB, gitignored since 3.8.0; no gate reads
+                                               them — memory: screenshots-untracked)
+      $HOME/Library/Caches/onyx-swift/*       (all the wave scratch paths)
+      Xcode DerivedData for this project
+
+  Then REGENERATE rather than leave a hole:
+      graphify update .       (AST-only, no API cost — rebuilds the tracked root files)
+
+  Report the reclaimed megabytes. graphify-out was 134 MB and __screenshots__ 63 MB at the
+  start of this sprint.
+
+STEP 3 — The gate, in full. No commit before it is green.
+  npm run check
+  npm run check:swift
+  npm run swift:core
+  npm run swift:data
+  cd native && xcodegen generate && xcodebuild -project Onyx.xcodeproj -scheme Onyx \
+    -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
+
+  Compare the OnyxTests failure count against the five baseline failures recorded in W1's
+  Wave Record. A sixth belongs to this sprint and must be fixed or named.
+
+STEP 4 — Version and changelog.
+  package.json → 4.0.1 (PATCH: a purge ships no capability).
+  npm run version:sync && cd native && xcodegen generate
+  Append the release section to docs/CHANGELOG.md using the template at the bottom of that
+  file. Confirm `npm run version:check` passes — it is part of `npm run check`.
+
+STEP 5 — Harvest, then land.
+  · Harvest the four Wave Records into the CHANGELOG entries they belong to.
+  · Write ONE memory file at
+    /Users/michael/.claude/projects/-Users-michael-Documents-PyCharmProjects-Onyx/memory/
+    covering what this sprint discovered that the code does not record — the PR identity flip,
+    the Optional rule on ContentState, the theme decode trap, the Save-gate trap on the InBody
+    sheet, the four doors into the report. Add its one-line pointer to MEMORY.md.
+  · KEEP docs/Plan-Onyx-UX-Architecture-Done.md. Its name says Done; the Wave Records are the
+    record of the sprint.
+  · Merge --no-ff into main, delete the branch.
+  · Push. The local push guard reads THE COMMAND, not the message (memory: next-gen-ux-sprint):
+    put `[skip ci]` in the commit message or run `ONYX_DEPLOY=1 git push`. Netlify publishes
+    site/ as-is with no build either way.
+
+STEP 6 — The founder's checklist.
+  End your final message with everything the founder must do by hand that no wave could —
+  DDL they still need to paste, App Store Connect steps, Supabase settings, a device-only
+  visual check. If the list is empty, say so explicitly.
+
+DOCUMENTATION REQUIREMENT — append "Wave Record — W5" with the four headings: What was done /
+Succeeded / Failed / Left open. "Left open" is the sprint's final state of the world; write it
+for someone who was not here.
+````
+
+---
+
+## Verification, end to end
+
+After W5, the sprint is verified by doing these on a device, not in a test:
+
+1. Start a workout, put the treadmill bout in — the Dynamic Island reads `mm:ss · km · pace`
+   with a Cardio chip, never `0 kg × 0`.
+2. Hit a PR mid-session — the cup appears on that tick, not after Finish.
+3. Type `18.75`, `17.5`, `20` into a weight field — all three the same size, at 375 pt and at AX5.
+4. Edit a finished workout with a treadmill in it — it stays in position 1; Records shows a
+   number; Sets shows a count, not a fraction; Cancel returns everything to where it was.
+5. Open Appearance, walk all nine themes — nothing unreadable, widget and watch follow.
+6. Open the InBody sheet — already filled, Save disabled until you change something, waist in Mass.
+7. Open Past Weeks — Week 0 is there, banners are short and phase-coloured, tapping one PUSHES
+   a full page whose hero is a phase band over three rails, and there is no donut anywhere.
+8. Tick the psyllium dose at 18:30 — the day gains 17 kcal, 4.4 g carbs, 3.9 g fiber, once.
