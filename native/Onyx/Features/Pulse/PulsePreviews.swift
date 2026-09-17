@@ -447,11 +447,14 @@ enum PulsePreviews {
     @MainActor @ViewBuilder
     static func view(_ screen: String) -> some View {
         switch screen {
+        // `pinned` since W10: the fatigue card's verb reads the clock ("Rate
+        // before training" flips to "after" at 18:30 with no session), so an
+        // unpinned day screen would photograph a different card by the hour.
         case "day":
-            NavigationStack { PulseTabView(seeded: fullDay()) }
+            NavigationStack { PulseTabView(seeded: pinned(fullDay())) }
                 .environment(AppEnvironment.preview)
         case "day-rows":
-            NavigationStack { PulseTabView(seeded: fullDay(), startAtRows: true) }
+            NavigationStack { PulseTabView(seeded: pinned(fullDay()), startAtRows: true) }
                 .environment(AppEnvironment.preview)
         // ── THE CAROUSEL'S OTHER TWO PAGES ──────────────────────────────────
         // A pager shows one page, and `simctl` can film a simulator but cannot
@@ -480,15 +483,16 @@ enum PulsePreviews {
         // very little; it is kept because it is the only screen that draws
         // `SessionHeaderCard` on Pulse at all.
         case "day-past":
-            NavigationStack { PulseTabView(seeded: fullDay(withSession: true), startAtRows: true) }
+            NavigationStack { PulseTabView(seeded: pinned(fullDay(withSession: true)), startAtRows: true) }
                 .environment(AppEnvironment.preview)
         // The same day, at the TOP — where the muscle wash is. It is the one
         // part of this screen that exists only above the fold and only when the
         // date holds a session, so `day-past` (which parks on the rows) cannot
         // photograph it, and a colour nobody has photographed is a colour that
         // was reviewed by reading the source.
+        // The seeded session ends at 10:08, so the pinned 13:00 asks "after".
         case "day-session":
-            NavigationStack { PulseTabView(seeded: fullDay(withSession: true)) }
+            NavigationStack { PulseTabView(seeded: pinned(fullDay(withSession: true))) }
                 .environment(AppEnvironment.preview)
         case "day-empty":
             NavigationStack { PulseTabView(seeded: model()) }

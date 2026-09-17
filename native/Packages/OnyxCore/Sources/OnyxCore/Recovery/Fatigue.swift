@@ -164,6 +164,54 @@ public enum Fatigue {
         return nil
     }
 
+    // MARK: - The clock (W10)
+
+    /// Where a rest day's Waking ends and its Night begins, in minutes since
+    /// local midnight. 18:30 also stands in for a session that never ended.
+    public static let morningEndsMinutes = 11 * 60
+    public static let eveningFromMinutes = 18 * 60 + 30
+
+    /// Which of the day's slots the card is ASKING for now.
+    ///
+    /// ── THE QUESTION FOLLOWS THE SESSION, NOT THE CLOCK ─────────────────────
+    /// A training day is shaped by its session: it asks "Before training"
+    /// until the session ends and "After training" from then on, whatever the
+    /// hour. Only when no session has ended does the clock stand in — 18:30,
+    /// past which a day without a session is being asked how it finished.
+    /// A rest day has no session to follow, so it reads the clock alone:
+    /// Waking until 11:00, Midday until 18:30, Night after; it never asks the
+    /// pre-session question. A day that has already happened asks its LAST
+    /// slot — the day ended, and a late reading is about how it finished.
+    ///
+    /// `sessionEndedMinutes` is the session's end as minutes since local
+    /// midnight, derived by the caller from the stored row — never from
+    /// `Date()` — so the shot loop and the tests read one day twice and get
+    /// one answer. This picks the QUESTION only. `dayMean` still reads every
+    /// slot the day holds (`STRESS_MODEL.md` §2), and nothing here feeds it.
+    public static func askingSlot(isTraining: Bool, clock: DayClock, sessionEndedMinutes: Int? = nil) -> FatigueSlot {
+        let slots = slotsForDay(isTraining: isTraining)
+        guard let now = clock.nowMinutes else { return slots.last ?? .night }
+        if isTraining {
+            return now >= (sessionEndedMinutes ?? eveningFromMinutes) ? .post : .pre
+        }
+        if now < morningEndsMinutes { return .waking }
+        return now < eveningFromMinutes ? .midday : .night
+    }
+
+    /// The end `delta` is missing for want of — when exactly one end is
+    /// logged. Nil when the delta exists, and nil when neither end is: there
+    /// is nothing to compare yet, and naming one of two absent readings would
+    /// be a guess. A rest day's fold yields `pre`/`post` only from a MODERN row
+    /// written while the day was still a training day, so the card also checks
+    /// the named slot is one the day has.
+    public static func deltaMissing(_ day: FatigueDay) -> FatigueSlot? {
+        switch (day[.pre], day[.post]) {
+        case (nil, .some): .pre
+        case (.some, nil): .post
+        default: nil
+        }
+    }
+
     /// `fatigueDayMean` — the mean over every slot logged: the stress index's
     /// self-report term (E3), and deliberately NOT the tracker's summary. The
     /// index asks how heavy the whole day felt; the shape of the curve is that
