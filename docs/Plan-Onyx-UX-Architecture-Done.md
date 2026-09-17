@@ -1623,3 +1623,247 @@ two-decimal grid every preset is written on.
   and removes a session blob" throws a Keychain error in the simulator. It passes
   under `npm run swift:data`. Present on clean `main` too — recorded here so the
   next wave does not adopt it as new.
+
+---
+
+# Wave Record — W4 · Train tab & the weekly report
+
+**Shipped `4.0.0`** — MAJOR, by `docs/CHANGELOG.md`'s own rule: a screen was
+removed. Branch `onyx/w4-week-report`, cut from `main` at `1a856ce2`.
+
+## What was done
+
+### GOAL 1 — Week 0. The brief's premise was false, and the test is the proof.
+
+The brief said "REPRODUCE FIRST" and named two candidates. Both were wrong, and
+so was the symptom: **Week 0 already drew its banner.**
+
+`WorkoutWeekTests.weekZeroIsAPastWeek` was written to fail against
+`WorkoutWeek.pastWeeks` with the founder's own numbers — `onyx5` started
+2026-07-15, `week_end_day = 6` (a SUNDAY-start week), anchor 2026-07-12, two
+sessions inside it. It passed on the first run. So did the guard beneath it,
+`theEraBeforeTheAnchorStaysHidden`: a session on 2026-07-08 and a PPL session in
+May are both excluded, because the walk stops at the first week BELOW the anchor
+and not at the anchor itself.
+
+Neither candidate could have been the bug:
+
+- `Schedule.isPlannable` is `dateISO >= ctx.weekZeroStart`, and the walk tests
+  the week it is ABOUT to emit rather than the one it stepped off — so
+  `2026-07-12 >= 2026-07-12` lets the anchor week through and `2026-07-05` ends
+  the walk. There is no off-by-one.
+- `guard !finished.isEmpty else { continue }` skips EMPTY weeks and continues; it
+  cannot hide a week holding two sessions.
+
+A third test was written for the half the brief did not name — the only place a
+week the walk emitted could still fail to be drawn. `PastWeeksLibrary.blocks(_:)`
+joins the walk's weeks against `Phases.enumerateWeeks`, and a week no
+`plan_phases` block covers falls to the "Between blocks" bucket at the bottom of
+the shelf, in grey, under a heading that reads like an error.
+`WeeklyReportTests.weekZeroIsBanneredAndTinted` asserts the anchor week reaches a
+block with a `kind` of its own and is not in that bucket. It passes, and the
+screenshot agrees: `train-library` shows **Week 0 · 12 – 18 Jul** under its own
+`ONYX · WEEK 0` heading in the peak hue.
+
+`blocks(_:)` and `tint(_:)` were made `nonisolated static` and internal to be
+asserted at all. That is the change GOAL 1 actually produced: no screenshot can
+show that a week is missing from a list it was never in.
+
+### GOAL 2 — 124.3 pt → 86.3 pt, measured.
+
+The before and after were measured off the PNGs, not judged: a pure-Python PNG
+decode of a column through the shelf, reading the glass edges. The tile was
+**373 px = 124.3 pt**; it is **259 px = 86.3 pt**, with the 30 px (`OnyxSpace.grid`)
+gutter between tiles unchanged in both. Five whole banners on a 402 × 874 screen
+instead of three and a half.
+
+Four cuts, no figure removed:
+
+1. `.hero` → `.display`. W2 (refinement) wrote down **one hero per screen** and a
+   shelf had one per ROW — eight 28 pt numerals arguing about which of them the
+   screen was about. −8 pt, and the rule is now obeyed.
+2. The totals are `.caption` on one line at every size that is not an
+   accessibility size. Two lines were bought for AX5, where `Shoulders` already
+   stacks and the tile is free to grow; a default-size banner paid 20 pt for a
+   break it never took.
+3. `OnyxSpace.xs` between the three rows rather than `s`. They are one thought.
+4. `m` horizontal / `s` vertical padding rather than `l` all round.
+
+The tag row was NOT folded onto the totals line: a muscle capsule cannot share a
+row (W2 · live-ux), and a `FlowRow` beside a `Spacer` wraps to one tag per line
+at the first long landmark name.
+
+**The brief was wrong about the hue too, in the other direction.** It said the
+phase colour was "ALREADY THERE and unused". It was already USED — `banner(_:kind:)`
+took `tint(kind)` for both the label and `.onyxTopWash(hue)` before this wave.
+What was missing was a test, and `bannerHueFollowsPhase` is it: four kinds, four
+distinct inks from `Color.onyx.phase(_:)`, and `textTertiary` for the unclaimed
+week — asserted to be none of the four, or "no phase" would read as one.
+
+### GOAL 3 — the sheet is gone, and all four doors moved.
+
+`WeeklyWrapView` is deleted. `WeeklyMuscleRing.swift` is deleted.
+`WeeklyWrapView.swift` was `git mv`d to `WeeklyWrapContent.swift` and holds only
+the reel, which is unchanged apart from losing three things that were the
+sheet's: `showsLegend` (answered from a detent), `onNeedsHeight` (a page is
+already at its height) and `ringCard`.
+
+`WeeklyReportView` is pushed by every door:
+
+| Door | Was | Is |
+|---|---|---|
+| `WorkoutTabView` This-week tile | `.sheet(item: $wrapped)` | `.navigationDestination(item: $wrapped)`, beside the session destination |
+| `PastWeeksLibrary` banner | `.sheet(item: $opened)` on the sheet | `.navigationDestination(item: $opened)` **inside** its own `NavigationStack` |
+| `WeekDaysView` Wrapped chip | `.sheet(item: $wrapDoor)` | `.navigationDestination(item: $wrapDoor)`, still hung off the LIST |
+| `TodayTabView` week-complete banner | `.sheet(item: $wrapDoor)` | `.navigationDestination(item: $wrapDoor)` |
+
+Every `WrapDoor` / `Door` box went from `Identifiable` to `Hashable`, which is
+what `navigationDestination(item:)` wants — the same box `WeekDaysView.ReportDoor`
+already was, keyed on the week start.
+
+The shelf stays a sheet and that is not a contradiction: a SHELF is a thing you
+open, scan and put down; the week you find in it is a place. The zoom transition
+(`matchedTransitionSource` + `.navigationTransition(.zoom)`) was built for a push
+in the first place and is unchanged.
+
+`fourDoorsPushAndNonePresents` asserts it off the source — the four files, the
+four bindings, `navigationDestination` present and `sheet(item:)` absent for each,
+and no `WeeklyWrapView(` or `WeeklyMuscleRing(` anywhere. It cannot pass
+vacuously (W8's trap): the first expectation on every file is that it was read
+and is over a thousand characters.
+
+`grep -rn "WeeklyWrapView\|WeeklyMuscleRing" native` now returns two prose lines
+in the two files that explain what happened to them, plus the graph fixture and
+three `OnyxMega`/`WeekDaysView` comments that cite the deleted ring as precedent.
+
+### GOAL 4 — the band and the three rails.
+
+`PhaseBand` is full-bleed: no gutter, no glass, a 28 %→0 wash in
+`Color.onyx.phase(kind)` with the week numeral at `.clock` over it, the `era_tag`
+capsule and the date range beneath. The numeral is the page's one hero, which is
+what makes that rule checkable here rather than a sentiment — nothing else on
+the screen is set at `.clock`. `Phases.weekPhase(weekStart:in:)` answers the kind
+and the tag; a week no block covers falls back to the train accent, no capsule,
+and prints its label whole under `BLOCK` rather than splitting a numeral out of it.
+
+Three rails, reusing `OnyxProgressBar`:
+
+| Rail | Source | Denominator |
+|---|---|---|
+| Training | `Summary.sessions` / `tonnageKg` / `tonnageDeltaKg` | `Schedule.sessionTargetIn` — the plan's own day count, which is the footer's "3/5" |
+| Nutrition | `MacroAdherenceSeries.build`, ±10 %, graded against the rung in force ON EACH DATE (`targetPeriods`) | days graded hit-or-miss; exceptions and untracked days are neither |
+| Recovery | the stored `battery_pct` (READINESS_MODEL §7) | the nights that have one |
+
+No fourth score was invented, and bars were chosen over a donut deliberately:
+these three are not parts of one whole, so part-to-whole is the wrong encoding.
+A rail with no reading prints an em dash and not 0 %, because "no graded day" and
+"missed every graded day" are different weeks.
+
+### GOAL 5 — the body, off one call.
+
+`WeekReport.build` is a fold over `WeeklyExportBuilder.input(weekStart:today:)` —
+the same payload the weekly export renders — plus one `scheduleContext` read for
+the phase table. Not six queries, and the page cannot disagree with the exported
+document about the same week.
+
+- **Nutrition** — the seven verdicts as dots, and water through
+  `WaterTruth.ml(log:ledger:)`. The payload has already applied the half of that
+  rule that needs two stores (`ExportDay.waterMl` is the ledger's sum where the
+  ledger has rows); passing an empty ledger applies the other half — a stored
+  zero is a day nobody measured — without a second copy of it.
+- **New PRs** — `ExportSession.prs`, built off the range query at
+  `WeeklyExportBuilder.swift:536`, sorted by exercise name.
+- **Strongest** — `TopLifts.group` over the whole week's working sets, warm-ups
+  and ghosts excluded. `previous: [:]`, because the arrow is a session-to-session
+  comparison and there is no "last week's hardest set of the week" to point it at.
+- **Weight** — `Summary.bodyweightKg` / `bodyweightDeltaKg`, signed.
+
+The share control **left the reel** and is now the page's last block
+(`WeeklyShareSection`). It was the final section of what used to be the whole
+sheet; with four more sections under the reel it would have sat in the middle of
+the page, above the macros and the weigh-in — a terminal action with a document
+after it.
+
+## Succeeded
+
+- **OnyxTests: 10 baseline issues before, 10 after.** History weeks (3), Workout
+  week (5), Session summary — the hotfix (2). Six new tests, all green, none of
+  them in those three suites' failing cases.
+- **`npm run swift:core` 575/575, `npm run swift:data` 583/583.**
+- **The app target builds** — `xcodebuild -scheme Onyx -destination
+  'generic/platform=iOS'`, which is the check a green `check:swift` can hide a
+  failure behind (memory: `xcodeproj-drift-and-swift6`).
+- **The banner is 86.3 pt, measured off the PNG.** Not "looks shorter".
+- **Week 0 is on the shelf, in its own block, in the peak hue** — `train-library`.
+- **All four doors push.** `history-week-wrap-open` photographs the History door
+  end to end: a back chevron, the band, and Week 5's figures matching the Week 5
+  banner on the shelf exactly (5 sessions, 7,872 kg).
+- **Two public inits were added** — `AdherenceDay` and `ExportPr` — because a
+  preview fixture in the app module cannot reach an internal memberwise init.
+  Both are documented as preview-only; nothing else changed in OnyxCore.
+
+## Failed
+
+- **GOAL 1's premise.** Week 0 was never missing from `pastWeeks`. Three tests
+  now say so, which is the whole of what the goal produced. If the founder is
+  still not seeing it on the phone, the remaining explanation is the live
+  `plan_phases` table having no block over 2026-07-12 — the week would then draw
+  in grey under "No phase covers these weeks" at the bottom of the shelf, which
+  the fixture cannot reproduce because `PreviewCatalogue` seeds a Week 0 block.
+  **This is the one claim in this record that could not be checked against the
+  live database from here.**
+- **GOAL 2's "the phase hue is ALREADY THERE and unused".** It was already used.
+  Only the test was missing.
+- **`train-past` and `train-past-open` do not exist.** They were renamed
+  `train-library` / `train-library-open` by W1 (refinement) when the section
+  became a sheet; the brief's shot list is one wave stale. Those two were shot.
+- **Two rounds of screenshots were needed, and the first round's defects were
+  both in the harness rather than the page.** `AppEnvironment.userIdString` is the
+  empty string when nothing is signed in, so the first `train-wrap` built its
+  export for user `""` and drew a page with no nutrition, no battery, no records,
+  no strongest and no phase capsule — over a store holding all five.
+  `WeekReport.build` now falls back to `database.localUserId()`, which is what
+  `WorkoutWeek.library()` and every other preview reader already did.
+- **The first cut truncated its own rail detail at AX5** — `5 of 5 sessions ·
+  42,180 kg · …`. `lineLimit(2)` is not enough for that string at an
+  accessibility size; it is unlimited there now.
+
+## Left open
+
+**Nothing is required of the founder to ship this wave.** No DDL, no Supabase
+setting, no App Store step.
+
+- **The preview store seeds no `daily_logs` calories and no `battery_pct`.** So
+  `train-wrap`, `train-wrap-large` and `train-wrap-deload` can only ever
+  photograph the Nutrition and Recovery rails in their EMPTY state — "no day was
+  graded", "no night was scored". `train-report` exists precisely for this and
+  hands `WeekReport` over as a fixture, but the end-to-end shot cannot show a
+  populated nutrition card. Seeding a week of `daily_logs` in
+  `HistoryPreviews.environment()` would close it and is worth doing once, for
+  every screen that reads nutrition and not only this one.
+- **The band and the navigation title both say the week's name.** `Week 7` in the
+  inline bar, `WEEK / 7` immediately under it. It is the standard arrangement —
+  the bar title is what you see once the band has scrolled away — but it reads as
+  a repeat on arrival.
+- **A deload declared by the LEVER wears its block's colour, not the deload one.**
+  `WorkoutWeek.wrap` sets `isDeload` for a phase-table deload OR a maintenance
+  week (`Maintenance.isMaintenanceDate`), while the band takes
+  `Phases.weekPhase(...).kind`. So a maintenance week inside a cut block shows the
+  cut hue over a reel headed "Deload week — lighter by design". Both are correct
+  about what they describe and the pair is visible in `train-wrap-deload`; a band
+  that read `isDeload` instead would be a fourth opinion about what phase a week
+  is in.
+- **`Strongest` draws no arrows.** `TopLifts.group(sets, previous: [:])` — there
+  is no week-over-week bar for a week-scoped role, and inventing one would mean
+  deciding whether last week's "hardest" is the same question as this week's.
+- **`WeekWindow(containing:startDay:)` has no anchor, so `number` is always 0.**
+  `HistoryWeeksTests.weekZero` has failed on this since W2 made the anchor a
+  parameter, and it is one of the ten baseline issues. It is a stale TEST, not a
+  product bug — every real caller passes `weekZero` — but it sits directly on
+  top of this wave's subject and should be either fixed or deleted by W5's audit.
+- **`OnyxTests` is still run by nothing in `npm run check`.** Unchanged from W3.
+  The six tests added here are as ungated as the ten that were already failing.
+- **`train-wrap-large` is now "the bottom of the page" rather than "the `.large`
+  detent".** It is shot with `.defaultScrollAnchor(.bottom)`. The name is kept so
+  the pair with `train-wrap` still reads as one review, but it no longer means
+  what it says.

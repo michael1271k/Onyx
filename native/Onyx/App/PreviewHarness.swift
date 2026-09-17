@@ -379,6 +379,9 @@ enum PreviewHarness {
             NavigationStack { SettingsTabView(seeded: model) }.environment(AppEnvironment.preview)
         case "train", "train-done", "train-pending", "train-cardio", "train-empty", "train-week", "train-wrap", "train-wrap-large",
              "train-wrap-deload", "train-monday", "train-library", "train-library-open",
+             // W4: the weekly report the wrap sheet became, seeded — the one
+             // shot that can show its lower four blocks whatever the store says.
+             "train-report",
              "train-customize", "train-customized", "share-card":
             // Seeded from the history store: the This-week panel and the
             // Ready-to-progress box are both reads over the ledger, so an empty

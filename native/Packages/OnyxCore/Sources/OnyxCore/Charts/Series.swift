@@ -230,6 +230,20 @@ public struct AdherenceDay: Codable, Sendable, Equatable {
     public var carbsPct: Double?
     public var fatPct: Double?
     public var estimated: Bool
+
+    /// Public so a PREVIEW can write one. `build` is the only thing that makes
+    /// these in earnest; a fixture that hand-rolls a week of verdicts is the
+    /// other caller, and it lives in the app module.
+    public init(
+        date: String, verdict: AdherenceVerdict, kcalPct: Double? = nil,
+        proteinPct: Double? = nil, carbsPct: Double? = nil, fatPct: Double? = nil,
+        estimated: Bool = false
+    ) {
+        self.date = date; self.verdict = verdict
+        self.kcalPct = kcalPct; self.proteinPct = proteinPct
+        self.carbsPct = carbsPct; self.fatPct = fatPct
+        self.estimated = estimated
+    }
 }
 
 public enum MacroAdherenceSeries {

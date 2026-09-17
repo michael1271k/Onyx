@@ -120,16 +120,21 @@ struct WorkoutTabView: View {
     /// console.
     static let doneTransitionID = "onyx.session.done"
 
-    /// The closed week being read, in a sheet from the This-week tile.
+    /// The closed week being read, PUSHED from the This-week tile (W4).
     @State private var wrapped: WrapDoor?
 
     /// The same box as `Review` above, for the same reason: `WeeklyWrap.Summary`
-    /// is an OnyxCore value and making an OnyxCore type `Identifiable` to
-    /// present one sheet reaches every caller of that type. The Monday the week
+    /// is an OnyxCore value and making an OnyxCore type conform to present one
+    /// destination reaches every caller of that type. The Monday the week
     /// starts on already names it uniquely.
-    struct WrapDoor: Identifiable {
+    ///
+    /// `Hashable` and no longer `Identifiable`: `navigationDestination(item:)`
+    /// wants the former, which is the same box `WeekDaysView.ReportDoor` is and
+    /// for the same reason.
+    struct WrapDoor: Hashable {
         let summary: WeeklyWrap.Summary
-        var id: String { summary.weekStart }
+        static func == (lhs: Self, rhs: Self) -> Bool { lhs.summary.weekStart == rhs.summary.weekStart }
+        func hash(into hasher: inout Hasher) { hasher.combine(summary.weekStart) }
     }
     /// Bumped when a dismissal turns out to have finished the session. The
     /// haptic lived on the finish button, which was torn down in the same
@@ -308,16 +313,16 @@ struct WorkoutTabView: View {
                 )
             }
         }
-        // `item:` and not `isPresented:`, for the reason spelled out above the
-        // logger cover: a sheet whose content is `if let` over a separate piece
-        // of state can come up empty. The summary IS the presentation here.
+        // `item:` and not a `Bool`, for the reason spelled out above the logger
+        // cover: a destination whose content is `if let` over a separate piece
+        // of state can come up empty. The summary IS the destination here.
         //
-        // The view owns its own `NavigationStack` and its own detents, unlike
-        // the session review above — W1b opens the same reel from a past week
-        // in History, and chrome spelled at each call site is chrome that
-        // drifts between them.
-        .sheet(item: $wrapped) { door in
-            WeeklyWrapView(
+        // A PUSH since W4, beside the session destination above it and into the
+        // same stack (`RootView`'s). The report is a place now, not a reel
+        // behind a drag indicator — `WeeklyReportView`'s header has the whole
+        // argument, and it is one door of four that had to move together.
+        .navigationDestination(item: $wrapped) { door in
+            WeeklyReportView(
                 summary: door.summary,
                 program: week?.snapshot.program ?? Program(id: "", label: "", days: [])
             )
@@ -424,18 +429,18 @@ struct WorkoutTabView: View {
             // action for six days of the week and the wrap-up is the news on
             // the seventh, so the seventh takes the tap.
             if let wrap = week?.snapshot.wrap {
-                // ── A SHEET AND NOT A PUSH (W1a) ────────────────────────────
-                // The wrap-up is not a place you navigate INTO — it is a thing
-                // you glance at and put down, and a push says the opposite: it
-                // replaces the tab, takes a back tap to leave, and buries the
-                // Train screen the reader came here to use. A detent sheet says
-                // what it is: the reel at 560 pt, the breakdown if you drag for
-                // it, and the tab still behind it the whole time.
+                // ── A PUSH, AND W1a's ARGUMENT FOR A SHEET WAS RIGHT (W4) ───
+                // W1a made this a detent sheet because "a wrap-up is a thing
+                // you glance at and put down". That was true of the REEL and it
+                // is false of what the week now answers — macros, water,
+                // records, the strongest lifts, the weigh-in. A document behind
+                // a drag indicator is a document whose second half is never
+                // read.
                 //
-                // The argument against a MODAL is in `WeeklyWrapView`'s header
-                // and it still holds — it is an argument against a modal that
-                // appears UNINVITED. This one opens because the tile was
-                // tapped, and the tile is still a door that stays.
+                // The argument against a MODAL is unchanged and still holds: it
+                // is an argument against a summary that appears UNINVITED. This
+                // one opens because the tile was tapped, and the tile is still
+                // a door that stays.
                 Button { wrapped = WrapDoor(summary: wrap) } label: {
                     wrapLabel(wrap)
                 }

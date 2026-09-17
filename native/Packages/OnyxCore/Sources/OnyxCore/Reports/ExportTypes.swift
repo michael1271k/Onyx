@@ -234,6 +234,17 @@ public struct ExportPr: Codable, Equatable, Sendable {
     public var axes: [PrAxis]
     public var volumeKg: Double?
     public var e1rmKg: Double?
+
+    /// Public so a PREVIEW can write one. Every real payload decodes or is
+    /// assembled inside `OnyxData`; the weekly report's shot fixture is in the
+    /// app module and cannot reach an internal memberwise init.
+    public init(
+        name: String, weightKg: Double, reps: Double, axes: [PrAxis],
+        volumeKg: Double? = nil, e1rmKg: Double? = nil
+    ) {
+        self.name = name; self.weightKg = weightKg; self.reps = reps
+        self.axes = axes; self.volumeKg = volumeKg; self.e1rmKg = e1rmKg
+    }
 }
 
 public struct ExportSession: Codable, Equatable, Sendable {

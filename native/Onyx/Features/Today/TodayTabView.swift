@@ -59,10 +59,14 @@ struct TodayTabView: View {
     /// The summary and the programme it is read against, resolved together: the
     /// day labels in the reel belong to the programme that was active in the
     /// week being wrapped, not to today's.
-    private struct WrapDoor: Identifiable {
+    /// `Hashable` since W4 — `navigationDestination(item:)` wants it, and the
+    /// week start names a week uniquely. `Program` is deliberately NOT part of
+    /// the identity: it is what the summary is READ AGAINST, not what it is.
+    private struct WrapDoor: Hashable {
         let summary: WeeklyWrap.Summary
         let program: Program
-        var id: String { summary.weekStart }
+        static func == (lhs: Self, rhs: Self) -> Bool { lhs.summary.weekStart == rhs.summary.weekStart }
+        func hash(into hasher: inout Hasher) { hasher.combine(summary.weekStart) }
     }
 
     var body: some View {
@@ -198,11 +202,11 @@ struct TodayTabView: View {
         .sheet(isPresented: $showQuickLog) {
             if let quickLog { QuickLogSheet(model: quickLog) }
         }
-        // The view owns its own `NavigationStack` and its own detents — the
-        // same reel the Train tab and History open, with no chrome spelled at
-        // this call site to drift away from theirs.
-        .sheet(item: $wrapDoor) { door in
-            WeeklyWrapView(summary: door.summary, program: door.program)
+        // Pushed into the Today tab's own stack (`RootView`) since W4 — the
+        // same report the Train tab, the shelf and History push, with no chrome
+        // spelled at this call site to drift away from theirs.
+        .navigationDestination(item: $wrapDoor) { door in
+            WeeklyReportView(summary: door.summary, program: door.program)
         }
         // The ring's sheets read STREAMED state — the day's fatigue rows, its
         // stress readings, its cardio — and a model nobody observes draws every
@@ -220,11 +224,11 @@ struct TodayTabView: View {
         }
     }
 
-    /// ── WHY THE BANNER OPENS THE REEL AND NOT THE SETTINGS TAB ─────────────
+    /// ── WHY THE BANNER OPENS THE REPORT AND NOT THE SETTINGS TAB ───────────
     /// It said "Week 12 is complete — every session logged. Review the week."
     /// and then selected the Settings tab, because Reports live there. The
-    /// review it offers is the weekly wrap, and the wrap already exists: the
-    /// Train tab opens the reel from its This-week panel and History opens it
+    /// review it offers is the weekly report, and the report already exists:
+    /// the Train tab pushes it from its This-week panel and History pushes it
     /// from a past week's chip. Today is the third door to one room, not a
     /// fourth screen about the same week.
     ///
