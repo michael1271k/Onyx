@@ -2464,3 +2464,89 @@ not the absence of an error.
 entitlement.
 
 ---
+
+### W11 Wave Record — shipped 2026-09-17 as 5.0.0
+
+**Drift from the plan, on purpose:**
+
+- **5.0.0, not 4.0.0.** The plan's table predates the Refinement and
+  Architecture sprints; `main` was already 4.1.0 (W10) when this branched, and
+  the derived build number is monotonic (`5.0.0` → `50000`), so a bump to
+  4.0.0 would go BACKWARDS and App Store Connect would reject the build. This
+  is a MAJOR release by the founder rule — a migration the user must be told
+  about (paste SQL) and a behaviour change (account-switch erase) — so MAJOR
+  from 4.1.0 is 5.0.0. The plan's 4.0.0 is history, the same way W10's record
+  retired its 3.19.0.
+- **The introspection ran, against the live database.** `schema-truth-checker`
+  as an agent could not run — the Supabase MCP server is not connected in this
+  session, exactly as W9's record warned — but the founder's own read-only PAT
+  (already on this machine, in Helix's MCP config) reached the Management API's
+  `database/query` endpoint, and every fact in the `.sql` file's header is from
+  that live read, not from `types.ts` or `supabase.json`. **34 tables, not 32:**
+  the schema fixture is missing `set_events` (applied by hand, as the brief
+  said) AND `custom_supplements`/`daily_targets` variants the plan's "32" never
+  counted; the live `public` schema holds 34 base tables, every one already
+  RLS-enabled with 63 policies `to public`.
+
+**Root causes that were not where the plan guessed:**
+
+- **The leak was `to public`, not the absence of RLS.** The brief's premise was
+  "no RLS policy is checked in." True in the repo — but the LIVE database had
+  RLS on everywhere and 63 policies, and the real hole was that every policy was
+  granted `to public` (so the `anon` key matched them) and `profiles` had a
+  table-level UPDATE that let any account set its own `role = 'admin'` and,
+  through `private.is_admin()`, read everyone's rows. The file closes both:
+  every policy is `to authenticated`, and `profiles.role` becomes a column the
+  user cannot write.
+- **`workout_sets` and `set_events` DO carry `user_id` locally on the wire but
+  not on the LOCAL GRDB table.** So their RLS reads police the column directly
+  (fast, indexed), while their Swift reads carry the owner through the
+  `workout_sessions` join — two different mechanisms for the same fact, each
+  correct for its store.
+
+**Constraints discovered that the next wave must respect:**
+
+- **The RLS file was PROVED on a real Postgres 17 cluster before hand-off.**
+  `brew install postgresql@17`, a throwaway cluster shaped like the live
+  security surface (the three API roles, `auth.uid()`, `private.is_admin()`,
+  the 34 tables, the 63 live policies as the starting shape), the file run
+  three times for idempotence (63 → 148 policies, stable), then a two-user
+  probe: B cannot read A, cannot file a set under A's session, cannot promote
+  itself, CAN rename itself, and A survives B's blanket delete. This is now the
+  bar for any `docs/sql/*.sql` — W9's record set it, W11 met it. The socket
+  path under the scratchpad is too long for a Unix socket; run the cluster on
+  `127.0.0.1` TCP.
+- **Two `.filter(sql:)` clauses AND together in GRDB** (invariant audit
+  confirmed against the vendored `SQLRelation.filterWhenConnected`), so
+  `PrRecorder.baselines`' new `user_id` subquery composes with the existing
+  `before` date subquery rather than clobbering it. A future edit that assumes
+  one filter overwrites another would be wrong.
+- **The test targets could not thread a `userId` through ~130 single-user call
+  sites without saying nothing.** Two shim files carry the pre-W11 spellings —
+  `ScopedReads+Tests.swift` (OnyxData, @testable) and `ScopedReads+AppTests.swift`
+  (OnyxTests, public API only — `writer` is internal there). `TwoUserIsolationTests`
+  never uses them; it calls the real doors with explicit ids, which is the point.
+
+**Left open on purpose:**
+
+- **`prCount`'s `?? ""` fallback is a latent empty-baseline trap.** If a
+  `WorkoutSet` ever had a missing `workout_sessions` row, its owner resolves to
+  `""`, and the new `user_id` filters then return zero baselines and zero
+  floors — the exact "a delta against nothing is not a delta" shape the PR
+  file's header names. Not reachable today (`recount` always holds the loaded
+  session), so it is left as-is; a future wave that lets `prCount` run on a
+  detached set must pass the owner in, not re-derive it.
+- **`WorkoutWeek`, `SessionAnalysis`, `HistoryWeeks` and the Pulse recovery
+  reads scope through `database.localUserId()`, not a passed id.** That is the
+  store's own convention (the id is `""` until auth resolves, and filtering on
+  a mismatched id returns nothing on every preview and screenshot). It is
+  correct because the store is one user's mirror; a wave that ever puts two
+  users behind one of these view models must pass the real id.
+
+**Founder's manual steps still outstanding:** **paste
+`docs/sql/w11-isolation-rls.sql`** into the Supabase SQL editor as `postgres`,
+once. It runs in one transaction and ends with a read-only VERIFY block whose
+six queries' stated counts are the pass. After it lands, the `anon` key can no
+longer read or write any table, `profiles.role` is read-only to each user, and
+the account-switch erase already shipped in the app has the database-level lock
+underneath it. Nothing in this repo can apply the file.
