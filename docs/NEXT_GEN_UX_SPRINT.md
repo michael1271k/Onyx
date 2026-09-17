@@ -2386,3 +2386,81 @@ and `v26.healthWorkoutUuid` did. A bilateral rating is unaffected, because it
 sends neither column. The file requires **Postgres 15+** for `NULLS NOT
 DISTINCT`; it ends with a two-query VERIFY block, and the counts are the pass,
 not the absence of an error.
+
+### W10 Wave Record — shipped 2026-09-17 as 4.1.0
+
+**Drift from the plan, on purpose:**
+
+- **4.1.0, not 3.19.0.** The plan's table predates the Refinement and
+  Architecture sprints; `main` was already 4.0.0 (W4 of the Architecture plan)
+  and 4.0.1 (its W5 purge) when this wave branched. A wave that lands new
+  capability is MINOR, so the number is 4.1.0 and the table's 3.19.0 is
+  history — `quick-fixes-ux-3-19-0` shipped under it in the meantime.
+- **Waking is never the question on a training day.** The brief says "before
+  ~11:00 on a training day the card asks the pre-session question", and the
+  self-check pins 07:00 → pre. So a training day asks `pre` from midnight
+  until the session ends (or 18:30) and `post` after; the Waking slot still
+  exists — the dots draw it, the sheet's segment offers it — it is just never
+  what the card is *asking* for. A rest day reads the clock alone: Waking
+  until 11:00, Midday until 18:30, Night after.
+- **The sheet's own clock rule was deleted, not kept beside the card's.**
+  `FatigueSheet.slotForNow` (11:00 / 17:00, index into the day's slots) was a
+  second rule for the same question, and it would have opened the sheet on
+  Waking at 07:00 while the card above it said "Rate before training". One
+  rule, `Fatigue.askingSlot`, read by both through `DayModel.fatigueAsk`.
+- **The "missing end" is hidden at the accessibility sizes.** "Exhausted" and
+  "Post not rated" cannot share a 340 pt row at AX5 — the same measurement
+  that forced `ViewThatFits` on the reading — so the caption follows
+  `slotRow`'s precedent and steps aside there; VoiceOver reads it from the
+  accessibility label regardless.
+
+**Root causes that were not where the plan guessed:**
+
+- **`MAX(ended_at)` is wrong on a two-a-day.** SQL's MAX skips NULLs across
+  rows, so a date with one finished session and one still open answers the
+  morning's finish while the afternoon is mid-set — and the card would ask
+  "after training" during the session. `sessionEndedStream` guards it with
+  `CASE WHEN COUNT(*) > COUNT(ended_at) THEN NULL` and
+  `SessionEndedStreamTests` pins the case. Found by the invariant audit, not
+  by the self-check, whose tests feed `askingSlot` a hand-supplied minute.
+- **A rest day's fold CAN yield `pre`/`post`.** `normalizeSlot` passes a
+  modern key through unchanged whatever the day's kind, so a `pre` row logged
+  before the day was swapped to rest survives the fold. `deltaMissing` is
+  pure and does not know the day; the card checks the slot it would name is
+  one the day has (`slots.contains`) before printing it.
+
+**Constraints discovered that the next wave must respect:**
+
+- **The day screens are pinned now.** `day`, `day-rows`, `day-past` and
+  `day-session` go through `pinned(...)` (13:00) because the card's verb reads
+  the clock. The seeded session in `fullDay(withSession: true)` ends at 10:08,
+  so `day-session` photographs "Rate after training" and `day` "Rate before
+  training" — a new day screen that is not pinned photographs a different
+  card by the hour.
+- **`DayClock` is the clock.** The card, the sheet, the stress log's time
+  wheel and the stack's Due/Later split all read `DayModel.clock`; the
+  session's end is the stored row's `ended_at` as minutes of the day
+  (`PsychStress.minuteOfDay`). Nothing new under `Features/Pulse` should read
+  `Date()` for a time-of-day decision.
+- **`OnyxTests` and the `.swift` PostToolUse hook.** The hook in
+  `.claude/settings.json` runs `scripts/check-swift.sh` in the PRIMARY
+  checkout, not the worktree — it verifies nothing about a wave's edits. Run
+  the gates by hand in the worktree, with scratch paths of your own
+  (`OnyxCore-w10`, `OnyxData-w10`, `shot-w10`) when another wave is building.
+
+**Left open on purpose:**
+
+- **The verb still says "Rate before training" when Before is already rated.**
+  The reading line shows the answer, so the card is truthful; advancing the
+  question to Post before the session ends would ask for a reading that does
+  not exist yet. If the founder wants "Rated · Before training" as the verb
+  on an answered slot, it is a one-line change in `FatigueCard.body`.
+- **Waking on a training day is reachable only by the segment.** See drift
+  above; if the founder wants the card to ask Waking before 11:00 on a
+  training day when it is unrated, `askingSlot` gains one branch and
+  `FatigueClockTests.trainingDayByClock` changes its first expectation.
+
+**Founder's manual steps still outstanding:** none. No schema, no SQL, no
+entitlement.
+
+---

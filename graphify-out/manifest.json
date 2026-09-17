@@ -300,18 +300,18 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseFatigue.swift": {
-    "mtime": 1789478519.1321418,
-    "ast_hash": "a52e4801150717af2236840a97823ea1",
+    "mtime": 1789670039.658993,
+    "ast_hash": "9c507c86575956f06867181e9c58e71d",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseModel.swift": {
-    "mtime": 1789584384.8503468,
-    "ast_hash": "5a17a8b9fde0430415c97038f609ca6e",
+    "mtime": 1789670039.6594489,
+    "ast_hash": "6f229c70866459015401ebf516ba78cf",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulsePreviews.swift": {
-    "mtime": 1789656656.2465138,
-    "ast_hash": "ea025cb09f3e099a59ca92d5a998d1a7",
+    "mtime": 1789670039.659737,
+    "ast_hash": "8022a761716a26220f184a3474de0599",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseScale.swift": {
@@ -920,8 +920,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Recovery/Fatigue.swift": {
-    "mtime": 1789307813.9064138,
-    "ast_hash": "37ef9292664dae809a44393d9a807698",
+    "mtime": 1789670039.6601503,
+    "ast_hash": "a69981b7247b22190e38a63a02edd88d",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Recovery/PsychStress.swift": {
@@ -2660,8 +2660,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Day/DayEditing.swift": {
-    "mtime": 1789663914.425243,
-    "ast_hash": "788ec1df1437cc6098c11a644975fb72",
+    "mtime": 1789670039.660853,
+    "ast_hash": "a9b249b706fb8ab0f1fa3d29b611cc4d",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Day/NutritionWeek.swift": {
@@ -3410,8 +3410,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1789669884.6278622,
-    "ast_hash": "21fbeea27fd620d74755d95625bc0901",
+    "mtime": 1789670039.6627061,
+    "ast_hash": "963425547b84406957ec31a4f3a6a0f9",
     "semantic_hash": ""
   },
   "scripts/check-swift.sh": {
@@ -3475,8 +3475,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1789669884.6110003,
-    "ast_hash": "866114a3a4c7c56a68e6758e04b55f03",
+    "mtime": 1789670039.6582346,
+    "ast_hash": "4954cfd5d4b7d94a8cb755d4181c72bc",
     "semantic_hash": ""
   },
   "docs/EPIC_SPRINT_PLAN.md": {
@@ -3510,8 +3510,8 @@
     "semantic_hash": ""
   },
   "native/project.yml": {
-    "mtime": 1789669884.6275058,
-    "ast_hash": "cd979a405ff291d19574a495ec7913d9",
+    "mtime": 1789670039.6624913,
+    "ast_hash": "88f37383d69861b1e930ca1e0a918fcc",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png": {
@@ -3670,8 +3670,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseCarousel.swift": {
-    "mtime": 1789506314.5735366,
-    "ast_hash": "7fc871c88891a80f586581db0147c338",
+    "mtime": 1789670039.6586561,
+    "ast_hash": "2554e8e31e17c81bde12159a0fb3f496",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Settings/AppearanceView.swift": {
@@ -3735,8 +3735,8 @@
     "semantic_hash": ""
   },
   "docs/NEXT_GEN_UX_SPRINT.md": {
-    "mtime": 1789584524.465548,
-    "ast_hash": "e6c9969f03917c8054e5b62f4b33b96e",
+    "mtime": 1789670050.2098045,
+    "ast_hash": "b717f836259a51dde850ae07068efb58",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Nutrition/WaterTruth.swift": {
@@ -3907,6 +3907,16 @@
   "native/OnyxTests/WeeklyReportTests.swift": {
     "mtime": 1789666694.9171603,
     "ast_hash": "6682221521fc4f5fdd8946bf75c50fc9",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxCore/Tests/OnyxCoreTests/FatigueClockTests.swift": {
+    "mtime": 1789670039.66035,
+    "ast_hash": "52bf6bd0ca6eece6abc92b6a55301811",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxData/Tests/OnyxDataTests/SessionEndedStreamTests.swift": {
+    "mtime": 1789670039.6612062,
+    "ast_hash": "7659a2aa49caf4751343fc54d45fcb4e",
     "semantic_hash": ""
   }
 }
