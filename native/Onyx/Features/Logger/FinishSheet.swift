@@ -246,7 +246,22 @@ struct FinishSheet: View {
             ) {
                 tile("Tonnage", "scalemass", OnyxFormat.volumeExact(model.totalVolumeKg), "kg",
                      tint: Color.onyx.textPrimary)
-                tile("Sets", "square.stack.3d.up", "\(model.completedSets)/\(model.plannedSets)", nil,
+                // ── A FINISHED SESSION HAS NO DENOMINATOR ───────────────────
+                // `plannedSets` is `day.plannedSets(for:)`, and on an edit deck
+                // `day` is `SessionDetailView.editorDay`'s synthetic day, which
+                // appends EVERY unperformed plan movement so a lift you forgot
+                // can still be added. So a complete workout read "18/19" — the
+                // 19th being a set nobody was ever going to do, on a session
+                // that ended three weeks ago.
+                //
+                // Fixed HERE and not at the day: that appending is deliberate
+                // and the deck needs it. What is wrong is a tile printing a
+                // target at a session that has no target left to hit.
+                tile("Sets", "square.stack.3d.up",
+                     model.isEditing
+                        ? "\(model.completedSets)"
+                        : "\(model.completedSets)/\(model.plannedSets)",
+                     model.isEditing ? "sets" : nil,
                      tint: Color.onyx.textPrimary)
                 tile("Records", "trophy", model.recordCount > 0 ? "\(model.recordCount)" : "—", nil,
                      tint: model.recordCount > 0 ? Color.onyx.record : Color.onyx.textTertiary)

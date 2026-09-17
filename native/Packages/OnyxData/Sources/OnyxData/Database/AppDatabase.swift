@@ -1228,6 +1228,40 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // ── v29 ─────────────────────────────────────────────────────────────
+        // Where an edit STARTED, so Cancel knows what to take back.
+        //
+        // ── WHY THE MARK IS (device_id, seq) AND NOT A TIME OR AN ID ────────
+        // The obvious watermark is "the newest event when the editor opened",
+        // and both candidates for that are wrong here. `set_events.id` is a
+        // uuid — there is no ordering in it at all — and `created_at` is a
+        // DEVICE wall clock, which is the one thing `SetEvent` exists not to
+        // trust. `seq` is the Lamport value: monotonic per device, and only per
+        // device. So the honest statement is a pair — "every event THIS device
+        // wrote for this session above N" — and it is also the useful one: it
+        // names exactly this sitting's edits and cannot name a watch's
+        // concurrent ones, which a revert must leave standing.
+        //
+        // ── AND WHY A TABLE, NOT TWO COLUMNS ON `workout_sessions` ──────────
+        // That row is encoded toward the wire. Every column on it is a column
+        // `SyncTranslation.sessionRow` may send and the server may answer with,
+        // and the two ends already drift by hand-applied SQL more often than
+        // anyone would like. A watermark is not a fact about the workout; it is
+        // a fact about a screen that is open on this device right now, and it
+        // belongs where `device_state` and `live_sessions` already live —
+        // local-only, no mirror entry, no outbox.
+        //
+        // The foreign key is what makes `discardSession` correct for free: the
+        // session goes, the mark goes with it.
+        migrator.registerMigration("v29.sessionEditMarks") { db in
+            try db.create(table: "session_edit_marks") { t in
+                t.primaryKey("session_id", .text)
+                    .references("workout_sessions", onDelete: .cascade)
+                t.column("device_id", .text).notNull()
+                t.column("seq", .integer).notNull()
+            }
+        }
+
         return migrator
     }
 }

@@ -227,24 +227,58 @@ struct LiveLoggerView: View {
         // what is at stake — which is nothing at all on the session this button
         // is mostly for.
         .confirmationDialog(
-            model.completedSets > 0 ? "Discard this workout?" : "Cancel this workout?",
+            cancelDialogTitle,
             isPresented: $confirmCancel,
             titleVisibility: .visible
         ) {
-            Button(cancelActionTitle, role: .destructive) { cancelWorkout() }
-            Button("Keep logging", role: .cancel) {}
+            // ── BOTH LABELS AND THE ACTION ARE NAMED, NOT INLINE ────────────
+            // A ternary in either slot is enough to tip this body over the
+            // solver's budget — "unable to type-check this expression in
+            // reasonable time", reported against the `Text` two lines down
+            // rather than against the branch that caused it. The chain above is
+            // already long; anything added here has to arrive pre-typed.
+            Button(cancelActionTitle, role: .destructive) { confirmedCancel() }
+            Button(keepTitle, role: .cancel) {}
         } message: {
             Text(cancelMessage)
         }
         // ── LEAVING IS NOT CANCELLING, AND IT STILL OWES THE CASCADE ────────
         // There is no draft here: every set edit committed the moment it was
         // made, seeded the event log, replayed the ledger and rewrote the
-        // session's aggregates. So the chevron cannot discard, and the only
-        // thing it CAN do wrong is skip the rescore — leaving `daily_scores`
-        // describing a session that no longer exists, from the edit's date up
-        // to forty-eight days after it. `RescoreQueue` coalesces, so a Save
-        // followed by a dismiss asks twice and runs once.
-        .onDisappear { requestRescore() }
+        // session's aggregates. So the chevron KEEPS the changes — Cancel is
+        // now the button that does not — and the only thing it CAN do wrong is
+        // skip the rescore, leaving `daily_scores` describing a session that no
+        // longer exists, from the edit's date up to forty-eight days after it.
+        // `RescoreQueue` coalesces, so a Save followed by a dismiss asks twice
+        // and runs once.
+        //
+        // ── AND IT HAS TO CLOSE THE SITTING, WHICHEVER WAY IT ENDED ─────────
+        // The watermark `markEditStart` laid down is a ROW, on purpose: an
+        // editor killed mid-sitting can still be cancelled when it comes back,
+        // which is the whole reason it is not held on the model. The cost is
+        // that nothing forgets it for free — and `markEditStart` deliberately
+        // does NOT move an existing mark, because moving it is how the crash
+        // case loses the very edits it needs to undo.
+        //
+        // So a mark left standing after the chevron is worse than no Cancel at
+        // all: leaving KEEPS the changes, and re-opening the session next month
+        // would find a mark still pointing at last month, so one Discard would
+        // silently undo both sittings. `finishEdit` and `cancelEdit` clear
+        // their own; this is the third exit, and it is the only one nothing in
+        // the model can see.
+        //
+        // ── AND WHY THE VIEW REACHES THE STORE HERE ────────────────────────
+        // The same argument `mirrorRestToWatch` makes one screen down.
+        // `LoggerModel` is the session's arithmetic; the mark is not about the
+        // session at all, it is about a SCREEN being open, and this is the line
+        // that knows the screen is going away. Giving the model a method for it
+        // would be giving the model a fact it has no other use for.
+        .onDisappear {
+            requestRescore()
+            if let sessionId = model.sessionId, model.isEditing {
+                try? environment?.database.clearEditMark(sessionId: sessionId)
+            }
+        }
         // ── ASKED PER EDIT, NOT ONLY ON THE WAY OUT ─────────────────────────
         // `.onDisappear` does not fire when iOS terminates the app, so an edit
         // made and then jetsammed left `daily_scores` describing a session that
@@ -375,17 +409,49 @@ struct LiveLoggerView: View {
                     ? "Every change is already saved. Finish runs the recompute."
                     : "The session keeps running. Resume it from the Train tab.")
 
-            // ── AND WHY EDIT MODE HAS NO TRASH ──────────────────────────────
+            // ── WHY EDIT MODE STILL HAS NO TRASH, AND NOW HAS AN UNDO ───────
             // `cancel()` is `discardSession`: the session row, its sets, its
             // events and its outbox items in one transaction. On the live deck
             // that is a workout that did not happen. On a session from three
             // weeks ago it is a workout that DID, with a daily score, a PR
-            // ledger and forty-eight days of readiness built on it — and no
-            // undo, because the events it would destroy are the record of it.
-            // Deleting a past session is a different verb than cancelling a
-            // live one and it does not belong on a screen whose other buttons
-            // are about the set in front of you.
-            if !model.isEditing {
+            // ledger and forty-eight days of readiness built on it. Deleting a
+            // past session is a different verb than cancelling a live one and
+            // it still does not belong on a screen whose other buttons are
+            // about the set in front of you.
+            //
+            // What DID belong here, and was missing, is the other half of
+            // Save. This paragraph used to say an undo was impossible because
+            // "the events it would destroy are the record of it" — true of a
+            // discard, and the wrong shape for a cancel. A revert destroys no
+            // event: `revertSessionEdits` diffs the session against the
+            // watermark `markEditStart` laid down when the editor opened and
+            // writes the COMPENSATING events — a void for what the sitting
+            // added, a fresh append for what it deleted. The log grows in both
+            // directions, which is what lets the server, the watch and a
+            // half-synced queue all end up agreeing.
+            //
+            // Two things it deliberately is not. It is not the chevron: that
+            // leaves with the changes KEPT (`.onDisappear`, and the hint
+            // above), which is the right default for a screen whose every edit
+            // has already committed. And it is not scoped to the app's
+            // lifetime: the watermark is a row, so an editor killed mid-sitting
+            // can still be cancelled when it comes back.
+            // ── AND ONLY WHEN THERE IS A MARK TO GO BACK TO ─────────────────
+            // `markEditStart` can fail — a busy store, a migration that has not
+            // run — and `attach(editing:)` swallows that on purpose rather than
+            // refusing to open an editor over it. Without this clause the button
+            // still drew: the dialog promised "every set goes back to the way it
+            // was", `revertSessionEdits` found no mark, did nothing, and the
+            // screen dismissed reporting success. A button that looks live and
+            // does nothing is worse than no button.
+            if model.isEditing, model.editWatermarked {
+                Button(role: .destructive) { confirmCancel = true } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .tint(Color.onyx.danger)
+                .accessibilityLabel("Discard changes")
+                .accessibilityHint("Puts every set back the way it was when you opened the editor.")
+            } else {
 
             // ── AND WHY LEAVING NEEDED A SIBLING ────────────────────────────
             // The chevron was the only way out, and it leaves the session
@@ -648,16 +714,41 @@ struct LiveLoggerView: View {
 
     /// What the confirmation offers, and what it warns about.
     ///
-    /// The two states are genuinely different actions and the dialog says so: a
+    /// The states are genuinely different actions and the dialog says so: a
     /// session with nothing in it has nothing to discard, and telling someone
     /// their sets are about to be deleted when there are none is how a dialog
     /// stops being read.
+    ///
+    /// ── AND EDITING IS A THIRD THING AGAIN ──────────────────────────────────
+    /// One button opens this dialog from two screens that share no verb. On the
+    /// live deck the workout is thrown away; in the editor the WORKOUT survives
+    /// and the sitting's changes are thrown away. Reusing the live copy would
+    /// have told a person about to undo a typo that their session is being
+    /// deleted from the server — the one sentence guaranteed to make them tap
+    /// Cancel on the Cancel.
+    private var cancelDialogTitle: String {
+        if model.isEditing { return "Discard your changes?" }
+        return model.completedSets > 0 ? "Discard this workout?" : "Cancel this workout?"
+    }
+
     private var cancelActionTitle: String {
-        model.completedSets > 0 ? "Discard \(model.completedSets) sets" : "Cancel workout"
+        if model.isEditing { return "Discard changes" }
+        return model.completedSets > 0 ? "Discard \(model.completedSets) sets" : "Cancel workout"
+    }
+
+    private var keepTitle: String { model.isEditing ? "Keep editing" : "Keep logging" }
+
+    /// One dialog, two screens, two verbs — resolved here rather than in the
+    /// button, which the type-checker cannot afford. See the call site.
+    private func confirmedCancel() {
+        if model.isEditing { cancelEdit() } else { cancelWorkout() }
     }
 
     private var cancelMessage: String {
-        model.completedSets > 0
+        if model.isEditing {
+            return "Every set goes back to the way it was when you opened this session. The workout itself is kept."
+        }
+        return model.completedSets > 0
             ? "The sets logged in this session are deleted here and on the server. This cannot be undone."
             : "Nothing has been logged, so nothing is saved. The session closes and no workout is recorded."
     }
@@ -689,6 +780,28 @@ struct LiveLoggerView: View {
         activity.end()
         dismiss()
         return true
+    }
+
+    /// Put the sitting back, and only then leave.
+    ///
+    /// ── IT OWES THE CASCADE EXACTLY AS SAVE DOES ────────────────────────────
+    /// A revert rewrites `total_volume_kg`, the PR ledger and every set row of
+    /// the session — the same three things an edit rewrites, in the opposite
+    /// direction. `daily_scores` from this date forward now describes a session
+    /// that no longer exists either way, so `requestRescore()` runs here for
+    /// the reason it runs in `finishEdit`, off the same anchor and through the
+    /// same coalescing queue. `cancelEdit` raises `editDirty` so it has
+    /// something to ask about; `.onDisappear` is still the backstop.
+    ///
+    /// The store failing keeps the screen up — `cancelEdit` puts the reason in
+    /// `storeError` and the banner is already rendering it — which is the rule
+    /// `finish` and `cancelWorkout` both follow. Dismissing anyway would report
+    /// a half-done revert to a screen that no longer exists.
+    private func cancelEdit() {
+        guard model.cancelEdit() else { return }
+        requestRescore()
+        model.stopRest()
+        dismiss()
     }
 
     /// Close an edit: the effort word, then the cascade (§U4.5).

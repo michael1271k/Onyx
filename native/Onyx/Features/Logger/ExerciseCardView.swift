@@ -87,11 +87,21 @@ struct ExerciseCardView: View {
     }
 
     private var rail: Color {
-        // A bout has no primary mover to be coloured by, and the day's accent
-        // is not a substitute: it made one treadmill teal on Legs and indigo on
+        // ── THE BOUT IS TESTED FIRST, AND IT STAYS THAT WAY ─────────────────
+        // A bout has no primary mover to be coloured by, and the day's accent is
+        // not a substitute: it made one treadmill teal on Legs and indigo on
         // Upper A — the same movement, two colours, on one deck.
+        //
+        // Tested FIRST rather than left to fall through, which is the change W2
+        // made and the reason to keep it: the wave briefly taught
+        // `ProgramExercise` to resolve `MuscleMap.cardioMovers`, `family` began
+        // answering quadriceps for a treadmill, and this rail quietly turned
+        // into a leg colour. That fallback is gone (it was paying muscle credit
+        // for a walk — see `ProgramExercise.init`), but the ordering is the part
+        // that makes the rail say what the card is about no matter who answers.
+        if isCardio { return Color.onyx.cardio }
         if let family { return Color.onyx.muscle(family) }
-        return isCardio ? Color.onyx.cardio : Color.onyx.day(model.day.key)
+        return Color.onyx.day(model.day.key)
     }
 
     /// The bottom half of the rail — the movement's first ASSISTING mover.
@@ -464,7 +474,17 @@ struct ExerciseCardView: View {
                 // accessibility size, and for the same reason: "Compound" is
                 // not worth pushing a countdown off the screen.
                 if liveRest == nil {
-                    if let family {
+                    // ── ONE TAG SLOT, AND A BOUT SPENDS IT SAYING SO ────────
+                    // `family` is nil on a bout: `ProgramExercise` resolves
+                    // movers from `MuscleMap.dict` only, and `dict` does not
+                    // name a treadmill (it must not — it is the input to the
+                    // weekly muscle accumulator). So this branch is what draws
+                    // the card's one tag, and "Cardio" is the useful word: the
+                    // line is already full at 375 pt, and a muscle name on a
+                    // walk would be a claim the deck does not pay credit for.
+                    if isCardio {
+                        tag("Cardio", Color.onyx.cardio)
+                    } else if let family {
                         tag(family.displayName, Color.onyx.muscle(family))
                     }
                     // ── NOT ON A BOUT ───────────────────────────────────────

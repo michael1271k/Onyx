@@ -145,8 +145,34 @@ final class LiveActivityController {
         let current = model.currentSet
 
         var load = ""
+        // ── THE BOUT IS TESTED FIRST, AND NOT ON NIL ────────────────────────
+        // A treadmill row carries `weightKg 0` and `reps 0` — non-nil ZEROS,
+        // written by `withWarmupCardio` so the row is tickable while staying
+        // out of tonnage and out of the PR engine. So the `if let` below
+        // SUCCEEDS on a bout, and the Lock Screen led a ten-minute walk with
+        // "0 kg × 0" for as long as the card has existed. Nil is not the
+        // question: `SetRow.isCardio` is the same test the deck itself uses to
+        // decide a row is time and distance rather than reps, and it is the
+        // only one that can see the difference.
+        var cardioSec: Int?
+        var cardioKm: Double?
         if let row = current?.row {
-            if let kg = row.weightKg, let reps = row.reps {
+            // ── A BOUT NEEDS A NUMBER THE CARD CAN DRAW ─────────────────────────
+        // `isCardio` is true on an INCLINE alone (`SetRow.isCardio`), and the
+        // two fields below are the only ones this branch fills — so a row that
+        // has an incline and neither a clock nor a distance produced an empty
+        // `load` and an empty cardio line, and the card drew nothing at all
+        // where the set used to be. Typing the incline first does exactly that.
+        // Falling through leaves it on the lift path, which prints the load it
+        // does have rather than a blank.
+        if row.isCardio, row.durationSec != nil || row.distanceKm != nil {
+                // The two numbers, unformatted — see `ContentState
+                // .cardioElapsedSec` for why this one wire is not a string, and
+                // `cardioLine(sec:km:pace:)` for the line they become. `load`
+                // stays empty: the card draws one or the other, never both.
+                cardioSec = row.durationSec
+                cardioKm = row.distanceKm
+            } else if let kg = row.weightKg, let reps = row.reps {
                 load = "\(OnyxFormat.kg(kg)) kg × \(reps)"
             } else if let kg = row.weightKg {
                 // Weight-only while the reps are still being typed — which is
@@ -217,6 +243,10 @@ final class LiveActivityController {
             // Nil when not resting, so the card's bar and the card's clock
             // appear and leave together.
             restTotalSec: restTotal,
+            // The bout, as two numbers. Nil on a lift, which is what puts the
+            // card's slot back on `load`.
+            cardioElapsedSec: cardioSec,
+            cardioDistanceKm: cardioKm,
             dayKey: model.day.key
         )
     }

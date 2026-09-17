@@ -179,6 +179,51 @@ enum WidgetPreviews {
             ("resting", state(rest: resting, rpe: "RPE 8")),
             ("record", state(rest: resting, prs: 2, rpe: "RPE 9", setLabel: "Set 4 of 4")),
             ("paused", state(rpe: "RPE 8", paused: true)),
+            // ── THE BOUT, WHICH THIS PAGE COULD NOT PHOTOGRAPH (W2) ─────────
+            // Every fixture above is a lift, so the cardio branch W2 added to
+            // `WorkoutCurrentSet` and to the compact island had no shot on this
+            // page at all — the screenshot round reviewed four cards that could
+            // not exercise it and would have reported the wave verified.
+            //
+            // `load` is EMPTY on purpose. That is what `LiveActivityController`
+            // sends for a bout now: the old producer read `if let kg, let reps`,
+            // the treadmill row carries non-nil ZEROS, and the card said
+            // "0 kg × 0". The two numbers are the wire's whole content and the
+            // view derives the pace, so a fixture that pre-formatted the string
+            // would photograph a card the producer can never send.
+            ("cardio", .init(
+                exercise: "Treadmill",
+                setLabel: "Bout 1 of 1",
+                load: "",
+                rpe: "",
+                lastTime: "12 min · 2.15 km",
+                volume: "1 074 kg",
+                setsDone: 9,
+                setsPlanned: 22,
+                prsThisSession: 0,
+                nextExercise: "Seated Cable Row (Wide Grip)",
+                lastRpe: "",
+                restEndsAt: nil,
+                timerOrigin: Date().addingTimeInterval(-45 * 60),
+                isPaused: false,
+                elapsed: "",
+                // What `LoggerModel.primaryMuscle` actually sends for a bout: it
+                // tests the rows and answers `"cardio"`, and `WorkoutActivityCard`
+                // resolves that token to the cardio chip. "quadriceps" here would
+                // photograph a chip the producer cannot produce — which it did,
+                // for one round, while `ProgramExercise` was resolving cardio
+                // movers it had no business resolving.
+                primaryMuscle: "cardio",
+                restTotalSec: nil,
+                // A REAL bout, and the arithmetic has to close. The brief's
+                // example line — "12:30 · 0.37 km · 5:42/km" — does not: 750 s
+                // over 0.37 km is 33:47/km, and a fixture carrying it would
+                // photograph a correct formatter reading out an impossible walk
+                // for anyone to check against. 750 s over 2.19 km IS 5:42/km.
+                cardioElapsedSec: 750,
+                cardioDistanceKm: 2.19,
+                dayKey: "arms"
+            )),
         ]
     }()
 

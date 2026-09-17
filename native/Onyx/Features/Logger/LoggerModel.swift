@@ -458,6 +458,24 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// `routine_templates` — see `AppDatabase.deckOrder(dayKey:userId:)`.
     /// Empty until a session has been finished on this day.
     private let storedDeckOrder: [String]
+
+    /// This deck is being built to CORRECT a finished session, not to run one.
+    ///
+    /// Known at construction, which is the point. Two rules turn on it and both
+    /// used to be applied — or undone — after the fact:
+    ///
+    ///   * `storedDeckOrder` is not read. See `init` for what ranking an edit
+    ///     deck against another session's running order did to the treadmill.
+    ///   * The warm-up bout is not prepended. `withWarmupCardio` ran at `init`,
+    ///     before anything knew this was an edit, and `attach(editing:)` then
+    ///     deleted the card again if nobody had ticked it — a card minted and
+    ///     destroyed in the same breath, and a real one on any session that DID
+    ///     walk, because the delete could not tell the two apart without
+    ///     inspecting rows that had not been restored yet.
+    ///
+    /// `attach(editing:)` is the only caller that needs it and `openEditor` is
+    /// the only construction site that passes it, so the two cannot drift.
+    private let openingForEdit: Bool
     /// Whether this athlete's catalogue knows the warm-up's movement — see
     /// `catalogueHasWarmupCardio`. False for every account W5 creates.
     private let opensWithWarmupCardio: Bool
@@ -540,12 +558,46 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
 
     // ── The live PR bar ─────────────────────────────────────────────────────
     //
-    // Built at `attach`, from the same function that writes the ledger on
-    // close, and NOT rebuilt while the session runs: the bar a set is measured
-    // against is the history that existed before this workout started. Folding
-    // this session's own sets into it as they land is how every set becomes a
-    // record against itself.
+    // Built from the same function that writes the ledger on close. The bar a
+    // set is measured against is the history that existed before this workout
+    // started — folding this session's own sets into it as they land is how
+    // every set becomes a record against itself — and `excluding: sessionId`
+    // is what enforces that, not the fact that the bar is never rebuilt.
+    //
+    // ── WHY IT IS REBUILT, WHICH IT USED TO NOT BE (W2) ─────────────────────
+    // It was built once, at `attach`, and the comment here said so. That made
+    // the bar a snapshot of the deck's identities at the instant the screen
+    // opened — and those identities MOVE. `storedIdCreatingCatalogueRow` mints
+    // a catalogue row at the first commit of a movement the catalogue has never
+    // heard of and rewrites `idByCanonicalName`, so the key `refreshLivePrs`
+    // hands the engine flipped slug → uuid on the first tick while the bar was
+    // still keyed on the slug. `PrEngine.detectSetPrs` requires an EXISTING
+    // index entry for every axis, so it awarded nothing at all: the deck showed
+    // no trophy on a set whose own session page, one screen later, showed two.
+    //
+    // Widening the id set handed to `livePrBaselines` does NOT fix it, and
+    // that is the part worth being explicit about. `PrRecorder.baselines`
+    // re-keys every row it gathers to `keyByName[name(id)]`, and `keyByName`
+    // uniques on FIRST over a `Set` — whose iteration order is a hash. Hand it
+    // both the slug and the uuid for one movement and the bar lands under
+    // whichever the hash happened to visit first, which is why the symptom came
+    // and went between launches.
+    //
+    // So: ONE resolved id per card goes in (`PrRecorder.baselines` gathers the
+    // movement's other ids by canonical NAME itself — that is what `siblings`
+    // is for), and the bar is rebuilt whenever that set of ids moves. Rebuilding
+    // is safe precisely because `excluding` is what bounds the history, and it
+    // can only ever raise a bar or fill an empty one.
     private var baselines: PrBaselines = .empty
+
+    /// The ids `baselines` was built from — the deck's resolved identities as
+    /// they stood at the last build.
+    ///
+    /// The comparison `refreshLivePrs` makes before every pass. A mint, a phase
+    /// switch that replaces `exercises`, and a restore that learns a session's
+    /// stored ids all move this set, and all three used to leave the bar keyed
+    /// on identities the candidates no longer carry.
+    private var baselineKeys: Set<String> = []
 
     /// Distinct axis-records claimed so far — the Live Activity's count.
     private(set) var prsThisSession = 0
@@ -620,6 +672,13 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// session. Silent, and it survives until something else happens to edit a
     /// day inside the same window.
     private(set) var editDirty = false
+
+    /// Whether `attach(editing:)` managed to stamp the revert watermark.
+    ///
+    /// The Cancel button reads it: a deck that could not be marked cannot be
+    /// reverted, and a button that looks live and does nothing is worse than no
+    /// button. See `cancelEdit`.
+    private(set) var editWatermarked = false
 
     /// Called by the view once the cascade has been asked for.
     func clearEditDirty() { editDirty = false }
@@ -797,12 +856,14 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         phase: ProgramPhase,
         store: AppDatabase? = nil,
         userId: String = "preview",
-        startedAt: Date? = nil
+        startedAt: Date? = nil,
+        openingForEdit: Bool = false
     ) {
         self.day = day
         self.phase = phase
         self.store = store
         self.userId = userId
+        self.openingForEdit = openingForEdit
         self.startedAt = startedAt ?? Date()
         // ── WHETHER THE CALLER HAD AN OPINION ABOUT THE CLOCK ───────────────
         // `attach` may adopt a start banked before the first set created a
@@ -819,7 +880,25 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         // Read ONCE, at init. The stored order is last week's answer and the
         // live deck is this week's; re-reading it on a phase switch would let a
         // week-old template argue with a card the athlete has just dragged.
-        self.storedDeckOrder = (try? store?.deckOrder(dayKey: day.key, userId: userId)) ?? []
+        //
+        // ── AND AN EDIT DECK HAS NO USE FOR IT AT ALL (W2) ──────────────────
+        // `deckOrder(dayKey:)` answers with the MOST RECENT session on this day
+        // key, which on an edit is almost never the session being edited. So
+        // `inDeckOrder` ranked a three-week-old workout against last Tuesday's
+        // running order, and any movement last Tuesday did not contain got no
+        // rank at all — `placed ?? (count + index)` — and sorted to the BOTTOM.
+        // The treadmill is the movement that happens to, every time, because it
+        // is the one the opener prepends rather than the program naming it: the
+        // "treadmill drops to the bottom on edit" report, whose cause is not
+        // `exercise_order` (the phone has written that for every cardio row
+        // since `v16.exerciseOrder`; the live table has no null among them).
+        //
+        // `SessionDetailView.editorDay` already builds the deck in the session's
+        // own performed order. That IS the stored answer for a finished session,
+        // and nothing else gets a vote.
+        self.storedDeckOrder = openingForEdit
+            ? []
+            : ((try? store?.deckOrder(dayKey: day.key, userId: userId)) ?? [])
         // Read once, like the deck order above, and for the same reason: it
         // cannot change mid-session and a per-rebuild query would be a
         // catalogue read on every phase switch.
@@ -927,9 +1006,18 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             return previous
         }
         exercises = Self.inDeckOrder(exercises, stored: storedDeckOrder, current: liveOrder.isEmpty ? nil : liveOrder)
-        if opensWithWarmupCardio {
+        if opensWithWarmupCardio && !openingForEdit {
             exercises = Self.withWarmupCardio(exercises, existing: existing)
         }
+        // ── A REBUILT DECK IS A MOVED DECK ──────────────────────────────────
+        // This replaces `exercises` wholesale, so every identity the bar was
+        // built on is potentially gone and `prsThisSession` still holds the
+        // count from the deck that no longer exists. Neither was recomputed: a
+        // phase switch mid-session dropped the trophies off the rows it had
+        // already awarded them to, and the Live Activity's count went with them.
+        // `refreshLivePrs` rebuilds the bar first when the ids moved, so this is
+        // the whole of the fix.
+        refreshLivePrs()
     }
 
     /// Put the deck in the order the athlete last left it.
@@ -1013,12 +1101,16 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         //
         //   `SessionDetailView.editorDay` builds the edit deck in performed
         //   order, so a session that walked opens with a `Treadmill` card. At
-        //   `init` that card holds SEEDED rows, and `Self.setRow(SeedRow)`
-        //   carries no `durationSec`, no `distanceKm` and no `incline` —
-        //   `SeedRow` has no such fields. So the card did not look like cardio,
+        //   `init` that card held SEEDED rows, and `Self.setRow(SeedRow)`
+        //   carried no `durationSec`, no `distanceKm` and no `incline` —
+        //   `SeedRow` had no such fields. So the card did not look like cardio,
         //   this guard passed, and a second card was minted beside it.
         //
-        // The name test is what the row test cannot see, and the row test is
+        // W2 gave `SeedSet` and `SeedRow` the three fields and `setRow` forwards
+        // them, so the row test can see a seeded bout now. BOTH TESTS STAY. The
+        // name test is what the row test cannot see (a card whose rows the seed
+        // could not fill — the history tier refuses a movement with no working
+        // sets, which every treadmill-only movement is), and the row test is
         // what the name test cannot see (a bike or a rower somebody put at the
         // top is cardio under another name). Neither is redundant; the bug was
         // having only one of them.
@@ -1131,6 +1223,14 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     }
 
     /// One seeded row, as the deck holds it.
+    ///
+    /// ── AND IT CARRIES THE BOUT, WHICH IT USED NOT TO ───────────────────────
+    /// `SeedRow` had no `durationSec`, `incline` or `distanceKm`, so a seeded
+    /// treadmill card came back as a lift of nothing: `SetRow.isCardio` false,
+    /// no Cardio tag, `primaryMuscle`'s row test with nothing to find, and
+    /// `withWarmupCardio` unable to see that the deck already held a bout — it
+    /// needed a second, name-based test to cover for this one. W2 gave the seed
+    /// the three fields; this forwards them.
     private static func setRow(_ row: SeedRow) -> SetRow {
         SetRow(
             weightKg: row.weightKg,
@@ -1139,7 +1239,10 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             kind: row.kind == .warmup ? .warmup : .normal,
             previous: row.previous,
             rpeStale: row.rpeStale,
-            progressed: row.progressed
+            progressed: row.progressed,
+            durationSec: row.durationSec,
+            incline: row.incline,
+            distanceKm: row.distanceKm
         )
     }
 
@@ -1562,19 +1665,22 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         var origin: [SetRow] = []
         for exercise in exercises {
             let name = ExerciseAliases.canonicalName(exercise.name)
-            // The same key `snapshot` writes and `attach(editing:)` built the
-            // bar from. A slug here against uuid-keyed baselines is the bug
-            // above, one layer up.
+            // The same key `snapshot` writes and `buildLiveBaselines` built the
+            // bar from — `baselineIds` calls this very function, so the two
+            // cannot disagree by construction. They used to, and the header on
+            // `baselines` describes what that cost.
             let key = storedId(for: exercise)
-            // ── THE LEDGER'S FLOOR, NOT THIS SESSION'S PHASE ────────────
-            // `PrRecorder.baselines` and `PrRecorder.record` both call
-            // `Ceilings.repWindow(for:dayKey:)` and take its `.cut` default, so
-            // passing `phase` here would gate the e1RM axis by a different
-            // window than the close path uses. Leg Press is 8–12 on a bulk and
-            // 12–15 on a cut: a bulk set of 140 × 10 would light gold live
-            // (floor 8, eligible) and file nothing on close (floor 12, not
-            // eligible). Matching `record` exactly is the requirement.
-            let floor = Ceilings.repWindow(for: name, dayKey: day.key, program: Program(id: "", label: "", days: [day]))?.floor
+            // ── THERE IS NO REP FLOOR ON A CANDIDATE, AND THAT IS RIGHT ─────
+            // A `floor` was computed here from `Ceilings.repWindow` and then
+            // dropped on the ground — `PrCandidateSet` has no field to put it
+            // in, so nothing downstream could ever have read it. Deleted rather
+            // than plumbed through, because plumbing it is the bug it looks like
+            // the fix for: `PrRecorder.baselines` and `PrRecorder.record` both
+            // take `repWindow`'s `.cut` default, so gating the e1RM axis here by
+            // THIS deck's phase would light a trophy the close path then refuses
+            // to file. Leg Press is 8–12 on a bulk and 12–15 on a cut, and a
+            // bulk set of 140 × 10 is exactly that disagreement. Matching
+            // `record` means asking it nothing extra.
             for (i, row) in exercise.rows.enumerated() where row.isDone {
                 candidates.append(PrCandidateSet(
                     key: key,
@@ -1609,6 +1715,22 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             livePrs = []
             return
         }
+        // ── THE BAR, AFTER THE EARLY RETURN AND NOT BEFORE IT ───────────────
+        // The keys above come from `storedId(for:)`, never from `baselines`, so
+        // the ordering is free — and both reasons to take it are real. `init`
+        // ends in `rebuildForPhase`, which now ends here, and at that moment
+        // nothing is ticked: a rebuild above this guard paid for a full store
+        // read (`PersonalRecordRow.fetchAll`, plus every set row for the deck's
+        // ids) on the main actor for a pass that returns without ever reading
+        // it — and then `attach` built the same bar again a moment later.
+        //
+        // Worse on the edit path: at `init` both `sessionId` and `editing` are
+        // still nil, so that discarded bar was built with NO exclusion and NO
+        // date bound — the edited session's own sets folded into the bar it is
+        // judged against. Unreadable, because candidates were empty, and
+        // overwritten by `attach(editing:)` — but a loaded gun inside the one
+        // function whose invariant is that a rebuild can never do that.
+        rebuildBaselinesIfDeckMoved()
         let result = PrEngine.detectSessionPrs(candidates, baselines)
         var records: [LivePrRecord] = []
         for (i, detected) in result.perSet.enumerated() where i < origin.count {
@@ -1825,11 +1947,91 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         guard let store, let sessionId, let editing else { return nil }
         do {
             try store.updateMetrics(sessionId: sessionId, sessionRpe: sessionRpe)
+            // ── SAVING IS WHAT MAKES THE EDIT UNREVERTABLE ──────────────────
+            // The watermark is the one thing that makes `cancelEdit` possible,
+            // so Save is where it stops being true: these changes are now the
+            // session, and a mark left behind would let a LATER editor revert
+            // them as if they had been made in that sitting. Failing to clear it
+            // must not fail the save — the edits themselves already landed, one
+            // transaction each, as they were made.
+            try? store.clearEditMark(sessionId: sessionId)
+            editWatermarked = false
             storeError = nil
             return editing.date
         } catch {
             storeError = String(describing: error)
             return nil
+        }
+    }
+
+    /// Put the session back the way the editor found it (§W2).
+    ///
+    /// ── WHY THIS CAN EXIST NOW, WHEN IT COULD NOT BEFORE ────────────────────
+    /// `LiveLoggerView`'s own comment used to explain the refusal: every set
+    /// edit commits to `set_events`, the projection and the outbox as it is
+    /// made, so by the time a Cancel button could be pressed there was nothing
+    /// left to not-do. That is still true. What changed is that the log is now
+    /// WATERMARKED — `attach(editing:)` records where this device's log stood
+    /// when the editor opened — so "the way the editor found it" is a state the
+    /// store can still name, and `revertSessionEdits` writes the events that
+    /// get back to it. Nothing is deleted; the undo is itself history.
+    ///
+    /// Returns false when the store refused, with the reason in `storeError`,
+    /// which the header banner is already rendering. The caller keeps the screen
+    /// up in that case — dismissing onto a half-done revert is the failure
+    /// `cancel()` and `finish` both avoid.
+    ///
+    /// `editDirty` is RAISED rather than cleared: a revert rewrote the session's
+    /// rows, its aggregates and its PR ledger, so the cascade this deck owes is
+    /// the same one a save owes. The view runs `requestRescore()` next.
+    @discardableResult
+    func cancelEdit() -> Bool {
+        guard let store, let sessionId, isEditing, editWatermarked else { return false }
+        do {
+            // ── THE OUTCOME IS THE ANSWER TO "DID ANYTHING CHANGE" ──────────
+            // `revertSessionEdits` answers nil for a session with nothing to
+            // undo. Nil is not a failure — but it is not a success either, and
+            // the caller DISMISSES on a `true`. Reporting one here would close
+            // the screen telling the athlete their session was restored, after
+            // a dialog promised exactly that and nothing happened.
+            guard try store.revertSessionEdits(sessionId: sessionId) != nil else {
+                storeError = nil
+                return false
+            }
+            // The mark is NOT cleared here. `revertSessionEdits` re-writes it at
+            // the clock as it now stands, deliberately — see its own note —
+            // because this screen stays open and whatever is edited next has to
+            // be cancellable too. Clearing it deleted that one line later and
+            // left the second sitting silently un-revertable.
+            //
+            // ── THE DECK IS BLANKED BEFORE IT IS REBUILT ────────────────────
+            // `restoreLoggedSets` folds the projection ONTO the deck and skips a
+            // card the session holds nothing of (`guard !mine.isEmpty`). Right
+            // for an attach, wrong here: a movement ADDED during the sitting
+            // owns no rows once the revert has voided them, so its card would
+            // keep ticked rows describing sets that no longer exist — and a tick
+            // on one would append behind a terminal tombstone and be dropped in
+            // silence (`SetEventFold` rule 3). Setting the flags writes no
+            // events; only `toggleDone` appends.
+            for exercise in exercises {
+                for row in exercise.rows where row.isDone {
+                    row.isDone = false
+                    row.isRecord = false
+                }
+            }
+            // Rebuilt from the projection the revert just wrote, not from what
+            // was on screen. Reversing the rows in place would be a second
+            // implementation of the fold — the failure `reproject`'s own header
+            // argues against — and it would be wrong the moment a compensating
+            // event did anything the deck could not predict.
+            try restoreLoggedSets()
+            refreshLivePrs()
+            editDirty = true
+            storeError = nil
+            return true
+        } catch {
+            storeError = String(describing: error)
+            return false
         }
     }
 
@@ -1968,17 +2170,67 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     ///
     /// `before` is the edit path's date bound and nothing else: a live session
     /// has nothing after it to exclude.
-    private func buildLiveBaselines(store: AppDatabase, excluding sessionId: String?, before: String? = nil) throws {
+    /// The deck's identities, as the bar and the candidates both have to see
+    /// them: exactly one id per card, which is the id `storedId` answers with
+    /// and therefore the id `refreshLivePrs` will key a candidate on.
+    ///
+    /// ── ONE ID PER CARD, NOT EVERY ID THE MOVEMENT HAS ──────────────────────
+    /// This used to hand over the union of `storedId`, a slug of the name and
+    /// whatever `restoreLoggedSets` had learned. That reads as "widen the bar",
+    /// and it is not what happens: `PrRecorder.baselines` re-keys every row it
+    /// gathers to `keyByName[name(id)]`, and `keyByName` is built by uniquing
+    /// on FIRST over the `Set` it is handed. Two ids for one canonical name
+    /// therefore put the bar under whichever of them the hash visited first,
+    /// with no way for a caller to say which it wanted.
+    ///
+    /// Passing one is not a narrowing. `baselines` gathers the movement's OTHER
+    /// ids itself — `siblings`, every `exercise_id` in `workout_sets` that
+    /// resolves to the same canonical name — and re-keys them onto the id given
+    /// here. So the history is as wide as it ever was, and the key it lands
+    /// under is now chosen rather than drawn.
+    private func baselineIds() -> Set<String> {
+        Set(exercises.map { storedId(for: $0) })
+    }
+
+    /// Rebuild the bar from the deck's identities as they stand NOW.
+    ///
+    /// `excluding` and `before` are read off the model rather than passed: they
+    /// were the same two expressions at both original call sites, and a rebuild
+    /// that reached for a stale `session.id` would fold this session's own sets
+    /// into the bar it is judged against. `sessionId` is nil on a fresh deck and
+    /// becomes the session at the first append, which is the correct bound at
+    /// every instant; `editing?.date` is nil on a live deck, which is exactly
+    /// the unbounded behaviour the live path wants.
+    private func buildLiveBaselines(store: AppDatabase) throws {
+        let ids = baselineIds()
         baselines = try store.livePrBaselines(
-            exerciseIds: Array(Set(
-                exercises.flatMap { [storedId(for: $0), ExerciseSlug.id($0.name)] }
-                    + exercises.compactMap(\.storedExerciseId)
-            )),
+            exerciseIds: Array(ids),
             excluding: sessionId,
-            before: before,
+            before: editing?.date,
             dayKey: day.key,
             program: Program(id: "", label: "", days: [day])
         )
+        baselineKeys = ids
+    }
+
+    /// Rebuild the bar if the deck's identities moved since it was built.
+    ///
+    /// ── THE ONE GUARD, IN THE ONE PLACE EVERY TICK PASSES THROUGH ───────────
+    /// `refreshLivePrs` has eight callers. A guard in each would be eight
+    /// chances to add a ninth and forget — and the fault this exists for is
+    /// silent, so a missed caller costs a trophy nobody can prove was owed.
+    /// The set comparison is a handful of strings; the store read happens only
+    /// on the tick where an identity actually changed, which is once per
+    /// movement per session.
+    ///
+    /// A failed rebuild is said out loud rather than swallowed: the bar it
+    /// leaves standing is the one from before, which is a bar the candidates may
+    /// no longer be keyed on, and the visible result is a Records tile reading
+    /// "—" for a reason nothing else would name.
+    private func rebuildBaselinesIfDeckMoved() {
+        guard let store, baselineIds() != baselineKeys else { return }
+        do { try buildLiveBaselines(store: store) }
+        catch { storeError = String(describing: error) }
     }
 
     func attach() {
@@ -2101,19 +2353,27 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // empty, and `PrEngine` awards no axis against an empty index — so
             // the deck showed no trophy on a set whose own session page, one
             // screen later, showed two. `attach(editing:)` hit this in U4 and
-            // fixed it by restoring first and taking the union; the LIVE path
-            // never got the same treatment.
+            // fixed it by restoring first; the LIVE path never got the same
+            // treatment.
             //
-            // Widening an id set can only raise a bar or fill an empty one
-            // (`PrRecorder.baselines`'s own note), so this removes trophies that
-            // should never have lit and cannot invent one.
+            // ── IT IS THE ORDER THAT MATTERS, NOT A UNION (W2) ──────────────
+            // This used to end "and taking the union … widening an id set can
+            // only raise a bar or fill an empty one". Do NOT restore that.
+            // `baselineIds` hands over exactly ONE id per card, and its header
+            // sets out why widening is the bug rather than the fix:
+            // `PrRecorder.baselines` re-keys on `keyByName`, which uniques on
+            // FIRST over a `Set`, so two ids for one movement put the bar under
+            // whichever the hash happened to visit. The history is as wide as it
+            // ever was — `baselines` gathers the movement's other ids by
+            // canonical name itself. What this ordering buys is that
+            // `storedExerciseId` is known before the id is resolved.
             //
             // In its own `do`, for the reason the ordering above exists: a bar
             // that cannot be built costs the record badges and nothing else,
             // and must not unwind a deck that is already restored and usable.
             // The edit path has said the same since U4.
             do {
-                try buildLiveBaselines(store: store, excluding: live)
+                try buildLiveBaselines(store: store)
                 refreshLivePrs()
             } catch {
                 storeError = String(describing: error)
@@ -2160,22 +2420,37 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // summary page showed three records.
             //
             // `restoreLoggedSets` is what learns those ids, so it runs first
-            // and the bar is built from the union: the deck's slugs for a
-            // movement with no rows yet, plus whatever the session's rows
-            // actually carry. A throw here leaves a restored, usable deck with
+            // and `baselineIds` then resolves each card to the id its rows
+            // actually carry — NOT to a union of that id and the deck's slug;
+            // see `baselineIds` and the note in `attach()` for why two ids for
+            // one movement is how the bar landed under a hash-chosen key.
+            // A throw here leaves a restored, usable deck with
             // no live records rather than no deck at all.
             try restoreLoggedSets()
-            // ── THE OPENER IS A PROPOSAL, AND AN EDIT IS NOT ────────────────
-            // `rebuildForPhase` prepends the treadmill at init, before this
-            // knows the deck is a re-opened session — and `restoreLoggedSets`
-            // fills the existing cards rather than rebuilding the list, so it
-            // survives. On a workout from three weeks ago that is an empty card
-            // offering to add five minutes of walking to history. A bout that
-            // WAS walked comes back from the projection ticked, so this only
-            // removes the one nobody performed.
-            exercises.removeAll {
-                $0.plan.id == WarmupCardio.name && !$0.rows.contains(where: \.isDone)
-            }
+            // ── WHERE THE LOG STOOD WHEN THIS SCREEN OPENED ─────────────────
+            // The mark `cancelEdit` reverts to. Stamped here, and PERSISTED by
+            // the store rather than held on the model, because the deck can die
+            // between opening and cancelling — iOS terminating a suspended app
+            // mid-edit is the ordinary case, not the exotic one — and a
+            // watermark that lives in memory is one that is gone exactly when
+            // the athlete comes back wanting their session returned.
+            //
+            // Its own `try`, inside the restore's `do`: a session that cannot be
+            // marked must not open an editor whose Cancel button would silently
+            // do nothing.
+            editWatermarked = (try? store.markEditStart(sessionId: session.id)) != nil
+            // There used to be a `removeAll` here, deleting the treadmill card
+            // again when nothing on it was ticked. It was undoing a decision
+            // taken one method earlier: `rebuildForPhase` prepended the bout at
+            // `init`, before anything knew this deck was a re-opened session.
+            //
+            // `openingForEdit` moves that decision to where it is actually
+            // known, so the card is never minted and there is nothing to delete
+            // — and the delete-after's own failure mode goes with it. It ran
+            // BEFORE `restoreLoggedSets` had folded the projection onto the
+            // deck on the path that builds `editorDay` from a session with no
+            // program entry for the bout, so a treadmill that WAS walked looked
+            // untouched and was removed with the phantom.
         } catch {
             // ── THE ONE THROW THAT MUST UNWIND ──────────────────────────────
             // `openEditor`'s guard is `sessionId != nil`, so a failed restore
@@ -2198,7 +2473,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // different sets — without this the deck measures an August set
             // against a September one and shows no records at all on a session
             // whose own summary page, one screen back, shows three.
-            try buildLiveBaselines(store: store, excluding: session.id, before: session.date)
+            try buildLiveBaselines(store: store)
             refreshLivePrs()
             storeError = nil
         } catch {

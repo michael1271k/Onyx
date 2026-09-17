@@ -192,7 +192,9 @@ public enum PrRecorder {
         guard !exerciseIds.isEmpty else { return .empty }
         // Off for every rebuild path; the live deck is the one caller that
         // passes true. `floors`' header says why.
-        let floors = try floors(db, standingRecords: standingRecordFloors)
+        let floors = try floors(
+            db, standingRecords: standingRecordFloors, excludingSession: sessionId
+        )
         // ── EVERY ID THAT IS THIS MOVEMENT, NOT JUST THE ONE IN HAND ────────
         //
         // This filtered on `exerciseIds` alone — the ids the session's OWN rows
@@ -300,7 +302,25 @@ public enum PrRecorder {
     /// close path files, which is the trade being made on purpose: a trophy
     /// withheld is corrected by the summary one screen later, and a false one
     /// is a number the athlete has already believed.
-    static func floors(_ db: Database, standingRecords: Bool = false) throws -> [String: PrFloor] {
+    ///
+    /// ── AND IT MUST NOT INCLUDE THE SESSION BEING JUDGED (W2) ───────────────
+    /// `excludingSession` is the same bound `baselines` already applies to
+    /// `workout_sets`, applied to the ledger. Without it a RE-OPENED session was
+    /// measured against the records it had itself set: `closeSession` files them
+    /// under `personal_records`, `standingRecords` folds every session-backed
+    /// row in as a floor, and the edit deck then asked whether a 100 kg set beat
+    /// the 100 kg standing record it WAS. It does not, so the deck reported no
+    /// records at all on a session whose own summary page, one screen back,
+    /// showed three — the "Records vanish to —" report, whose cause is here and
+    /// not in the swallowed `catch` it looked like.
+    ///
+    /// Nil is the live deck's answer and changes nothing for it: a session in
+    /// progress has filed no records yet, so there is nothing of its own to
+    /// exclude. The tier itself is untouched — this is not the deck opting out
+    /// of the floor, it is the floor being asked the question the caller meant.
+    static func floors(
+        _ db: Database, standingRecords: Bool = false, excludingSession: String? = nil
+    ) throws -> [String: PrFloor] {
         var out: [String: PrFloor] = [:]
         for row in try PersonalRecordRow.fetchAll(db) {
             // A floor is a session-less row's value, or the `floor_value` a
@@ -315,7 +335,7 @@ public enum PrRecorder {
             }
             // `absorb` keeps whichever side is the better mark for the axis, so
             // this is a max (a min on a timed lift) and never a downgrade.
-            if standingRecords, row.sessionId != nil {
+            if standingRecords, let owner = row.sessionId, owner != excludingSession {
                 floor.absorb(axis: axis, value: row.value, timed: timed)
             }
             out[row.exerciseKey] = floor

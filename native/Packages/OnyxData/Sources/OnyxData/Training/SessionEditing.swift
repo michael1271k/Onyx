@@ -550,6 +550,24 @@ public extension AppDatabase {
             )
         }
         try reproject(sessionId: sessionId, in: db)
+
+        // ── A SEED IS NOT AN EDIT, AND A CANCEL MUST NOT UNDO ONE ───────────
+        // `markEditStart` records where this device's log STOOD when the editor
+        // opened, and on a web-logged session it stood nowhere: there was no
+        // log until the first edit ran this. The seed then stamps one `append`
+        // per existing row from `tickClock`, so every one of them lands ABOVE
+        // the mark — and `revertPlan`, which excludes this device's post-mark
+        // events, folded an empty array and concluded the whole session was
+        // this sitting's work. Cancel emptied the workout.
+        //
+        // Pushing the mark past the seed says what was always meant: these
+        // events describe rows that were already there. Nothing else can be
+        // above the mark yet — `edit` seeds BEFORE it applies — so this can
+        // only ever skip the restatement, never a real edit. A session that
+        // already has a log returns above and the mark is left alone.
+        if try editMark(db, sessionId: sessionId) != nil {
+            try writeEditMark(db, sessionId: sessionId, replacing: true)
+        }
     }
 
     /// Recompute the session's stored aggregates from its rows, and report.
@@ -583,5 +601,358 @@ public extension AppDatabase {
             totalVolumeKg: totals.volumeKg, setCount: totals.count,
             prCount: prCount, replayed: replayed
         )
+    }
+}
+
+// MARK: - Cancelling an edit
+
+public extension SessionEditing {
+
+    /// Where an edit began.
+    ///
+    /// "Every event THIS device wrote for this session above `seq`" — see
+    /// `v29.sessionEditMarks` for why the pair, and why neither half alone
+    /// would do. It is persisted, so a crash mid-edit does not take the ability
+    /// to cancel with it.
+    struct Watermark: Sendable, Equatable {
+        public var sessionId: String
+        public var deviceId: String
+        public var seq: Int64
+
+        public init(sessionId: String, deviceId: String, seq: Int64) {
+            self.sessionId = sessionId
+            self.deviceId = deviceId
+            self.seq = seq
+        }
+    }
+
+    /// One compensating event a revert has to write.
+    ///
+    /// Three kinds, because `SetEventFold` only has three verbs and a revert is
+    /// written in the same language as the edit it undoes — never by deleting
+    /// rows from the log. Deleting them would be undone by the very next pull:
+    /// `TrainingPuller.ingestRemoteEvents` re-fetches this session's events
+    /// from the server and `AppDatabase.ingest` de-duplicates by event id, so
+    /// an event this device removed locally and had already pushed simply comes
+    /// back. Compensating events survive that, because the server has them too.
+    enum RevertStep: Sendable, Equatable {
+        /// The edit brought this set into existence. Tombstone it.
+        case void(setId: String)
+        /// A patch puts this set back exactly. Cheapest, and it keeps the id.
+        case amend(setId: String, patch: SetPatch)
+        /// The edit VOIDED this set, and `SetEventFold`'s rule 3 is terminal —
+        /// so it comes back under a **new** id. See `revertPlan`.
+        case restore(SetSnapshot)
+    }
+
+    /// What it would take to put this session back, and which ledger keys move.
+    struct RevertPlan: Sendable, Equatable {
+        public var steps: [RevertStep] = []
+        /// `exercise_id`s, for the PR replay. Sorted, so a plan is comparable.
+        public var touched: [String] = []
+        public var isEmpty: Bool { steps.isEmpty }
+    }
+
+    /// Diff the session as it is against the session as it was, and say what to
+    /// write. **Pure** — no database, no clock, no ids minted. `SetEventFold`
+    /// is pure for the same reason, and this is the other half of that bargain:
+    /// the awkward orderings are testable in microseconds.
+    ///
+    /// ── THE TARGET IS A FOLD WITH A HOLE IN IT ──────────────────────────────
+    /// `SetEventFold.sets` takes an array, so "the session without this
+    /// sitting's edits" is just that array minus this device's post-watermark
+    /// events. Another device's events stay in — all of them, at any `seq` —
+    /// which is the whole reason the watermark is a pair. A watch that logged
+    /// set 4 while you were correcting set 2 keeps set 4.
+    ///
+    /// ── WHY A RESTORED SET GETS A NEW ID, AND WHY THAT IS SAFE ──────────────
+    /// Rule 3 of the fold is that a `void` is TERMINAL and wins even when it
+    /// arrives first — a voided `setId` can never be appended again, by design,
+    /// because a partially-synced log must not resurrect deleted sets. So there
+    /// is no compensating event that restores a set under its own id, and
+    /// weakening the rule to make one would break the property it protects.
+    ///
+    /// The id therefore changes, and the SERVER agrees anyway.
+    /// `SyncEngine.push` reconciles each queued event against the local
+    /// projection: an event whose `setId` the fold no longer holds becomes
+    /// `remote.deleteSets([id])` (`Sync/SyncEngine.swift:305-310`). The edit's
+    /// own `void` is an outbox item naming the old id, and it is still there —
+    /// either queued, in which case the next drain deletes the server row, or
+    /// already drained, in which case it deleted it then. Either way the stale
+    /// row does not survive, and the restored one uploads under the new id from
+    /// its own `append`. Nothing keys on a set id but the set: the PR ledger is
+    /// keyed `(user_id, exercise_key, axis)` and references a SESSION, never a
+    /// set.
+    ///
+    /// The cost is real and small: a restored set moves to the end of its
+    /// `setIndex` tie group, because rule 5 breaks a tie on first appearance
+    /// and a re-append is a new arrival. That is why the walk below is in
+    /// TARGET order — it keeps restored sets in the order they had relative to
+    /// each other.
+    static func revertPlan(
+        events: [SetEvent], sessionId: String, mark: Watermark
+    ) -> RevertPlan {
+        let current = SetEventFold.sets(from: events, sessionId: sessionId)
+        let target = SetEventFold.sets(
+            from: events.filter { !($0.deviceId == mark.deviceId && $0.seq > mark.seq) },
+            sessionId: sessionId
+        )
+        let byId = { (sets: [WorkoutSet]) in
+            Dictionary(sets.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        }
+        let targetById = byId(target)
+        let currentById = byId(current)
+
+        var plan = RevertPlan()
+        var touched: Set<String> = []
+
+        // Anything the edit ADDED. Order is irrelevant — a tombstone is
+        // terminal wherever it lands.
+        for set in current where targetById[set.id] == nil {
+            plan.steps.append(.void(setId: set.id))
+            touched.insert(set.exerciseId)
+        }
+
+        // Then the target in its OWN fold order, so a set that has to be
+        // re-appended arrives in the position it held.
+        for want in target {
+            let wanted = SetSnapshot(want)
+            guard let have = currentById[want.id] else {
+                plan.steps.append(.restore(wanted))
+                touched.insert(want.exerciseId)
+                continue
+            }
+            let held = SetSnapshot(have)
+            guard held != wanted else { continue }
+            touched.insert(want.exerciseId)
+            touched.insert(have.exerciseId)
+            if let patch = restoringPatch(to: wanted, from: held) {
+                plan.steps.append(.amend(setId: want.id, patch: patch))
+            } else {
+                // ── A PATCH IS NOT ALWAYS ENOUGH, AND IT SAYS SO ────────────
+                // `SetPatch` reads `nil` as UNCHANGED for every field but
+                // `quality`, so it cannot put a `side`, a `pairId` or an `rpe`
+                // back to null; and it has no `duration_sec`, `incline`,
+                // `distance_km`, `elevation_m` or `actual_rest_sec` at all,
+                // though `SetSnapshot` does. An amend back to a treadmill row's
+                // pre-edit state is therefore LOSSY, silently. Void and
+                // re-append is the honest way to say "that never happened" —
+                // which is the advice `SetPatch`'s own doc comment gives.
+                plan.steps.append(.void(setId: want.id))
+                plan.steps.append(.restore(wanted))
+            }
+        }
+
+        plan.touched = touched.sorted()
+        return plan
+    }
+
+    /// The patch that turns `have` back into `want`, or nil when no patch can.
+    ///
+    /// Deliberately MAXIMAL — every patchable field is set from the target,
+    /// changed or not — and then checked by applying it. That is the only way
+    /// to ask "can a patch express this?" that cannot drift from what the fold
+    /// would actually do: the answer comes from `SetPatch.applied`, the same
+    /// function `reproject` runs, rather than from a hand-maintained list of
+    /// which fields `SetPatch` happens to carry this month. Add a field to
+    /// `SetSnapshot` and this keeps telling the truth with no edit.
+    ///
+    /// A maximal patch is also what the logger already writes — it sends the
+    /// whole row on every commit — so this adds no shape the log has not had.
+    private static func restoringPatch(to want: SetSnapshot, from have: SetSnapshot) -> SetPatch? {
+        let patch = SetPatch(
+            setIndex: want.setIndex,
+            weightKg: want.weightKg,
+            reps: want.reps,
+            setType: want.setType,
+            side: want.side,
+            pairId: want.pairId,
+            est1rmKg: want.est1rmKg,
+            rpe: want.rpe,
+            // The sentinel, not nil: `nil` means UNCHANGED, so withdrawing a
+            // quality the edit added is the one clearing a patch CAN express.
+            quality: want.quality ?? SetPatch.clearedQuality,
+            exerciseOrder: want.exerciseOrder
+        )
+        return patch.applied(to: have) == want ? patch : nil
+    }
+}
+
+extension SetSnapshot {
+    /// A projected row, read back as the snapshot it came from.
+    ///
+    /// The inverse of the map at the bottom of `SetEventFold.sets`, and it has
+    /// to carry every axis that one does — a comparison that quietly omits
+    /// `duration_sec` would call an edited treadmill bout unchanged and leave
+    /// it edited through a Cancel.
+    init(_ set: WorkoutSet) {
+        self.init(
+            exerciseId: set.exerciseId,
+            setIndex: set.setIndex,
+            weightKg: set.weightKg,
+            reps: set.reps,
+            setType: set.setType,
+            side: set.side,
+            pairId: set.pairId,
+            est1rmKg: set.est1rmKg,
+            rpe: set.rpe,
+            quality: set.quality,
+            exerciseOrder: set.exerciseOrder,
+            durationSec: set.durationSec,
+            incline: set.incline,
+            distanceKm: set.distanceKm,
+            elevationM: set.elevationM,
+            actualRestSec: set.actualRestSec
+        )
+    }
+}
+
+public extension AppDatabase {
+
+    /// Open an edit sitting: remember where this device's log stands.
+    ///
+    /// Call it once, as the editor attaches. **It does not move an existing
+    /// mark**, and that is not a convenience — it is the crash case. An app
+    /// killed mid-edit never got to clear its mark, so re-opening the editor
+    /// finds it and Cancel can still reach back past the crash to where the
+    /// edit actually began. Re-entrancy falls out of the same rule: a second
+    /// `attach` in one sitting cannot silently shrink the window.
+    ///
+    /// A mark left by a DIFFERENT device id is replaced rather than kept — it
+    /// can only come from a store restored under a new install, where the seq
+    /// it names belongs to a clock this device has never run.
+    @discardableResult
+    func markEditStart(sessionId: String) throws -> SessionEditing.Watermark {
+        try writer.write { db in try Self.writeEditMark(db, sessionId: sessionId, replacing: false) }
+    }
+
+    /// The mark as stored. Nil once the sitting was saved, left or reverted.
+    func editMark(sessionId: String) throws -> SessionEditing.Watermark? {
+        try writer.read { db in try Self.editMark(db, sessionId: sessionId) }
+    }
+
+    /// Close the sitting without undoing it — Save, and the chevron.
+    ///
+    /// The chevron matters as much as Save does. Leaving with the changes KEPT
+    /// and the mark standing would mean the next sitting's Cancel reverts this
+    /// one too, silently, weeks later.
+    func clearEditMark(sessionId: String) throws {
+        try writer.write { db in
+            try db.execute(
+                sql: "DELETE FROM session_edit_marks WHERE session_id = ?", arguments: [sessionId]
+            )
+        }
+    }
+
+    /// Cancel: put the session back to where the mark says it was.
+    ///
+    /// Returns nil when there is nothing to undo — no mark, or a sitting that
+    /// changed nothing. Nil is not a failure, and the caller should still close
+    /// the screen on it.
+    ///
+    /// ── WHY THE EMPTY CASE IS CHECKED OUTSIDE THE TRANSACTION ───────────────
+    /// `edit` SEEDS the event log on the way in, and seeding is a one-way door:
+    /// it takes a web-logged session permanently out of the mirror's reach (see
+    /// `seedEventLog`). Cancelling out of an editor that was opened and touched
+    /// nothing must not do that, and must not queue an upload for a session
+    /// nothing changed. The pre-check is one COUNT, not a fold — the PLAN is
+    /// still computed inside the write transaction, off the log as it stands
+    /// there, so nothing that lands in between is planned against a stale read.
+    ///
+    /// Everything else — the seed, the compensating events, the PR replay, the
+    /// recount and the outbox upsert — is `edit`'s existing envelope, in ONE
+    /// transaction. A revert that half-happened is a session no reader could
+    /// describe.
+    @discardableResult
+    func revertSessionEdits(sessionId: String) throws -> SessionEditing.Outcome? {
+        let worthDoing = try writer.read { db -> Bool in
+            guard let mark = try Self.editMark(db, sessionId: sessionId) else { return false }
+            // `kind` is filtered because `pause` / `resume` are in this log too
+            // and change no set. A sitting whose only event was a clock tick
+            // has nothing to revert, and running the envelope for it would seed
+            // a pulled session for nothing.
+            return try Int.fetchOne(db, sql: """
+                SELECT count(*) FROM set_events
+                WHERE session_id = ? AND device_id = ? AND seq > ?
+                  AND kind IN ('append', 'amend', 'void')
+                """, arguments: [sessionId, mark.deviceId, mark.seq]) ?? 0 > 0
+        }
+        guard worthDoing else {
+            try clearEditMark(sessionId: sessionId)
+            return nil
+        }
+
+        return try edit(sessionId: sessionId) { db, _ in
+            guard let mark = try Self.editMark(db, sessionId: sessionId) else { return [] }
+            let events = try SetEvent
+                .filter(SetEvent.Columns.sessionId == sessionId)
+                .fetchAll(db)
+            let plan = SessionEditing.revertPlan(events: events, sessionId: sessionId, mark: mark)
+            for step in plan.steps {
+                switch step {
+                case .void(let setId):
+                    try Self.appendEvent(db, sessionId: sessionId, setId: setId, body: .void)
+                case .amend(let setId, let patch):
+                    try Self.appendEvent(db, sessionId: sessionId, setId: setId, body: .amend(patch))
+                case .restore(let snapshot):
+                    try Self.appendEvent(
+                        db, sessionId: sessionId, setId: newOnyxID(), body: .append(snapshot)
+                    )
+                }
+            }
+            // ── RE-MARKED AT THE CLOCK AS IT NOW STANDS ────────────────────
+            // Two things need this. A second Cancel must be a no-op rather than
+            // a diff between the restored session and itself — which, because a
+            // restored set carries a new id, would void and re-append it again
+            // and churn ids forever. And the screen stays open long enough for
+            // the reader to keep editing, which should still be cancellable.
+            _ = try Self.writeEditMark(db, sessionId: sessionId, replacing: true)
+            return plan.touched
+        }
+    }
+
+    // MARK: - The mark, in SQL
+
+    internal static func editMark(
+        _ db: Database, sessionId: String
+    ) throws -> SessionEditing.Watermark? {
+        try Row.fetchOne(
+            db,
+            sql: "SELECT device_id, seq FROM session_edit_marks WHERE session_id = ?",
+            arguments: [sessionId]
+        ).map {
+            SessionEditing.Watermark(
+                sessionId: sessionId, deviceId: $0["device_id"], seq: $0["seq"]
+            )
+        }
+    }
+
+    @discardableResult
+    internal static func writeEditMark(
+        _ db: Database, sessionId: String, replacing: Bool
+    ) throws -> SessionEditing.Watermark {
+        let device = try deviceId(db)
+        if !replacing, let existing = try editMark(db, sessionId: sessionId),
+           existing.deviceId == device {
+            return existing
+        }
+        // The clock is READ, never ticked. `tickClock` hands out a stamp for an
+        // event that is about to be written, and a mark is not an event — one
+        // taken by ticking would leave a gap in the log's numbering per editor
+        // opened, and (worse) would sit one above the last real event, so the
+        // first edit of the sitting would fall on the boundary rather than
+        // above it.
+        let seq = try Int64.fetchOne(
+            db, sql: "SELECT lamport FROM device_state WHERE row_id = 'local'"
+        ) ?? 0
+        try db.execute(
+            sql: """
+                INSERT INTO session_edit_marks (session_id, device_id, seq) VALUES (?, ?, ?)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    device_id = excluded.device_id, seq = excluded.seq
+                """,
+            arguments: [sessionId, device, seq]
+        )
+        return SessionEditing.Watermark(sessionId: sessionId, deviceId: device, seq: seq)
     }
 }

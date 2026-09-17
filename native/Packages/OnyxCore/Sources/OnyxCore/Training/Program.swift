@@ -118,6 +118,28 @@ public struct ProgramExercise: Identifiable, Sendable, Equatable, Codable {
         // holds it to that. The empty fallback exists so a typo in a NEW lift's
         // name is a failing test rather than a compile error nobody can fix
         // without inventing anatomy.
+        //
+        // ── AND THE CARDIO TABLE DOES NOT BELONG HERE (W2) ──────────────────
+        // W2 briefly added `?? MuscleMap.cardioMovers(name)` to this chain, to
+        // give a treadmill card a non-nil `ExerciseCardView.family`. It was
+        // wrong three ways and the audit caught it:
+        //
+        //   * `LoggerModel.muscleSets` builds `MuscleCredit.weightedSets` — the
+        //     ONE accumulator — out of `plan.movers`. `cardioMovers`' own header
+        //     states the invariant: "Nothing here reaches an accumulator". A
+        //     ticked warm-up walk would have started paying quad and calf credit
+        //     into the distribution sheet and Live Stats.
+        //   * `LoggerModel.primaryMuscle` ALREADY answers `"cardio"` for a bout,
+        //     by testing the rows. A non-nil `movers.primary` outranks that
+        //     branch, so the Live Activity's chip — which resolves the "cardio"
+        //     token — would have read QUADS on a treadmill.
+        //   * It was not needed. The card draws an explicit Cardio tag and its
+        //     rail tests `isCardio` first, and W2's seed change is what makes
+        //     `isCardio` true on a seeded bout, which is the fallback
+        //     `primaryMuscle` was always waiting on.
+        //
+        // A bout's muscles are a DISPLAY question and are asked at the display,
+        // where `MuscleMap.cardioPrimaryLandmarks` already answers them.
         self.movers = movers ?? MuscleMap.movers(name) ?? MoverTokens(primary: [])
         self.isCompound = compound
         self.note = note

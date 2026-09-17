@@ -280,7 +280,12 @@ public extension AppDatabase {
                         // every OnyxCore rule that folds a pair tests for the
                         // one-letter form. A pair handed over unmapped is scored
                         // as two lone sides, silently.
-                        side: Self.domainSide(r.side), pairId: r.pairId
+                        side: Self.domainSide(r.side), pairId: r.pairId,
+                        // A bout's whole content, which `weightKg`/`reps` above
+                        // are the non-nil zeros of. Dropped here, a seeded
+                        // treadmill came back to the deck as a lift of nothing
+                        // — `SeedSet.durationSec` says what that cost.
+                        durationSec: r.durationSec, incline: r.incline, distanceKm: r.distanceKm
                     )
                 }
             )

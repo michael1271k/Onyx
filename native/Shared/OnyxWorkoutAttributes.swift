@@ -174,6 +174,31 @@ struct OnyxWorkoutAttributes: ActivityAttributes {
         /// period rather than about the slice it happened to be opened during.
         /// Nil while not resting, and on a card encoded before this existed.
         var restTotalSec: Int?
+        /// The live bout's two numbers: how long it has run, and how far. Both
+        /// nil on every set that is a LIFT, which is most of them.
+        ///
+        /// ── WHY TWO NUMBERS WHEN EVERY OTHER FIELD IS A STRING ──────────────
+        /// The rule at the top of this type is that the producer owns the
+        /// formatting, and it holds — for facts. A pace is not a fact, it is
+        /// the RATIO of these two, and the surfaces that draw a bout do not all
+        /// have room for the same line: the Lock Screen reads
+        /// `12:30 · 0.37 km · 5:42 /km` and a 40 mm Smart Stack card has to
+        /// drop the pace to fit. A pre-composed string cannot be shortened on
+        /// the far side without parsing it back apart, which is exactly the
+        /// second implementation the string rule exists to prevent. Sent as
+        /// numbers, `cardioLine(sec:km:pace:)` is the single definition and
+        /// each surface asks it for the line it can afford.
+        ///
+        /// ── AND WHY `load` COULD NOT CARRY IT ───────────────────────────────
+        /// It tried to. A treadmill row carries `weightKg 0` and `reps 0` —
+        /// non-nil ZEROS, so the producer's `if let` succeeded and the Lock
+        /// Screen led a ten-minute walk with "0 kg × 0". `load` is empty on a
+        /// bout now and these two are what the card draws instead.
+        ///
+        /// Optional, like every field added after the first release — see
+        /// `timerOrigin` for what a required key does to a running activity.
+        var cardioElapsedSec: Int?
+        var cardioDistanceKm: Double?
         /// The workout's own day key — "cb_b", "legs_a".
         ///
         /// ── WHY A KEY AND NOT A COLOUR ──────────────────────────────────────

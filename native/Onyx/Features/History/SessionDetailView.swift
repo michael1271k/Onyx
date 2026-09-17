@@ -411,7 +411,13 @@ struct SessionDetailView: View {
             phase: editorPhase,
             store: environment.database,
             userId: environment.userIdString,
-            startedAt: session.startedAt ?? Date()
+            startedAt: session.startedAt ?? Date(),
+            // `day` above IS `editorDay`: the session's own performed order,
+            // plus the plan movements it skipped. Saying so at construction is
+            // what stops `LoggerModel` re-ranking it against another session's
+            // deck order and prepending a warm-up nobody walked — see
+            // `LoggerModel.openingForEdit`.
+            openingForEdit: true
         )
         model.attach(editing: session)
         // A failed attach leaves no session on the model, and a deck with no
