@@ -236,24 +236,28 @@ struct WeeklyWrapContent: View {
         stat("PRs", "\(summary.prCount)", delta: nil, tint: summary.prCount > 0 ? Color.onyx.record : nil)
     }
 
+    /// ── THE SQUARE MOVED TO `OnyxUI` (§W2 C) ────────────────────────────────
+    /// This and `SessionDetailView.cell(_:_:_:sub:…)` were the same object —
+    /// micro label, `.display` numeral, a small line under it — drawn twice in
+    /// two files, differing in two decisions and two accidents. `OnyxStatCell`
+    /// is the one drawing; the two decisions are the parameters below.
+    ///
+    /// `glass: false` because the reel's card already wears a tile and material
+    /// over material reads as a third surface that is not there.
+    /// `reserves: false` because there is no second rendering of this card for
+    /// its height to stay the same as — §3.6's reservation is about a GRID
+    /// redrawn for a different session, which this is not.
     private func stat(_ label: String, _ value: String, delta: Double?, tint: Color? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).onyxMicro()
-            Text(value)
-                .onyxType(.display).onyxNumeral()
-                .foregroundStyle(tint ?? Color.onyx.textPrimary)
-                .lineLimit(1).minimumScaleFactor(0.6)
-            if let delta, delta != 0 {
-                // Signed, always: "+1,240 kg" and "1,240 kg" are different
-                // claims and only one of them is a comparison.
-                Text("\(delta > 0 ? "+" : "−")\(OnyxFormat.volume(abs(delta))) kg")
-                    .onyxType(.micro).onyxNumeral()
-                    .foregroundStyle(delta > 0 ? Color.onyx.good : Color.onyx.textSecondary)
-                    .lineLimit(1)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
+        OnyxStatCell(
+            label, value,
+            // Signed, always: "+1,240 kg" and "1,240 kg" are different claims
+            // and only one of them is a comparison.
+            sub: (delta.map { $0 == 0 ? nil : $0 } ?? nil).map {
+                .init("\($0 > 0 ? "+" : "−")\(OnyxFormat.volume(abs($0))) kg",
+                      $0 > 0 ? Color.onyx.good : Color.onyx.textSecondary)
+            },
+            reserves: false, tint: tint, glass: false
+        )
     }
 
     /// The two best lifts of the week, side by side and labelled differently.

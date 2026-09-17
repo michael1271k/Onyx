@@ -42,6 +42,14 @@ struct PastWeeksLibrary: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    /// The geometry a banner hands its wrap-up on the way in (§W2 H).
+    ///
+    /// One namespace holding both ends, owned above both of them. The id is the
+    /// WEEK START rather than a constant: every banner on the shelf is a
+    /// potential source and a shared id would make the zoom start from whichever
+    /// one SwiftUI resolved last.
+    @Namespace private var zoom
+
     /// The weeks and the blocks that group them. Nil until the read lands,
     /// which is a spinner rather than an empty state — a shelf that drew "no
     /// closed weeks" for the half-second before its own query answered would
@@ -115,6 +123,10 @@ struct PastWeeksLibrary: View {
                 summary: door.summary, program: program,
                 title: weeks.first { $0.weekStart == door.summary.weekStart }?.label
             )
+            // The sheet and the cover go through one presentation bridge in
+            // SwiftUI, which is why a zoom works out of `.sheet(item:)` at all
+            // — the same reason the logger's full-screen cover can take one.
+            .navigationTransition(.zoom(sourceID: door.summary.weekStart, in: zoom))
         }
         .task {
             if library == nil { library = await week.library() }
@@ -324,6 +336,13 @@ struct PastWeeksLibrary: View {
         }
         .buttonStyle(.plain)
         .onyxPress(scale: 0.98)
+        // OUTERMOST, after the press: the source rect is the banner's bounds,
+        // and a scale still applied at tap-up would start the zoom from a
+        // shrunken card. The corner is spelled because the configuration only
+        // takes a `RoundedRectangle` and defaults to square.
+        .matchedTransitionSource(id: past.weekStart, in: zoom) {
+            $0.clipShape(RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous))
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(past.label), \(past.range)")
         .accessibilityValue(spoken(past))

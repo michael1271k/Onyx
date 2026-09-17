@@ -44,6 +44,54 @@ _Nothing yet._
 
 ---
 
+## [3.21.0] — 2026-09-17 · Seven Figures, Two Rows
+
+### Changed
+- **The session page has one hero and one grid.** Volume was the first of seven
+  equal figures in a 3-up over a 4-up — two tables about one workout, with the
+  four narrow cells breaking their own labels. It is the masthead's hero figure
+  now, with its arrow and its delta, and the six that are left (Duration · Sets ·
+  Difficulty · Records · Avg HR · Calories) sit in one 3×2 grid at one column
+  width. Fourteen figures down to seven.
+- **Every metric cell carries eight weeks of itself.** A low-opacity trail of the
+  split's own history sits behind each figure, in the space the number was
+  already using. The two cells whose second line said "measured" or "estimated"
+  — a restatement, not a comparison — say it to VoiceOver now and show the
+  trail instead.
+- **The exercise card is two rows that never move.** The header was one flowing
+  line of muscle chips and readings, so the wrap point moved with the text size
+  and no reading had a place. Row 1 is the movement's muscle, how it went, what
+  was asked and the cue; row 2 is what it produced. Tapping the muscle chip
+  swaps row 2 **in place** for the assisting muscles — the card does not change
+  height, at any text size — and `+2` on the chip is both the count and the
+  affordance. The assists are reachable at the accessibility sizes for the first
+  time; they used to be capped away there.
+- **The trail beside a movement's name moved and grew.** 40×16 on the title line,
+  competing with the movement's own name, to 56×16 at the trailing edge of row 1.
+  The height never changed, which is why it never cost anything.
+- **The muscle card says it once.** The 100 % ramp is gone. It restated the
+  legend's numbers as lengths in 6 pt of stacked capsule, where 4.5 and 4.0 are
+  a pixel apart. The body figure is the shape; the legend is the reading.
+- **The Train tab's finished card grows into the session page.** Both open with
+  the same masthead, so the push was an identical band sliding over an identical
+  band. A zoom says what happened, and the exit travels the same path. A Past
+  Weeks banner opens its wrap-up the same way.
+- **One square, not two.** `SessionDetailView.cell` and
+  `WeeklyWrapContent.stat` were the same object drawn twice in two files, drifted
+  apart by a type size and a scale floor. `OnyxStatCell` in the design system is
+  the one drawing.
+
+### Fixed
+- **A first-ever movement reserves no delta line.** The rule that keeps a row
+  from changing height between two sessions was being applied to a card that has
+  no previous session and never had one — three columns of guaranteed blank on
+  every row. It is a card's decision now; within a card nothing changed.
+- **A session that lifted nothing has no volume hero.** `0.0 kg` at 28 pt over a
+  treadmill-only day is the same category error the tonnage capsule already
+  refuses: the work carried no load, so there is no tonnage to be zero of.
+
+---
+
 ## [3.20.0] — 2026-09-17 · The Shelf, and Both Arms
 
 ### Added

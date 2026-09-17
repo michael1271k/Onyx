@@ -33,6 +33,24 @@ enum SessionAnalysis {
         let sets: Int
         let tonnageKg: Double
         let prCount: Int
+        /// ── THE THREE COLUMNS THIS SUMMARY ONLY NOW CARRIES (§W2 B) ─────
+        /// Every cell of the session page's metric grid draws eight weeks of
+        /// itself behind its figure, and `summaries` is the one walk that has
+        /// every session of the split in hand. These three are columns already
+        /// on the `WorkoutSession` row it is iterating, so carrying them costs
+        /// no query at all — and deriving them anywhere else would mean a
+        /// second walk of the ledger with its own idea of which sessions count.
+        ///
+        /// `calories` is the STORED figure only. The page falls back to a MET
+        /// estimate for the cell's own value; a trail mixing measured burns
+        /// with estimated ones would be a curve of two different quantities.
+        /// Defaulted, unlike the six above: these three are drawn behind a
+        /// figure and nothing is computed FROM them, so a caller assembling a
+        /// summary by hand (a test, a fixture) should not have to supply three
+        /// readings to ask a question about a seventh.
+        var sessionRpe: Double? = nil
+        var avgBpm: Double? = nil
+        var calories: Double? = nil
 
         /// `durationMin`, but only when the clock can be believed.
         ///
@@ -241,7 +259,10 @@ enum SessionAnalysis {
                 // it opens disagreeing about the same workout's weight is the
                 // same divergence, one screen earlier.
                 tonnageKg: SessionVolume.sessionVolumeKg(rows.map(volumeSet)),
-                prCount: pr.prCount
+                prCount: pr.prCount,
+                sessionRpe: session.sessionRpe,
+                avgBpm: session.avgBpm.map(Double.init),
+                calories: session.caloriesBurned.map(Double.init)
             ))
         }
         return out.reversed()

@@ -525,6 +525,87 @@ tests with the same five failures.
 
 ---
 
+## W2 — Exercise card compaction & post-workout polish · 3.21.0
+
+**Shipped:** 2026-09-17 · `<merge sha>`
+
+**What changed.** A · `metrics(_:)` is ONE `LazyVGrid(columns: columns(3))` of
+six cells; Volume is `SessionHeaderCard.Hero`, with its arrow and its delta.
+B · every cell draws eight weeks of itself at 18 % behind its figure
+(`Page.trail(_:)`); `basis`/`bpmBasis` moved to `OnyxStatCell.detail`, spoken
+only. C · `cell()` and `WeeklyWrapContent.stat()` are `OnyxUI/OnyxStatCell`.
+D · the 100 % ramp is deleted. E · `LedgerHeader`, a new view with its own
+state: two fixed rows, and row 2 swaps in place. F · `SetRow.cardComparable` —
+a card with no previous session reserves nothing. G · the movement sparkline is
+56×16 at the trailing edge of row 1. H · `.matchedTransitionSource` /
+`.navigationTransition(.zoom)` on the Train done card and on a Library banner.
+
+**What the brief got wrong — and the six things it could not have known.**
+
+1. **`OnyxType.hero` forbids what task A asks for**, in as many words: "at most
+   one per screen — a second hero is two screens in a trench coat". The card is
+   shared with the Train tab, so the resolution is per SURFACE: when a `hero` is
+   supplied the split's name steps down to `.display` and the tonnage takes the
+   role; on the Train tab there is no hero figure and the name keeps it. One
+   card, two screens, one hero each.
+2. **`SplitPoint` carried tonnage and a PR count and nothing else**, so five of
+   the six cells had no series to draw. `SessionAnalysis.Summary` now carries
+   `sessionRpe`, `avgBpm` and `calories` — all three columns already on the
+   `WorkoutSession` row that walk is iterating, so the trails cost no query.
+   `Summary.sets` is WORKING sets while the Sets cell prints `physicalSets`: the
+   curve is a shape, not a reading, and the alternative is replaying every
+   session of the split.
+3. **A `ZStack`, not an `if`, is what makes the swap free.** At the default
+   sizes a branch was enough. At AX5 every capsule takes a line, so three
+   readings are three lines and two assists are two — and the first cut jumped
+   the card and everything under it by a line on every tap, at exactly the text
+   size where a reader can least afford the page to move. Both states are laid
+   out and one is faded; the row is the taller of the two at every size.
+4. **The AX5 mover cap had to go with it.** `movers()` capped the list at ONE at
+   the accessibility sizes, because a chip was a line there. The assists do not
+   share a row with anything any more, so the cap was no longer buying a line —
+   it was removing the feature from the readers who most need a shorter card.
+5. **`.disabled()` greys a chip**, so a movement with no assists drew the one
+   capsule that says which muscle the card is about in dimmed ink, reading as
+   "unavailable" on a fact that is neither missing nor uncertain.
+   `.allowsHitTesting(false)` instead.
+6. **A bout-only session had a `0.0 kg` hero** at 28 pt — the same category
+   error `headerTags` already refuses for the tonnage capsule. No tonnage, no
+   hero; the name takes the role back.
+
+**Two AX5 defects found in review and fixed.** The hero line printed
+`▲ 5,398.0 ..  ...` — a 28 pt figure, its unit and a signed comparison cannot
+share a line — now `Shoulders`, which branches rather than measures. And the
+`+2` counter is `.caption`, never `.micro`: the token's own rule is "a register
+label … never carrying a number", and `+2` is a number.
+
+**Seams left for W3.** (a) Row ASSIGNMENT is deterministic; row WRAPPING is not
+— a long movement name plus four brief capsules (Seated Cable Row) still wraps
+row 1 to two lines. That is `FlowRow` doing its job and the fix, if it is one,
+is a shorter cue. (b) The stacked row 2 leaves visible slack at AX5 on a card
+whose two states differ in capsule count — the cost of the height guarantee, and
+it is only at AX5. (c) `session-pairs` is still shot parked at the ledger HEAD,
+so the pair table is below the fold there; `session-pairs-merged` is where it is
+reviewed. (d) W1's two open seams are untouched: the `books.vertical.fill`
+collision, and the This-week tile / History still opening a wrap-up under its
+date name.
+
+**Gate.** `npm run check` ✔ (3.21.0 · 32100 in sync, atlas ✔, mirror ✔, doms ✔,
+OnyxUI 21 ✔) · `check:swift` ✔ · `swift:core` 565 ✔ · `swift:data` 568 ✔ ·
+`xcodebuild` app target ✔ · shots ✔ — `session session-ledger
+session-ledger-assists session-records session-pairs session-cardio train
+train-done`, every one reviewed at default type AND at AX5.
+`session-ledger-assists` is NEW and is the wave's own gate: it and
+`session-ledger` are the same screen in the two states of row 2, and the review
+is that every pixel below the header is at the same y in both.
+
+**OnyxTests: the same FIVE pre-existing failures as W1, none new.**
+`HistoryWeeksTests` ×2, `SessionSummaryHotfixTests` treadmill slug,
+`WorkoutWeekTests` ready-to-progress, `AppDatabaseTests` session blob (Keychain
+`-34018`, environmental). 58 tests, 5 failures — byte for byte W1's baseline.
+
+---
+
 <!--
 ## W<N> — <title> · <version>
 

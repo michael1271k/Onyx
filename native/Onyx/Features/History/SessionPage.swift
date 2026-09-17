@@ -27,6 +27,13 @@ extension SessionAnalysis {
         let date: String
         let tonnageKg: Double
         let prCount: Int
+        /// The readings the metric grid draws a trail behind — see
+        /// `SessionAnalysis.Summary` for why they are carried and not re-read.
+        let durationMin: Double?
+        let sets: Int
+        let sessionRpe: Double?
+        let avgBpm: Double?
+        let calories: Double?
         /// Logged inside a maintenance week (the LEVER, not the deload phase).
         ///
         /// The line drops on these weeks by design — that is what a
@@ -185,6 +192,22 @@ extension SessionAnalysis {
             return "Heaviest \(label) in \(weeks) weeks."
         }
 
+        /// The last eight sessions of this split, by one reading — the trail
+        /// each metric cell draws behind its figure (§W2 B).
+        ///
+        /// ── WHY EIGHT, AND WHY IT IS NOT PADDED ─────────────────────────────
+        /// Eight is the Progression chart's own window one card down, so the
+        /// curve behind a number and the curve under it describe the same
+        /// stretch. A session that carries no reading for a column is DROPPED
+        /// rather than zeroed: a missing heart rate is not a heart rate of
+        /// zero, and a zero in a series that is drawn against its own range
+        /// would rescale every other point in it. Under two readings
+        /// `Sparkline` draws nothing at all, which is the honest picture of a
+        /// column with no history.
+        func trail(_ reading: (SplitPoint) -> Double?) -> [Double] {
+            Array(split.compactMap(reading).suffix(8))
+        }
+
         /// The verdict sentence over the Progression chart.
         var verdict: String {
             guard let previous, previous.tonnageKg > 0 else {
@@ -256,7 +279,9 @@ extension SessionAnalysis {
             split: mine.map {
                 SplitPoint(
                     sessionId: $0.id, date: $0.date, tonnageKg: $0.tonnageKg,
-                    prCount: $0.prCount, isMaintenance: lens.callsIt($0.date)
+                    prCount: $0.prCount, durationMin: $0.credibleDurationMin,
+                    sets: $0.sets, sessionRpe: $0.sessionRpe, avgBpm: $0.avgBpm,
+                    calories: $0.calories, isMaintenance: lens.callsIt($0.date)
                 )
             },
             careerIndex: careerIndex,

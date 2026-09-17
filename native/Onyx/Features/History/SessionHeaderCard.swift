@@ -74,6 +74,30 @@ struct SessionHeaderCard: View {
     /// Nil on the session page, whose metric grid is the next thing down and
     /// says all four with units and deltas.
     var totals: String?
+    /// The one figure this screen is about (§W2 A).
+    ///
+    /// ── AND WHY THE TITLE STEPS DOWN WHEN IT IS HERE ────────────────────────
+    /// `OnyxType.hero` says it in as many words: "at most one per screen — a
+    /// second hero is two screens in a trench coat". The session page's subject
+    /// is the TONNAGE, so on that page the tonnage is the hero and the split's
+    /// name is a `display` title over it. On the Train tab there is no hero
+    /// figure — the card is one of four things on a page about today — so the
+    /// name keeps the role. One card, two screens, one hero each.
+    var hero: Hero?
+
+    /// A labelled figure with its comparison, at the top of the card.
+    struct Hero {
+        let value: String
+        let unit: String
+        /// `+1,240 kg`, `level`, `first of this split` — the same sentence the
+        /// metric grid's cells carry, in the colour it already means.
+        let sub: String
+        let subTint: Color
+        /// The verdict's own direction mark. Nil below half a kilogram, where
+        /// `delta` calls it level and a triangle over a rounding error is noise
+        /// with a direction.
+        let symbol: String?
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: OnyxSpace.s) {
@@ -84,7 +108,7 @@ struct SessionHeaderCard: View {
             // than as a stack of captions.
             Shoulders(.firstTextBaseline) {
                 Text(header.label)
-                    .onyxType(.hero)
+                    .onyxType(hero == nil ? .hero : .display)
                     .foregroundStyle(Color.onyx.dayLabel(header.dayKey))
                     .lineLimit(2)
                     .minimumScaleFactor(0.75)
@@ -95,6 +119,12 @@ struct SessionHeaderCard: View {
                     careerNumber(index)
                 }
             }
+            // ── ROW 1½ · WHAT THE SESSION WEIGHED ──────────────────────────
+            // It was the first cell of a 3-up grid under this card, in
+            // `.display`, indistinguishable from Duration and Sets beside it —
+            // seven equal figures, none of them the answer to "how did that
+            // go". It is the answer, so it is the figure.
+            if let hero { heroLine(hero) }
             // ── ROW 2 · WHICH PLAN, AND WHEN ───────────────────────────────
             // Calendar facts, both sides: what the programme called this day on
             // the left, what the clock called it on the right.
@@ -137,6 +167,59 @@ struct SessionHeaderCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .sessionDayWash(header.dayKey)
         .onyxGlass(.tile)
+    }
+
+    /// The tonnage, its unit and its verdict on one baseline.
+    ///
+    /// The unit sits BESIDE the number rather than under it, the rule every
+    /// `OnyxStatCell` on this page follows: a unit on its own line has left its
+    /// number. The verdict trails both, in the ink a delta already means —
+    /// `good` for more work, secondary for less, tertiary for no comparison.
+    private func heroLine(_ hero: Hero) -> some View {
+        // `Shoulders` and not a bare `HStack`: at AX5 a 28 pt figure, its unit
+        // and a signed comparison cannot share a line at any scale factor, and
+        // the first cut of this row proved it — `▲ 5,398.0 ..  ...`, with the
+        // unit and the whole verdict truncated to ellipses. The shared
+        // primitive already makes that break a BRANCH rather than a measure,
+        // for exactly this failure (see its own header).
+        Shoulders(.firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.xs) {
+                if let symbol = hero.symbol {
+                    Image(systemName: symbol)
+                        .symbolRenderingMode(.hierarchical)
+                        .onyxType(.caption)
+                        .foregroundStyle(hero.subTint)
+                        .accessibilityHidden(true)
+                }
+                Text(hero.value)
+                    // `.onyxNumeral()` carries `contentTransition(.numericText())`,
+                    // so the figure counts up as the page arrives rather than
+                    // snapping into place.
+                    .onyxType(.hero).onyxNumeral()
+                    // ── THE FIGURE IS NEVER THE VERDICT'S COLOUR ────────
+                    // Tinting it `good` on a heavier session and
+                    // `textSecondary` on a lighter one would grey out the one
+                    // number the page is about on exactly the sessions worth
+                    // reading twice. The direction is the arrow's job and the
+                    // magnitude is the line's; the subject keeps primary ink.
+                    .foregroundStyle(Color.onyx.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .layoutPriority(1)
+                Text(hero.unit)
+                    .onyxType(.caption)
+                    .foregroundStyle(Color.onyx.textTertiary)
+                    .lineLimit(1)
+            }
+        } trailing: {
+            Text(hero.sub)
+                .onyxType(.caption).onyxNumeral()
+                .foregroundStyle(hero.subTint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Volume, \(hero.value) \(hero.unit), \(hero.sub)")
     }
 
     /// The session's place in the whole career — `#45` — and, when it produced
