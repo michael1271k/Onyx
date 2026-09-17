@@ -146,7 +146,11 @@ public extension AppDatabase {
             return false
         }
         if try RoutineRow.filter(user).fetchCount(db) > 0 { return false }
-        if try Exercise.fetchCount(db) > 0 { return false }
+        // NOT the catalogue. Local `exercises` has no `user_id`, so a row there
+        // says a catalogue was pulled onto this phone at some point — by
+        // whichever account — and nothing about whether THIS one has been set
+        // up. Counting it is how a brand-new account landed on a configured
+        // app (W11; the check is deleted, not filtered, because it cannot be).
         if try WorkoutSession.filter(user).fetchCount(db) > 0 { return false }
         // The non-training half.
         if try DailyLogRow.filter(user).fetchCount(db) > 0 { return false }

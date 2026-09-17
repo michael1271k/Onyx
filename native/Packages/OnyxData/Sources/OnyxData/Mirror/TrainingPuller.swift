@@ -159,7 +159,7 @@ public actor TrainingPuller {
             let sets: [RemoteSetRow] = try await remote.selectIn(
                 RemoteSetRow.self, table: "workout_sets", column: "session_id", values: sessionIds
             )
-            let landed = try database.applyPulledSets(sets)
+            let landed = try database.applyPulledSets(sets, userId: userId)
             report.rows += landed
             report.tables += 1
             report.rowsByTable["workout_sets"] = landed
@@ -317,7 +317,7 @@ extension AppDatabase {
 
     /// Server sets → the local projection, for sessions this device never logged.
     @discardableResult
-    func applyPulledSets(_ rows: [RemoteSetRow]) throws -> Int {
+    func applyPulledSets(_ rows: [RemoteSetRow], userId: String) throws -> Int {
         guard !rows.isEmpty else { return 0 }
         return try writer.write { db in
             var written = 0
@@ -325,6 +325,9 @@ extension AppDatabase {
             for row in rows { bySession[row.sessionId, default: []].append(row) }
 
             for (sessionId, sessionRows) in bySession {
+                // Not this user's session (W11): a row the server should never
+                // have handed over, and one the local projection must not file.
+                guard try Self.ownedSession(db, id: sessionId, userId: userId) != nil else { continue }
                 // THE GUARD. A session with events is a session whose sets are
                 // a fold over them; pulled rows would be deleted by the very
                 // next append and the two would disagree in between.

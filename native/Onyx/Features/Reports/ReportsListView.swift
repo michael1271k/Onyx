@@ -234,7 +234,7 @@ struct ReportReaderView: View {
                 body_ = seededBody
                 return
             }
-            body_ = (try? environment.database.reportBody(id: report.id)) ?? report.contentMd
+            body_ = (try? environment.database.reportBody(id: report.id, userId: environment.userIdString)) ?? report.contentMd
         }
     }
 }
@@ -331,7 +331,7 @@ struct ReportEditorSheet: View {
             return
         }
         guard let id = week.report?.id else { return }
-        text = (try? environment.database.reportBody(id: id)) ?? week.report?.contentMd ?? ""
+        text = (try? environment.database.reportBody(id: id, userId: environment.userIdString)) ?? week.report?.contentMd ?? ""
     }
 
     private func save() {

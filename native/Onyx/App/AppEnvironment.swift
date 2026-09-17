@@ -406,6 +406,21 @@ public final class AppEnvironment {
                     self.auth = .signedOut
                     continue
                 }
+                // ── THE ACCOUNT-SWITCH DOOR (W11) ───────────────────────────
+                // A sign-in with no sign-out before it used to inherit the
+                // previous account's store until its own sync overwrote it,
+                // and `AppDatabase.sharedFolder()` has no user component — so
+                // every reader answered from the wrong person's rows in the
+                // meantime, and the widget kept drawing them. The erase runs
+                // HERE, before `auth` flips and before a coordinator exists,
+                // so no view and no worker reads across the boundary; it is
+                // the same `eraseLocalData()` sign-out runs. A store that
+                // cannot be cleared is a store this account may not use: the
+                // session is revoked and the loop hears the sign-out.
+                if let session, !self.prepareStore(for: session.user.id) {
+                    try? await self.supabase.auth.signOut()
+                    continue
+                }
                 self.auth = session.map { .signedIn(userID: $0.user.id) } ?? .signedOut
                 if case .signedIn(let userID) = self.auth {
                     self.startSync(userID: userID)
@@ -769,6 +784,30 @@ public final class AppEnvironment {
     public func deleteAccount() async throws {
         try await supabase.rpc("delete_my_account").execute()
         await signOut()
+    }
+
+    /// Erase a store that belongs to another account, before this one reads
+    /// it. `AppDatabase.prepareForUser` decides; this surfaces what it found
+    /// exactly as `signOut()` surfaces its own unsynced count, and redraws the
+    /// widget against the now-empty store the same way. False when the erase
+    /// itself failed — the one case a sign-in must not proceed.
+    private func prepareStore(for userID: UUID) -> Bool {
+        let userId = OnyxJSON.canonicalUserID(userID)
+        do {
+            guard let discarded = try database.prepareForUser(userId) else { return true }
+            NSLog("onyx-session: the store belonged to another account; erased, %d unsynced", discarded)
+            if discarded > 0 {
+                startupError = "Signed in to a different account. \(discarded) change\(discarded == 1 ? "" : "s")"
+                    + " from the previous account had not reached the server and could not be kept."
+            }
+            widgetReload?.cancel()
+            widgetReload = nil
+            WidgetCenter.shared.reloadAllTimelines()
+            return true
+        } catch {
+            startupError = "Signed in to a different account, but the previous account's data could not be cleared."
+            return false
+        }
     }
 
     /// One read of `profiles.role`, from the mirror rather than the network.

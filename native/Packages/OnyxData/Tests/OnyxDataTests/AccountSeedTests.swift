@@ -257,11 +257,40 @@ struct AccountSeedTests {
         #expect(try db.needsOnboarding(userId: user) == false)
     }
 
-    @Test("a catalogue row alone is enough evidence of a person")
-    func catalogueCounts() throws {
+    /// The W11 inversion. Local `exercises` has NO `user_id`, so a catalogue
+    /// row proves a catalogue was pulled onto this phone at some point — by
+    /// whichever account — and nothing about whether THIS one is set up. The
+    /// pre-W11 check counted it and let a brand-new account land on a
+    /// configured app; the check is deleted, and this pins that it is gone.
+    @Test("a catalogue row is NOT evidence — it has no user (W11)")
+    func catalogueDoesNotCount() throws {
         let db = try store()
         _ = try db.createExercise(userId: user, name: "Hip Thrust")
-        #expect(try db.needsOnboarding(userId: user) == false)
+        #expect(try db.needsOnboarding(userId: user) == true,
+                "a leftover catalogue row must not suppress onboarding for a new account")
+    }
+
+    /// The isolation case the same inversion buys: a device that held account
+    /// B still offers onboarding to a fresh account A, and A sees none of B's
+    /// PRs. B's catalogue rows survive an erase only in this contrived seed —
+    /// on a real device the account-switch erase clears them first — but the
+    /// onboarding gate must be correct even if one leaks through.
+    @Test("a store holding B's catalogue still offers onboarding to A, whose PRs are empty (W11)")
+    func newAccountPastAnotherAccountsCatalogue() throws {
+        let db = try store()
+        let a = "00000000-0000-0000-0000-0000000000aa"
+        let b = "00000000-0000-0000-0000-0000000000bb"
+        // B leaves a catalogue row and a PR behind.
+        _ = try db.createExercise(userId: b, name: "Hip Thrust")
+        try db.writer.write { conn in
+            try PersonalRecordRow(
+                userId: b, exerciseKey: "Hip Thrust", axis: "weight", value: 180, achievedOn: "2026-09-01"
+            ).insert(conn)
+        }
+        #expect(try db.needsOnboarding(userId: a) == true, "A is new despite B's catalogue")
+        #expect(try db.personalRecords(exerciseKey: "Hip Thrust", userId: a).isEmpty,
+                "A must not read B's records")
+        #expect(try db.personalRecords(exerciseKey: "Hip Thrust", userId: b).count == 1)
     }
 
     @Test("the seed writes the plan, the deck, both phases and the preferences")

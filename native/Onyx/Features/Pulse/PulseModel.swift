@@ -376,7 +376,7 @@ final class DayModel {
     /// The anchor is the END of the selected day, so a session logged that
     /// morning reads as hours old rather than as a day old.
     private nonisolated static func recoveryBouts(
-        database: AppDatabase, on dateISO: String
+        database: AppDatabase, userId: String, on dateISO: String
     ) -> [MuscleRecovery.Bout] {
         guard let day = LogicalDay.date(fromISO: dateISO) else { return [] }
         // `byAdding: .day`, not +86,400 seconds: on the two days a year the
@@ -386,11 +386,11 @@ final class DayModel {
         let midnight = calendar.startOfDay(for: day)
         let anchor = calendar.date(byAdding: .day, value: 1, to: midnight) ?? midnight.addingTimeInterval(86_400)
         let from = ISODate.addDays(dateISO, -Int(MuscleRecovery.horizonHours / 24)) ?? dateISO
-        return ((try? database.sessionHistory()) ?? [])
+        return ((try? database.sessionHistory(userId: userId)) ?? [])
             .filter { $0.date >= from && $0.date <= dateISO && $0.endedAt != nil }
             .compactMap { session -> MuscleRecovery.Bout? in
                 guard let ended = session.endedAt else { return nil }
-                let rows = ((try? database.historySets(sessionId: session.id)) ?? [])
+                let rows = ((try? database.historySets(sessionId: session.id, userId: userId)) ?? [])
                     // Working sets only. A warm-up is real weight and counts
                     // for tonnage, and it is not what leaves a muscle sore
                     // three days later.
@@ -427,10 +427,10 @@ final class DayModel {
         // keep in step with `HistoryWeeks`. Unfinished sessions are excluded:
         // an abandoned draft has no summary worth a card, and its ledger row
         // is the logger's business.
-        let sessions = ((try? database.sessionHistory()) ?? [])
+        let sessions = ((try? database.sessionHistory(userId: userId)) ?? [])
             .filter { $0.date == to && $0.endedAt != nil }
             .map { session -> WorkoutSummary in
-                let rows = (try? database.historySets(sessionId: session.id)) ?? []
+                let rows = (try? database.historySets(sessionId: session.id, userId: userId)) ?? []
                 // WORKING sets for the COUNT, every non-ghost row for the
                 // TONNAGE — `SessionTonnage.kg` states why, and it is the same
                 // split `SessionAnalysis.summaries` and `closeSession` make.
@@ -513,7 +513,7 @@ final class DayModel {
             sessions: sessions,
             stress: stress,
             stressBreakdown: stressBreakdown,
-            fatigue: MuscleRecovery.fatigue(recoveryBouts(database: database, on: to)),
+            fatigue: MuscleRecovery.fatigue(recoveryBouts(database: database, userId: userId, on: to)),
             loaded: true
         )
     }
@@ -1117,7 +1117,7 @@ final class DayModel {
 
     func deleteCardio(_ id: String) {
         cardio.removeAll { $0.id == id }
-        write { [database] in try database.deleteCardio(id: id) }
+        write { [database, userId] in try database.deleteCardio(id: id, userId: userId) }
     }
 
     // MARK: Swaps

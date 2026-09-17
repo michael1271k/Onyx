@@ -127,6 +127,36 @@ struct NewAccountPathTests {
         #expect(try database.exercises().map(\.id).sorted() == beforeCatalogue)
     }
 
+    /// The W11 gate, on a phone that has HELD ANOTHER ACCOUNT.
+    ///
+    /// Local `exercises` has no `user_id`, so account B's catalogue rows say a
+    /// catalogue was pulled here once — not that account A has been set up. The
+    /// pre-W11 gate counted them and suppressed onboarding for A; this pins that
+    /// A is still offered the flow, and that A's PR list is empty however many
+    /// of B's records sit in the same table. (On a real device the
+    /// account-switch erase clears B first; the gate must be right even if it
+    /// did not.)
+    @Test("a store holding another account's catalogue still offers onboarding to a new account")
+    func newAccountPastAnotherAccountsCatalogue() async throws {
+        let database = try store()
+        let other = "00000000-0000-0000-0000-0000000000cc"
+
+        // B leaves a catalogue row behind (public path; the store has no
+        // per-user catalogue). The record-book half of the isolation — A never
+        // reading B's PRs — is proved exhaustively in `TwoUserIsolationTests`
+        // and `AccountSeedTests`, which have @testable access to seed a PR row.
+        _ = try database.createExercise(userId: other, name: "Hip Thrust")
+
+        // A is new despite B's catalogue, and its own record book is empty.
+        #expect(try database.needsOnboarding(userId: Self.user) == true,
+                "a leftover catalogue row suppressed onboarding for a new account")
+        #expect(try database.personalRecords(exerciseKey: "Hip Thrust", userId: Self.user).isEmpty)
+
+        // And the flow still lands cleanly.
+        #expect(await flow(database).finish())
+        #expect(try database.needsOnboarding(userId: Self.user) == false)
+    }
+
     /// "Build my own" is a real answer, and the logger has to survive it.
     @Test("a blank plan reaches a logger with nothing in it, and does not crash")
     func blankPlan() async throws {

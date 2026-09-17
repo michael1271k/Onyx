@@ -285,12 +285,31 @@ public final class AppDatabase: Sendable {
     /// session, so it asks the store whose data it is — `profiles` first, then
     /// any row that carries a `user_id`.
     public func knownUserId() throws -> String? {
-        try writer.read { db in
-            for table in ["profiles", "user_goals", "daily_logs"] {
-                if let id = try String.fetchOne(db, sql: "SELECT user_id FROM \(table) LIMIT 1") { return id }
-            }
-            return nil
+        try writer.read { db in try Self.knownUserId(db) }
+    }
+
+    /// The same question inside a transaction. EVERY table that carries a
+    /// `user_id` is asked, off `sqlite_master` rather than a list: the
+    /// account-switch erase (`prepareForUser`) hangs off this answer, and a
+    /// store holding nothing but one half-synced session must still say
+    /// whose it is. `profiles` and `user_goals` go first because they are the
+    /// rows a sign-in writes before anything else.
+    static func knownUserId(_ db: Database) throws -> String? {
+        for table in try userTables(db) {
+            if let id = try String.fetchOne(db, sql: "SELECT user_id FROM \"\(table)\" LIMIT 1") { return id }
         }
+        return nil
+    }
+
+    /// Every table with a `user_id` column, read off the schema so the list
+    /// cannot go stale — the same rule `eraseLocalData` follows.
+    static func userTables(_ db: Database) throws -> [String] {
+        let names = try String.fetchAll(db, sql: """
+            SELECT name FROM sqlite_master
+            WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'grdb_migrations'
+            ORDER BY CASE name WHEN 'profiles' THEN 0 WHEN 'user_goals' THEN 1 ELSE 2 END, name
+            """)
+        return try names.filter { name in try db.columns(in: name).contains { $0.name == "user_id" } }
     }
 
     /// An in-memory store, for tests.
@@ -1511,11 +1530,33 @@ extension AppDatabase {
 // MARK: - Reads
 
 extension AppDatabase {
+    /// One session, if it is THIS user's — the door every session-keyed read
+    /// and write goes through (W11). `workout_sets` and `set_events` carry no
+    /// `user_id` locally; ownership is the session's, so it is asked here once
+    /// rather than re-derived at every caller.
+    static func ownedSession(_ db: Database, id: String, userId: String) throws -> WorkoutSession? {
+        try WorkoutSession.filter(Column("id") == id && Column("user_id") == userId).fetchOne(db)
+    }
+
+    /// The projected sets of a session that is THIS user's, in the fold's
+    /// order. `fold_order` is the fold's arrival tiebreak, carried into the
+    /// table so two devices render a duplicated set_index in the same order;
+    /// sorting on set_index alone leaned on rowid order, which SQLite does not
+    /// promise.
+    static func ownedSets(sessionId: String, userId: String) -> QueryInterfaceRequest<WorkoutSet> {
+        WorkoutSet
+            .filter(
+                sql: "session_id = ? AND EXISTS (SELECT 1 FROM workout_sessions WHERE id = ? AND user_id = ?)",
+                arguments: [sessionId, sessionId, userId]
+            )
+            .order(Column("set_index"), Column("fold_order"))
+    }
+
     /// Sessions for a day, newest first.
-    public func sessions(on date: String) throws -> [WorkoutSession] {
+    public func sessions(on date: String, userId: String) throws -> [WorkoutSession] {
         try writer.read { db in
             try WorkoutSession
-                .filter(Column("date") == date)
+                .filter(Column("user_id") == userId && Column("date") == date)
                 .order(Column("started_at").desc)
                 .fetchAll(db)
         }
@@ -1526,23 +1567,16 @@ extension AppDatabase {
     /// A `ValueObservation` rather than a fetch: the logger writes a set and the
     /// list redraws, with no refresh call, no invalidation key and no chance of
     /// the two disagreeing.
-    public func observeSets(sessionId: String) -> ValueObservation<ValueReducers.Fetch<[WorkoutSet]>> {
+    public func observeSets(sessionId: String, userId: String) -> ValueObservation<ValueReducers.Fetch<[WorkoutSet]>> {
         ValueObservation.tracking { db in
-            try WorkoutSet
-                .filter(Column("session_id") == sessionId)
-                // `fold_order` is the fold's arrival tiebreak, carried into the
-                // table so two devices render a duplicated set_index in the
-                // same order. Sorting on set_index alone leaned on rowid order,
-                // which SQLite does not promise.
-                .order(Column("set_index"), Column("fold_order"))
-                .fetchAll(db)
+            try Self.ownedSets(sessionId: sessionId, userId: userId).fetchAll(db)
         }
     }
 
     /// One session by id. The drainer's read: it pushes the row as it stands
     /// now, never a copy captured when the queue item was written.
-    public func session(id: String) throws -> WorkoutSession? {
-        try writer.read { db in try WorkoutSession.fetchOne(db, key: id) }
+    public func session(id: String, userId: String) throws -> WorkoutSession? {
+        try writer.read { db in try Self.ownedSession(db, id: id, userId: userId) }
     }
 
     public func exercises() throws -> [Exercise] {
@@ -1557,13 +1591,8 @@ extension AppDatabase {
     /// once — at attach, to fold what is already logged back onto the deck —
     /// and a `ValueObservation` for a single read is a subscription to cancel
     /// for no benefit.
-    public func sets(sessionId: String) throws -> [WorkoutSet] {
-        try writer.read { db in
-            try WorkoutSet
-                .filter(Column("session_id") == sessionId)
-                .order(Column("set_index"), Column("fold_order"))
-                .fetchAll(db)
-        }
+    public func sets(sessionId: String, userId: String) throws -> [WorkoutSet] {
+        try writer.read { db in try Self.ownedSets(sessionId: sessionId, userId: userId).fetchAll(db) }
     }
 
     /// The session for a split that is still being logged, if there is one.
@@ -1578,10 +1607,11 @@ extension AppDatabase {
     /// Keyed on `(date, day_key)` and never on the weekday: a swap moves a
     /// workout to another date, and a Wednesday "Delts & Arms" landed in the
     /// Upper A curve exactly that way.
-    public func liveSession(dayKey: String, date: String) throws -> WorkoutSession? {
+    public func liveSession(dayKey: String, date: String, userId: String) throws -> WorkoutSession? {
         try writer.read { db in
             try WorkoutSession
-                .filter(Column("date") == date
+                .filter(Column("user_id") == userId
+                        && Column("date") == date
                         && Column("day_key") == dayKey
                         && Column("ended_at") == nil)
                 .order(Column("started_at"))
@@ -1607,10 +1637,10 @@ extension AppDatabase {
     /// "Resume workout" footer on exactly this test, and the shell agreeing
     /// with it is the point — two answers to "is there a workout on" is how the
     /// footer and the tab bar end up disagreeing.
-    public func liveWorkoutInProgress(date: String) throws -> Bool {
+    public func liveWorkoutInProgress(date: String, userId: String) throws -> Bool {
         try writer.read { db in
             let open = try WorkoutSession
-                .filter(Column("date") == date && Column("ended_at") == nil)
+                .filter(Column("user_id") == userId && Column("date") == date && Column("ended_at") == nil)
                 .fetchAll(db)
             for session in open {
                 let sets = try WorkoutSet.filter(Column("session_id") == session.id).fetchAll(db)
@@ -1639,13 +1669,14 @@ extension AppDatabase {
         date: String,
         startedAt: Date = Date()
     ) throws -> WorkoutSession {
-        if let live = try liveSession(dayKey: dayKey, date: date) { return live }
+        if let live = try liveSession(dayKey: dayKey, date: date, userId: userId) { return live }
         return try writer.write { db in
             // Re-checked inside the transaction: the read above is not part of
             // it, and two writers (the phone and, at Wave 5, the watch) racing
             // on the same split would otherwise each create a row.
             if let live = try WorkoutSession
-                .filter(Column("date") == date
+                .filter(Column("user_id") == userId
+                        && Column("date") == date
                         && Column("day_key") == dayKey
                         && Column("ended_at") == nil)
                 .order(Column("started_at"))
@@ -1789,9 +1820,9 @@ extension AppDatabase {
     /// Locally it is one statement: `set_events`, `live_sessions` and
     /// `workout_sets` all cascade from `workout_sessions`.
     @discardableResult
-    public func discardSession(id: String) throws -> Bool {
+    public func discardSession(id: String, userId: String) throws -> Bool {
         try writer.write { db in
-            guard try WorkoutSession.fetchOne(db, key: id) != nil else { return false }
+            guard try Self.ownedSession(db, id: id, userId: userId) != nil else { return false }
 
             // Server-side deletes, queued while the ids are still readable.
             for set in try WorkoutSet.filter(Column("session_id") == id).fetchAll(db) {
@@ -1830,9 +1861,9 @@ extension AppDatabase {
     /// "when did you train" reader take it — so this is a correction and never
     /// a rebase around a pause. The pause ledger is untouched, which is the
     /// same rule `PauseControlling.setElapsed` states.
-    public func setSessionStart(id: String, startedAt: Date) throws {
+    public func setSessionStart(id: String, startedAt: Date, userId: String) throws {
         try writer.write { db in
-            guard var session = try WorkoutSession.fetchOne(db, key: id) else { return }
+            guard var session = try Self.ownedSession(db, id: id, userId: userId) else { return }
             session.startedAt = startedAt
             try session.update(db)
             try Self.enqueueSessionUpsert(sessionId: id, in: db)
@@ -1863,12 +1894,12 @@ extension AppDatabase {
     /// different rules is exactly how the provenance flags drift apart.
     @discardableResult
     public func setSessionMetrics(
-        id: String, durationMin: Double? = nil, avgBpm: Int? = nil, caloriesBurned: Int? = nil,
+        id: String, userId: String, durationMin: Double? = nil, avgBpm: Int? = nil, caloriesBurned: Int? = nil,
         measured: Bool = true
     ) throws -> SessionEditing.Outcome? {
         guard durationMin != nil || avgBpm != nil || caloriesBurned != nil else { return nil }
         return try updateMetrics(
-            sessionId: id, durationMin: durationMin, avgBpm: avgBpm, calories: caloriesBurned,
+            sessionId: id, userId: userId, durationMin: durationMin, avgBpm: avgBpm, calories: caloriesBurned,
             measured: measured
         )
     }
@@ -2001,17 +2032,44 @@ extension AppDatabase {
     /// `defer_foreign_keys` lets the deletes run in whatever order the catalog
     /// hands back rather than making this care about the reference graph.
     public func eraseLocalData() throws {
+        try writer.write { db in try Self.eraseLocalData(db) }
+    }
+
+    static func eraseLocalData(_ db: Database) throws {
+        let tables = try String.fetchAll(db, sql: """
+            SELECT name FROM sqlite_master
+            WHERE type = 'table'
+              AND name NOT LIKE 'sqlite_%'
+              AND name <> 'grdb_migrations'
+            """)
+        try db.execute(sql: "PRAGMA defer_foreign_keys = ON")
+        for table in tables {
+            try db.execute(sql: "DELETE FROM \"\(table)\"")
+        }
+    }
+
+    /// The account-switch door (W11).
+    ///
+    /// A sign-in whose user is not the one this store belongs to erases the
+    /// store BEFORE the first sync — the same `eraseLocalData()` sign-out
+    /// runs, reached from the other direction. `sharedFolder()` has no user
+    /// component, so without this a sign-in that skipped sign-out read the
+    /// previous account's rows under the new one until its own sync landed.
+    ///
+    /// Returns nil when nothing had to happen — an empty store, or the same
+    /// user signing back in — else the number of queued changes the previous
+    /// account had not pushed and has now lost. `signOut()` drains the queue
+    /// first and reports the remainder; a switch CANNOT drain, because the
+    /// session in hand is the new user's and RLS would refuse the old rows.
+    /// So the count is read before the erase and handed back, and the caller
+    /// reports it exactly as sign-out reports its own. One transaction: the
+    /// count and the erase describe the same store.
+    public func prepareForUser(_ userId: String) throws -> Int? {
         try writer.write { db in
-            let tables = try String.fetchAll(db, sql: """
-                SELECT name FROM sqlite_master
-                WHERE type = 'table'
-                  AND name NOT LIKE 'sqlite_%'
-                  AND name <> 'grdb_migrations'
-                """)
-            try db.execute(sql: "PRAGMA defer_foreign_keys = ON")
-            for table in tables {
-                try db.execute(sql: "DELETE FROM \"\(table)\"")
-            }
+            guard let owner = try Self.knownUserId(db), owner != userId else { return nil }
+            let unsynced = try Int.fetchOne(db, sql: "SELECT count(*) FROM outbox") ?? 0
+            try Self.eraseLocalData(db)
+            return unsynced
         }
     }
 

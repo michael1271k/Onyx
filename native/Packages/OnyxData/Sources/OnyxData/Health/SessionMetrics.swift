@@ -63,7 +63,7 @@ public extension HealthSync {
                       let estimate = Estimates.estimateCalories(
                         durationMin: session.durationMin,
                         samples: try database.kcalSamples(before: session, calendar: calendar),
-                        bodyweightKg: try database.bodyweight(onOrBefore: session.date)
+                        bodyweightKg: try database.bodyweight(onOrBefore: session.date, userId: session.userId)
                       ) {
                 next.caloriesBurned = Self.whole(estimate.kcal)
                 next.caloriesEstimated = true
@@ -150,12 +150,12 @@ extension AppDatabase {
     /// The MET fallback's, originally, and now also the weekly wrap's: the same
     /// question — "what did the scale last say by this day" — asked by two
     /// callers, one of which lives in the app target and needs it public.
-    public func bodyweight(onOrBefore date: String) throws -> Double? {
+    public func bodyweight(onOrBefore date: String, userId: String) throws -> Double? {
         try writer.read { db in
             try Double.fetchOne(
                 db,
-                sql: "SELECT weight_kg FROM body_composition WHERE date <= ? ORDER BY date DESC LIMIT 1",
-                arguments: [date]
+                sql: "SELECT weight_kg FROM body_composition WHERE user_id = ? AND date <= ? ORDER BY date DESC LIMIT 1",
+                arguments: [userId, date]
             )
         }
     }

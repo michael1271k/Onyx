@@ -435,9 +435,11 @@ public extension AppDatabase {
 
     /// Date-free: the id is enough, and a deletion can move a record, so every
     /// cardio reader re-derives rather than patching a cache.
-    func deleteCardio(id: String) throws {
+    func deleteCardio(id: String, userId: String) throws {
         try writer.write { db in
-            _ = try CardioLogRow.deleteOne(db, key: id)
+            // Only a row that is this user's goes, locally and on the wire (W11).
+            guard try CardioLogRow.filter(Column("id") == id && Column("user_id") == userId).deleteAll(db) > 0
+            else { return }
             try Self.enqueueRowDelete(table: CardioLogRow.databaseTableName, key: ["id": id], in: db)
         }
     }

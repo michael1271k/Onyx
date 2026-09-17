@@ -225,9 +225,10 @@ extension SessionAnalysis {
 
     /// The page, or nil when the id names nothing.
     static func page(database: AppDatabase, sessionId: String) -> Page? {
-        guard let session = try? database.session(id: sessionId),
-              let ledger = try? database.historySets(),
-              let sessions = try? database.sessionHistory()
+        let owner = database.localUserId()
+        guard let session = try? database.session(id: sessionId, userId: owner),
+              let ledger = try? database.historySets(userId: owner),
+              let sessions = try? database.sessionHistory(userId: owner)
         else { return nil }
 
         let ctx = context(database: database)
@@ -253,7 +254,7 @@ extension SessionAnalysis {
 
         // The bout this session owns, if it owns one — see `Page.bout` for
         // why the date half of that query is filtered back out.
-        let bout = ((try? database.cardio(sessionId: sessionId, date: session.date)) ?? [])
+        let bout = ((try? database.cardio(sessionId: sessionId, date: session.date, userId: session.userId)) ?? [])
             .first { $0.sessionId == sessionId }
 
         let goals: UserGoalRow? = (try? database.read { db in
@@ -320,8 +321,8 @@ extension SessionAnalysis {
     /// numbering it would put a gap in every number after it.
     static func headers(database: AppDatabase, userId: String, sessionIds: [String]) -> [String: SessionHeader] {
         guard !sessionIds.isEmpty,
-              let ledger = try? database.historySets(),
-              let sessions = try? database.sessionHistory()
+              let ledger = try? database.historySets(userId: userId),
+              let sessions = try? database.sessionHistory(userId: userId)
         else { return [:] }
 
         let ctx = context(database: database)

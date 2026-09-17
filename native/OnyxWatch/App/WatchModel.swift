@@ -216,7 +216,7 @@ final class WatchModel {
     /// later from an abandoned workout. The row is created by the first append.
     private func rejoinLiveSession() {
         guard let store, let day, let context else { return }
-        guard let live = try? store.liveSession(dayKey: day.key, date: context.today) else { return }
+        guard let live = try? store.liveSession(dayKey: day.key, date: context.today, userId: context.userId) else { return }
         adopt(live)
     }
 
@@ -264,9 +264,9 @@ final class WatchModel {
     }
 
     private func reload(_ id: String) {
-        guard let store else { return }
+        guard let store, let context else { return }
         do {
-            sets = try store.sets(sessionId: id)
+            sets = try store.sets(sessionId: id, userId: context.userId)
             seedCursor()
         } catch {
             storeError = String(describing: error)
@@ -481,11 +481,12 @@ final class WatchModel {
     /// metrics write afterwards would be a second queue item for a row that had
     /// already gone.
     func finish() async {
-        guard let store, let sessionId else { return }
+        guard let store, let sessionId, let context else { return }
         let metrics = await workout.end()
         do {
             try store.setSessionMetrics(
-                id: sessionId, durationMin: nil, avgBpm: metrics.avgBpm, caloriesBurned: metrics.calories
+                id: sessionId, userId: context.userId, durationMin: nil,
+                avgBpm: metrics.avgBpm, caloriesBurned: metrics.calories
             )
             _ = try store.closeSession(
                 id: sessionId, restTargetSec: cursor.map { Double($0.movement.plan.restSec ?? 120) }

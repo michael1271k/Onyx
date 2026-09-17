@@ -68,7 +68,8 @@ public extension AppDatabase {
         // Which plan owns a date, off the catalogue. The local store is ONE
         // user's mirror, so the goals row names the user (the same reading
         // `HistoryWeeks` and `sessionsForSeed` make).
-        let ctx = try scheduleContext(userId: localUserId())
+        let user = localUserId()
+        let ctx = try scheduleContext(userId: user)
         let owner = { (date: String) in Schedule.planId(owning: date, in: ctx) }
         let era = owner(today)
         let allowed = try qualifying
@@ -79,7 +80,7 @@ public extension AppDatabase {
         // read of `workout_sessions`.
         var instant: [String: String] = [:]
         var rows: [ProgressionQueue.SetRow] = []
-        for r in try historySets(exerciseIds: Array(fold.keys))
+        for r in try historySets(exerciseIds: Array(fold.keys), userId: user)
         where r.dayKey == dayKey && owner(r.date) == era && allowed.contains(r.sessionId) {
             if instant[r.sessionId] == nil {
                 instant[r.sessionId] = "\(r.date)|\(String(format: "%06d", instant.count))"

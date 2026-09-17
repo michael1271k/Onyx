@@ -220,8 +220,8 @@ public extension AppDatabase {
     }
 
     /// The asserted PR floors — session-less `personal_records` rows, per key.
-    func prFloors() throws -> [String: PrFloor] {
-        try writer.read { db in try PrRecorder.floors(db) }
+    func prFloors(userId: String) throws -> [String: PrFloor] {
+        try writer.read { db in try PrRecorder.floors(db, userId: userId) }
     }
 
     /// The schedule context — see the static twin.

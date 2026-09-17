@@ -49,7 +49,7 @@ public extension AppDatabase {
     ) -> AsyncThrowingStream<[ReportWeek], any Error> {
         stream(ValueObservation.tracking { db in
             let startDay = Week.startDay(fromEndDay: try Self.weekEndDay(db, userId: userId))
-            let rows = try Self.bodiedReports(db)
+            let rows = try Self.bodiedReports(db, userId: userId)
             return Self.weeks(rows, today: today, startDay: startDay, minWeeks: minWeeks)
         })
     }
@@ -88,10 +88,10 @@ public extension AppDatabase {
     /// The bodies run 16 kB to 40 kB and grow every week; holding twenty of them
     /// in a list model to show twenty date rows is a megabyte of strings the
     /// screen never draws.
-    func reportBody(id: String) throws -> String? {
+    func reportBody(id: String, userId: String) throws -> String? {
         try writer.read { db in
             try String.fetchOne(
-                db, sql: "SELECT content_md FROM reports WHERE id = ?", arguments: [id]
+                db, sql: "SELECT content_md FROM reports WHERE id = ? AND user_id = ?", arguments: [id, userId]
             )
         }
     }
@@ -180,17 +180,17 @@ public extension AppDatabase {
     /// No type filter: the FMT v2 test is a regex on the BODY, not a column, so
     /// a `weekly` row whose text says "FMT v2" is a v2 report and renders as
     /// one. Filtering on `type = 'sentinel7'` here would hide it.
-    private static func bodiedReports(_ db: Database) throws -> [ReportRow] {
+    private static func bodiedReports(_ db: Database, userId: String) throws -> [ReportRow] {
         try ReportRow
+            .filter(Column("user_id") == userId)
             .filter(sql: "content_md IS NOT NULL AND trim(content_md) <> ''")
             .order(Column("period_start").desc, Column("created_at").desc)
             .fetchAll(db)
     }
 
-    /// The athlete's week end, or Saturday. Unfiltered on `user_id` like every
-    /// other read in the app — the local store is one user's mirror and the id
-    /// is `""` until auth resolves.
+    /// The athlete's week end, or Saturday. The stream is started from a
+    /// signed-in screen with the session's own id (W11), so the row is theirs.
     private static func weekEndDay(_ db: Database, userId: String) throws -> Int? {
-        try UserGoalRow.fetchOne(db)?.weekEndDay
+        try UserGoalRow.filter(Column("user_id") == userId).fetchOne(db)?.weekEndDay
     }
 }

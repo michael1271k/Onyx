@@ -196,7 +196,7 @@ public extension AppDatabase {
             // Scoped by the parent SESSION rather than by a set's own timestamp:
             // a back-dated session is written today, so filtering on the set
             // would miss it entirely.
-            let daySets = try Self.sets(db, sessionIds: sessions.map(\.id))
+            let daySets = try Self.sets(db, sessionIds: sessions.map(\.id), userId: userId)
             let counted = Self.countSets(daySets)
 
             // ── THE FORMER HOLES ────────────────────────────────────────────
@@ -238,7 +238,7 @@ public extension AppDatabase {
                     .filter(Column("user_id") == userId && Column("date") < date)
                 if let dayKey { priorQuery = priorQuery.filter(Column("day_key") == dayKey) }
                 let prior = try priorQuery.order(Column("date").desc).limit(6).fetchAll(db)
-                let priorSets = try Self.sets(db, sessionIds: prior.map(\.id))
+                let priorSets = try Self.sets(db, sessionIds: prior.map(\.id), userId: userId)
                 var bySession: [String: [WorkoutSet]] = [:]
                 for set in priorSets { bySession[set.sessionId, default: []].append(set) }
                 let candidates = prior
@@ -359,9 +359,13 @@ extension AppDatabase {
         var failureSets = 0
     }
 
-    static func sets(_ db: Database, sessionIds: [String]) throws -> [WorkoutSet] {
+    static func sets(_ db: Database, sessionIds: [String], userId: String) throws -> [WorkoutSet] {
         guard !sessionIds.isEmpty else { return [] }
-        return try WorkoutSet.filter(sessionIds.contains(Column("session_id"))).fetchAll(db)
+        return try WorkoutSet
+            .filter(sessionIds.contains(Column("session_id")))
+            // Ownership rides on the session (W11): a set has no `user_id` locally.
+            .filter(sql: "session_id IN (SELECT id FROM workout_sessions WHERE user_id = ?)", arguments: [userId])
+            .fetchAll(db)
     }
 
     static func countSets(_ rows: [WorkoutSet]) -> SetCounts {

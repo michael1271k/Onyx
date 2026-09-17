@@ -223,7 +223,7 @@ public actor SyncCoordinator: MirrorRefreshing {
         let mirror = PostgRESTMirrorRemote(client: client, userId: userId)
         self.init(
             database: database,
-            engine: SyncEngine(database: database, remote: PostgRESTRemote(client: client, userId: userId), rows: mirror),
+            engine: SyncEngine(database: database, userId: userId, remote: PostgRESTRemote(client: client, userId: userId), rows: mirror),
             puller: MirrorPuller(database: database, remote: mirror, userId: userId, windowDays: nil),
             training: TrainingPuller(database: database, remote: mirror, userId: userId, windowDays: nil),
             health: health,
