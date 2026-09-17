@@ -307,7 +307,9 @@ struct WorkoutWeekTests {
         }
         let tab = week(database, dayKey: "cb_a", today: "2026-09-09")
         await tab.refresh()
-        let weeks = tab.snapshot.pastWeeks
+        // Off `library()` and no longer off the snapshot: the walk is a sheet's
+        // content since §W1 C, so the tab does not pay for it on every refresh.
+        let weeks = await tab.library().weeks
         #expect(weeks.map(\.weekStart) == ["2026-08-31", "2026-08-24", "2026-08-17"])
         #expect(weeks.allSatisfy { $0.sessions == 1 })
         #expect(weeks[0].tonnageKg == 1_000)

@@ -191,6 +191,119 @@ struct UnilateralAndQualityTests {
         #expect(exercise.rows.count == before, "a side is not half of a side")
     }
 
+    // MARK: - How a pair is DRAWN, in the ledger
+
+    /// The fixture `session-pairs-merged` is shot from, through the real
+    /// pipeline: rows out of the store, `SessionAnalysis.detailSet`,
+    /// `SessionDetail.toRows`, and then the row view's own decision. Building
+    /// `DetailRow`s by hand would test a shape the app never assembles.
+    private func pairRows() throws -> [SetRow] {
+        let environment = HistoryPreviews.environment()
+        let sets = try environment.database.historySets(sessionId: HistoryPreviews.pairShapes)
+        let rows = SessionDetail.toRows(sets.map(SessionAnalysis.detailSet))
+        // `.pair` is what the card resolves to when ANY row on it is a pair,
+        // and the merge decision is per row inside that table — so the layout
+        // has to be the card's, not the default.
+        return rows.map { SetRow(row: $0, timed: false, layout: .pair) }
+    }
+
+    /// ── THE LEDGER HONOURS ALL THREE CASES (§W1 E) ──────────────────────────
+    /// `SetPairLayout.resolve` has defined them since it was written and only
+    /// the LOGGER consumed it. The session page hard-coded two value lines for
+    /// every pair, so a set both arms performed identically printed
+    /// `5kg × 12` twice to say nothing twice.
+    @Test("the four pair shapes, and what the session page does with each")
+    func ledgerHonoursEveryPairShape() throws {
+        let rows = try pairRows()
+        // Four pairs, four rows. A pair is ONE set everywhere it is counted and
+        // this is where it is drawn; eight rows here would mean the fold broke.
+        #expect(rows.count == 4)
+
+        // 1 · load, reps and rating all agree → ONE line, one word, no L/R.
+        #expect(rows[0].pairLayout == .effortSplit)
+        #expect(rows[0].splitsValues == false, "one value line")
+        #expect(rows[0].splitEfforts == nil, "one effort reading")
+
+        // 2 · same numbers, different ratings → one value line, `L 8 · R 9`.
+        #expect(rows[1].pairLayout == .effortSplit)
+        #expect(rows[1].splitsValues == false)
+        let second = try #require(rows[1].splitEfforts)
+        #expect(second.0 == 8)
+        #expect(second.1 == 9)
+
+        // 3 · the reps differ and the right side was NEVER rated. Both facts
+        // have to survive: two value lines, and `L 8 · R —` rather than a
+        // lone `L 8` that would read as the set's own rating.
+        #expect(rows[2].pairLayout == .valueSplit)
+        #expect(rows[2].splitsValues)
+        let third = try #require(rows[2].splitEfforts)
+        #expect(third.0 == 8)
+        #expect(third.1 == nil, "an unrated side is an em-dash, never a blank")
+
+        // 4 · the reps differ and the ratings agree → two value lines and ONE
+        // effort glyph, centred against the pair rather than against the left.
+        #expect(rows[3].pairLayout == .valueSplit)
+        #expect(rows[3].splitsValues)
+        #expect(rows[3].splitEfforts == nil)
+    }
+
+    /// A pair with one side logged is not a comparison — it is a set, and the
+    /// rule says so itself: "a group of one is `unified` by definition".
+    @Test("one side is an ordinary set, and never an L with no R")
+    func oneSideIsUnified() {
+        #expect(SetPairLayout.resolve(weights: [5], reps: [12], rpes: [8]) == .unified)
+    }
+
+    /// ── WHY THE MERGE ALSO ASKS THE STRING ──────────────────────────────────
+    /// `resolve` reads load, reps and effort. A cardio pair is told apart by
+    /// `duration_sec` and `distance_km`, which are none of the three — both
+    /// sides store `weight_kg 0, reps 0` — so the rule alone would call two
+    /// bouts of different lengths identical and the row would print one of
+    /// them. `SetRow.splitsValues` asks `fmt` as well for exactly this.
+    @Test("the rule alone would merge two different bouts")
+    func cardioIsNotTheRulesToDecide() {
+        #expect(SetPairLayout.resolve(weights: [0, 0], reps: [0, 0], rpes: [nil, nil]) == .effortSplit)
+    }
+
+    /// The merge is a RENDERING change. If this number ever moves, it is not.
+    @Test("drawing a pair as one row changes no tonnage")
+    func mergeMovesNoNumber() throws {
+        let environment = HistoryPreviews.environment()
+        let sets = try environment.database.historySets(sessionId: HistoryPreviews.pairShapes)
+        #expect(sets.count == 8, "four pairs, two rows each, in the store")
+        // Scored ONCE per pair, at the weaker side: 12, 12, 11 and 10 reps at
+        // 5 kg. Eight rows summed whole would be 450.
+        #expect(SessionVolume.sessionVolumeKg(sets.map(SessionAnalysis.volumeSet)) == 5 * (12 + 12 + 11 + 10))
+    }
+
+    /// ── AND THE LEAK THE LOGGER USED TO HAVE (§W1 F) ────────────────────────
+    /// Rating one arm of a pair wrote to that row alone, and `SetPatch` cannot
+    /// write a null back — so a side skipped at the moment of rating stayed
+    /// null for good. The card now carries the unrated sibling into the picker
+    /// with the tapped side, which is the same seed `splitSet` already writes.
+    @Test("rating one side of a pair seeds the sibling that has none")
+    func ratingOneSideSeedsTheOther() throws {
+        let model = armsDay()
+        guard let exercise = unilateral(model) else {
+            Issue.record("no unilateral movement on Delts & Arms")
+            return
+        }
+        // ONE pair — the group a set box is drawn from, not every row of the
+        // movement: three prescribed sets are three pairs and six rows.
+        let sides = try #require(LoggerModel.groups(exercise.rows).first)
+        #expect(sides.count == 2)
+        #expect(sides.allSatisfy { $0.rpe == nil }, "a fresh pair opens unrated")
+
+        // What the sheet is handed when the LEFT side is tapped.
+        #expect(SetRowView.effortTargets(tapping: sides[0], in: sides).map(\.id)
+                == [sides[0].id, sides[1].id], "both rows, the tapped one first")
+
+        // Once the right side holds a rating of its own, it is nobody's seed.
+        sides[1].rpe = 9
+        #expect(SetRowView.effortTargets(tapping: sides[0], in: sides).map(\.id)
+                == [sides[0].id], "a rated sibling is left alone")
+    }
+
     // MARK: - Several tags on one set
 
     @Test("tags accumulate, withdraw one at a time, and store in canonical order")

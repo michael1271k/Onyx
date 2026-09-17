@@ -88,11 +88,36 @@ final class WorkoutWeek {
     struct PastWeek: Identifiable, Sendable, Equatable {
         var id: String { weekStart }
         let weekStart: String
-        /// `Week of 23 Aug` — the same label the banner it expands into wears,
-        /// so the row and its contents cannot name the week differently.
+        /// `Week 3` — the PROGRAMME's own counter, from
+        /// `Week.label(ofWeekStart:anchor:phases:)`.
+        ///
+        /// ── IT USED TO BE A DATE, AND THE COUNTER ALREADY EXISTED ───────────
+        /// `Week of Sun 6 Sep` was hand-rolled here out of `Swap.shortDayLabel`
+        /// while the one function that numbers a week against the plan's anchor
+        /// sat unused two modules away — the same function the History capsule,
+        /// the session masthead and the weekly export all label a week with. So
+        /// one week was `Week 8` on three screens and `Week of Sun 6 Sep` on the
+        /// fourth, and the date said nothing about where in the block it fell.
+        /// The date is not lost: it is `range`, one line down, where a subtitle
+        /// belongs.
         let label: String
+        /// `30 Aug – 5 Sep` — `WeekWindow.rangeLabel`, the same string History's
+        /// own capsules wear.
+        let range: String
         let sessions: Int
         let tonnageKg: Double
+        /// What the week was FOR, biggest share of the work first, at most four.
+        ///
+        /// ── WHY THIS ONE IS CAPPED WHEN THE MASTHEAD'S IS NOT ───────────────
+        /// `SessionHeaderCard`'s own header argues against a cap and is right
+        /// about a SESSION: an upper day has four or five primaries and the
+        /// small one is Abs/core, which is exactly the tag a cap eats. A WEEK
+        /// has all of them — a five-day split is every family the plan trains,
+        /// so an uncapped row is eight capsules over three lines on every
+        /// banner, and the Library exists so that several weeks fit where one
+        /// expanded banner used to. The full breakdown, with each muscle's
+        /// share, is the ring one tap away in the wrap-up this banner opens.
+        let muscles: [LandmarkMuscle]
     }
 
     /// The last session of the split TODAY is, and what was done in it.
@@ -161,8 +186,6 @@ final class WorkoutWeek {
         /// passed, and nil while the week is empty — a projection off no
         /// sessions is a number with no input.
         var weekPaceKg: Double?
-        /// The weeks behind this one, newest first — one collapsed row each.
-        var pastWeeks: [PastWeek] = []
         /// Which of this tab's sections the reader has put away (W6). Read in
         /// the same pass as everything else; written by the long-press menu.
         /// Distinct movements this device has ever logged a set of — the
@@ -276,6 +299,54 @@ final class WorkoutWeek {
             Self.build(database: database, today: today, phase: phase, seededDayKey: dayKey)
         }.value
         loaded = true
+    }
+
+    /// Every closed week behind this one, with the phase table that groups
+    /// them — the Library sheet's whole content, read when it opens.
+    ///
+    /// ── WHY IT IS NOT ON THE SNAPSHOT ANY MORE ──────────────────────────────
+    /// It was, and it cost the tab a week-query plus a `historySets` read per
+    /// session inside eight weeks on EVERY refresh — for a list at the bottom
+    /// of the page that a reader reaches by scrolling past everything else.
+    /// Behind a button the walk runs once, when it is asked for, which is what
+    /// let the eight-week cap go (see `pastWeekCeiling`).
+    ///
+    /// Detached, and reading its own `ScheduleContext` rather than borrowing
+    /// the snapshot's: this is a walk over every week of a block and it must
+    /// not run on the actor drawing the sheet it fills.
+    ///
+    /// On the actor only long enough to read `today` — the same shape
+    /// `refresh()` has, and the reason neither can be `nonisolated`: the seeded
+    /// day the harness pins is main-actor state, and a detached task that read
+    /// it would be reading it from outside the actor that owns it.
+    func library() async -> Library {
+        let database = self.database, today = self.today
+        return await Task.detached(priority: .userInitiated) {
+            // The same conversion `build` makes, from the same column: a
+            // Library cut on a different week start from the tab behind it
+            // would number its weeks off by a day at each end.
+            let goals: UserGoalRow? = (try? database.read { db in
+                try UserGoalRow.fetchOne(db)
+            }) ?? nil
+            let startDay = Week.startDay(fromEndDay: goals?.weekEndDay)
+            let context = (try? database.scheduleContext(userId: database.localUserId()))
+                ?? ScheduleContext(programId: "", phase: .cut)
+            return Library(
+                weeks: Self.pastWeeks(
+                    database, before: Week.start(of: today, startDay: startDay),
+                    in: context, startDay: startDay
+                ),
+                phases: context.phases
+            )
+        }.value
+    }
+
+    /// The weeks, and the blocks they are grouped into. One value because the
+    /// two are read in one pass and a sheet handed only the weeks would have to
+    /// go back for the table that names their sections.
+    struct Library: Sendable {
+        var weeks: [PastWeek] = []
+        var phases: [PhaseDef] = []
     }
 
     /// The banner behind one collapsed past-week row, built on expand.
@@ -580,8 +651,9 @@ final class WorkoutWeek {
             programId: context.programId, phase: context.phase
         )
 
-        // ── The weeks behind this one (W6) ──────────────────────────────────
-        out.pastWeeks = pastWeeks(database, before: weekStart, in: withOverrides)
+        // The weeks behind this one are NOT built here any more (§W1 C). They
+        // are a sheet's content now, and this pass runs on every appearance of
+        // the tab — see `library()`.
         out.trainLayout = database.trainLayout(userId: database.localUserId())
 
         // ── What the card prints where the rep window used to be ────────────
@@ -778,16 +850,20 @@ final class WorkoutWeek {
         }
     }
 
-    /// How many weeks back the collapsed rows go.
+    /// The loop's stop, and not a window.
     ///
-    /// ponytail: eight weeks means up to eight week-queries and one
-    /// `historySets` read per session inside them — around thirty small indexed
-    /// reads, once, on a detached pass that already does a dozen. If it ever
-    /// shows in a trace the fix is `workout_sessions.total_volume_kg`, which
-    /// holds the same number; it is not read here because one seeded session in
-    /// this app still carries a null aggregate and a collapsed row that
-    /// disagreed with the banner it opens would be worse than the cost.
-    nonisolated static let pastWeekCount = 8
+    /// ── THE EIGHT-WEEK CAP IS GONE, AND SO IS WHAT PAID FOR IT ──────────────
+    /// It was eight because this walk ran on EVERY Train-tab refresh to fill a
+    /// list nobody had scrolled to — around thirty small indexed reads behind a
+    /// section at the bottom of the page. The list is a sheet now (§W1 C), so
+    /// the walk runs when the Library is opened and not before, and the reader
+    /// who opens it is the reader asking for the whole block.
+    ///
+    /// `Schedule.isPlannable` is what actually ends the walk: it goes false the
+    /// week before the plan's first day, which is the real edge of the record.
+    /// This is the guard for a plan whose start date does not parse, where that
+    /// test could answer true forever — ten years of weeks, and then a stop.
+    nonisolated static let pastWeekCeiling = 520
 
     /// The closed weeks behind `weekStart`, newest first.
     ///
@@ -801,22 +877,44 @@ final class WorkoutWeek {
     /// gate `wrap` itself applies, so a row that survived it here would expand
     /// into nothing.
     nonisolated static func pastWeeks(
-        _ database: AppDatabase, before weekStart: String, in context: ScheduleContext
+        _ database: AppDatabase, before weekStart: String, in context: ScheduleContext,
+        startDay: Int
     ) -> [PastWeek] {
         var out: [PastWeek] = []
         var start = weekStart
-        for _ in 0..<pastWeekCount {
+        for _ in 0..<pastWeekCeiling {
             guard let previous = ISODate.addDays(start, -7) else { break }
             start = previous
             guard Schedule.isPlannable(start, in: context) else { break }
             let dates = (0..<7).compactMap { ISODate.addDays(start, $0) }
             let finished = finishedByDate(database, dates: dates)
             guard !finished.isEmpty else { continue }
+            // ── ONE READ PER SESSION, TWO ANSWERS ───────────────────────────
+            // The tonnage and the families are both folds over the same rows,
+            // and `tonnageByDate` read them for the first alone — so adding the
+            // capsules by calling it and then re-reading for the muscles would
+            // have doubled the walk's cost to draw a row of tags.
+            var tonnageKg = 0.0
+            var rows: [HistorySetRow] = []
+            for session in finished.values {
+                let sets = (try? database.historySets(sessionId: session.id)) ?? []
+                rows += sets
+                // The one tonnage rule, the one `tonnageByDate` applies: every
+                // non-ghost row, warm-ups included, a pair scored once at its
+                // weaker side.
+                tonnageKg += SessionVolume.sessionVolumeKg(sets.map(SessionAnalysis.volumeSet))
+            }
             out.append(PastWeek(
                 weekStart: start,
-                label: "Week of \(Swap.shortDayLabel(start))",
+                label: Week.label(
+                    ofWeekStart: start, anchor: context.weekZeroStart, phases: context.phases
+                ),
+                range: WeekWindow(containing: start, startDay: startDay).rangeLabel,
                 sessions: finished.count,
-                tonnageKg: jsRound(tonnageByDate(database, finished).values.reduce(0, +))
+                tonnageKg: jsRound(tonnageKg),
+                muscles: Array(
+                    SessionAnalysis.primaryLandmarks(SessionAnalysis.grouped(rows)).prefix(4)
+                )
             ))
         }
         return out

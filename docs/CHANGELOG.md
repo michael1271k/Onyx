@@ -44,6 +44,50 @@ _Nothing yet._
 
 ---
 
+## [3.20.0] — 2026-09-17 · The Shelf, and Both Arms
+
+### Added
+- **Past Weeks is a shelf, behind a button.** The Train tab has its first
+  toolbar: a books button at the trailing edge opens every closed week of the
+  plan as a sheet of banners — the week's number, its dates, what it trained and
+  what it weighed — grouped under the `plan_phases` block that owns it and
+  tinted by that block's phase. Tapping one opens the wrap-up the This-week tile
+  and History already open. The eight-week cap is gone: the shelf walks back to
+  the week the plan started in.
+- **`Color.onyx.phase` answers for a plan block.** The token took cut and bulk
+  and the table stores four — so `peak` takes the app's record gold and `deload`
+  takes Recover's accent, with no new hex. The two directions keep their ink.
+
+### Changed
+- **A week is called `Week 5` everywhere.** The Train tab hand-rolled
+  `Week of Sun 16 Aug` while History, the session masthead and the weekly export
+  all used the programme's own counter. The shelf, and the wrap-up sheet a
+  banner opens, now both take `Week.label(ofWeekStart:anchor:phases:)`. The date
+  is still there, as the subtitle it always should have been.
+- **A unilateral set that agreed with itself is one row.** The session ledger
+  drew every pair as two lines, so both arms pressing `5kg × 12` printed
+  `5kg × 12` twice to say nothing twice. It now consumes `SetPairLayout` — the
+  rule that has defined the three shapes since it was written — and merges the
+  sides that agree, splits the ones that do not, and centres a single effort
+  reading against a pair rather than parking it on the left arm's line. The
+  LOGGER is untouched: merging there is an editing dead end, and the ledger is
+  read-only. No tonnage, set count or record moves.
+- **The Train tab stopped paying for a list nobody had opened.** The eight past
+  weeks were walked on every refresh — a week query plus a read per session
+  inside them. They are read when the shelf opens.
+
+### Fixed
+- **Rating one arm no longer strands the other.** `workout_sets.rpe` is nullable
+  and `SetPatch` cannot write a null back, so rating the left side and walking
+  away left the right side unrated permanently. The picker now carries an
+  unrated sibling with the tapped side and seeds it with the same value —
+  editable, and exactly what splitting a set already did. Nothing historical is
+  written; a session already logged is repaired by editing that session.
+- **An unrated side says so.** The ledger prints `L 8 · R —` in tertiary ink
+  rather than a lone `L 8` that reads as the set's own rating.
+
+---
+
 ## [3.19.0] — 2026-09-16 · A Walk Knows When It Happened
 
 ### Fixed

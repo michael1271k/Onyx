@@ -28,6 +28,47 @@ struct PreviewCatalogueTests {
     }
 }
 
+/// ── THE SHELF THE TRAIN TAB'S TOOLBAR OPENS (§W1 B–D) ───────────────────────
+/// `train-library` and `train-library-open` photograph a sheet built from
+/// `WorkoutWeek.library()`, which is a walk over every week of a block — a
+/// screen a shot cannot review if the walk comes back empty, because an empty
+/// shelf and a broken one look the same.
+@MainActor
+@Suite("Past Weeks library fixture")
+struct PastWeeksLibraryFixtureTests {
+    @Test("the shelf reaches two phase blocks, real week numbers, and the week the shot opens")
+    func shelfHasBlocksAndNumbers() async throws {
+        let environment = HistoryPreviews.environment()
+        let week = WorkoutWeek(
+            database: environment.database, userId: environment.userIdString,
+            phase: .cut, seededToday: "2026-09-03", seededDayKey: "cb_a"
+        )
+        let library = await week.library()
+
+        // Six weeks behind 30 August with something logged in them. The walk
+        // stops at `Schedule.isPlannable`, which goes false the week before the
+        // plan's own Week 0 — NOT at an eight-week cap, which is gone.
+        #expect(library.weeks.count == 6)
+        #expect(library.weeks.first?.weekStart == "2026-08-23", "newest first")
+        #expect(library.weeks.last?.weekStart == "2026-07-12", "and it walks back to Week 0")
+
+        // The label is the PROGRAMME's counter now — `Week 5`, not
+        // `Week of Sun 16 Aug`, which is what this file hand-rolled before.
+        let opened = try #require(library.weeks.first { $0.weekStart == "2026-08-16" })
+        #expect(opened.label == "Week 5")
+        #expect(opened.range == "16 – 22 Aug")
+        #expect(opened.sessions == 5, "the one week in this seed that closed complete")
+        #expect(!opened.muscles.isEmpty, "a banner says what the week was for")
+
+        // Two blocks, two colours: the shelf's sections are only visible as
+        // sections if more than one phase is on it.
+        let kinds = Set(library.weeks.compactMap {
+            Phases.span(for: $0.weekStart, in: library.phases)?.def.kind
+        })
+        #expect(kinds == [.peak, .cut])
+    }
+}
+
 /// The Top Lifts shot is the only picture of an arrow or a flame, and both are
 /// drawn from a store: the fixture seeds one previous session of the same day,
 /// and `LiveStatsView` reads it back through its environment. A fixture whose

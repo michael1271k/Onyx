@@ -372,7 +372,8 @@ enum PreviewHarness {
         case "you":
             NavigationStack { SettingsTabView(seeded: model) }.environment(AppEnvironment.preview)
         case "train", "train-done", "train-pending", "train-cardio", "train-empty", "train-week", "train-wrap", "train-wrap-large",
-             "train-wrap-deload", "train-monday", "train-past", "train-past-open", "train-customize", "train-customized", "share-card":
+             "train-wrap-deload", "train-monday", "train-library", "train-library-open",
+             "train-customize", "train-customized", "share-card":
             // Seeded from the history store: the This-week panel and the
             // Ready-to-progress box are both reads over the ledger, so an empty
             // database photographs the empty states rather than the screen.
@@ -476,7 +477,8 @@ enum PreviewHarness {
              "history-week-wrap-open", "session", "session-ledger", "exercise-history",
              "session-atlas", "session-edit", "session-records",
              // W4: the pair table, and a day that is only a bout.
-             "session-pairs", "session-cardio":
+             // W1 (refinement): the same table with its agreeing pairs merged.
+             "session-pairs", "session-pairs-merged", "session-cardio":
             HistoryPreviews.view(screen)
         case "trends", "trends-empty", "trends-maintenance":
             TrendsPreviews.view(screen)

@@ -1935,8 +1935,22 @@ struct SetRow: View {
                 // the row keeps the one string it can set whole and gives the
                 // effort word its own line underneath.
                 VStack(alignment: .leading, spacing: 2) {
-                    if layout == .pair, row.kind == "pair" {
-                        pairLines
+                    if splitsValues {
+                        // ── ONE EFFORT, CENTRED AGAINST TWO LINES ──────────
+                        // The effort is the row's trailing column everywhere
+                        // else and inherits the row's `.top`, which parked a
+                        // single reading against the LEFT side's line — as if
+                        // it were the left side's rating. Against a pair it
+                        // belongs to both, so it sits between them, and the
+                        // only way to centre one child of a top-aligned row is
+                        // to give it a row of its own.
+                        HStack(alignment: .center, spacing: OnyxSpace.s) {
+                            pairLines
+                            if !typeSize.isAccessibilitySize, let effort {
+                                Spacer(minLength: OnyxSpace.xs)
+                                effort
+                            }
+                        }
                     } else {
                         value
                     }
@@ -1950,7 +1964,9 @@ struct SetRow: View {
                     if layout == .pair { deltaLine(unitDelta, unit: "kg") }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                if !typeSize.isAccessibilitySize, let effort { effort }
+                // A split pair has already drawn its one effort, centred
+                // between the two lines it belongs to.
+                if !typeSize.isAccessibilitySize, !splitsValues, let effort { effort }
             }
         }
         .padding(.horizontal, OnyxSpace.l)
@@ -2189,6 +2205,78 @@ struct SetRow: View {
         }
     }
 
+    /// How this row's two sides are drawn — nil on anything that is not a pair.
+    ///
+    /// ── THE LEDGER HONOURS ALL THREE CASES; THE LOGGER STILL DOES NOT ───────
+    /// `SetPairLayout.resolve` has implemented exactly the three shapes this
+    /// page needs since it was written, and only the LOGGER consumed it — where
+    /// `.unified` was deliberately killed for a completed pair on 2026-09-11,
+    /// because a merged row left no control that could make the two sides
+    /// differ. That dead end is an EDITING dead end (the rule's own header says
+    /// so: "there was no way out, because the only control that could have made
+    /// the sides differ was the one writing to both of them"), and this page is
+    /// read-only — the Edit button in the bar is how a set is corrected here.
+    /// So the ledger merges and the deck does not, and founder decision 4 is
+    /// the reason the two surfaces are allowed to differ about one drawing.
+    ///
+    /// A group of ONE is `.unified` by the rule's own definition, which is what
+    /// makes a pair row with a side missing render as an ordinary set.
+    ///
+    /// `reps` is rounded because the rule counts them as `Int` and a set is a
+    /// whole number of reps everywhere it is entered; `DetailSet.reps` is a
+    /// `Double` because every numeric column in this schema is.
+    /// Internal rather than private, on the precedent `effortFigure` sets one
+    /// screen down: the three cases are this wave's whole claim about this row,
+    /// and a `private` computed property can only be checked by photographing
+    /// it. `UnilateralAndQualityTests` reads all three; nothing else outside
+    /// this file does.
+    var pairLayout: SetPairLayout? {
+        guard row.kind == "pair" else { return nil }
+        let sides = [row.left, row.right].compactMap { $0 }
+        return SetPairLayout.resolve(
+            weights: sides.map { $0.weightKg },
+            reps: sides.map { Int($0.reps.rounded()) },
+            rpes: sides.map { $0.rpe }
+        )
+    }
+
+    /// Whether the two sides get a line each, or share one.
+    ///
+    /// `.valueSplit` is the rule's answer and the second test is the case the
+    /// rule cannot see: it reads load, reps and effort, and a CARDIO pair is
+    /// told apart by `duration_sec` / `distance_km`, which are not among them.
+    /// Two bouts of different lengths would resolve as `effortSplit` — equal
+    /// weights, equal reps, both zero — and merge into one line that printed
+    /// one of them. So a merge also asks the thing that is actually about to be
+    /// drawn: if the two sides do not render the same string, they are not one
+    /// line, whatever the three axes say.
+    var splitsValues: Bool {
+        guard layout == .pair, row.kind == "pair",
+              let left = row.left, let right = row.right
+        else { return false }
+        return pairLayout == .valueSplit || fmt(left) != fmt(right)
+    }
+
+    /// The two ratings when they disagree — `L 8 · R 9`, and `L 8 · R —` when
+    /// one side was never rated.
+    ///
+    /// Nil when they AGREE, which includes both being unrated: that is one
+    /// reading about one set, and printing `L 8 · R 8` to say it is the
+    /// repetition the three cases exist to avoid.
+    ///
+    /// ── AND WHY A NIL SIDE IS AN EM-DASH AND NEVER A BLANK ──────────────────
+    /// `workout_sets.rpe` is nullable by design — "an unrated set must stay
+    /// distinguishable from a set rated zero" (`AppDatabase`) — and until §W1 F
+    /// the logger could leave one side null permanently. A ledger that printed
+    /// the rated side alone would show `L 8` and read as a rating for the set,
+    /// which is the one thing that row does not have.
+    var splitEfforts: (Double?, Double?)? {
+        guard row.kind == "pair", let left = row.left, let right = row.right,
+              left.rpe != right.rpe
+        else { return nil }
+        return (left.rpe, right.rpe)
+    }
+
     /// The two sides, one under the other, under one badge.
     ///
     /// ── WHY THE VALUE IS `secondary` AND NOT `body` ─────────────────────────
@@ -2375,7 +2463,15 @@ struct SetRow: View {
     private var spoken: String {
         var parts = [row.num.map { "Set \($0)" } ?? "Warm-up set", current]
         if !axes.isEmpty { parts.append("\(axes.joined(separator: ", ")) record") }
-        if let rpe { parts.append(Effort.rpeLabel(rpe)) }
+        // Two ratings are spoken as two. `rpe` is the MAX of the row's sides,
+        // which is the right single number for a set that agreed with itself
+        // and, on a pair that did not, is the harder arm announced as though it
+        // were the set — the exact reading the split column exists to end.
+        if let sides = splitEfforts {
+            parts.append("left \(readout(sides.0)), right \(readout(sides.1))")
+        } else if let rpe {
+            parts.append(Effort.rpeLabel(rpe))
+        }
         // ── THE ARROWS ARE SPOKEN, BECAUSE THEY ARE THE ONLY PLACE THIS IS
         // SAID ──────────────────────────────────────────────────────────────
         // The row is `children: .ignore`, so every column's delta is invisible
@@ -2398,12 +2494,46 @@ struct SetRow: View {
 
     @ViewBuilder
     private var effort: (some View)? {
-        if let rpe {
+        if rpe != nil || splitEfforts != nil { effortInk }
+    }
+
+    /// Reached only when there is something to say — see `effort`.
+    ///
+    /// Two readings print as NUMBERS and one prints as a WORD, which is the
+    /// same call the logger's own split row makes (`ExerciseCardView.effort`):
+    /// the row is already telling you this is the left arm and the right arm,
+    /// so the question has narrowed from "how hard was that" to "which of the
+    /// two was harder" — and two numbers answer a comparison better than two
+    /// words, in a column sized for one of them.
+    @ViewBuilder
+    private var effortInk: some View {
+        if let sides = splitEfforts {
+            HStack(spacing: 3) {
+                sideEffort("L", sides.0)
+                Text("·")
+                    .onyxType(.micro)
+                    .foregroundStyle(Color.onyx.textTertiary)
+                sideEffort("R", sides.1)
+            }
+            .lineLimit(1)
+            .fixedSize()
+        } else if let rpe {
             Text(Effort.rpeLabel(rpe))
                 .onyxType(.caption)
                 .foregroundStyle(Color.onyx.effort(rpe))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
+        }
+    }
+
+    private func sideEffort(_ tag: String, _ value: Double?) -> some View {
+        HStack(spacing: 2) {
+            Text(tag)
+                .onyxType(.micro).fontWeight(.bold)
+                .foregroundStyle(Color.onyx.textTertiary)
+            Text(value.map(OnyxFormat.rpe) ?? "—")
+                .onyxType(.caption).fontWeight(.bold).onyxNumeral()
+                .foregroundStyle(value.map(Color.onyx.effort) ?? Color.onyx.textTertiary)
         }
     }
 
@@ -2434,7 +2564,9 @@ struct SetRow: View {
     // while the mark column existed and is not worth reintroducing one.
 
     private var current: String {
-        if row.kind == "pair" {
+        // Only a pair whose sides actually DIFFER is two readings. One that
+        // agrees is one set, drawn and spoken as one — see `splitsValues`.
+        if row.kind == "pair", splitsValues {
             return [row.left.map { "L " + fmt($0) }, row.right.map { "R " + fmt($0) }]
                 .compactMap { $0 }.joined(separator: " · ")
         }
@@ -2452,6 +2584,13 @@ struct SetRow: View {
 
     private var rpe: Double? {
         [row.set, row.left, row.right].compactMap { $0?.rpe }.max()
+    }
+
+    /// One side's rating in words, or the fact that it has none. Never a
+    /// silence: VoiceOver reading "left hard" and stopping cannot be told from
+    /// a row with one side.
+    private func readout(_ value: Double?) -> String {
+        value.map(Effort.rpeLabel) ?? "not rated"
     }
 
     private func fmt(_ kg: Double, _ reps: Double) -> String {

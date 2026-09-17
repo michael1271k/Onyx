@@ -330,9 +330,22 @@ extension View {
     /// 6 %→2 % of a MOVEMENT's family over a whole card, plus a 3 pt rail. This
     /// is a session's DAY, at the head of the card and nowhere else.
     func sessionDayWash(_ dayKey: String?) -> some View {
+        onyxTopWash(Color.onyx.day(dayKey))
+    }
+
+    /// The masthead wash with the hue named by the caller — the same 22 %→0
+    /// over the same 72 pt, and deliberately not a second gradient.
+    ///
+    /// A week banner in the Library is the same object as a session masthead
+    /// (hero label, tags, totals, a wash at the head of a tile) wearing a
+    /// PHASE's colour instead of a split's, and a copied `LinearGradient` is
+    /// how the two come to differ by two points or four percent for the half
+    /// second a reader is looking at exactly that difference. One wash, two
+    /// callers, one number to change.
+    func onyxTopWash(_ tint: Color) -> some View {
         background(alignment: .top) {
             LinearGradient(
-                colors: [Color.onyx.day(dayKey).opacity(0.22), .clear],
+                colors: [tint.opacity(0.22), .clear],
                 startPoint: .top, endPoint: .bottom
             )
             .frame(height: 72)

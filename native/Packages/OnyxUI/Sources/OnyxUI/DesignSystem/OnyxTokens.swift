@@ -399,6 +399,32 @@ extension Color {
             }
         }
 
+        /// The same fact, over the four values a PLAN BLOCK can actually take.
+        ///
+        /// `ProgramPhase` is the athlete's own cut/bulk switch — two states,
+        /// because the nutrition direction of a day is one or the other.
+        /// `PhaseKind` is what `plan_phases` stores, and it has two more: a
+        /// `peak` that polishes a block's end state and a bounded `deload`.
+        /// The overload above cannot answer for either, so every surface that
+        /// wanted to colour a real block — the Library's week banners — had no
+        /// token at all and the phase went uncoloured.
+        ///
+        /// The two directions keep the ink they already have, so a cut block
+        /// in the Library and a cut day on the Train tab are one colour. The
+        /// other two borrow rather than invent, which is the §3.2 rule about
+        /// a fifth hue: `peak` is the app's `record` gold, because a peak week
+        /// IS the achievement a block was built toward, and `deload` takes
+        /// Recover's accent, because a planned easing-off is recovery on a
+        /// block's timescale. Four cases, no new hex.
+        public static func phase(_ kind: PhaseKind) -> Color {
+            switch kind {
+            case .cut:    OnyxDomain.fuel.accent
+            case .bulk:   good
+            case .peak:   record
+            case .deload: OnyxDomain.recover.accent
+            }
+        }
+
         // ── THE MUSCLE PALETTE ───────────────────────────────────────────────
         //
         // Eight family hues, sixteen landmark shades (founder decision 4). This

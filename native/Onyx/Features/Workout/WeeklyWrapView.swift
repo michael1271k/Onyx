@@ -40,6 +40,21 @@ import OnyxData
 struct WeeklyWrapView: View {
     let summary: WeeklyWrap.Summary
     let program: Program
+    /// What to call this week, when the caller already knows.
+    ///
+    /// ── WHY THE SHEET CANNOT ALWAYS WORK IT OUT ─────────────────────────────
+    /// `WeeklyWrap.Summary` carries no phase table and no week-0 anchor, so the
+    /// default below is the only name it can derive on its own — the date. That
+    /// was fine while every door into this sheet called a week by its date too.
+    /// The Past Weeks shelf calls it `Week 5` (`Week.label(ofWeekStart:…)`, the
+    /// one counter History and the export also use), and a banner that opened
+    /// into a sheet with a different name for the same week is the disagreement
+    /// `PastWeek.label` has always existed to prevent.
+    ///
+    /// Optional rather than required: every other call site passes the summary
+    /// and nothing else, and threading a phase table through four of them to
+    /// re-derive a string one of them already holds is the wrong direction.
+    var title: String?
 
     /// The reel's height. One constant used by both the detent SET and the
     /// initial selection — `PresentationDetent.height` is value-equal, so two
@@ -53,11 +68,12 @@ struct WeeklyWrapView: View {
     /// `WorkoutTabView` takes a seeded day. Every app call site takes the
     /// default and opens on the reel.
     init(
-        summary: WeeklyWrap.Summary, program: Program,
+        summary: WeeklyWrap.Summary, program: Program, title: String? = nil,
         detent: PresentationDetent = WeeklyWrapView.reel
     ) {
         self.summary = summary
         self.program = program
+        self.title = title
         _detent = State(initialValue: detent)
     }
     @Environment(\.dismiss) private var dismiss
@@ -66,7 +82,7 @@ struct WeeklyWrapView: View {
         NavigationStack {
             ScrollView {
                 WeeklyWrapContent(
-                    summary: summary, program: program,
+                    summary: summary, program: program, title: title,
                     // The legend is the half of the ring that only fits once
                     // the sheet has been dragged up, so it follows the detent.
                     showsLegend: detent == .large,
@@ -80,7 +96,7 @@ struct WeeklyWrapView: View {
                 .padding(.bottom, OnyxSpace.xl)
             }
             .onyxScreen(.train)
-            .navigationTitle(WeeklyWrapContent.title(summary))
+            .navigationTitle(title ?? WeeklyWrapContent.title(summary))
             .navigationBarTitleDisplayMode(.inline)
             // Without this the inline bar draws its own material band over the
             // mesh the moment content scrolls under it.
@@ -121,6 +137,10 @@ struct WeeklyWrapView: View {
 struct WeeklyWrapContent: View {
     let summary: WeeklyWrap.Summary
     let program: Program
+    /// The week's name when the caller knows it — see `WeeklyWrapView.title`.
+    /// Read here only by the share preview, so the card that leaves the phone
+    /// and the bar above it cannot call one week two things.
+    var title: String?
     var showsLegend = true
     var onNeedsHeight: () -> Void = {}
 
@@ -499,7 +519,7 @@ struct WeeklyWrapContent: View {
             if let card {
                 ShareLink(
                     item: card,
-                    preview: SharePreview(Self.title(summary), image: card)
+                    preview: SharePreview(title ?? Self.title(summary), image: card)
                 ) {
                     Label("Share this week", systemImage: "square.and.arrow.up")
                         .onyxType(.secondary).fontWeight(.semibold)
