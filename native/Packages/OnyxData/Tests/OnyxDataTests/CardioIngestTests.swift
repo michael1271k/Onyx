@@ -494,7 +494,7 @@ struct CardioDuplicateSweepTests {
 
     @Test("a tie breaks on the lowest id — the same way the SQL file breaks it")
     func tiesBreakDeterministically() throws {
-        // `docs/sql/w1-hk-uuid.sql` runs the identical collapse server-side for
+        // A one-off server-side pass ran the identical collapse for
         // rows no device will open again. Two rules that disagree about the
         // survivor delete each other's keeper.
         let db = try sweep([
