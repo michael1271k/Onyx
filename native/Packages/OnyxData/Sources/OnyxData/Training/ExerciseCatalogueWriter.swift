@@ -182,11 +182,27 @@ public extension AppDatabase {
     /// carrying when sets are actually filed under it. See `createExercise`.
     private static func slugWithHistory(_ db: Database, name: String) throws -> String? {
         let slug = ExerciseSlug.id(name)
-        let count = try Int.fetchOne(
-            db, sql: "SELECT count(*) FROM workout_sets WHERE exercise_id = ? LIMIT 1",
+        // ── AND NOT ONE ANOTHER ROW ALREADY ANSWERS FOR ─────────────────────
+        // `ExerciseSlug.id` is a lossy collapse of the name, so two catalogue
+        // names can land on one slug. `ExerciseSlug.nameBySlug` resolves a slug
+        // by uniquing on FIRST, which would then pick between them by array
+        // order — silently, and differently across rebuilds.
+        //
+        // This is the ambiguity `exerciseIds(byCanonicalNameIn:)` in this same
+        // file already refuses rather than resolves ("a caller that cannot tell
+        // is better off saying so"), and the refusal has to be the same here:
+        // an unclaimed slug is the only one safe to claim. Declining costs the
+        // second row its legacy history in the bar, which is the pre-W2
+        // behaviour and is strictly better than two rows answering to one id.
+        let taken = try Bool.fetchOne(
+            db, sql: "SELECT EXISTS (SELECT 1 FROM exercises WHERE slug = ?)", arguments: [slug]
+        ) ?? false
+        guard !taken else { return nil }
+        let logged = try Bool.fetchOne(
+            db, sql: "SELECT EXISTS (SELECT 1 FROM workout_sets WHERE exercise_id = ?)",
             arguments: [slug]
-        ) ?? 0
-        return count > 0 ? slug : nil
+        ) ?? false
+        return logged ? slug : nil
     }
 
     static func jsonArray(_ values: [String]) -> String {

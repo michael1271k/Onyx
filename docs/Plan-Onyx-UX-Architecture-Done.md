@@ -1058,14 +1058,15 @@ branches on `row.isCardio` BEFORE the `if let kg, let reps` that the treadmill's
 non-nil zeros were satisfying. `OnyxWidgets.swift:296` got a real branch, not a real
 field: the compact slot needs one number and the wire already carries it.
 
-**GOAL 3 — the Cardio tag.** `ProgramExercise.movers` falls back to
-`MuscleMap.cardioMovers` after `dict` has had its say. `MuscleMap.dict` did not learn
-a treadmill and cannot: the fallback is read at the display layer and reaches no
-accumulator. `SeedSet` and `SeedRow` gained `durationSec`/`incline`/`distanceKm`,
+**GOAL 3 — the Cardio tag.** `SeedSet` and `SeedRow` gained `durationSec`/`incline`/`distanceKm`,
 `SessionHistoryStore` fills them and `LoggerModel.setRow(SeedRow)` forwards them, so a
-seeded bout is a bout. The card draws an explicit **Cardio** chip in place of the
-muscle chip — `family` now answers "Quads" for a treadmill, which is true and is not
-what the card is about, and the header line is already full at 375 pt.
+seeded bout is a bout — which is the fallback `LoggerModel.primaryMuscle` was always
+waiting on. The card draws an explicit **Cardio** chip, and its rail tests `isCardio`
+before `family`.
+
+The brief's 3(b) — teach `Program.swift:121` to consult `MuscleMap.cardioMovers` — was
+implemented, shipped into the first commit, and then **reverted**. See the review round
+below; it was the one change in this wave that was actively wrong.
 
 **GOAL 4 — performed order on an edit deck.** `LoggerModel.init` gained
 `openingForEdit`, passed only by `SessionDetailView.openEditor`. An edit deck does not
@@ -1158,3 +1159,81 @@ chevron both clear the mark.
 - `session-edit` is not a screen the shot harness knows. The edit deck was verified by
   test, not by pixel; the new Cancel button (`arrow.uturn.backward`, leading group,
   beside the chevron) has never been photographed at any text size.
+
+## Review round — what the audit and the code review changed
+
+Both ran against the committed wave. Neither found a defect in the PR/scoring path
+itself; both found real defects around it, and one of them was a change the brief
+had asked for.
+
+**Reverted: the brief's GOAL 3(b).** `ProgramExercise.init` was taught to fall back to
+`MuscleMap.cardioMovers`. It was wrong three ways:
+
+- `LoggerModel.muscleSets` builds `MuscleCredit.weightedSets` — **the** accumulator —
+  out of `plan.movers`. `cardioMovers`' own header states the invariant it broke:
+  *"Nothing here reaches an accumulator."* A ticked warm-up walk began paying quad and
+  calf credit into the distribution sheet and Live Stats. `MuscleMap.dict` stayed
+  clean, so the rule everyone remembers was honoured and the leak went around it.
+- `LoggerModel.primaryMuscle` **already** answers `"cardio"` for a bout by testing the
+  rows. A non-nil `movers.primary` outranks that branch, so the Live Activity chip —
+  the one the brief said "will light once (b) is fixed" — read **QUADS** on a
+  treadmill. The first screenshot round photographed that and I read it as correct,
+  because I had hand-written `primaryMuscle: "quadriceps"` into the fixture.
+- It was not needed. The tag and the rail are `isCardio`-driven, and GOAL 3(a) is what
+  makes `isCardio` true on a seeded bout.
+
+The test written for it was asserting the bug (`#expect(bout.plan.movers.primary.isEmpty
+== false)`). It is inverted now and ticks the bout to assert `model.muscleSets.isEmpty`.
+
+**Fixed: `editWatermarked` was declared, written twice, and read nowhere.** Its own
+header said the Cancel button reads it. The button was gated on `isEditing` alone, so a
+session whose `markEditStart` had failed (busy store, unapplied migration) opened an
+editor whose Discard button ran, reverted nothing, and dismissed reporting success —
+after a dialog promising *"every set goes back to the way it was."* The button is gated
+now, and `cancelEdit` treats `revertSessionEdits`' nil return as "nothing was undone"
+rather than as success.
+
+**Fixed: `cancelEdit` cleared the mark one line after the revert re-wrote it.**
+`revertSessionEdits` re-marks deliberately, so a screen that stays open is still
+cancellable. Clearing it made the second sitting silently un-revertable.
+
+**Fixed: `cancelEdit` left ticked rows on a card the revert had emptied.**
+`restoreLoggedSets` folds onto the deck and skips a card with no logged rows, so a
+movement ADDED during the sitting kept rows describing sets that no longer existed —
+and a tick on one would append behind a terminal tombstone and vanish. The deck is
+blanked before it is rebuilt.
+
+**Fixed: the bar was built twice per screen open, and the first one was unbounded.**
+`rebuildBaselinesIfDeckMoved()` ran at the TOP of `refreshLivePrs`, which `init` now
+reaches through `rebuildForPhase` — before `sessionId` or `editing` exist. That build
+had no exclusion and no date bound, i.e. the edited session's own sets folded into the
+bar it is judged against. Unreadable (candidates are empty there) and overwritten by
+`attach`, but a loaded gun inside the one function whose invariant forbids exactly
+that. The rebuild moved below the early return; the keys never came from the bar, so
+the ordering was free.
+
+**Fixed: an incline-only bout drew an empty slot.** `SetRow.isCardio` is true on an
+incline alone, and the producer forwards only duration and distance — so typing the
+incline first left the Lock Screen, the island and the wrist drawing nothing at all
+where the set used to be.
+
+**Fixed: `slugWithHistory` could let two catalogue rows claim one slug.**
+`ExerciseSlug.id` is a lossy collapse — `Crunch Machine` and `Crunch (Machine)` give
+the same slug — and `ExerciseIndex.bySlug` uniques on FIRST, which is the silent MERGE
+that file exists to prevent. It now declines a slug another row already claims, which
+is the same refusal `exerciseIds(byCanonicalNameIn:)` makes one file over.
+
+**Fixed: three comment blocks that no longer described their code** — two in
+`attach`/`attach(editing:)` still arguing for the id UNION that `baselineIds` now
+exists to refuse (a reader trusting them would have reintroduced the hash-order
+nondeterminism this wave removed), and two in `ExerciseCardView` crediting the reverted
+cardio fallback.
+
+**Left standing, with the reasoning recorded rather than changed:** if a
+`personal_records` row owned by the judged session has a null `floor_value` (a web-written
+row, or one predating `carryFloor`), excluding it drops the ledger tier for that axis and
+the edit deck falls back to `workout_sets` — the tier that cannot see a movement whose
+catalogue row has not been pulled. That is the 2026-09-14 false-trophy case the standing
+-record tier was invented for. It now agrees with `record` and with a replay, both of
+which read `workout_sets` only, so the behaviour is right and the gap is a documentation
+item, not a code one.

@@ -87,16 +87,18 @@ struct ExerciseCardView: View {
     }
 
     private var rail: Color {
-        // ── THE BOUT IS TESTED FIRST, AND IT HAS TO BE ──────────────────────
-        // This read "a bout has no primary mover to be coloured by" and fell
-        // through to `Color.onyx.cardio`. Since W2 it HAS one — `ProgramExercise`
-        // resolves `MuscleMap.cardioMovers` when `dict` answers nothing — so
-        // `family` now returns quadriceps for a treadmill and the rail would
-        // have quietly turned into a leg colour on a surface nobody asked to
-        // change. The mover is wanted (`primaryMuscle`, the ledger); the colour
-        // is not. The day's accent is still not a substitute either: it made one
-        // treadmill teal on Legs and indigo on Upper A — the same movement, two
-        // colours, on one deck.
+        // ── THE BOUT IS TESTED FIRST, AND IT STAYS THAT WAY ─────────────────
+        // A bout has no primary mover to be coloured by, and the day's accent is
+        // not a substitute: it made one treadmill teal on Legs and indigo on
+        // Upper A — the same movement, two colours, on one deck.
+        //
+        // Tested FIRST rather than left to fall through, which is the change W2
+        // made and the reason to keep it: the wave briefly taught
+        // `ProgramExercise` to resolve `MuscleMap.cardioMovers`, `family` began
+        // answering quadriceps for a treadmill, and this rail quietly turned
+        // into a leg colour. That fallback is gone (it was paying muscle credit
+        // for a walk — see `ProgramExercise.init`), but the ordering is the part
+        // that makes the rail say what the card is about no matter who answers.
         if isCardio { return Color.onyx.cardio }
         if let family { return Color.onyx.muscle(family) }
         return Color.onyx.day(model.day.key)
@@ -473,14 +475,13 @@ struct ExerciseCardView: View {
                 // not worth pushing a countdown off the screen.
                 if liveRest == nil {
                     // ── ONE TAG SLOT, AND A BOUT SPENDS IT SAYING SO ────────
-                    // `family` answers for a treadmill since W2 gave
-                    // `ProgramExercise` the cardio table as a fallback, so this
-                    // would now print "Quads" on a walk. That is true and it is
-                    // not what the card is about — and the line is already full
-                    // at 375 pt, so "Quads · Cardio · 5:42/km" is how a figure
-                    // gets truncated. The mover is still resolved, for
-                    // `primaryMuscle`, the rail and the session ledger; the
-                    // header just spends its one slot on the useful word.
+                    // `family` is nil on a bout: `ProgramExercise` resolves
+                    // movers from `MuscleMap.dict` only, and `dict` does not
+                    // name a treadmill (it must not — it is the input to the
+                    // weekly muscle accumulator). So this branch is what draws
+                    // the card's one tag, and "Cardio" is the useful word: the
+                    // line is already full at 375 pt, and a muscle name on a
+                    // walk would be a claim the deck does not pay credit for.
                     if isCardio {
                         tag("Cardio", Color.onyx.cardio)
                     } else if let family {

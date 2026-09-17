@@ -207,7 +207,13 @@ enum WidgetPreviews {
                 timerOrigin: Date().addingTimeInterval(-45 * 60),
                 isPaused: false,
                 elapsed: "",
-                primaryMuscle: "quadriceps",
+                // What `LoggerModel.primaryMuscle` actually sends for a bout: it
+                // tests the rows and answers `"cardio"`, and `WorkoutActivityCard`
+                // resolves that token to the cardio chip. "quadriceps" here would
+                // photograph a chip the producer cannot produce — which it did,
+                // for one round, while `ProgramExercise` was resolving cardio
+                // movers it had no business resolving.
+                primaryMuscle: "cardio",
                 restTotalSec: nil,
                 // A REAL bout, and the arithmetic has to close. The brief's
                 // example line — "12:30 · 0.37 km · 5:42/km" — does not: 750 s

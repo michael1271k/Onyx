@@ -1661,9 +1661,6 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// answer and the ledger written by `closeSession` are the same engine over
     /// the same keys against the same bar.
     private func refreshLivePrs() {
-        // The bar first, because the keys below are what it has to be built on.
-        // See `rebuildBaselinesIfDeckMoved`.
-        rebuildBaselinesIfDeckMoved()
         var candidates: [PrCandidateSet] = []
         var origin: [SetRow] = []
         for exercise in exercises {
@@ -1718,6 +1715,22 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             livePrs = []
             return
         }
+        // ── THE BAR, AFTER THE EARLY RETURN AND NOT BEFORE IT ───────────────
+        // The keys above come from `storedId(for:)`, never from `baselines`, so
+        // the ordering is free — and both reasons to take it are real. `init`
+        // ends in `rebuildForPhase`, which now ends here, and at that moment
+        // nothing is ticked: a rebuild above this guard paid for a full store
+        // read (`PersonalRecordRow.fetchAll`, plus every set row for the deck's
+        // ids) on the main actor for a pass that returns without ever reading
+        // it — and then `attach` built the same bar again a moment later.
+        //
+        // Worse on the edit path: at `init` both `sessionId` and `editing` are
+        // still nil, so that discarded bar was built with NO exclusion and NO
+        // date bound — the edited session's own sets folded into the bar it is
+        // judged against. Unreadable, because candidates were empty, and
+        // overwritten by `attach(editing:)` — but a loaded gun inside the one
+        // function whose invariant is that a rebuild can never do that.
+        rebuildBaselinesIfDeckMoved()
         let result = PrEngine.detectSessionPrs(candidates, baselines)
         var records: [LivePrRecord] = []
         for (i, detected) in result.perSet.enumerated() where i < origin.count {
@@ -1973,15 +1986,44 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// the same one a save owes. The view runs `requestRescore()` next.
     @discardableResult
     func cancelEdit() -> Bool {
-        guard let store, let sessionId, isEditing else { return false }
+        guard let store, let sessionId, isEditing, editWatermarked else { return false }
         do {
-            _ = try store.revertSessionEdits(sessionId: sessionId)
-            try store.clearEditMark(sessionId: sessionId)
-            // The deck is rebuilt from the projection the revert just wrote,
-            // not from what is on screen. Reversing the rows in place would be
-            // a second implementation of the fold — the failure `reproject`'s
-            // own header argues against — and it would be wrong the moment a
-            // compensating event did anything the deck could not predict.
+            // ── THE OUTCOME IS THE ANSWER TO "DID ANYTHING CHANGE" ──────────
+            // `revertSessionEdits` answers nil for a session with nothing to
+            // undo. Nil is not a failure — but it is not a success either, and
+            // the caller DISMISSES on a `true`. Reporting one here would close
+            // the screen telling the athlete their session was restored, after
+            // a dialog promised exactly that and nothing happened.
+            guard try store.revertSessionEdits(sessionId: sessionId) != nil else {
+                storeError = nil
+                return false
+            }
+            // The mark is NOT cleared here. `revertSessionEdits` re-writes it at
+            // the clock as it now stands, deliberately — see its own note —
+            // because this screen stays open and whatever is edited next has to
+            // be cancellable too. Clearing it deleted that one line later and
+            // left the second sitting silently un-revertable.
+            //
+            // ── THE DECK IS BLANKED BEFORE IT IS REBUILT ────────────────────
+            // `restoreLoggedSets` folds the projection ONTO the deck and skips a
+            // card the session holds nothing of (`guard !mine.isEmpty`). Right
+            // for an attach, wrong here: a movement ADDED during the sitting
+            // owns no rows once the revert has voided them, so its card would
+            // keep ticked rows describing sets that no longer exist — and a tick
+            // on one would append behind a terminal tombstone and be dropped in
+            // silence (`SetEventFold` rule 3). Setting the flags writes no
+            // events; only `toggleDone` appends.
+            for exercise in exercises {
+                for row in exercise.rows where row.isDone {
+                    row.isDone = false
+                    row.isRecord = false
+                }
+            }
+            // Rebuilt from the projection the revert just wrote, not from what
+            // was on screen. Reversing the rows in place would be a second
+            // implementation of the fold — the failure `reproject`'s own header
+            // argues against — and it would be wrong the moment a compensating
+            // event did anything the deck could not predict.
             try restoreLoggedSets()
             refreshLivePrs()
             editDirty = true
@@ -2311,12 +2353,20 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // empty, and `PrEngine` awards no axis against an empty index — so
             // the deck showed no trophy on a set whose own session page, one
             // screen later, showed two. `attach(editing:)` hit this in U4 and
-            // fixed it by restoring first and taking the union; the LIVE path
-            // never got the same treatment.
+            // fixed it by restoring first; the LIVE path never got the same
+            // treatment.
             //
-            // Widening an id set can only raise a bar or fill an empty one
-            // (`PrRecorder.baselines`'s own note), so this removes trophies that
-            // should never have lit and cannot invent one.
+            // ── IT IS THE ORDER THAT MATTERS, NOT A UNION (W2) ──────────────
+            // This used to end "and taking the union … widening an id set can
+            // only raise a bar or fill an empty one". Do NOT restore that.
+            // `baselineIds` hands over exactly ONE id per card, and its header
+            // sets out why widening is the bug rather than the fix:
+            // `PrRecorder.baselines` re-keys on `keyByName`, which uniques on
+            // FIRST over a `Set`, so two ids for one movement put the bar under
+            // whichever the hash happened to visit. The history is as wide as it
+            // ever was — `baselines` gathers the movement's other ids by
+            // canonical name itself. What this ordering buys is that
+            // `storedExerciseId` is known before the id is resolved.
             //
             // In its own `do`, for the reason the ordering above exists: a bar
             // that cannot be built costs the record badges and nothing else,
@@ -2370,9 +2420,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // summary page showed three records.
             //
             // `restoreLoggedSets` is what learns those ids, so it runs first
-            // and the bar is built from the union: the deck's slugs for a
-            // movement with no rows yet, plus whatever the session's rows
-            // actually carry. A throw here leaves a restored, usable deck with
+            // and `baselineIds` then resolves each card to the id its rows
+            // actually carry — NOT to a union of that id and the deck's slug;
+            // see `baselineIds` and the note in `attach()` for why two ids for
+            // one movement is how the bar landed under a hash-chosen key.
+            // A throw here leaves a restored, usable deck with
             // no live records rather than no deck at all.
             try restoreLoggedSets()
             // ── WHERE THE LOG STOOD WHEN THIS SCREEN OPENED ─────────────────

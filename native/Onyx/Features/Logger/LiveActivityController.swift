@@ -157,7 +157,15 @@ final class LiveActivityController {
         var cardioSec: Int?
         var cardioKm: Double?
         if let row = current?.row {
-            if row.isCardio {
+            // ── A BOUT NEEDS A NUMBER THE CARD CAN DRAW ─────────────────────────
+        // `isCardio` is true on an INCLINE alone (`SetRow.isCardio`), and the
+        // two fields below are the only ones this branch fills — so a row that
+        // has an incline and neither a clock nor a distance produced an empty
+        // `load` and an empty cardio line, and the card drew nothing at all
+        // where the set used to be. Typing the incline first does exactly that.
+        // Falling through leaves it on the lift path, which prints the load it
+        // does have rather than a blank.
+        if row.isCardio, row.durationSec != nil || row.distanceKm != nil {
                 // The two numbers, unformatted — see `ContentState
                 // .cardioElapsedSec` for why this one wire is not a string, and
                 // `cardioLine(sec:km:pace:)` for the line they become. `load`

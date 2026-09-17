@@ -119,21 +119,28 @@ public struct ProgramExercise: Identifiable, Sendable, Equatable, Codable {
         // name is a failing test rather than a compile error nobody can fix
         // without inventing anatomy.
         //
-        // ── AND THE CARDIO TABLE ANSWERS FOR A BOUT (W2) ────────────────────
-        // `MuscleMap.dict` does not name a treadmill and MUST NOT LEARN TO: it
-        // is the input to `MuscleCredit.weightedSets`, so teaching it that
-        // walking trains calves starts paying muscle credit for a warm-up in
-        // five accumulators nobody asked to change, and breaks two golden
-        // fixtures on the way. `cardioMovers` is the separate DISPLAY table
-        // written for exactly this question, and it is empty for anything that
-        // is not a bout — a bench press can never reach it.
+        // ── AND THE CARDIO TABLE DOES NOT BELONG HERE (W2) ──────────────────
+        // W2 briefly added `?? MuscleMap.cardioMovers(name)` to this chain, to
+        // give a treadmill card a non-nil `ExerciseCardView.family`. It was
+        // wrong three ways and the audit caught it:
         //
-        // Without this rung `plan.movers.primary` was empty for "Treadmill",
-        // `ExerciseCardView.family` was nil, and the card drew no muscle tag at
-        // all — the "missing Cardio tag" report. Read as a FALLBACK, after
-        // `dict` has had its say, so nothing that `dict` already answers for
-        // can be re-answered here.
-        self.movers = movers ?? MuscleMap.movers(name) ?? MuscleMap.cardioMovers(name) ?? MoverTokens(primary: [])
+        //   * `LoggerModel.muscleSets` builds `MuscleCredit.weightedSets` — the
+        //     ONE accumulator — out of `plan.movers`. `cardioMovers`' own header
+        //     states the invariant: "Nothing here reaches an accumulator". A
+        //     ticked warm-up walk would have started paying quad and calf credit
+        //     into the distribution sheet and Live Stats.
+        //   * `LoggerModel.primaryMuscle` ALREADY answers `"cardio"` for a bout,
+        //     by testing the rows. A non-nil `movers.primary` outranks that
+        //     branch, so the Live Activity's chip — which resolves the "cardio"
+        //     token — would have read QUADS on a treadmill.
+        //   * It was not needed. The card draws an explicit Cardio tag and its
+        //     rail tests `isCardio` first, and W2's seed change is what makes
+        //     `isCardio` true on a seeded bout, which is the fallback
+        //     `primaryMuscle` was always waiting on.
+        //
+        // A bout's muscles are a DISPLAY question and are asked at the display,
+        // where `MuscleMap.cardioPrimaryLandmarks` already answers them.
+        self.movers = movers ?? MuscleMap.movers(name) ?? MoverTokens(primary: [])
         self.isCompound = compound
         self.note = note
     }

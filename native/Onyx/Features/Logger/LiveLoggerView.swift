@@ -436,7 +436,15 @@ struct LiveLoggerView: View {
             // has already committed. And it is not scoped to the app's
             // lifetime: the watermark is a row, so an editor killed mid-sitting
             // can still be cancelled when it comes back.
-            if model.isEditing {
+            // ── AND ONLY WHEN THERE IS A MARK TO GO BACK TO ─────────────────
+            // `markEditStart` can fail — a busy store, a migration that has not
+            // run — and `attach(editing:)` swallows that on purpose rather than
+            // refusing to open an editor over it. Without this clause the button
+            // still drew: the dialog promised "every set goes back to the way it
+            // was", `revertSessionEdits` found no mark, did nothing, and the
+            // screen dismissed reporting success. A button that looks live and
+            // does nothing is worse than no button.
+            if model.isEditing, model.editWatermarked {
                 Button(role: .destructive) { confirmCancel = true } label: {
                     Image(systemName: "arrow.uturn.backward")
                 }

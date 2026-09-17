@@ -70,9 +70,9 @@ _Nothing yet._
   shows the live bout on the phone and the watch: `12:30 · 2.19 km · 5:42 /km`,
   and the compact island shows the bout's clock instead of a barbell.
 - **The Cardio tag is back on the exercise card**, with the bout's pace beside
-  it. The deck now resolves a cardio movement's muscles from the cardio table —
-  the muscle dictionary still refuses to learn a treadmill, which is what keeps
-  walking out of your weekly volume.
+  it. A seeded treadmill card now carries its minutes, incline and distance, so
+  the card knows it is a bout — and the muscle dictionary still refuses to learn
+  a treadmill, which is what keeps walking out of your weekly volume.
 - **An edit deck opens in the order you trained in.** A re-opened session was
   being re-ranked against a different session's running order, which sent the
   treadmill to the bottom every time, and the deck offered a warm-up bout nobody

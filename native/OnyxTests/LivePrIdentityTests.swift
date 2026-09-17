@@ -249,23 +249,39 @@ struct LivePrIdentityTests {
         #expect(live.exercises.first?.name == WarmupCardio.name)
     }
 
-    /// The bout the deck opens with resolves a mover and reads as cardio.
+    /// The bout reads as cardio, and pays no muscle credit for doing so.
     ///
-    /// `Program.swift` read `MuscleMap.movers` and nothing else, so
-    /// `plan.movers.primary` was empty for "Treadmill", `ExerciseCardView.family`
-    /// was nil and the card drew no tag at all. `MuscleMap.dict` must never learn
-    /// a treadmill — it is the input to `MuscleCredit.weightedSets` — so the
-    /// separate `cardioMovers` table is read as a FALLBACK.
-    @Test("the treadmill card resolves a cardio mover and reports its bout")
-    func treadmillCardResolvesACardioMover() throws {
+    /// ── THE TEST THIS REPLACED WAS ASSERTING THE BUG ────────────────────────
+    /// It required `bout.plan.movers.primary` to be NON-empty, because W2 briefly
+    /// taught `ProgramExercise.init` to fall back to `MuscleMap.cardioMovers`.
+    /// `LoggerModel.muscleSets` builds `MuscleCredit.weightedSets` — the one
+    /// accumulator — out of exactly that field, so the green test was pinning a
+    /// walk into the quad and calf credit of the distribution sheet. It also
+    /// outranked `primaryMuscle`'s own `"cardio"` branch, which is the token the
+    /// Live Activity's chip resolves.
+    ///
+    /// So the assertion is inverted: a bout has NO movers, the accumulator stays
+    /// empty, and the two things that actually wanted an answer — `isCardio` and
+    /// `primaryMuscle` — get it from the rows, which is what W2's seed change
+    /// made reliable.
+    @Test("the treadmill card reads as cardio and pays no muscle credit")
+    func treadmillCardIsCardioAndNotAMuscle() throws {
         let model = LoggerModel(day: PlanTemplates.day("onyx5", "cb_a"), phase: .cut)
         let bout = try #require(model.exercises.first { $0.name == WarmupCardio.name })
-        #expect(bout.plan.movers.primary.isEmpty == false,
-                "a bout with no mover draws no tag and colours no rail")
+
         let bouts = bout.rows.filter(\.isCardio)
-        #expect(bouts.isEmpty == false)
-        // …and `dict` still does not name it, which is the rule this fallback
-        // exists to avoid breaking.
+        #expect(bouts.isEmpty == false, "a seeded bout must read as cardio")
+        #expect(LoggerModel.primaryMuscle(of: bout) == "cardio")
+
+        // `dict` does not name it, and neither does the prescription — the two
+        // halves of "MuscleMap.dict must never learn a treadmill".
         #expect(MuscleMap.movers(WarmupCardio.name) == nil)
+        #expect(bout.plan.movers.primary.isEmpty)
+
+        // The accumulator itself: tick the bout and it still credits no muscle.
+        let row = try #require(bout.rows.first)
+        model.toggleDone(row, in: bout)
+        #expect(bout.physicalSets == 1, "the bout really was ticked")
+        #expect(model.muscleSets.isEmpty, "a walk is not resistance training")
     }
 }
