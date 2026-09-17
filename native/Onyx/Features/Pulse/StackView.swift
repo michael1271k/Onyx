@@ -329,7 +329,8 @@ struct SupplementEditSheet: View {
     @State private var loaded = false
     @FocusState private var focus: Field?
 
-    private enum Field: Hashable { case name, amount, time }
+    /// No `.time`: the time is a wheel now, and a wheel takes no keyboard.
+    private enum Field: Hashable { case name, amount }
 
     private static let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
@@ -384,14 +385,69 @@ struct SupplementEditSheet: View {
                 }
             }
 
-            TextField("Time", text: $time)
-                .focused($focus, equals: .time)
-                .accessibilityHint("Twenty-four hour, for example 22:00. Leave blank for no set time.")
+            timeRows
         } header: {
             OnyxSectionHeader("Item", .fuel)
         } footer: {
             Text(dosePreview)
         }
+    }
+
+    // MARK: The time
+
+    /// A toggle, and the wheel it reveals.
+    ///
+    /// ── WHY A WHEEL AND NOT `.compact` ──────────────────────────────────────
+    /// The same reason `TimerSheet` gives: a compact `DatePicker` opens a
+    /// popover, and a popover over a sheet is where one gesture becomes three.
+    /// `[.hourAndMinute]` only — a dose has a time of day and no date, unlike
+    /// the sleep window, which straddles midnight and therefore carries `.date`.
+    ///
+    /// ── AND WHY THE TOGGLE EXISTS AT ALL ────────────────────────────────────
+    /// A wheel cannot express "no time". The column is nullable and an empty
+    /// one is a real state — it lands in `customSlotsForDate`'s "—" bucket,
+    /// which sorts first — so the absence needs a control of its own. Turning
+    /// it off empties `time`, and `editCustomSupplement` sends that through as
+    /// a genuine NULL rather than as an empty string.
+    @ViewBuilder
+    private var timeRows: some View {
+        Toggle("Set a time", isOn: timeEnabled)
+            .accessibilityHint("Off means the item has no set time and sits at the top of the stack.")
+        if !time.isEmpty {
+            DatePicker("Time", selection: timeBinding, displayedComponents: [.hourAndMinute])
+                .datePickerStyle(.wheel)
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+                // 128, as the sleep sheet clamps it: the wheel's intrinsic
+                // height is 216 pt, which is two thirds of this Form.
+                .frame(height: 128)
+                .clipped()
+                .accessibilityLabel("Time")
+        }
+    }
+
+    /// The wheel's `Date`, over the `"HH:mm"` the row stores. `OnyxCore` owns
+    /// both halves — the string is grouped on and ordered by, so its spelling
+    /// is domain, not presentation.
+    private var timeBinding: Binding<Date> {
+        Binding(
+            get: { Supplements.slotTime(from: time) ?? Self.defaultDoseTime },
+            set: { time = Supplements.slotTimeString($0) }
+        )
+    }
+
+    private var timeEnabled: Binding<Bool> {
+        Binding(
+            get: { !time.isEmpty },
+            set: { time = $0 ? Supplements.slotTimeString(Self.defaultDoseTime) : "" }
+        )
+    }
+
+    /// Where the wheel opens for a row that has never had a time: 09:00, not
+    /// "now" — a stack is a protocol, and the minute you happened to add an
+    /// item to it is not when you intend to take it.
+    private static var defaultDoseTime: Date {
+        Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
     }
 
     private var amountField: some View {

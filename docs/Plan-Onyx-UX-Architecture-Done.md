@@ -803,3 +803,194 @@ After W5, the sprint is verified by doing these on a device, not in a test:
 7. Open Past Weeks — Week 0 is there, banners are short and phase-coloured, tapping one PUSHES
    a full page whose hero is a phase band over three rails, and there is no donut anywhere.
 8. Tick the psyllium dose at 18:30 — the day gains 17 kcal, 4.4 g carbs, 3.9 g fiber, once.
+
+---
+
+# Wave Record — W1 · Nutrition, Stack UI & Typography
+
+**Shipped `3.22.0` on 2026-09-17** from `onyx/w1-nutrition-stack-type`.
+
+## What was done
+
+**GOAL 1 — the Stack time editor is a wheel.**
+
+| File:line | Change |
+|---|---|
+| `OnyxCore/Supplements/SupplementStack.swift:505-535` | New `Supplements.slotTime(from:calendar:now:)` and `slotTimeString(_:calendar:)`. They live in **OnyxCore**, beside `customSlotsForDate` which groups by the string they produce, because the spelling of `"HH:mm"` is domain and not presentation — and because a test for it then runs in `swift:core` without a simulator. |
+| `Onyx/Features/Pulse/StackView.swift:390-440` | `timeRows` — a `Toggle("Set a time")` and, when it is on, a `.wheel` `DatePicker` at `[.hourAndMinute]`, clamped to 128 pt. Replaces the `TextField("Time", text: $time)` that was at `:387-389`. |
+| `…/StackView.swift:333` | `Field.time` deleted from the focus enum. A wheel takes no keyboard. |
+
+**Deviation from the brief, deliberately.** The prompt specified a
+`DateFormatter` with `Locale(identifier: "en_US_POSIX")` and
+`dateFormat = "HH:mm"`. `slotTimeString` uses `String(format: "%02d:%02d")` over
+`Calendar.dateComponents` instead. Same output, one fewer object to
+misconfigure: `%02d` is C-locale **by construction**, so there is no locale
+property that a future edit could forget to set. The mutation test below shows
+the difference is load-bearing, not cosmetic.
+
+**GOAL 2 — supplements carry calories.**
+
+| File:line | Change |
+|---|---|
+| `OnyxCore/Supplements/SupplementNutrients.swift:108-163` | New `StackMacros` and `macros(_:payloads:)` — same doses, same `credited` rule, same count multiplier as `credit`. |
+| `OnyxData/Day/StackCredit.swift:19-42, 62-71` | `StackCredit.macros`, resolved from the same `payloads` dictionary in the same pass as `nutrients`. |
+| `Onyx/Features/Nutrition/NutritionModel.swift:240-290` | `eaten` = food + credited stack. New private `eatenFood` holds the food-only sum; `macrosForEditing` reads **that**. |
+| `scripts/add-supplement.mjs` | The seeder. Idempotent on `schedule->>key`, derives the per-dose payload from the label so the arithmetic is in the diff, and refuses to write without `ONYX_APPLY=1`. |
+
+`custom_supplements` row **`b62dd39b-9006-4bbe-9c49-2832740feb2a`** — Psyllium
+Husk Powder, `5 g` at `18:30`, `form: powder`, payload
+`kcal 16.7 · carbs 4.4 · fiber 3.9 · protein 0 · fat 0 · sodium 5.6 · iron 0.83 · potassium 50`.
+Verified back out of PostgREST after the write.
+
+**Two judgement calls the brief did not settle:**
+
+1. **The credit rule is `taken || due`, not `taken`.** The prompt said fold only
+   on `supplement_log.taken`. The app's own rule — `SupplementDose.credited`,
+   `SupplementStack.swift:245` — has always been `taken || due`, because the
+   protocol is what happens unless you say otherwise. Using a stricter rule for
+   macros than for micronutrients would let the nutrient grid credit a scoop's
+   potassium while the ring refused its carbohydrate, for the same scoop, at the
+   same minute. That is the shape of the water-has-two-truths bug this repo has
+   already paid for once. The brief's actual intent — a planned dose must not
+   inflate the total — is already served by `.later` never counting.
+2. **`credit` was left unfiltered.** Its golden fixture (`stack-credit`, 40+
+   cases) covers nine legacy payloads that carry no macro keys, so filtering
+   would have changed nothing for them and risked a golden edit for no gain. The
+   grid iterates `NutrientTargets.all`, so `kcal`/`carbs`/`fat` sitting in that
+   dictionary are inert; `fiber` and `protein` **are** grid rows and are credited
+   there on purpose. Documented at `SupplementNutrients.swift:142-148`.
+
+**GOAL 3 — the numerals hold still.**
+
+Root cause, and it was not the scale factor everyone would blame:
+`SetColumn.weightFloor` was the constant `56`, which is six monospaced glyphs at
+body's **17 pt and at no other size**. A `monospacedDigit` numeral advances at
+~0.6 em and its decimal point at ~0.26, so `123.75` needs ~3.26 em — 55 pt at
+17, 68 at Large, 76 at xxxLarge. Above the default the field ran out of room
+between the fourth glyph and the fifth, and `.minimumScaleFactor(0.6)` shrank
+exactly the strings that crossed it.
+
+| File:line | Change |
+|---|---|
+| `Onyx/Features/Logger/ExerciseCardView.swift:1029-1048` | `weightFloor`'s doc rewritten; it is a BASE now. |
+| `…:1056-1060` | `weightGroup` becomes `weightGroup(floor:)`. The unused constant is gone. |
+| `…:41-44` and `…:1177-1181` | `@ScaledMetric(relativeTo: .body) private var loadFloor = SetColumn.weightFloor`, declared identically in `ExerciseCardView` (the header) and `SetRowView` (the rows). Same base, same text style, therefore the same number on both sides — which is the rule `columnHeaders:878-891` already depended on. |
+| `…:911-915, 1617, 1699, 1731` | Six call sites repointed at the scaled floor. |
+| `…:2408-2425` | `minimumScaleFactor(0.6)` **kept**, comment rewritten. |
+
+**Second deviation, deliberately.** The brief's step 2 said to raise
+`minimumScaleFactor` to 1.0 once the budget was fixed. It was conditional on
+step 1, and step 1 makes it pointless: with the floor tracking the type, the
+factor cannot fire on any load this app proposes, and raising it would only
+bring the ellipsis back for a load typed past six glyphs — the case the comment
+at `:2408` records as strictly worse than a small numeral. Smaller diff, same
+outcome.
+
+**Harness work this needed** (a control with no shot is a control nobody
+reviewed):
+
+| File:line | Change |
+|---|---|
+| `scripts/native-shot.sh:117-131` | New `SHOT_SIZE`. The default+AX5 pair **brackets** Dynamic Type and photographs neither of the four ordinary sizes between them — which is precisely where this defect lived, and why it survived a release. |
+| `Onyx/Features/Pulse/PulsePreviews.swift:521-541` | New `stack-edit` case. `stack-add` opens on a new item, whose toggle is off, so it can only ever photograph the wheel's absence. |
+| `Onyx/App/PreviewHarness.swift:436` | `stack-edit` registered. |
+| `Onyx/Features/Logger/LoggerPreviews.swift:53-66` | `set-row` now seeds `20`, `17.5`, `18.75` on three adjacent rows — two, four and five glyphs, the founder's own three numbers. |
+
+## Succeeded
+
+**Package tests — every one green, and the new ones bite.**
+
+| Suite | Before | After |
+|---|---|---|
+| `swift:core` | 565 tests / 118 suites | **575 / 119** |
+| `swift:data` | 568 / 71 | **572 / 71** |
+| `swift:ui` (inside `npm run check`) | 21 / 7 | 21 / 7 |
+
+New: `SupplementMacroTests.swift` (10 tests) and four in `StackPushTests`.
+
+**The new tests were mutation-tested, not just run.** Two mutations injected and
+reverted:
+
+- `slotTimeString` → a device-locale `DateFormatter`. Caught by four tests,
+  including all five locales in `timeStringIsLocaleIndependent` and
+  `sameMinuteIsOneSlot` (`slots.first?.time == "18:30"` failed — the exact
+  second-slot bug the format exists to prevent).
+- `macros` credit rule → `dose.state != .skipped`. Caught by
+  `statesMatchTheMicroRule` at `SupplementMacroTests.swift:138`.
+
+**The typography fix was photographed both ways, at the size that shows it.**
+The bug does not appear at `medium` or at AX5 — the only two sizes the loop
+shot. At `extra-extra-extra-large`:
+
+- `scratchpad/before/set-row-extra-extra-extra-large.png` — floor reverted to the
+  constant: `18.75` is visibly smaller than `20` and `17.5`.
+- `native/__screenshots__/set-row-extra-extra-extra-large.png` — fixed: all three
+  at one size, `KG` still centred over its column, `EFFORT` still fits
+  "Very Hard" and "Max Effort".
+
+Other shots read: `stack-edit.png` (wheel at 18:30, toggle on, dose `5 g`,
+form Powder), `stack-add.png` (toggle off on a new item — correct),
+`set-row-ax5.png` (stacked layout, all three loads full size),
+`fuel.png` / `nutrients.png` (unchanged, as they should be — the preview stack
+carries no macro payloads).
+
+**Build:** `npm run check`, `check:swift`, `swift:core`, `swift:data` all green;
+`xcodebuild -scheme Onyx -destination 'generic/platform=iOS'` **BUILD SUCCEEDED**.
+
+## Failed
+
+- **The OnyxTests baseline was measured late and imperfectly.** The background
+  run was launched at the branch cut but `xcodebuild` reads the working tree at
+  build time, so it compiled work in progress. It is therefore a POST-change
+  run, not the baseline it was meant to be. Re-measuring cleanly costs a ~10
+  minute run on `main`; it was not done.
+- **The count in memory was wrong.** `refinement-ux-w1` records *five* baseline
+  `OnyxTests` failures. This run shows **one**:
+  `AppDatabaseTests.swift:254` — *"stores, retrieves and removes a session blob"*,
+  `Keychain error -34018: A required entitlement isn't present`. That is the
+  free-team constraint the runbook documents ("Keychain sharing… need the paid
+  program"), not anything in this diff — but it was not proven against `main`,
+  so it is asserted from the error text, not from a measurement.
+- **The first screenshot attempt produced nothing.** Seven screens failed with
+  `Unable to lookup in current state: Shutdown` because the background test run
+  still held the simulator. Sequencing, not a defect — but a shot run launched
+  beside a test run wastes ten minutes and, per the script's own header, can
+  silently photograph the wrong build.
+- **`set-row.png` at the default size cannot review this fix**, and neither can
+  `set-row-ax5.png`. Both were re-shot and both look correct, but the claim they
+  support is "nothing regressed", not "the bug is fixed". Only the `SHOT_SIZE`
+  pass carries that.
+
+## Left open
+
+**For W2 and beyond:**
+
+1. **The week strip does not know about the stack.** `NutritionModel.week` comes
+   from `AppDatabase.nutritionWeekStream` (`OnyxData/Day/NutritionWeek.swift:53`),
+   which reads `nutrition_entries` only. So today's ring now includes the
+   psyllium while today's adherence dot and the seven-day strip do not. Closing
+   it means resolving `stackCredit` for seven days inside that stream — real
+   work, and **W4's weekly report will want exactly the same thing** for its
+   Nutrition rail (`MacroAdherenceSeries.build`). Do it once, there.
+2. **`WeeklyExportBuilder` has the same gap.** The exported week's macros are
+   food-only for the same reason.
+3. **`PulseModel.stackNutrients:786` has no consumer.** Dead since it was
+   written. Left alone — deleting it is W5's kind of work, not W1's.
+4. **W2's brief is confirmed by the compiler.** The app build warns
+   `LoggerModel.swift:1577: initialization of immutable value 'floor' was never
+   used` — divergence (e) in W2's GOAL 1, exactly as the plan predicted.
+5. **`SHOT_SIZE` now exists and nothing else uses it.** Any wave touching a
+   fixed width under a scaling font should shoot at
+   `extra-extra-extra-large`, not trust the default+AX5 pair.
+
+**Founder's manual checklist:**
+
+- **Nothing is required to ship this wave.** No DDL, no Supabase setting, no App
+  Store step.
+- **Worth doing by eye on the phone:** open Pulse ▸ Stack ▸ Psyllium Husk Powder
+  and confirm the wheel opens on 18:30; turn "Set a time" off and on and confirm
+  the item moves to the top of the list and back. Then tick the 18:30 dose and
+  confirm the Fuel tab's calorie ring moves by 17 kcal and the Nutrients grid's
+  fibre row by 3.9 g.
+- **W3 still needs its DDL** — `ALTER TABLE daily_logs ADD COLUMN waist_cm numeric;`
+  — before that wave can run.

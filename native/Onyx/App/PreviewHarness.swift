@@ -433,7 +433,7 @@ enum PreviewHarness {
             .environment(AppEnvironment.preview)
         case "day", "day-rows", "day-past", "day-session", "day-two", "day-empty", "day-stress", "day-soreness", "day-hero",
              "scale", "scale-first", "day-swap", "doms", "doms-rate",
-             "pulse-squares", "pulse-squares-evening", "pulse-squares-empty", "stack", "stack-add",
+             "pulse-squares", "pulse-squares-evening", "pulse-squares-empty", "stack", "stack-add", "stack-edit",
              "sleep-edit", "stress", "fatigue", "stress-log", "stress-day", "quick-log":
             PulsePreviews.view(screen)
         case "fuel", "fuel-over", "fuel-empty", "nutrients", "macro-edit":

@@ -497,6 +497,41 @@ public enum Supplements {
         return (amount, unit)
     }
 
+    // MARK: - The stored time
+
+    /// `18:30` → a `Date` on today at that wall-clock time, for a `DatePicker`.
+    ///
+    /// Returns nil for the empty string and for anything that is not two
+    /// numbers inside the clock — the caller draws "no set time" rather than
+    /// inventing one, which is what a blank `time` column means.
+    public static func slotTime(from stored: String, calendar: Calendar = .current, now: Date = Date()) -> Date? {
+        let parts = stored.trimmingCharacters(in: .whitespaces).split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              let hour = Int(parts[0]), let minute = Int(parts[1]),
+              (0...23).contains(hour), (0...59).contains(minute)
+        else { return nil }
+        return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: now)
+    }
+
+    /// A `Date` → the `"HH:mm"` the `time` column stores.
+    ///
+    /// ── WHY THIS IS ARITHMETIC AND NOT A `DateFormatter` ────────────────────
+    /// `customSlotsForDate` GROUPS BY THIS STRING and orders the keys bytewise
+    /// against a "—" bucket. A `DateFormatter` on the device locale writes
+    /// "6:30 PM" on a US phone and "١٨:٣٠" on an Arabic-Indic one, and either
+    /// one mints a second slot that never merges with the first — the same
+    /// class of silent locale bug `number(_:)` above exists to prevent, on the
+    /// one other string in this file that is stored and re-read.
+    ///
+    /// `%02d` is C-locale by construction, so there is no formatter to
+    /// misconfigure and nothing for a region setting to reach. What the WHEEL
+    /// shows is the platform's business and may well be 12-hour; what it
+    /// stores is this.
+    public static func slotTimeString(_ date: Date, calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        return String(format: "%02d:%02d", parts.hour ?? 0, parts.minute ?? 0)
+    }
+
     private static func timeOrder(_ a: String, _ b: String) -> Bool {
         if a == "—" { return b != "—" }
         if b == "—" { return false }

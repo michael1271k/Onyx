@@ -38,6 +38,10 @@ struct ExerciseCardView: View {
     let position: (index: Int, total: Int)
 
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// The load column's floor, at the reader's text size. Declared identically
+    /// in `SetRowView`, which is what keeps this table a table — see
+    /// `SetColumn.weightFloor` for why it cannot be a constant.
+    @ScaledMetric(relativeTo: .body) private var loadFloor: CGFloat = SetColumn.weightFloor
 
     /// Whether the warm-up ladder is shown at all (Settings ▸ Training).
     ///
@@ -904,11 +908,11 @@ struct ExerciseCardView: View {
                 // measurements need to stay legible at 375 pt, and a warm-up
                 // walk is not a set anybody rates.
                 if isCardio {
-                    head("MIN").frame(minWidth: SetColumn.weightGroup, maxWidth: .infinity)
-                    head("KM").frame(minWidth: SetColumn.weightGroup, maxWidth: .infinity)
+                    head("MIN").frame(minWidth: SetColumn.weightGroup(floor: loadFloor), maxWidth: .infinity)
+                    head("KM").frame(minWidth: SetColumn.weightGroup(floor: loadFloor), maxWidth: .infinity)
                 } else {
                     if !isWeightless {
-                        head("KG").frame(minWidth: SetColumn.weightGroup, maxWidth: .infinity)
+                        head("KG").frame(minWidth: SetColumn.weightGroup(floor: loadFloor), maxWidth: .infinity)
                     }
                     // ── THE SURVIVING COLUMN TAKES THE VACATED WIDTH ────────
                     // Dropping the kg track left its width unclaimed: the rep
@@ -1016,6 +1020,25 @@ private enum SetColumn {
     ///
     /// It costs the row 12 pt out of the effort track: 375 pt still leaves it
     /// 95 and 402 leaves 122, against the 68 that column needs for a word.
+    ///
+    /// ── AND WHY EVERY CALLER SCALES IT ──────────────────────────────────────
+    /// 56 is six glyphs AT BODY'S DEFAULT 17 pt, and nowhere else. A
+    /// `monospacedDigit` numeral advances at about 0.6 em and the decimal point
+    /// at 0.26, so `123.75` is ~3.26 em — 55 pt at 17, but 68 at Large and 76
+    /// at xxxLarge, all of which are ordinary non-accessibility settings. The
+    /// floor did not move with them, so on a reader's larger-than-default type
+    /// the field ran out of room between the FOURTH and FIFTH glyph and
+    /// `minimumScaleFactor` shrank the strings that crossed it: `18.75` came
+    /// out visibly smaller than `17.5` and `20` on the same row, which is the
+    /// defect this constant now exists to explain.
+    ///
+    /// So it is a BASE, and the two structs that lay the table out hold it in a
+    /// `@ScaledMetric(relativeTo: .body)` — the same base, the same text style,
+    /// therefore the same number on both sides, which is the rule
+    /// `columnHeaders` already depends on. The scale factor stays where it is:
+    /// with the floor tracking the type it can no longer fire on a load this
+    /// app can propose, and it is still the right backstop for a value typed
+    /// past six glyphs.
     static let weightFloor: CGFloat = 56
     /// The whole rep group — the field and its two ends. The header names the
     /// GROUP, so it needs the group's width and not the field's. A FLOOR on
@@ -1023,8 +1046,11 @@ private enum SetColumn {
     /// size large enough to widen the numeral, pushes the row's group past this
     /// and a header pinned to it would stop agreeing.
     static let reps: CGFloat = repsField + step * 2
-    /// The whole load group, and the row's true minimum for it.
-    static let weightGroup: CGFloat = weightFloor + step * 2
+    /// The whole load group, and the row's true minimum for it — around a floor
+    /// the caller has already scaled to the reader's type. The header takes
+    /// this; the row's field takes the floor itself and its two ends add the
+    /// rest. A parameter and not a constant for the reason `weightFloor` gives.
+    static func weightGroup(floor: CGFloat) -> CGFloat { floor + step * 2 }
     /// Between columns. 4 rather than 8 for the same reason the card's gutter
     /// is: the row is the one place in this app where a gap competes with a tap
     /// target, and the target wins.
@@ -1147,6 +1173,11 @@ struct SetRowView: View {
     @State private var commitTicks = 0
     @State private var recordTicks = 0
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// The load column's floor, at the reader's text size. The same declaration
+    /// as `ExerciseCardView`'s, deliberately: one base and one text style give
+    /// both stacks the same number, which is the only reason the header sits
+    /// over the number it names.
+    @ScaledMetric(relativeTo: .body) private var loadFloor: CGFloat = SetColumn.weightFloor
 
     /// The row every one-sided fact is read off, and the one a sheet displays.
     /// Never optional in practice — `LoggerModel.groups` yields no empty group
@@ -1582,7 +1613,7 @@ struct SetRowView: View {
                     set: { next in write(targets) { $0.weightKg = next } }
                 ),
                 unit: "kilograms", decimals: true,
-                minWidth: SetColumn.weightFloor, fills: !typeSize.isAccessibilitySize,
+                minWidth: loadFloor, fills: !typeSize.isAccessibilitySize,
                 prominent: true,
                 // The one number on the card that CHANGED today, in the same
                 // green as the header chip that explains why. The chip is four
@@ -1664,7 +1695,7 @@ struct SetRowView: View {
                     set: { next in write(targets) { $0.durationSec = next.map { Int(($0 * 60).rounded()) } } }
                 ),
                 unit: "minutes", decimals: true,
-                minWidth: SetColumn.weightFloor, fills: !typeSize.isAccessibilitySize,
+                minWidth: loadFloor, fills: !typeSize.isAccessibilitySize,
                 prominent: true, tint: nil, onCommit: { commit(targets) }
             )
         }
@@ -1696,7 +1727,7 @@ struct SetRowView: View {
                     set: { next in write(targets) { $0.distanceKm = next } }
                 ),
                 unit: "kilometres", decimals: true,
-                minWidth: SetColumn.weightFloor, fills: !typeSize.isAccessibilitySize,
+                minWidth: loadFloor, fills: !typeSize.isAccessibilitySize,
                 prominent: true, tint: nil, onCommit: { commit(targets) }
             )
         }
@@ -2381,11 +2412,20 @@ private struct NumericField: View {
             // glyph count and read as `11` and `13`, which are real loads two
             // plates away from the truth.
             //
-            // The floor stays at `SetColumn.weightFloor`, which now fits six
-            // glyphs — this only catches what is past it (a 1074 kg leg press
-            // at a large non-accessibility type size), and 0.6 keeps body-size
+            // The floor is `SetColumn.weightFloor` SCALED to the reader's text
+            // size by the two structs that lay the row out, so it fits six
+            // glyphs at every setting rather than only at 17 pt. This catches
+            // what is past six (a 1074 kg leg press), and 0.6 keeps body-size
             // numerals above the 11 pt the token discipline calls the smallest
             // legible role.
+            //
+            // ── AND WHY IT IS STILL 0.6 AND NOT 1 ───────────────────────────
+            // A scale factor was never the bug. It fired because the floor was
+            // a constant under a font that scales, so the field ran out of room
+            // mid-string and `18.75` came out smaller than `20`. With the floor
+            // tracking the type it cannot fire on a load this app proposes, and
+            // raising it to 1 would buy nothing but bring the ellipsis back for
+            // the one case above.
             .lineLimit(1)
             .minimumScaleFactor(0.6)
             .foregroundStyle(
