@@ -44,6 +44,66 @@ _Nothing yet._
 
 ---
 
+## [5.0.1] — 2026-09-17 · The Sprint Leaves No Residue
+
+**PATCH: nothing in the app changed.** The closing wave of the Next-Gen UX
+sprint — twelve waves that ran from `3.10.1` to `5.0.0` — which was housekeeping
+by design: the plan retired, the migrations put away, the caches purged, the
+gate re-run on a cold cache.
+
+### The sprint this closes
+
+Twelve strictly sequential waves, each cut from `main`, merged `--no-ff` and
+bumped on its own branch. What they shipped, in order:
+
+| | | |
+|---|---|---|
+| `3.10.1` | Apple Health Tells The Truth | a walk imports once; the water row stops reading `—` |
+| `3.11.0` | The Night Leads | the sleep hero, eight sidekick vitals, and a vital that can take the lead |
+| `3.12.0` | Four Squares | Pulse's 2 × 2 grid — stress, soreness, scale, stack |
+| `3.13.0` | The Ledger Stops Shouting | RPE inverts, the em-dash goes, unilateral sets get a comparison |
+| `3.14.0` | Cardio and the Banners | the bout card, and the placeholder that stops being a grey box |
+| `3.15.0` | Train Tells the Truth About the Week | day-matched trends, past weeks, Customize Train |
+| `3.16.0` | The Dashboard Grows a Face | Day Rings, the rule-based sentence, connected stacks, the jiggle |
+| `3.17.0` | Appearance, Everywhere | the tab tint, the App Group accessor, 105 hardcoded inks tokenised |
+| `3.18.0`–`.2` | The Body Has Two Sides | tap the side you mean; `doms_logs` learns left from right |
+| `4.1.0` | Fatigue Reads The Clock | the card asks the question the time of day makes sense of |
+| `5.0.0` | One Store, One User | RLS on all 34 tables, every read scoped, account-switch erase |
+
+Each has its own entry below, and each says what a user can now do. This entry
+exists so the twelve read as one arc.
+
+### Changed
+- **The sprint's three migrations are applied and their files are gone.**
+  `w1-hk-uuid.sql` (pasted 2026-09-15), `w9-doms-laterality.sql` (2026-09-16)
+  and `w11-isolation-rls.sql` (2026-09-17) have all landed in Postgres, so
+  `docs/sql/` is empty again, as it was before the sprint. The guarded local
+  `ALTER TABLE`s that shipped beside them stay — they are for a store older than
+  the migration, not for a server that lacks the column — and the comments that
+  described the waiting window now say when it closed instead of naming a file
+  that no longer exists.
+- **The plan is retired to `docs/Done/`,** joining `EPIC_SPRINT_PLAN.md` and
+  `Plan-Onyx-UX-Architecture-Done.md`. Its eleven Wave Records — the drift taken
+  on purpose, the root causes that were not where the plan guessed, the
+  constraints each wave left for the next, and the seams held open deliberately —
+  were harvested first into this changelog and into the project's memory, so
+  nothing in them depends on the file to survive.
+- **The regenerable data is off this machine again**, none of it tracked and
+  none of it read by any gate: each wave's Swift scratch paths and screenshot
+  derived-data directories, `native/.build`, and the Xcode derived data for this
+  project. The whole gate — `check`, `check:swift`, `swift:core`, `swift:data`
+  and the app / widget / watch build — was then re-run from a cold cache, which
+  is what makes the green a green from source.
+
+### Note
+`native/OnyxTests` is still executed by nothing in `npm run check`
+(`scripts/swift-ui-test.sh` passes `-only-testing:OnyxUITests`, so the bundle is
+compiled by the gate and run by no one) and still carries the baseline it
+carried at the start of the sprint. Recorded rather than fixed, for the third
+sprint running: turning that bundle on is a sprint of its own.
+
+---
+
 ## [5.0.0] — 2026-09-17 · One Store, One User
 
 **A MAJOR release: the founder must paste one SQL file, and signing into a

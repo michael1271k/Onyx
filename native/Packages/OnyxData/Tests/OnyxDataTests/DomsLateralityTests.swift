@@ -159,7 +159,7 @@ struct DomsLateralityStoreTests {
     func conflictTargetWidened() {
         // PostgREST's `on_conflict` is a COLUMN LIST, and the server index it
         // resolves against is `(user_id, date, muscle_group, side, sub_region)
-        // NULLS NOT DISTINCT` — `docs/sql/w9-doms-laterality.sql`. The old
+        // NULLS NOT DISTINCT` — applied to Postgres 2026-09-16. The old
         // three-column target would reject a one-sided row as a duplicate of
         // the whole-muscle one.
         let table = MirrorCatalogue.tables.first { $0.name == "doms_logs" }

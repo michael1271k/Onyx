@@ -2640,8 +2640,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Database/AppDatabase.swift": {
-    "mtime": 1789672966.12015,
-    "ast_hash": "b68de18164805abc7d95f773c204306d",
+    "mtime": 1789673672.8934026,
+    "ast_hash": "c3c3f675f311fa0be6b2168cda457c7c",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Database/ExerciseCatalog.swift": {
@@ -2995,8 +2995,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Tests/OnyxDataTests/CardioIngestTests.swift": {
-    "mtime": 1789591371.9300787,
-    "ast_hash": "2054062f8939faa2fbae856d618ddc96",
+    "mtime": 1789673664.8023465,
+    "ast_hash": "6db28de6f14fc05aac244893a9ff5716",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Tests/OnyxDataTests/CardioSetTests.swift": {
@@ -3410,8 +3410,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1789672966.1274686,
-    "ast_hash": "e97818724c6f68440d7ec12516950959",
+    "mtime": 1789673685.2124608,
+    "ast_hash": "a03f8834400a1892bad26730f1443960",
     "semantic_hash": ""
   },
   "scripts/check-swift.sh": {
@@ -3475,8 +3475,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1789672966.111722,
-    "ast_hash": "41d6b8184937d8b61788a20d839da611",
+    "mtime": 1789673695.7975824,
+    "ast_hash": "b402401a32000570ca9d7415f0752775",
     "semantic_hash": ""
   },
   "docs/GIT.md": {
@@ -3505,8 +3505,8 @@
     "semantic_hash": ""
   },
   "native/project.yml": {
-    "mtime": 1789672966.1267529,
-    "ast_hash": "2cac139a66ca9ff6d6f62d6e41e516a5",
+    "mtime": 1789673685.3218472,
+    "ast_hash": "bb68e63072ebbb47ccc7efd12c6fac79",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png": {
@@ -3729,11 +3729,6 @@
     "ast_hash": "26903ce7f41febdb60bcf3e9459fc608",
     "semantic_hash": ""
   },
-  "docs/NEXT_GEN_UX_SPRINT.md": {
-    "mtime": 1789670050.2098045,
-    "ast_hash": "b717f836259a51dde850ae07068efb58",
-    "semantic_hash": ""
-  },
   "native/Packages/OnyxCore/Sources/OnyxCore/Nutrition/WaterTruth.swift": {
     "mtime": 1789502235.1559997,
     "ast_hash": "79f03c3c1a2af60aeae504574e38ffb7",
@@ -3824,19 +3819,14 @@
     "ast_hash": "c34432660e66f59543676a93fcf15980",
     "semantic_hash": ""
   },
-  "docs/sql/w9-doms-laterality.sql": {
-    "mtime": 1789584486.9421523,
-    "ast_hash": "11eba0347c95542c8083a26862a4cb49",
-    "semantic_hash": ""
-  },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/DomsLateralityTests.swift": {
     "mtime": 1789575867.6095266,
     "ast_hash": "9234e5a7638220da138e4e4d88c79fee",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Tests/OnyxDataTests/DomsLateralityTests.swift": {
-    "mtime": 1789584398.4968138,
-    "ast_hash": "592486f1a89898cd959e7fbfc2429159",
+    "mtime": 1789673664.8024542,
+    "ast_hash": "e10be07a47c5f50a6100fb9467ee05b4",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Day/DomsRow.swift": {
@@ -3909,11 +3899,6 @@
     "ast_hash": "7659a2aa49caf4751343fc54d45fcb4e",
     "semantic_hash": ""
   },
-  "docs/sql/w11-isolation-rls.sql": {
-    "mtime": 1789672966.112103,
-    "ast_hash": "93fb4943d773e6669778b8aa1fa5eb64",
-    "semantic_hash": ""
-  },
   "native/OnyxTests/ScopedReads+AppTests.swift": {
     "mtime": 1789672966.1190026,
     "ast_hash": "11aa7e943f199dad204ccd585fa1d682",
@@ -3937,6 +3922,11 @@
   "docs/Done/Plan-Onyx-UX-Architecture-Done.md": {
     "mtime": 1789669906.995209,
     "ast_hash": "323033a3611dfc13f85361b61bf75334",
+    "semantic_hash": ""
+  },
+  "docs/Done/NEXT_GEN_UX_SPRINT.md": {
+    "mtime": 1789673026.9540682,
+    "ast_hash": "417083e16659995cd6f8903b62462a99",
     "semantic_hash": ""
   }
 }

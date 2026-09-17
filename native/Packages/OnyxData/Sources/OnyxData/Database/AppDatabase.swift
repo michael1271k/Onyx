@@ -1138,8 +1138,8 @@ public final class AppDatabase: Sendable {
         // ── v24 ─────────────────────────────────────────────────────────────
         // Stress becomes an EVENT log (Live UX W1, decision A5): any number of
         // rows a day, each stamped with when it was felt. `logged_at` is
-        // nullable locally so a pull that ran before the founder pastes
-        // `docs/sql/w1-stress-events.sql` still decodes; `logStress` always
+        // nullable locally so a pull that ran before the column reached
+        // Postgres (2026-09-15) still decodes; `logStress` always
         // stamps a time, so an event logged before that paste has a non-nil
         // `logged_at`, `encodeIfPresent` pushes it, and the server rejects the
         // row until the column exists. That failure is per-row: it lands in
@@ -1182,11 +1182,12 @@ public final class AppDatabase: Sendable {
         // what `encodeIfPresent` needs to keep the column OUT of a push body
         // until Postgres grows it. Unlike v20, though, this column is written
         // the moment the founder walks anywhere — so between this build landing
-        // and `docs/sql/w1-hk-uuid.sql` being pasted, an imported bout's push is
+        // and the column reaching Postgres, an imported bout's push is
         // REJECTED by the server for an unknown column. That failure is per-row
         // (`outboxFailed`, retried under `SyncBackoff`) and clears itself on the
-        // first sync after the paste, exactly as `v24.stressEvents` does. It is
-        // the reason the SQL file is the first thing in the wave's handover.
+        // first sync after the paste, exactly as `v24.stressEvents` does. The
+        // column was pasted 2026-09-15 (3.10.1), so that window is closed; the
+        // guard stays because a store older than v26 can still open this build.
         //
         // A fresh install gets the column from the regenerated `migrateMirrorV1`;
         // the guard is for that.
@@ -1229,12 +1230,12 @@ public final class AppDatabase: Sendable {
         // so a whole-muscle row's request is unchanged on the wire and its
         // export token is unchanged in the document.
         //
-        // The same `v26` caveat applies and for the same reason: between this
-        // build landing and `docs/sql/w9-doms-laterality.sql` being pasted, a
-        // ONE-SIDED rating's push is rejected for an unknown column. That
-        // failure is per-row (`outboxFailed`, retried under `SyncBackoff`) and
-        // clears itself on the first sync after the paste. A bilateral rating
-        // is unaffected, because it sends neither column.
+        // The same `v26` caveat applied and for the same reason: until the
+        // columns reached Postgres, a ONE-SIDED rating's push was rejected for
+        // an unknown column — per-row (`outboxFailed`, retried under
+        // `SyncBackoff`), clearing itself on the first sync after. A bilateral
+        // rating was unaffected, because it sends neither column. Pasted
+        // 2026-09-16 (3.18.2); the guard stays for every store older than v28.
         //
         // A fresh install gets both from the regenerated `migrateMirrorV1`;
         // the guard is for every store that already exists.
@@ -1332,10 +1333,12 @@ extension AppDatabase {
     /// `id`. Most-non-null because the duplicates are not identical: an early
     /// import has the heart rate, a later one may have gained a total energy,
     /// and keeping the emptiest would lose measurements nothing can recover.
-    /// Lowest id because a tie has to break the SAME WAY here and in
-    /// `docs/sql/w1-hk-uuid.sql`, which does this collapse server-side for the
-    /// rows no device will ever open again. Two deterministic rules that agree
-    /// can both run; two that disagree delete each other's survivor.
+    /// Lowest id because a tie had to break the SAME WAY here and in the
+    /// server-side collapse that ran once alongside it (3.10.1, applied
+    /// 2026-09-15), for the rows no device will ever open again. Two
+    /// deterministic rules that agree can both run; two that disagree delete
+    /// each other's survivor. Anything that re-collapses `cardio_logs` from
+    /// either side keeps this rule or repeats that argument.
     ///
     /// The losers are DELETED THROUGH THE OUTBOX, not just locally. `cardio_logs`
     /// pulls on a date window, so a row removed here and left on the server
