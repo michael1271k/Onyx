@@ -13,6 +13,21 @@ import OnyxData
 enum HistoryPreviews {
     static let userId = "00000000-0000-0000-0000-000000000001"
     static let lastSession = "s-2026-09-01"
+    /// The four shapes a unilateral pair can take, in one card — the session
+    /// `session-pairs-merged` is reviewed from.
+    ///
+    /// ── WHY IT IS A SESSION OF ITS OWN, AND WHY IT IS DATED 15 JULY ─────────
+    /// Every pair already in this fixture is `(5, r)` against `(5, r - 1)`, so
+    /// all of them are `valueSplit` and NONE of them carry a rating — the two
+    /// cases W1's ledger rule is mostly about could not be photographed, and
+    /// making one of them photographable by editing a rep would move a tonnage
+    /// three other shots are pictures of.
+    ///
+    /// 15 July is the plan's own first day: before every other session here, so
+    /// it changes no week that is photographed for its totals, and inside
+    /// `Week 0 · Transition` — a PEAK block, which is the second phase colour
+    /// the Library shot needs to show that its sections are grouped at all.
+    static let pairShapes = "s-2026-07-15"
     /// A day that is ONLY a bout — the card W4 is reviewed from.
     ///
     /// The Sunday AFTER the photographed block, deliberately: every other
@@ -82,6 +97,14 @@ enum HistoryPreviews {
         // say on both of its rows instead of reserving a blank twice.
         case "session-pairs":
             NavigationStack { SessionDetailView(sessionId: "s-2026-09-02", startAtLedger: true) }
+                .environment(environment())
+        // ── W1 (refinement): all four pair shapes on one card ───────────────
+        // See `pairShapes` for what each of the four sets is for. `session-pairs`
+        // is the twin and the pair IS the review: that one still splits every
+        // value line, because its two sides genuinely lifted different numbers,
+        // and nothing about a merge may make two unequal sides look equal.
+        case "session-pairs-merged":
+            NavigationStack { SessionDetailView(sessionId: pairShapes, startAtLedger: true) }
                 .environment(environment())
         // ── W4: the card the treadmill brief is actually about ──────────────
         // A day with no lift on it: nothing to give the page a rail, a family
@@ -197,35 +220,31 @@ enum HistoryPreviews {
         case "train-monday":
             NavigationStack { WorkoutTabView(seededToday: "2026-09-07") }
                 .environment(environment())
-        // ── W6 (next-gen): the weeks behind this one ────────────────────────
-        // Parked at the BOTTOM, the same trick `train-cardio` uses and for the
-        // same reason: the list is the last thing on the tab and a shot taken
-        // from the top photographs the plan card again. Collapsed, which is the
-        // state they are in until one is asked for — the point of the section
-        // is that five weeks fit where one banner used to.
-        case "train-past":
-            NavigationStack {
-                WorkoutTabView(seededDay: PlanTemplates.program("onyx5")?.day(key: "cb_a"), seededToday: "2026-09-03")
+        // ── W1 (refinement): the shelf of closed weeks ──────────────────────
+        // `train-past` and `train-past-open` were here and are gone with the
+        // section they photographed — a harness screen for deleted code is a
+        // picture of nothing that still takes a shot to review.
+        //
+        // Presented as a REAL sheet, the trick `train-wrap` and `train-week`
+        // use: a shot script cannot press a toolbar button, and the whole of
+        // what this wave moved is what the sheet looks like when it opens.
+        case "train-library":
+            PresentingWeek(today: "2026-09-03") { week in
+                PastWeeksLibrary(week: week, program: week.snapshot.program)
             }
-            .defaultScrollAnchor(.bottom)
             .environment(environment())
-        // ── W6 (next-gen): one closed week, opened where it sits ────────────
-        // The wave's largest new surface: the wrap-up reel, the rings and the
-        // movement breakdown, drawn INSIDE the Train tab rather than in a sheet
-        // over it. 16 August is the one week in this seed that closed complete,
-        // so the banner has a progression, a regression and a PR in it — the
-        // same week `train-wrap` photographs as a sheet, which makes the pair
-        // the review: the two must draw the same figures and differ only in
-        // their chrome.
-        case "train-past-open":
-            NavigationStack {
-                WorkoutTabView(
-                    seededDay: PlanTemplates.program("onyx5")?.day(key: "cb_a"),
-                    seededToday: "2026-09-03",
-                    seededExpandedWeek: "2026-08-16"
+        // One banner tapped — the wrap-up over the shelf, which is the state
+        // the old expanding row was drawn INSIDE the tab for. 16 August is the
+        // one week in this seed that closed complete, so it has a progression,
+        // a regression and a PR in it: the same week `train-wrap` photographs
+        // from the This-week tile, which makes the pair the review — two routes
+        // to one sheet, drawing the same figures.
+        case "train-library-open":
+            PresentingWeek(today: "2026-09-03") { week in
+                PastWeeksLibrary(
+                    week: week, program: week.snapshot.program, seededOpen: "2026-08-16"
                 )
             }
-            .defaultScrollAnchor(.bottom)
             .environment(environment())
         // ── W6 (next-gen): the tab with three sections put away ─────────────
         // Two things at once, and the second is why it is bottom-anchored.
@@ -460,6 +479,43 @@ enum HistoryPreviews {
             }
         }
 
+
+        // ── THE FOUR PAIR SHAPES (§W1 E) ────────────────────────────────
+        // One movement, four sets, one of each case `SetPairLayout` can hand
+        // the ledger — read top to bottom:
+        //
+        //   1 · same load, same reps, same rating   → ONE line, one word
+        //   2 · same load, same reps, ratings differ → one line, `L 8 · R 9`
+        //   3 · reps differ, one side never rated    → two lines, `L 8 · R —`
+        //   4 · reps differ, ratings agree           → two lines, one word
+        //
+        // Set 3 is the state 10 September's pushdown is permanently in: the
+        // right side was skipped at the moment of rating and `SetPatch` cannot
+        // write a null back, so it stays unrated until that session is edited
+        // by hand. The ledger's job is to SAY so, in tertiary ink.
+        do {
+            let id = pairShapes
+            let start = LogicalDay.date(fromISO: "2026-07-15")!.addingTimeInterval(17 * 3600)
+            try WorkoutSession(
+                id: id, userId: userId, dayKey: "cb_a", date: "2026-07-15", startedAt: start,
+                endedAt: start.addingTimeInterval(38 * 60), durationMin: 38, sessionRpe: 7
+            ).insert(db)
+            let shapes: [(left: Int, right: Int, leftRpe: Double?, rightRpe: Double?)] = [
+                (12, 12, 8, 8), (12, 12, 8, 9), (12, 11, 8, nil), (12, 10, 8, 8),
+            ]
+            for (i, shape) in shapes.enumerated() {
+                let pair = "\(id)-raise-\(i)"
+                for (side, reps, rpe) in [("left", shape.left, shape.leftRpe),
+                                          ("right", shape.right, shape.rightRpe)] {
+                    try WorkoutSet(
+                        id: "\(id)-raise-\(i)-\(side)", sessionId: id, exerciseId: "ex-raise",
+                        setIndex: i + 1, weightKg: 5, reps: reps, side: side, pairId: pair,
+                        est1rmKg: OneRepMax.estimate(weight: 5, reps: Double(reps)), rpe: rpe,
+                        exerciseOrder: 1, foldOrder: i * 2 + (side == "left" ? 0 : 1)
+                    ).insert(db)
+                }
+            }
+        }
 
         for (n, s) in chestBack.enumerated() {
             let id = "s-\(s.date)"

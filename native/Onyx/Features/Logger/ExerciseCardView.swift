@@ -1107,7 +1107,12 @@ private struct SetTarget: Identifiable, Equatable {
 /// when the sides actually disagree — is the line the numbers sit on. See
 /// `SetPairLayout`, which is that decision, tested in OnyxCore rather than
 /// inferred from a screenshot.
-private struct SetRowView: View {
+/// Internal rather than private since §W1 F, on the precedent
+/// `SetRow.effortFigure` sets in the ledger: the rule below about which rows a
+/// rating is written to is this wave's whole claim about this control, and a
+/// `private` type can only be checked by tapping it. `UnilateralAndQualityTests`
+/// reads `effortTargets(tapping:in:)`; nothing else outside this file does.
+struct SetRowView: View {
     /// One row, or the two sides of one set, in deck order.
     let rows: [LoggerModel.SetRow]
     let ordinal: Int
@@ -1801,7 +1806,7 @@ private struct SetRowView: View {
     /// question has narrowed from "how hard was that" to "which of the two was
     /// harder" — and two numbers answer a comparison better than two words.
     private func compactEffort(_ side: LoggerModel.SetRow, showsTag: Bool) -> some View {
-        Button { onEffort([side]) } label: {
+        Button { onEffort(Self.effortTargets(tapping: side, in: rows)) } label: {
             HStack(spacing: 1) {
                 if let tag = side.sideLabel, showsTag {
                     Text(tag)
@@ -1833,6 +1838,37 @@ private struct SetRowView: View {
         .accessibilityLabel("Effort, \(side.sideLabel == "L" ? "left" : "right")")
         .accessibilityValue(RpeLadder.readout(side.rpe) ?? "Not rated")
         .accessibilityHint("Opens the effort picker")
+    }
+
+    /// The tapped side, and the sibling that has never been rated.
+    ///
+    /// ── WHY RATING ONE ARM SEEDS THE OTHER (§W1 F) ──────────────────────────
+    /// `workout_sets.rpe` is nullable by design — `AppDatabase`'s own note:
+    /// "an unrated set must stay distinguishable from a set rated zero" — and
+    /// `SetPatch` cannot write a null back (`SetEvent`). So rating the left
+    /// side and walking away left the right side null PERMANENTLY, and nothing
+    /// in this app backfills it. That is not a bug in a query: it is a state
+    /// this screen could produce and could not undo, and 10 September's Single
+    /// Arm Triceps Pushdown is still in it.
+    ///
+    /// The seed is the one `splitSet` already writes — it copies a set's rating
+    /// into BOTH halves when a set is split (`LoggerModel.splitSet`), so a pair
+    /// arriving from a split has never had this hole. This closes the other
+    /// door into it.
+    ///
+    /// It is a SEED and not a verdict: the sibling row stays tappable, its own
+    /// tap resolves to itself alone the moment it holds a number, and the
+    /// effort sheet writes through `model.commitEdit` either way. Nothing
+    /// historical is touched — a session already logged is repaired by editing
+    /// that session, which is the only place a rating may be invented.
+    ///
+    /// The tapped side goes FIRST: `EffortPickerSheet` seeds its ladder from
+    /// the first row the target names, and a picker that opened on the
+    /// sibling's rung would be rating the wrong arm's memory.
+    static func effortTargets(
+        tapping side: LoggerModel.SetRow, in rows: [LoggerModel.SetRow]
+    ) -> [LoggerModel.SetRow] {
+        [side] + rows.filter { $0.id != side.id && $0.rpe == nil }
     }
 
     private func wordEffort(_ targets: [LoggerModel.SetRow]) -> some View {

@@ -47,31 +47,13 @@ struct WorkoutTabView: View {
     /// of the shot is that the REAL screen, with the real week under it, looks
     /// right while it waits.
     var seededHeaderPending = false
-    /// Opens one past week's banner, for the harness only.
-    ///
-    /// The expansion is the largest thing this wave draws and a shot script
-    /// cannot tap a row — the same gap `seededHeaderPending` fills for the done
-    /// card's stand-in, and the reason that seed exists rather than a `#if
-    /// DEBUG` branch inside the row: the point of the shot is the REAL section,
-    /// with the real summary under it.
-    var seededExpandedWeek: String?
-
     @State private var week: WorkoutWeek?
     @State private var weekSheetOpen = false
     /// The Customize sheet, from a long press anywhere on the tab (W6).
     @State private var customizing = false
-    /// The one past week showing its banner. One at a time on purpose: three
-    /// wrap-ups expanded at once is most of a metre of scrolling, and the row
-    /// that is open is the question being asked.
-    @State private var expandedWeek: String?
-    /// Whether `seededExpandedWeek` has been applied. A plain `.task` would
-    /// re-open the row every time the tab re-read, which would fight a reader
-    /// who had just closed it.
-    @State private var seedApplied = false
-    /// Summaries already built, keyed by week start. A summary costs a PR
-    /// replay per session, so an expansion that has been paid for once is not
-    /// paid for again when the row is closed and reopened.
-    @State private var pastSummaries: [String: WeeklyWrap.Summary] = [:]
+    /// The shelf of closed weeks (§W1 C). A sheet, and the only thing on this
+    /// tab reached from a toolbar rather than from the page.
+    @State private var libraryOpen = false
     /// The session this tab is keeping, live or not. Survives the cover being
     /// dismissed — that is the whole reason it lives here.
     @State private var session: LoggerModel?
@@ -172,7 +154,6 @@ struct WorkoutTabView: View {
                 if shows(.doors) { doorsRow }
                 if shows(.cardio) { cardioCard }
                 if shows(.progression) { progressionCard }
-                if shows(.pastWeeks) { pastWeeksSection }
             }
             .padding(.horizontal, OnyxSpace.l)
             .padding(.top, OnyxSpace.s)
@@ -205,6 +186,31 @@ struct WorkoutTabView: View {
         .cardioIngestNotice()
         .navigationTitle("Train")
         .navigationBarTitleDisplayMode(.inline)
+        // ── THE TAB'S FIRST TOOLBAR, AND WHY THE SHELF EARNED IT ────────────
+        // Everything else on this screen is the week in front of you, and the
+        // page is ordered by how soon you need it. The weeks BEHIND you are a
+        // different question — asked rarely, from anywhere, and never while
+        // deciding what to lift — so it was the one section that had to be
+        // scrolled past every time to reach the things it was less important
+        // than. A bar button is the one place on this tab that costs the page
+        // no height at all.
+        //
+        // Still gated on `TrainSection.pastWeeks`: the Customize sheet has
+        // always been able to put this away, and a switch that stopped working
+        // because its section became a button would be a setting that silently
+        // does nothing.
+        .toolbar {
+            if shows(.pastWeeks) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { libraryOpen = true } label: {
+                        Image(systemName: "books.vertical.fill")
+                    }
+                    .tint(accent)
+                    .accessibilityLabel("Past weeks")
+                    .accessibilityHint("Every closed week of the plan")
+                }
+            }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
         .navigationDestination(item: $summary) { id in
             SessionDetailView(sessionId: id)
@@ -305,6 +311,14 @@ struct WorkoutTabView: View {
                 summary: door.summary,
                 program: week?.snapshot.program ?? Program(id: "", label: "", days: [])
             )
+        }
+        // The shelf. It reads its own weeks when it opens (`WorkoutWeek.library`)
+        // rather than taking them off the snapshot, which is what let the tab
+        // stop paying for them on every refresh.
+        .sheet(isPresented: $libraryOpen) {
+            if let week {
+                PastWeeksLibrary(week: week, program: week.snapshot.program)
+            }
         }
         .sheet(isPresented: $loggingCardio) {
             if let week {
@@ -1099,114 +1113,6 @@ struct WorkoutTabView: View {
         week?.snapshot.trainLayout.shows(section) ?? true
     }
 
-    // MARK: - Past weeks
-
-    /// Every closed week behind this one, collapsed, expanding in place into
-    /// the banner the wrap-up sheet shows (W6).
-    ///
-    /// ── WHY IT IS A CONTAINER AND NOT A SCREEN ──────────────────────────────
-    /// The wrap-up already existed and was already reachable — from the
-    /// This-week tile the evening a week closes, and from History forever
-    /// after. What it was not was BROWSABLE: reaching the week before last
-    /// meant leaving Train, opening History, finding the row and opening the
-    /// chip. Three navigations for a question — "was last week better than the
-    /// one before it" — that is asked standing in a gym.
-    ///
-    /// So this adds no view. `WeeklyWrapContent` is the sheet's own body, and
-    /// every figure in an expanded row is the same figure, from the same
-    /// summary, as the sheet would show for that week.
-    @ViewBuilder
-    private var pastWeeksSection: some View {
-        if let weeks = week?.snapshot.pastWeeks, !weeks.isEmpty {
-            VStack(alignment: .leading, spacing: OnyxSpace.grid) {
-                Text("PAST WEEKS").onyxMicro()
-                ForEach(weeks) { pastWeekRow($0) }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // Keyed on the OPEN week and not on the list: the summary is built
-            // once per expansion, and a task keyed on the rows would rebuild it
-            // every time the tab re-read.
-            .task(id: expandedWeek) { await loadExpandedWeek() }
-            .task {
-                guard !seedApplied, let seededExpandedWeek else { return }
-                seedApplied = true
-                expandedWeek = seededExpandedWeek
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func pastWeekRow(_ past: WorkoutWeek.PastWeek) -> some View {
-        let open = expandedWeek == past.weekStart
-        VStack(alignment: .leading, spacing: OnyxSpace.l) {
-            Button {
-                withAnimation(OnyxMotion.move) {
-                    expandedWeek = open ? nil : past.weekStart
-                }
-            } label: {
-                HStack(spacing: OnyxSpace.s) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(past.label)
-                            .onyxType(.body)
-                            .foregroundStyle(Color.onyx.textPrimary)
-                            .lineLimit(1)
-                        // The banner's own two figures, in the banner's own
-                        // units — `OnyxFormat.volume` and kilograms, not
-                        // tonnes. A row that rounded to `18.2 t` over a card
-                        // that says `18,240 kg` is two numbers for one week.
-                        Text("\(past.sessions) session\(past.sessions == 1 ? "" : "s") · \(OnyxFormat.volume(past.tonnageKg)) kg")
-                            .onyxType(.micro).onyxNumeral()
-                            .foregroundStyle(Color.onyx.textSecondary)
-                            .lineLimit(1).minimumScaleFactor(0.8)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .onyxType(.caption)
-                        .foregroundStyle(Color.onyx.textTertiary)
-                        .rotationEffect(.degrees(open ? 90 : 0))
-                        .accessibilityHidden(true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(OnyxSpace.m)
-                .onyxGlass(.tile)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .onyxPress(scale: 0.98)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(past.label)
-            .accessibilityValue("\(past.sessions) sessions, \(OnyxFormat.volume(past.tonnageKg)) kilograms")
-            .accessibilityHint(open ? "Collapses the week" : "Expands the week")
-            .accessibilityAddTraits(.isButton)
-
-            if open {
-                if let summary = pastSummaries[past.weekStart] {
-                    // NOT wrapped in a tile of its own: every card inside the
-                    // banner already wears `.onyxGlass(.tile)`, and material
-                    // over material reads as a third surface that is not there.
-                    WeeklyWrapContent(
-                        summary: summary,
-                        program: week?.snapshot.program ?? Program(id: "", label: "", days: [])
-                    )
-                } else {
-                    // The summary is a PR replay per session. On a warm store
-                    // it lands inside a frame; on a long week it does not, and
-                    // a row that expanded into nothing would read as a defect.
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, OnyxSpace.l)
-                }
-            }
-        }
-    }
-
-    /// Build the open week's summary, once.
-    private func loadExpandedWeek() async {
-        guard let week, let start = expandedWeek, pastSummaries[start] == nil else { return }
-        guard let summary = await week.pastSummary(weekStart: start) else { return }
-        pastSummaries[start] = summary
-    }
-
     // MARK: - Cardio
 
     /// The last bout in full, and the eight before it as a trail.
@@ -1627,7 +1533,7 @@ extension TrainSection {
         case .trends: return "chart.xyaxis.line"
         case .cardio: return "figure.run"
         case .progression: return "arrow.up.forward"
-        case .pastWeeks: return "calendar"
+        case .pastWeeks: return "books.vertical.fill"
         }
     }
 }
