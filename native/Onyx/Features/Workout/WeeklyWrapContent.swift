@@ -3,147 +3,36 @@ import OnyxUI
 import OnyxCore
 import OnyxData
 
-/// The week, once the work in it is done.
+/// The reel — the middle of the weekly report.
 ///
-/// ── WHY THIS IS NOT A SUNDAY MODAL ──────────────────────────────────────────
-/// The obvious build is a sheet that appears on its own when the week closes.
-/// It is also the build nobody reads: a modal between you and the screen you
-/// opened gets dismissed by reflex, and once dismissed it is gone — a summary
-/// of the week you just trained, shown exactly once, at a moment you did not
-/// choose.
+/// ── IT WAS A SHEET'S CONTENT AND THE SHEET IS GONE (W4) ─────────────────────
+/// W6 split this out of `WeeklyWrapView` so a Train-tab row could expand into
+/// it inline: the chrome — a `NavigationStack`, a `ScrollView`, two detents —
+/// stayed on the sheet and everything that draws a figure moved here. W4 took
+/// the argument to its conclusion and deleted the sheet. A week is a PLACE now,
+/// pushed by `WeeklyReportView`, and this is the block of it that reports how
+/// the training went.
 ///
-/// So the This-week tile TRANSFORMS instead. The same panel, in the same place,
-/// now saying "Week wrapped" with a chevron. Nothing interrupts, the door is
-/// permanent, and a week from March is reachable by the same route as this one.
+/// Three things went with the sheet, and all three were the sheet's:
 ///
-/// ── WHY IT IS NOW A SHEET, WHICH IS NOT A CONTRADICTION (W1a) ───────────────
-/// That argument is against a modal that arrives UNINVITED. It says nothing
-/// about what happens after the tile is tapped, and a push turns out to be the
-/// wrong answer there: the wrap-up is a thing you glance at and put down, and a
-/// push replaces the Train tab, costs a back tap to leave, and buries the
-/// screen the reader came to use. A detent sheet says what this is — the reel
-/// at 560 pt, the breakdown if you drag for it, and the tab visible behind it
-/// the whole time. The door is still permanent and still the reader's to open.
-///
-/// ── AND WHY THE WEEK CLOSES ON FRIDAY ───────────────────────────────────────
-/// `WeeklyWrap.isWrapped`, not the calendar: on a plan that rests Saturday the
-/// training week ends on Friday evening, and a summary that waits for Sunday
-/// arrives after you have stopped thinking about the week it describes. Cardio
-/// does not gate it — a walk is not something the training week waits for.
-///
-/// ── WHAT THE 560 DETENT IS FOR ──────────────────────────────────────────────
-/// It used to render three uncapped lists: every movement of the week, one
-/// 48 pt row each, thirty rows on a full week. That is a document, and nobody
-/// reads a document on the evening they finished the work it describes. The
-/// reel above the fold answers "how did the week go" in five seconds; the
-/// document is still there, one drag and one disclosure away, unabridged.
-struct WeeklyWrapView: View {
-    let summary: WeeklyWrap.Summary
-    let program: Program
-
-    /// The reel's height. One constant used by both the detent SET and the
-    /// initial selection — `PresentationDetent.height` is value-equal, so two
-    /// literals would compile and then drift apart at the first tweak.
-    private static let reel = PresentationDetent.height(560)
-
-    @State private var detent: PresentationDetent
-
-    /// `detent` is settable only so the screenshot harness can photograph the
-    /// `.large` state, which has no other route in a shot — the same reason
-    /// `WorkoutTabView` takes a seeded day. Every app call site takes the
-    /// default and opens on the reel.
-    init(
-        summary: WeeklyWrap.Summary, program: Program,
-        detent: PresentationDetent = WeeklyWrapView.reel
-    ) {
-        self.summary = summary
-        self.program = program
-        _detent = State(initialValue: detent)
-    }
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                WeeklyWrapContent(
-                    summary: summary, program: program,
-                    // The legend is the half of the ring that only fits once
-                    // the sheet has been dragged up, so it follows the detent.
-                    showsLegend: detent == .large,
-                    // Both the ring and the breakdown disclosure ask for room.
-                    // Raising here and not inside the content is what lets the
-                    // same content sit inline on the Train tab, where there is
-                    // no sheet and nothing to raise.
-                    onNeedsHeight: { withAnimation(OnyxMotion.move) { detent = .large } }
-                )
-                .padding(.horizontal, OnyxSpace.l)
-                .padding(.bottom, OnyxSpace.xl)
-            }
-            .onyxScreen(.train)
-            .navigationTitle(WeeklyWrapContent.title(summary))
-            .navigationBarTitleDisplayMode(.inline)
-            // Without this the inline bar draws its own material band over the
-            // mesh the moment content scrolls under it.
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([Self.reel, .large], selection: $detent)
-        .presentationDragIndicator(.visible)
-        .presentationBackground(Color.onyx.base)
-        // The OPPOSITE of `MuscleDistributionSheet` and `DomainSheet`, on
-        // purpose. Those two are lists meant to be READ at the small detent, so
-        // they suppress resizing and let a drag scroll. This one is a reel whose
-        // breakdown is meant to be dragged up into, which is the behaviour they
-        // were suppressing.
-        .presentationContentInteraction(.resizes)
-        .preferredColorScheme(.dark)
-    }
-}
-
-/// The wrap-up's CONTENT, with no chrome of its own (W6).
-///
-/// ── WHY IT WAS SPLIT OUT OF THE SHEET ───────────────────────────────────────
-/// The Train tab grew a list of closed weeks, each row expanding IN PLACE into
-/// the same banner. "In place" rules out the sheet: it carries a
-/// `NavigationStack`, a `ScrollView` and two detents, and a scroll view inside
-/// the tab's own scroll view is the one arrangement SwiftUI will not lay out.
-/// So the chrome stayed on `WeeklyWrapView` and everything that draws a figure
-/// moved here, unchanged — the reel is a `LazyVStack` either way and neither
-/// container had an opinion about it.
-///
-/// The two hooks are what the chrome used to do for itself. A sheet answers
-/// `showsLegend` from its detent and grows on `onNeedsHeight`; the tab passes
-/// `true` and `{}`, because inline content is already at its full height.
+///  · `showsLegend` — the ring's legend only fitted at `.large`, so it was
+///    answered from a detent. There is no ring (the founder's words: "destroy
+///    the ugly Where-the-work-went ring") and no detent.
+///  · `onNeedsHeight` — a page is already at its full height. Opening the
+///    breakdown grows the scroll view, which is what a scroll view is for.
+///  · `ringCard` — deleted with `WeeklyMuscleRing`. Where the week's work went
+///    is the Recovery and Training rails at the head of the page and the
+///    movement breakdown below; a part-to-whole donut of sixteen landmarks was
+///    a third answer to a question the page now asks twice.
 struct WeeklyWrapContent: View {
     let summary: WeeklyWrap.Summary
     let program: Program
-    var showsLegend = true
-    var onNeedsHeight: () -> Void = {}
 
-    /// Every movement of the week. Closed by default; opening it raises the sheet.
+    /// Every movement of the week. Closed by default; opening it grows the
+    /// page, which is what a scroll view does on its own — the `onNeedsHeight`
+    /// hook that raised a sheet went with the sheet (W4).
     @State private var breakdownOpen = false
 
-    /// Off by default. A share card is the one surface in this app that leaves
-    /// the phone, and the figures on it are the user's to choose — so the
-    /// private ones are absent until asked for, which is the only default that
-    /// cannot leak something by being forgotten.
-    @State private var showBodyweight = false
-    /// The rendered card, re-made whenever the toggle changes.
-    ///
-    /// Held rather than computed in `body`: `ShareLink` needs its item up front,
-    /// and rendering a 540×960 composition on every layout pass to supply one
-    /// would re-rasterise the card every time the screen scrolls.
-    @State private var card: Image?
-    /// Which toggle state `card` was rendered for. A sheet is opened and closed
-    /// far more casually than a screen is pushed, and without this every open
-    /// pays the 18 MB rasterise again for a card nothing asked to change.
-    @State private var renderedFor: Bool?
-
-    @Environment(\.displayScale) private var displayScale
     @Environment(\.dynamicTypeSize) private var typeSize
 
     /// `Week 5` — the PROGRAMME's own counter, answered by the builder.
@@ -168,18 +57,8 @@ struct WeeklyWrapContent: View {
         LazyVStack(alignment: .leading, spacing: OnyxSpace.l) {
             headline
             bestsCard
-            ringCard
             topThree
             breakdown
-            shareSection
-        }
-        .onChange(of: breakdownOpen) { _, open in
-            // Expanding raises the sheet, so the rows arrive in the same
-            // gesture that asked for them rather than one drag later.
-            // Collapsing does NOT lower it: shrinking the sheet out from under
-            // a thumb that just tapped "hide" is a second thing nobody asked
-            // for.
-            if open { onNeedsHeight() }
         }
     }
 
@@ -339,45 +218,6 @@ struct WeeklyWrapContent: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Where the week's work landed, and which day carried most of it.
-    @ViewBuilder
-    private var ringCard: some View {
-        if let muscle = summary.muscle, muscle.doneSets > 0 {
-            VStack(alignment: .leading, spacing: OnyxSpace.m) {
-                Text("WHERE THE WORK WENT").onyxMicro()
-                WeeklyMuscleRing(summary: muscle, showLegend: showsLegend) {
-                    onNeedsHeight()
-                }
-                if let session = summary.topSession, session.volumeKg > 0 {
-                    Label(
-                        "Biggest session · \(sessionLabel(session)) · \(OnyxFormat.volume(session.volumeKg)) kg",
-                        systemImage: "flame"
-                    )
-                    .onyxType(.caption).onyxNumeral()
-                    .foregroundStyle(Color.onyx.textSecondary)
-                    .lineLimit(2)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(OnyxSpace.l)
-            .onyxGlass(.tile)
-        }
-    }
-
-    /// The athlete's own word for the split — resolved here rather than stored,
-    /// precisely so a renamed programme renames this too.
-    ///
-    /// `SessionAnalysis.dayLabel` and not `program.day(key:)?.label ?? key`: the
-    /// helper refuses an empty key and tidies one the program does not know
-    /// (a Onyx-4 or PPL session) into "Legs A" rather than leaking `legs_a`.
-    /// A finished session CAN carry a null `day_key`, and the naive version
-    /// rendered that as "Biggest session ·  · 9,715 kg". The date is the
-    /// fallback, because a day with no name still happened on a Tuesday.
-    private func sessionLabel(_ session: WeeklyWrap.TopSession) -> String {
-        SessionAnalysis.dayLabel(session.dayKey, in: program)
-            ?? Swap.shortDayLabel(session.date)
-    }
-
     // MARK: - The lists
 
     /// Three rows, and a count of what is not being shown.
@@ -492,10 +332,44 @@ struct WeeklyWrapContent: View {
             }
         }
     }
+}
 
-    // MARK: - Sharing
 
-    private var shareSection: some View {
+/// The card that leaves the phone — the LAST thing on the report.
+///
+/// ── WHY IT IS ITS OWN VIEW NOW (W4) ─────────────────────────────────────────
+/// It was the final block of `WeeklyWrapContent`, which was the whole of the
+/// sheet. The report puts four more sections under the reel, so leaving it
+/// there would have put "Share this week" in the MIDDLE of the page, above the
+/// macros and the weigh-in — a terminal action with a document after it, which
+/// reads as the end of one screen and the start of another.
+///
+/// Nothing inside it changed. The render is still lazy, still keyed on the
+/// toggle, and still the reason the page's stack is a `LazyVStack`: the control
+/// is below the fold by construction, so the 540 × 960 rasterise happens when a
+/// reader scrolls to it and not in the turn that pushes the screen.
+struct WeeklyShareSection: View {
+    let summary: WeeklyWrap.Summary
+    let program: Program
+
+    /// Off by default. A share card is the one surface in this app that leaves
+    /// the phone, and the figures on it are the user's to choose — so the
+    /// private ones are absent until asked for, which is the only default that
+    /// cannot leak something by being forgotten.
+    @State private var showBodyweight = false
+    /// The rendered card, re-made whenever the toggle changes.
+    ///
+    /// Held rather than computed in `body`: `ShareLink` needs its item up front,
+    /// and rendering a 540×960 composition on every layout pass to supply one
+    /// would re-rasterise the card every time the screen scrolls.
+    @State private var card: Image?
+    /// Which toggle state `card` was rendered for. Without this every visit
+    /// pays the 18 MB rasterise again for a card nothing asked to change.
+    @State private var renderedFor: Bool?
+
+    @Environment(\.displayScale) private var displayScale
+
+    var body: some View {
         VStack(alignment: .leading, spacing: OnyxSpace.s) {
             Toggle(isOn: $showBodyweight) {
                 VStack(alignment: .leading, spacing: 1) {
@@ -510,7 +384,7 @@ struct WeeklyWrapContent: View {
             if let card {
                 ShareLink(
                     item: card,
-                    preview: SharePreview(Self.title(summary), image: card)
+                    preview: SharePreview(WeeklyWrapContent.title(summary), image: card)
                 ) {
                     Label("Share this week", systemImage: "square.and.arrow.up")
                         .onyxType(.secondary).fontWeight(.semibold)

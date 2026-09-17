@@ -318,6 +318,58 @@ struct WorkoutWeekTests {
         #expect(await tab.pastSummary(weekStart: "2026-08-31") != nil)
     }
 
+    // MARK: - W4 · the anchor week is a past week
+
+    /// The founder's own store, as `PreviewCatalogue` seeds it: `onyx5`
+    /// started 2026-07-15, `plan_phases` opening on 2026-07-12, and a week
+    /// that ends on Saturday — `week_end_day = 6`, which `Week.startDay`
+    /// turns into a SUNDAY start. So `weekZeroStart` is 2026-07-12 and the
+    /// anchor week is a real, partial week with two sessions in it.
+    private func sundayStartStore() throws -> AppDatabase {
+        let database = try AppDatabase.inMemory(deviceId: "test")
+        PreviewCatalogue.seed(database, userId: Self.userId, today: "2026-09-09")
+        try database.editUserGoals(userId: Self.userId) { $0.weekEndDay = 6; $0.activePlan = "onyx5" }
+        return database
+    }
+
+    /// THE BUG (W4 · GOAL 1). Week 0 is the week the plan opened in and the
+    /// shelf never drew it: the walk stops at the first week that fails
+    /// `Schedule.isPlannable`, and it was testing the week it had just stepped
+    /// off rather than the one it was about to emit.
+    @Test("the anchor week itself is listed, labelled Week 0")
+    func weekZeroIsAPastWeek() async throws {
+        let database = try sundayStartStore()
+        // Wednesday and Friday of the anchor week — the two days the founder's
+        // plan actually opened on.
+        try seedSession(database, id: "w0-wed", date: "2026-07-15", kg: 100)
+        try seedSession(database, id: "w0-fri", date: "2026-07-17", kg: 100)
+
+        let tab = week(database, dayKey: "cb_a", today: "2026-09-09")
+        let weeks = await tab.library().weeks
+        let zero = weeks.first { $0.weekStart == "2026-07-12" }
+        #expect(zero != nil, "the anchor week draws no banner: \(weeks.map(\.weekStart))")
+        #expect(zero?.label == "Week 0")
+        #expect(zero?.sessions == 2)
+        // And it opens: a banner that lists but cannot expand is half a door.
+        #expect(await tab.pastSummary(weekStart: "2026-07-12") != nil)
+    }
+
+    /// The other half of the same decision. The PPL era ran March–July under a
+    /// different plan and stays out of Past Weeks — the walk stops BELOW the
+    /// anchor, it does not stop AT it.
+    @Test("the walk still stops below the anchor — the PPL era stays hidden")
+    func theEraBeforeTheAnchorStaysHidden() async throws {
+        let database = try sundayStartStore()
+        try seedSession(database, id: "w0-wed", date: "2026-07-15", kg: 100)
+        // The week before Week 0, and a PPL cut week two months back. Both are
+        // logged, both are real, and neither is this plan's to show.
+        try seedSession(database, id: "pre", date: "2026-07-08", kg: 100)
+        try seedSession(database, id: "ppl", date: "2026-05-13", kg: 100)
+
+        let weeks = await week(database, dayKey: "cb_a", today: "2026-09-09").library().weeks
+        #expect(weeks.allSatisfy { $0.weekStart >= "2026-07-12" })
+    }
+
     @Test("hiding a section survives a re-read, and costs the dashboard nothing")
     func customizeRoundTrips() async throws {
         let database = try mondayStartStore()

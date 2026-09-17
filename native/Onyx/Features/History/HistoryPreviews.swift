@@ -296,32 +296,48 @@ enum HistoryPreviews {
         case "train-week":
             PresentingWeek(today: "2026-09-03") { WeekOverrideSheet(week: $0) }
                 .environment(environment())
-        // ── W6: the wrap-up, and the card it shares ─────────────────────────
-        // Seeded rather than read: the shot's job is the LAYOUT — a week with a
-        // progression, a regression and a PR in it — and the engine behind it
-        // has its own unit suite. Building a fixture whose four planned days
-        // all happen to be logged would make this shot hostage to the seed.
+        // ── W6: the wrap-up. W4: the REPORT it became ───────────────────────
+        // The summary is seeded rather than read: the shot's job is the LAYOUT
+        // — a week with a progression, a regression and a PR in it — and the
+        // engine behind it has its own unit suite. Building a fixture whose
+        // four planned days all happen to be logged would make this shot
+        // hostage to the seed.
         //
-        // Presented as a REAL sheet since W1a, the same trick `train-week`
-        // uses. The wrap is a detent sheet now, and a shot of the view on its
-        // own photographs neither the 560 height it opens at nor the drag
-        // indicator that is the only cue there is more below — which is most of
-        // what this wave changed.
+        // Pushed rather than presented since W4, which is also why it is no
+        // longer wrapped in `PresentingWeek`: there is no sheet to photograph
+        // the 560 pt fold of, and a `NavigationStack` around the page is what
+        // every one of the four doors now puts it in.
+        //
+        // The page BELOW the band is read for real, off the preview store —
+        // see `WeeklyReportView.task`. `train-report` is the seeded twin, for
+        // the blocks a preview store may answer nothing for.
         case "train-wrap":
-            PresentingWeek(today: "2026-09-03") { _ in
-                WeeklyWrapView(summary: wrapSummary, program: wrapProgram)
-            }
-            .environment(environment())
-        // The dragged-up state. Not a sheet: a shot cannot perform the drag,
-        // and the harness's own detent override is the only way to reach the
-        // legend. What it photographs is the CONTENT at `.large`, which is the
-        // half that needed reviewing.
+            NavigationStack { WeeklyReportView(summary: wrapSummary, program: wrapProgram) }
+                .environment(environment())
+        // The half below the fold. It was the `.large` detent and it is the
+        // bottom of a scroll view now — a shot cannot scroll any more than it
+        // could drag, and `defaultScrollAnchor` is the same trick
+        // `train-customized` already uses to photograph the end of a page.
         case "train-wrap-large":
-            WeeklyWrapView(summary: wrapSummary, program: wrapProgram, detent: .large)
+            NavigationStack { WeeklyReportView(summary: wrapSummary, program: wrapProgram) }
+                .defaultScrollAnchor(.bottom)
                 .environment(environment())
         case "train-wrap-deload":
-            PresentingWeek(today: "2026-09-03") { _ in
-                WeeklyWrapView(summary: deloadSummary, program: wrapProgram)
+            NavigationStack { WeeklyReportView(summary: deloadSummary, program: wrapProgram) }
+                .environment(environment())
+        // ── W4: the report with its lower half GUARANTEED ───────────────────
+        // `train-wrap` reads the export payload out of the preview store, which
+        // is the honest end-to-end shot and is also why it cannot be the only
+        // one: a store that answers with no graded day, no record and no
+        // working set photographs four empty sections and looks exactly like a
+        // page whose builder is broken. This one hands `WeekReport` over
+        // directly, so the rails, the dots, the trophies and the roles are in
+        // frame whatever the seed does.
+        case "train-report":
+            NavigationStack {
+                WeeklyReportView(
+                    summary: wrapSummary, program: wrapProgram, seeded: previewReport
+                )
             }
             .environment(environment())
         case "share-card":
@@ -369,7 +385,7 @@ enum HistoryPreviews {
             .environment(environment())
         case "history-week-wrap-open":
             // Decision 8, photographed: a week that closed three weeks ago,
-            // opening the same reel the Train tab opens on a Sunday night.
+            // opening the same report the Train tab opens on a Sunday night.
             PresentingWrap(weekStart: "2026-08-16").environment(environment())
         case "history-week-live":
             // ── THE LOCKED EXPORT NEEDS A WEEK THAT HAS NOT CLOSED ──────────
@@ -745,6 +761,47 @@ private var wrapSummary: WeeklyWrap.Summary {
     )
 }
 
+/// The report's lower half as a fixture — the four blocks `WeeklyReportView`
+/// reads out of `WeeklyExportBuilder`, handed over directly.
+///
+/// The numbers are the same week `wrapSummary` describes and are consistent
+/// with it on purpose: 5 sessions of 5 planned is the 100 % Training rail, and
+/// the four hits of six graded days are the 67 % Nutrition one. A fixture whose
+/// rail disagreed with its own detail line would make every shot of this screen
+/// a puzzle about which half to believe.
+@MainActor
+private var previewReport: WeekReport {
+    let days = ["2026-08-30", "2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05"]
+    let verdicts: [AdherenceVerdict] = [.hit, .hit, .miss, .hit, .exception, .hit, .miss]
+    return WeekReport(
+        phaseKind: .cut,
+        eraTag: "Onyx Cut",
+        rangeLabel: "30 Aug – 5 Sep",
+        trainingPct: 100,
+        trainingDetail: "5 of 5 sessions · 42,180 kg · +1,240 kg vs last week",
+        nutritionPct: 66.7,
+        nutritionDetail: "4 of 6 graded days on target · 1 exception",
+        recoveryPct: 74,
+        recoveryDetail: "battery, mean of 7 nights",
+        adherence: zip(days, verdicts).map { date, verdict in
+            AdherenceDay(date: date, verdict: verdict, kcalPct: 98, proteinPct: 104, estimated: false)
+        },
+        waterMlPerDay: 2_640,
+        waterGoalMl: 3_000,
+        records: [
+            ExportPr(name: "Incline DB Press", weightKg: 42, reps: 11, axes: [.weight, .e1rm]),
+            ExportPr(name: "Seated Cable Row", weightKg: 40, reps: 12, axes: [.volume]),
+        ],
+        strongest: TopLifts.group(
+            [
+                .init(exercise: "Leg Press", kg: 170, reps: 10, rpe: 9),
+                .init(exercise: "Incline DB Press", kg: 42, reps: 11, rpe: 8),
+            ],
+            previous: [:]
+        )
+    )
+}
+
 private var wrapProgram: Program {
     PlanTemplates.program("onyx5") ?? Program(id: "", label: "Onyx 5", days: [])
 }
@@ -782,29 +839,43 @@ private var deloadSummary: WeeklyWrap.Summary {
 /// The `Summary` comes from `WorkoutWeek.wrap(_:userId:weekStart:)` — the exact
 /// call the chip makes — rather than from the hand-written `wrapSummary` the
 /// Train tab's shots use. That is the point of this one: it photographs the
-/// door end to end, from a month-old week's rows to the reel, and a shot script
-/// cannot tap a chip.
+/// door end to end, from a month-old week's rows to the report, and a shot
+/// script cannot tap a chip.
+///
+/// W4: a PUSH. The destination is driven by `item:` and the item lands when the
+/// replay does, which is also what makes it correct rather than convenient — a
+/// `isPresented: true` declared up front would push an empty page for however
+/// long the PR replay takes and photograph whichever of the two won.
 private struct PresentingWrap: View {
     @Environment(AppEnvironment.self) private var environment
     let weekStart: String
 
-    @State private var summary: WeeklyWrap.Summary?
-    @State private var program = Program(id: "", label: "", days: [])
-    @State private var shown = true
+    private struct Door: Hashable {
+        let summary: WeeklyWrap.Summary
+        let program: Program
+        static func == (lhs: Self, rhs: Self) -> Bool { lhs.summary.weekStart == rhs.summary.weekStart }
+        func hash(into hasher: inout Hasher) { hasher.combine(summary.weekStart) }
+    }
+
+    @State private var door: Door?
 
     var body: some View {
         NavigationStack {
             WeekDaysView(window: WeekWindow(containing: weekStart, startDay: 0))
-        }
-        .sheet(isPresented: $shown) {
-            if let summary { WeeklyWrapView(summary: summary, program: program) }
+                .navigationDestination(item: $door) { door in
+                    WeeklyReportView(summary: door.summary, program: door.program)
+                }
         }
         .task {
             let database = environment.database
             let userId = database.localUserId()
-            summary = WorkoutWeek.wrap(database, userId: userId, weekStart: weekStart)
-            program = (try? database.scheduleContext(userId: userId, today: weekStart))?
-                .activeProgram ?? program
+            guard let summary = WorkoutWeek.wrap(database, userId: userId, weekStart: weekStart)
+            else { return }
+            door = Door(
+                summary: summary,
+                program: (try? database.scheduleContext(userId: userId, today: weekStart))?
+                    .activeProgram ?? Program(id: "", label: "", days: [])
+            )
         }
     }
 }

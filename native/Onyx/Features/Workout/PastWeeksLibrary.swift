@@ -24,11 +24,12 @@ import OnyxData
 /// rest of the app already opens it into — from History, from the This-week
 /// tile, and now from here. This screen adds no summary of its own.
 ///
-/// ── AND WHY IT IS A SHEET AND NOT A PUSHED SCREEN ───────────────────────────
-/// `WeeklyWrapView`'s own header makes the argument and it holds one level up:
-/// this is a thing you open, glance through and put down, and the Train tab is
-/// the screen you came to use. A push would cost a back tap to leave and bury
-/// the tab; a `.large` sheet leaves it visible behind the drag indicator.
+/// ── AND WHY THE SHELF IS STILL A SHEET, THOUGH THE WRAP-UP IS NOT (W4) ──────
+/// The two are not the same decision. A SHELF is a thing you open, scan and put
+/// down — you come to it to find one week — and a `.large` sheet says so while
+/// leaving the tab visible behind the drag indicator. The week you find is a
+/// place, so it pushes, into this sheet's own `NavigationStack`. The zoom out
+/// of a banner was built for a push in the first place and is unchanged.
 struct PastWeeksLibrary: View {
     let week: WorkoutWeek
     /// The programme's own deck, for the wrap-up a banner opens.
@@ -61,13 +62,20 @@ struct PastWeeksLibrary: View {
     /// sheets in the queue.
     @State private var loading: String?
 
-    /// A summary the wrap-up sheet can be presented BY — the same box, for the
-    /// same reason, as `WorkoutTabView.WrapDoor`: `WeeklyWrap.Summary` is an
-    /// OnyxCore value and making it `Identifiable` to present one sheet would
-    /// reach every caller of that type.
-    struct Door: Identifiable {
+    /// Asked directly, never inferred from a width (W1b): the one line the
+    /// totals take is a DEFAULT-size decision, and at an accessibility size the
+    /// tile grows rather than truncating a tonnage.
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// A summary the report can be pushed BY — the same box, for the same
+    /// reason, as `WorkoutTabView.WrapDoor`: `WeeklyWrap.Summary` is an
+    /// OnyxCore value and conforming it to present one destination would reach
+    /// every caller of that type. `Hashable`, which is what
+    /// `navigationDestination(item:)` wants.
+    struct Door: Hashable {
         let summary: WeeklyWrap.Summary
-        var id: String { summary.weekStart }
+        static func == (lhs: Self, rhs: Self) -> Bool { lhs.summary.weekStart == rhs.summary.weekStart }
+        func hash(into hasher: inout Hasher) { hasher.combine(summary.weekStart) }
     }
 
     var body: some View {
@@ -78,7 +86,7 @@ struct PastWeeksLibrary: View {
                         if library.weeks.isEmpty {
                             empty
                         } else {
-                            ForEach(blocks(library)) { block in
+                            ForEach(Self.blocks(library)) { block in
                                 section(block)
                             }
                         }
@@ -106,23 +114,26 @@ struct PastWeeksLibrary: View {
                     Button("Done") { dismiss() }
                 }
             }
+            // INSIDE the stack, which is the whole difference a push makes: a
+            // `navigationDestination` declared on the sheet — outside the
+            // `NavigationStack` it is meant to drive — registers against
+            // nothing and the tap does silently nothing at all.
+            .navigationDestination(item: $opened) { door in
+                // No name passed. W1 handed the banner's own label down because
+                // the sheet could not work one out; the SUMMARY carries it now
+                // (§W3), which is what makes the other three doors into this
+                // report agree with the shelf rather than only this one.
+                WeeklyReportView(summary: door.summary, program: program)
+                    // What the zoom was always for. `matchedTransitionSource`
+                    // + `.navigationTransition(.zoom)` is a NAVIGATION
+                    // transition; W2 (next-gen) got it to work out of a
+                    // `.sheet(item:)` through SwiftUI's one presentation
+                    // bridge, and this is the arrangement it was designed for.
+                    .navigationTransition(.zoom(sourceID: door.summary.weekStart, in: zoom))
+            }
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        // The wrap-up owns its own stack and its own detents (see
-        // `WeeklyWrapView`), so this is the whole of the presentation — the
-        // same call `WorkoutTabView` makes from the This-week tile.
-        .sheet(item: $opened) { door in
-            // No name passed. W1 handed the banner's own label down because
-            // the sheet could not work one out; the SUMMARY carries it now
-            // (§W3), which is what makes the other three doors into this sheet
-            // agree with the shelf rather than only this one.
-            WeeklyWrapView(summary: door.summary, program: program)
-            // The sheet and the cover go through one presentation bridge in
-            // SwiftUI, which is why a zoom works out of `.sheet(item:)` at all
-            // — the same reason the logger's full-screen cover can take one.
-            .navigationTransition(.zoom(sourceID: door.summary.weekStart, in: zoom))
-        }
         .task {
             if library == nil { library = await week.library() }
             guard let seededOpen, opened == nil,
@@ -147,7 +158,13 @@ struct PastWeeksLibrary: View {
     ///
     /// `kind` is optional for the one bucket that has no block — see
     /// `blocks(_:)`.
-    private struct Block: Identifiable {
+    ///
+    /// Internal and not private, and `blocks(_:)` with it: this is the function
+    /// that decides what the shelf DRAWS — which weeks appear at all and which
+    /// hue each one wears — and no screenshot can prove a week is missing from
+    /// a list it was never in. `PastWeeksLibraryFixtureTests` asserts against
+    /// it directly (W4).
+    struct Block: Identifiable {
         let id: String
         let eraTag: String
         let name: String
@@ -169,7 +186,7 @@ struct PastWeeksLibrary: View {
     /// is the spine and a logged week is looked up in it, so a week the plan
     /// PRESCRIBED but nothing was logged in draws no banner. A shelf of empty
     /// banners is a calendar, and the app has one.
-    private func blocks(_ library: WorkoutWeek.Library) -> [Block] {
+    nonisolated static func blocks(_ library: WorkoutWeek.Library) -> [Block] {
         let logged = Dictionary(library.weeks.map { ($0.weekStart, $0) }, uniquingKeysWith: { a, _ in a })
         var out: [Block] = []
         var at: [String: Int] = [:]
@@ -239,7 +256,7 @@ struct PastWeeksLibrary: View {
             Shoulders(.firstTextBaseline) {
                 HStack(spacing: OnyxSpace.xs) {
                     Circle()
-                        .fill(tint(block.kind))
+                        .fill(Self.tint(block.kind))
                         .frame(width: 7, height: 7)
                         .accessibilityHidden(true)
                     Text(block.eraTag.uppercased())
@@ -272,19 +289,39 @@ struct PastWeeksLibrary: View {
     // MARK: - One week
 
     /// A week as the session masthead draws a session (`SessionHeaderCard`):
-    /// the hero label with its dates on the far shoulder, the capsules for what
-    /// it trained, the totals under them, and a wash at the head of the tile.
+    /// the label with its dates on the far shoulder, the capsules for what it
+    /// trained, the totals under them, and a wash at the head of the tile.
     ///
     /// The wash takes the PHASE's colour rather than a split's day hue, which
     /// is the whole reason `Color.onyx.phase(_ kind:)` exists — a block reads
     /// as one stretch of the plan because eight banners in it share an ink.
+    ///
+    /// ── 137 pt TO UNDER 88, AND WHERE THE 49 CAME FROM (W4) ─────────────────
+    /// A shelf is a list you SCAN, and at ~137 pt a phone held at arm's length
+    /// showed two and a half weeks of a thirteen-week block. Four cuts, none of
+    /// them a figure removed:
+    ///
+    ///  1. `.display`, not `.hero`. The rule W2 (refinement) wrote down is one
+    ///     hero per screen, and a shelf of banners had one per ROW — eight
+    ///     28 pt numerals arguing about which of them the screen was about. A
+    ///     card's own title is exactly what `.display` is for, and it is 8 pt
+    ///     shorter.
+    ///  2. The totals are `.caption` on ONE line. Two lines were bought for
+    ///     AX5, where `Shoulders` already stacks and the whole tile is allowed
+    ///     to grow — a default-size banner paid 20 pt for a break it never took.
+    ///  3. `xs` between the three rows rather than `s`. They are one thought.
+    ///  4. `m` horizontal and `s` vertical padding rather than `l` all round.
+    ///
+    /// The tag row is NOT folded onto the totals line: a muscle capsule cannot
+    /// share a row (W2), and a `FlowRow` beside a `Spacer` wraps to one tag per
+    /// line at the first long landmark name.
     private func banner(_ past: WorkoutWeek.PastWeek, kind: PhaseKind?) -> some View {
-        let hue = tint(kind)
+        let hue = Self.tint(kind)
         return Button { open(past) } label: {
-            VStack(alignment: .leading, spacing: OnyxSpace.s) {
+            VStack(alignment: .leading, spacing: OnyxSpace.xs) {
                 Shoulders(.firstTextBaseline) {
                     Text(past.label)
-                        .onyxType(.hero)
+                        .onyxType(.display)
                         .foregroundStyle(hue)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
@@ -301,17 +338,17 @@ struct PastWeeksLibrary: View {
                 // rounded to `18.2 t` over a wrap-up saying `18,240 kg` is two
                 // numbers for one week.
                 Text(totals(past))
-                    .onyxType(.secondary).onyxNumeral()
+                    .onyxType(.caption).onyxNumeral()
                     .foregroundStyle(Color.onyx.textSecondary)
-                    // Two lines, the same allowance `SessionHeaderCard` gives
-                    // its own totals: at AX5 `1 session · 5,350 kg` does not
-                    // fit one line at any scale factor a number may be read at,
-                    // and it truncated to `5,350…` — a tonnage with its last
-                    // digits missing, which is worse than a second line.
-                    .lineLimit(2)
+                    // One line at every size that is not an accessibility size,
+                    // where the tile is free to grow and a truncated tonnage —
+                    // `5,350…`, a figure with its last digits missing — is the
+                    // one thing this row must never print.
+                    .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
                     .minimumScaleFactor(0.8)
             }
-            .padding(OnyxSpace.l)
+            .padding(.horizontal, OnyxSpace.m)
+            .padding(.vertical, OnyxSpace.s)
             .frame(maxWidth: .infinity, alignment: .leading)
             // INSIDE the glass, always: the tile clips the wash to its own
             // corner radius, and a wash applied outside that clip paints a
@@ -358,7 +395,14 @@ struct PastWeeksLibrary: View {
 
     // MARK: - Words
 
-    private func tint(_ kind: PhaseKind?) -> Color {
+    /// The block's ink: the phase's own token, or the one grey a week no block
+    /// claims can honestly wear.
+    ///
+    /// `nonisolated static` and internal for the reason `blocks(_:)` is — a
+    /// screenshot of a shelf where every block happens to be a cut cannot show
+    /// that a deload would be drawn in a different hue, and that is the whole
+    /// of W4's GOAL 2.
+    nonisolated static func tint(_ kind: PhaseKind?) -> Color {
         kind.map { Color.onyx.phase($0) } ?? Color.onyx.textTertiary
     }
 
@@ -377,7 +421,7 @@ struct PastWeeksLibrary: View {
     /// `19 Jul – 17 Oct`. Both ends carry their month: a block runs for weeks
     /// and almost always crosses one, so the abbreviation `WeekWindow` drops
     /// inside a single week would be wrong here more often than not.
-    private func range(_ from: String?, _ to: String?) -> String {
+    nonisolated private static func range(_ from: String?, _ to: String?) -> String {
         let ends = [from, to].compactMap { iso -> String? in
             guard let iso, let date = LogicalDay.date(fromISO: iso) else { return nil }
             return date.formatted(.dateTime.day().month(.abbreviated))

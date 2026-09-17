@@ -44,6 +44,48 @@ _Nothing yet._
 
 ---
 
+## [4.0.0] — 2026-09-17 · The Week Is A Place
+
+**MAJOR because a screen was removed.** The weekly wrap-up sheet is gone. Every
+door that opened it now pushes a full-page **Weekly Report** instead, and the
+"Where the work went" ring has been deleted rather than moved.
+
+### Added
+- **The Weekly Report — a page, not a sheet.** Open a week from the Train tab's
+  This-week tile, from the Past Weeks shelf, from a week's **Wrapped** chip in
+  History, or from the Today tab's "week is complete" banner: all four now push
+  the same screen, with a back button and no fold. It opens on a **phase band** —
+  the week's numeral over a full-bleed wash in its block's own colour, with the
+  block's tag and the dates beside it — and then three **rails**: Training,
+  Nutrition, Recovery, each a percentage with the figures behind it written
+  underneath.
+- **The report says what the week ate, drank, lifted and weighed.** Under the
+  reel that was the sheet's whole content you now get the seven days graded hit
+  / miss / exception against the calorie rung that was in force **on each date**;
+  the week's water as a daily mean against your goal; every personal record the
+  week set, sorted by exercise; the week's Hardest, Heaviest and best estimated
+  1RM; and the weigh-in with its change across the week. All of it comes from
+  the one call the weekly export already makes, so the page and the exported
+  document cannot disagree about the same week.
+
+### Changed
+- **Past Weeks banners are a third shorter and coloured by phase.** A banner was
+  ~124 pt; it is now under 88 pt at the default text size, which is five weeks
+  on a screen instead of three. The label is a card title rather than a second
+  hero, the totals are one line, and the tile's wash takes its block's colour —
+  cut, bulk, peak and deload each have their own.
+
+### Removed
+- **The wrap-up sheet.** `WeeklyWrapView`, its 560 pt detent and its drag
+  indicator. The reel it carried is unchanged and is now the middle of the
+  report page.
+- **The "Where the work went" ring.** `WeeklyMuscleRing` is deleted. Where the
+  week's work landed is the Training rail at the top of the page and the
+  movement breakdown below it; a third answer drawn as a donut of sixteen
+  landmarks was one too many.
+
+---
+
 ## [3.24.0] — 2026-09-17 · Nine Moods, And A Form That Arrives Full
 
 ### Added

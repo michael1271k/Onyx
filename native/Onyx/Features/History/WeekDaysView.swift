@@ -56,9 +56,13 @@ struct WeekDaysView: View {
         static func == (lhs: Self, rhs: Self) -> Bool { lhs.report.id == rhs.report.id }
         func hash(into hasher: inout Hasher) { hasher.combine(report.id) }
     }
-    private struct WrapDoor: Identifiable {
+    /// `Hashable` since W4, for the same reason `ReportDoor` above it is:
+    /// `navigationDestination(item:)` wants it, and the week start already
+    /// names a week uniquely.
+    private struct WrapDoor: Hashable {
         let summary: WeeklyWrap.Summary
-        var id: String { summary.weekStart }
+        static func == (lhs: Self, rhs: Self) -> Bool { lhs.summary.weekStart == rhs.summary.weekStart }
+        func hash(into hasher: inout Hasher) { hasher.combine(summary.weekStart) }
     }
 
     @State private var openReport: ReportDoor?
@@ -155,8 +159,11 @@ struct WeekDaysView: View {
         .navigationDestination(item: $openReport) { door in
             ReportReaderView(report: door.report, week: reportWeek)
         }
-        .sheet(item: $wrapDoor) { door in
-            WeeklyWrapView(summary: door.summary, program: program)
+        // A PUSH since W4, and still hanging off the LIST for the reason
+        // above: the chip that opens it lives in a row, and a `.plain` List
+        // tears rows down.
+        .navigationDestination(item: $wrapDoor) { door in
+            WeeklyReportView(summary: door.summary, program: program)
         }
         .sheet(isPresented: $writingReport) {
             // Re-read on save, or the chip that just wrote a report goes on
