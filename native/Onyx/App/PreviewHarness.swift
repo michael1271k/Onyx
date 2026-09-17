@@ -232,11 +232,17 @@ enum PreviewHarness {
     /// run's "default" shot would come out in whatever colour the previous one
     /// picked. A launch argument dies with the process.
     ///
-    /// `--onyx-theme Ember` names a preset; `--onyx-theme 6B78F0,E3A650` gives
-    /// the two hexes directly, which is how a CUSTOM pair is photographed
+    /// `--onyx-theme Obsidian` names a preset; `--onyx-theme 6B78F0,E3A650`
+    /// gives the two hexes directly, which is how a CUSTOM pair is photographed
     /// without adding it to `OnyxTheme.presets`. Anything unrecognised leaves
     /// the default in place, so a typo photographs the default rather than
-    /// failing the run.
+    /// failing the run — which is why the name here has to track the table: it
+    /// said `Ember` until W3 replaced the presets, and a shot run following
+    /// that would have come out in Ion under nine different filenames.
+    ///
+    /// The hex form takes the two accents only, so it photographs a custom PAIR
+    /// at the NEUTRAL mood. A custom chroma/lift is reachable only through a
+    /// preset; nothing has needed to photograph one yet.
     @MainActor
     static func applyRequestedTheme() {
         let arguments = ProcessInfo.processInfo.arguments

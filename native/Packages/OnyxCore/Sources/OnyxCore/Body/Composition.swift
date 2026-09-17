@@ -7,10 +7,18 @@ import Foundation
 // as weight × %. Fat-free mass = weight − fat mass. Protein: its own % when
 // given, else backed out of the fat-free compartment (FFM − water − bone).
 //
-// NO TAPE MEASUREMENTS, EVER: the waist-to-hip ratio Onyx tracks is the
-// scale's own single float, entered, never derived. SKELETAL MUSCLE MASS IS
-// NOT DERIVED AND CANNOT BE: weight × muscle% is lean SOFT TISSUE (~50 kg),
-// skeletal muscle (~27 kg) is a separate scale reading.
+// ONE TAPE MEASUREMENT, AND IT IS NOT DERIVED FROM ANYTHING. This comment read
+// "NO TAPE MEASUREMENTS, EVER" until 2026-09-17 (W3), when the founder decided
+// the waist earns a column — `daily_logs.waist_cm`, beside the weight it was
+// taken with. What has NOT changed is why the rule existed: nothing here
+// computes a girth, infers one, or turns one into a body-fat estimate. The
+// waist is stored and shown; the arithmetic in this file never reads it. The
+// waist-to-hip ratio stays the scale's own single float, entered, never
+// derived — and in particular it is NOT recomputed from `waist_cm`, because
+// there is no hip measurement and there is not going to be one.
+//
+// SKELETAL MUSCLE MASS IS NOT DERIVED AND CANNOT BE: weight × muscle% is lean
+// SOFT TISSUE (~50 kg), skeletal muscle (~27 kg) is a separate scale reading.
 // ─────────────────────────────────────────────────────────────────────────────
 
 public struct BodyCompInput: Codable, Equatable, Sendable {

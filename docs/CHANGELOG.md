@@ -44,6 +44,74 @@ _Nothing yet._
 
 ---
 
+## [3.24.0] — 2026-09-17 · Nine Moods, And A Form That Arrives Full
+
+### Added
+- **Appearance — a mood, not just a hue.** A theme was two colours and every
+  other colour in the app was one of them turned: lightness and chroma were
+  pinned to Ion's, so Obsidian and Aurora were the same palette at different
+  angles. Two sliders under the pickers now set **Saturation** and **Lift**, and
+  they reach all twenty-four derived colours — the four domain ramps, the washes
+  and the sixteen muscles. The two accents you pick stay exactly as you picked
+  them, so the swatch never disagrees with the screen.
+- **Eight new themes — nine in all.** Ion, Obsidian, Solstice, Meridian, Basalt,
+  Aurora, Terracotta, Vesper, Halcyon. Every pair was solved in OKLCH inside the
+  contrast guard rather than picked by eye, the nine primaries are at least 35°
+  apart around the hue circle, and each carries its own mood: Obsidian and
+  Basalt deep and grey, Aurora and Halcyon lifted and vivid. Widgets and the
+  watch follow on their next refresh.
+- **The waist has a column.** `daily_logs.waist_cm`, entered in the InBody sheet
+  beside the weight it was taken with, synced like every other figure and
+  carried forward into the next reading. Three comments that said this would
+  never happen have been replaced with the decision and its date rather than
+  quietly deleted — there is still no table of girths, and no hips, thighs or
+  arms.
+
+### Changed
+- **The InBody sheet is a hero and four accordions.** Body fat is the headline;
+  weight and skeletal muscle sit under it, each gaining a live ▲/▼ against your
+  last reading as you type. Below it the scale's own four registers — Mass,
+  Composition, Water & protein, Minerals & derived — each collapsible and each
+  saying how many of its fields are filled while it is shut. The five derived
+  masses are no longer a section at the bottom: each now sits one row under the
+  percentage it was computed from, and to one decimal, so a three-hundred-gram
+  move in fat mass is visible instead of rounded away.
+- **The form arrives full.** "Fill from last time" and "Fill from Apple Health"
+  are gone. Every empty field is seeded from your previous reading, with Apple
+  Health over the top of it where Health has something, and a caption under each
+  field names the source — **Health**, **Last** or **You**. Fine-tuning is
+  typing over a filled field.
+- **Save still waits for you.** On a day that already holds a reading, opening
+  the sheet and closing it writes nothing, however much arrived pre-filled. On a
+  day with no reading yet, the carried figures are offered for saving — because
+  a weigh-in that needed no corrections still has to be recorded.
+
+### Fixed
+- A theme saved before this release keeps it. The stored blob has two keys and
+  the spec now has four; a missing key reads as the neutral mood instead of
+  failing to decode and silently resetting the app to Ion.
+- The preset chips name their themes. The grid was built for five-character
+  names and "Terracotta" is ten — it is two columns now, and one at the
+  accessibility sizes, rather than a row of truncated words.
+- The InBody hero at the largest accessibility size: "Skeletal muscle" is no
+  longer cut to "SKELETAL MUSC…", and the blank line reserved to align two
+  side-by-side figures no longer sits in the middle of the stacked card.
+- A saved weigh-in can no longer gain body-composition masses computed from last
+  week's percentages. Correcting one field on a day that holds a partial reading
+  writes that field and the masses it feeds, and nothing else.
+- No theme can put a number under the 4.5:1 contrast floor. The lift used to
+  reach the ramp ENDS unguarded, and `Lean soft tissue` on the composition
+  widgets is drawn in one of them.
+
+### Note for anyone on an older theme
+Ember, Moss, Rose, Gold and Sea are no longer in the preset list. **Your colours
+are unchanged** — the app keeps the exact two hues you were on — but Settings
+now names the theme "Custom" and no chip is lit, because a theme is identified
+by its colours and those five are no longer in the table. Pick any of the nine
+to adopt a name again.
+
+---
+
 ## [3.23.0] — 2026-09-17 · The Trophy Lights On The First Tick
 
 ### Fixed

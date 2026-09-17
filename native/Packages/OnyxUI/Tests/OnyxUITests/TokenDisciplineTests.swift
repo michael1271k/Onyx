@@ -8,7 +8,7 @@ import Testing
 /// swap repaints the app — except wherever someone wrote the hex by hand. Such
 /// a line does not fail to compile, does not fail a snapshot (the default spec
 /// renders it identically) and only shows up as the one tile that stayed blue
-/// after the user picked Ember. The cheapest place to catch it is the text.
+/// after the user picked Obsidian. The cheapest place to catch it is the text.
 ///
 /// The test walks `native/` from `#filePath` so it needs no build setting and
 /// no path in `project.yml`, and it runs in the OnyxUI suite because that is

@@ -85,6 +85,60 @@ struct RowPushTests {
         #expect(MirrorCatalogue.byName.count == MirrorCatalogue.tables.count)
     }
 
+    // MARK: The waist (W3)
+
+    @Test("a waist lands on the day, survives the mirror and rides the push")
+    func waistRoundTrips() async throws {
+        let db = try store()
+        let date = "2026-09-17"
+        try db.saveBodyMetrics(userId: user, date: date) {
+            $0.weightKg = 64.8
+            $0.waistCm = 81.5
+        }
+
+        // ── THE MIRROR ──────────────────────────────────────────────────────
+        // `MirrorModels.swift` is GENERATED from `native/schema/supabase.json`,
+        // so this is really a check that the column was added to the fixture and
+        // the generator run — a hand-edited model would pass a compile and still
+        // fail here on a fresh store, which creates its tables from that source.
+        let log = try await db.writer.read { try DailyLogRow.fetchOne($0) }
+        #expect(log?.waistCm == 81.5)
+
+        // It is the DAY's column and not the ledger's: `body_composition` is the
+        // HealthKit twin and HealthKit has no waist type.
+        let ledger = try await db.writer.read { try BodyCompositionRow.fetchOne($0) }
+        #expect(ledger?.weightKg == 64.8)
+
+        // ── AND THE PUSH ────────────────────────────────────────────────────
+        let push = RecordingPush()
+        _ = try await engine(db, push).drain()
+        let sent = await push.sent
+        let day = try #require(sent.first { $0.table == "daily_logs" })
+        #expect(day.json.contains("\"waist_cm\":81.5"), "\(day.json)")
+
+        // A day with NO waist must not send the key at all — `encodeIfPresent`
+        // is what keeps a merge from blanking a column, and a `"waist_cm":null`
+        // in the body would erase a figure another device had written.
+        let other = try store()
+        try other.saveBodyMetrics(userId: user, date: date) { $0.weightKg = 64.8 }
+        let quiet = RecordingPush()
+        _ = try await engine(other, quiet).drain()
+        let quietSent = await quiet.sent
+        let quietDay = try #require(quietSent.first { $0.table == "daily_logs" })
+        #expect(!quietDay.json.contains("waist_cm"), "\(quietDay.json)")
+    }
+
+    @Test("a day whose only reading is a waist still counts as a reading")
+    func aWaistAloneIsAReading() throws {
+        let db = try store()
+        try db.saveBodyMetrics(userId: user, date: "2026-09-10") { $0.waistCm = 82.0 }
+        // `latestBodyReading` is what pre-fills the InBody sheet. Before W3 its
+        // `IS NOT NULL` list did not name this column, so a waist-only day was
+        // invisible to the carry-forward and the next weigh-in opened blank.
+        let carried = try db.latestBodyReading(userId: user, before: "2026-09-17")
+        #expect(carried?.waistCm == 82.0)
+    }
+
     // MARK: Draining
 
     @Test("the row is read at drain time, never carried in the payload")

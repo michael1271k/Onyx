@@ -60,6 +60,7 @@ public struct DailyLogRow: Codable, FetchableRecord, PersistableRecord, Sendable
     public var weighinSkipReason: String?
     public var skeletalMuscleMassKg: Double?
     public var estimatedWaistToHipRatio: Double?
+    public var waistCm: Double?
     public var nutritionException: String?
     public var nutritionEstimated: Bool
     public var sleepOnsetTrouble: Bool
@@ -113,6 +114,7 @@ public struct DailyLogRow: Codable, FetchableRecord, PersistableRecord, Sendable
         case weighinSkipReason = "weighin_skip_reason"
         case skeletalMuscleMassKg = "skeletal_muscle_mass_kg"
         case estimatedWaistToHipRatio = "estimated_waist_to_hip_ratio"
+        case waistCm = "waist_cm"
         case nutritionException = "nutrition_exception"
         case nutritionEstimated = "nutrition_estimated"
         case sleepOnsetTrouble = "sleep_onset_trouble"
@@ -167,6 +169,7 @@ public struct DailyLogRow: Codable, FetchableRecord, PersistableRecord, Sendable
         weighinSkipReason: String? = nil,
         skeletalMuscleMassKg: Double? = nil,
         estimatedWaistToHipRatio: Double? = nil,
+        waistCm: Double? = nil,
         nutritionException: String? = nil,
         nutritionEstimated: Bool,
         sleepOnsetTrouble: Bool,
@@ -219,6 +222,7 @@ public struct DailyLogRow: Codable, FetchableRecord, PersistableRecord, Sendable
         self.weighinSkipReason = weighinSkipReason
         self.skeletalMuscleMassKg = skeletalMuscleMassKg
         self.estimatedWaistToHipRatio = estimatedWaistToHipRatio
+        self.waistCm = waistCm
         self.nutritionException = nutritionException
         self.nutritionEstimated = nutritionEstimated
         self.sleepOnsetTrouble = sleepOnsetTrouble
@@ -1904,6 +1908,7 @@ extension AppDatabase {
                 t.column("weighin_skip_reason", .text)
                 t.column("skeletal_muscle_mass_kg", .double)
                 t.column("estimated_waist_to_hip_ratio", .double)
+                t.column("waist_cm", .double)
                 t.column("nutrition_exception", .text)
                 t.column("nutrition_estimated", .boolean).notNull()
                 t.column("sleep_onset_trouble", .boolean).notNull()

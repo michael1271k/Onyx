@@ -1262,6 +1262,30 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // ── v30 ─────────────────────────────────────────────────────────────
+        // The waist, on the day it was measured (W3, 2026-09-17).
+        //
+        // ── AND YES, THIS IS THE THING THE SCHEMA SAID WOULD NEVER HAPPEN ───
+        // `native/schema/supabase.json` has said since it was written that Onyx
+        // does not do tape measurements, because a `body_measurements` TABLE is
+        // a screen of girths and that has been deleted from this product twice.
+        // The founder's W3 decision narrows the rule rather than reversing it:
+        // the ONE figure the athlete actually takes gets a column beside the
+        // weight it was taken with. There is still no table, and therefore still
+        // nowhere for hips, thighs or arms to land.
+        //
+        // NULLABLE with no default, the `sleep_inaccurate` rule (v20). Unlike
+        // v20 and v22 the Postgres half is ALREADY pasted — `daily_logs.waist_cm`
+        // was introspected live on 2026-09-17 as `numeric`, nullable, no default
+        // — so a push carries the column from the first save.
+        migrator.registerMigration("v30.waistCm") { db in
+            let existing = Set(try db.columns(in: "daily_logs").map(\.name))
+            guard !existing.contains("waist_cm") else { return }
+            try db.alter(table: "daily_logs") { t in
+                t.add(column: "waist_cm", .double)
+            }
+        }
+
         return migrator
     }
 }

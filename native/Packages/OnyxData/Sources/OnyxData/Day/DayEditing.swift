@@ -80,8 +80,14 @@ public extension AppDatabase {
     /// is `NOT NULL` server-side, so a weightless day genuinely cannot open one
     /// and stays in `daily_logs` until a weight lands.
     ///
-    /// No tape measurements. There is no waist or hip column here and there
-    /// will not be one; the W:H ratio is one float the scale reports.
+    /// ONE tape measurement. This said "there is no waist or hip column here and
+    /// there will not be one" until 2026-09-17 (W3); `daily_logs.waist_cm` now
+    /// exists. No HIP column, though, so the W:H ratio is still one float the
+    /// scale reports and is never recomputed from the waist.
+    ///
+    /// The waist rides the day row only. The `body_composition` ledger below is
+    /// the HealthKit twin and HealthKit has no waist type, so mirroring it there
+    /// would invent a column the other writer could never fill.
     func saveBodyMetrics(
         userId: String, date: String, now: Date = Date(),
         _ change: @Sendable (inout DailyLogRow) -> Void
@@ -158,6 +164,7 @@ public extension AppDatabase {
                     OR water_percent IS NOT NULL OR protein_percent IS NOT NULL OR bone_mineral IS NOT NULL
                     OR visceral_fat IS NOT NULL OR bmr IS NOT NULL OR bmi IS NOT NULL
                     OR skeletal_muscle_mass_kg IS NOT NULL OR estimated_waist_to_hip_ratio IS NOT NULL
+                    OR waist_cm IS NOT NULL
                     """)
                 .order(Column("date").desc)
                 .fetchOne(db)
