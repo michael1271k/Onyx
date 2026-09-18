@@ -47,6 +47,11 @@ final class DayModel {
     private(set) var overrides: [String: String] = [:]
     private(set) var layout: DayLayout = [:]
     private(set) var customs: [CustomSupplementRow] = []
+    /// The six squares in the reader's order (W9), off the same
+    /// `dashboard_layouts` row the Today tab and the Train tab share.
+    private(set) var pulseLayout: PulseLayout = .default
+    /// Jiggle mode for the squares. Taps stop opening sheets; drags reorder.
+    var editingSquares = false
 
     // ── Per date ────────────────────────────────────────────────────────────
     private(set) var log: DailyLogRow?
@@ -82,6 +87,22 @@ final class DayModel {
         self.userId = userId
         self.date = min(date, LogicalDay.today())
         self.environment = environment
+    }
+
+    // MARK: - The squares' order (W9)
+
+    /// `square` dropped onto `target`. Applied locally first so the grid moves
+    /// under the finger, then written through the store, which carries every
+    /// other key of the shared row through untouched.
+    func moveSquare(_ square: PulseSquare, to target: PulseSquare) {
+        let next = pulseLayout.moving(square, to: target)
+        guard next != pulseLayout else { return }
+        pulseLayout = next
+        do {
+            try database.savePulseLayout(userId: userId, next)
+        } catch {
+            report(error)
+        }
     }
 
     // MARK: - Date
@@ -127,6 +148,18 @@ final class DayModel {
         userTasks = [
             watch(database.scheduleOverridesStream(userId: userId), into: \.overrides),
             watch(database.customSupplementsStream(userId: userId), into: \.customs),
+            // The row echoes a save back, so a drag on this device and a drag
+            // on another land the same way — as a yield.
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    for try await stored in database.dashboardLayoutStream(userId: userId) {
+                        pulseLayout = stored?.pulse ?? .default
+                    }
+                } catch {
+                    report(error)
+                }
+            },
         ]
         restartDateStreams()
         do {

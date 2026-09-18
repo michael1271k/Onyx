@@ -29,7 +29,7 @@ import OnyxData
 /// eight are drawn.
 struct VitalsSection: View {
     let model: DayModel
-    /// `DayScreen` owns the sheet — see `StressLogCard`.
+    /// `DayScreen` owns the sheet — see `PulseSquareGrid`.
     let onSleep: () -> Void
 
     private var window: DayModel.Window { model.window }

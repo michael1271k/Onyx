@@ -81,6 +81,35 @@ public extension AppDatabase {
             )
         }
     }
+
+    /// The Pulse squares' order, out of the same row (W9). A plain read for the
+    /// caller that wants one; `DayModel` streams `dashboardLayoutStream` and
+    /// reads `StoredDashboardLayout.pulse` off each yield instead.
+    func pulseLayout(userId: String) -> PulseLayout {
+        let row = try? read { db in
+            try DashboardLayoutRow.filter(Column("user_id") == userId).fetchOne(db)
+        }
+        return Dashboard.pulseLayout(from: row.map(StoredDashboardLayout.init)?.object)
+    }
+
+    /// Write the Pulse order, keeping both dashboard surfaces AND the train
+    /// key, and queue the row. Key for key the mirror of `saveTrainLayout`.
+    func savePulseLayout(userId: String, _ layout: PulseLayout, now: Date = Date()) throws {
+        try writer.write { db in
+            let existing = try DashboardLayoutRow.filter(Column("user_id") == userId).fetchOne(db)
+            let payload = Dashboard.withPulse(layout, in: existing.map(StoredDashboardLayout.init)?.object)
+            let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+            var row = existing ?? DashboardLayoutRow(userId: userId, layout: JSONText(raw: ""), updatedAt: now)
+            row.layout = JSONText(raw: String(decoding: data, as: UTF8.self))
+            row.updatedAt = now
+            try row.save(db)
+            try Self.enqueueRowUpsert(
+                table: DashboardLayoutRow.databaseTableName,
+                id: try Self.rowID(table: DashboardLayoutRow.databaseTableName, key: ["user_id": userId], in: db),
+                in: db
+            )
+        }
+    }
 }
 
 /// A `dashboard_layouts` row, decoded once. `object` is what
@@ -108,5 +137,10 @@ public struct StoredDashboardLayout: Sendable {
     /// The Train tab's sections, off the same decoded object (W6).
     public var train: TrainLayout {
         Dashboard.trainLayout(from: object)
+    }
+
+    /// The Pulse squares' order, off the same decoded object (W9).
+    public var pulse: PulseLayout {
+        Dashboard.pulseLayout(from: object)
     }
 }

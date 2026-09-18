@@ -161,7 +161,7 @@ struct DashboardGrid: View {
             }
         }
         .modifier(Arrangeable(
-            enabled: model.editing, slotId: slot.id,
+            enabled: model.editing, id: slot.id,
             onDrop: { dragged in drop(dragged, on: slot.id) },
             onTargeted: { targeted in hovered(slot.id, targeted) }
         ))
@@ -322,35 +322,6 @@ private struct TileMenu: ViewModifier {
             Button { onEdit() } label: {
                 Label("Edit Dashboard", systemImage: "square.grid.2x2")
             }
-        }
-    }
-}
-
-/// `.draggable` and `.dropDestination`, only while editing — a tile you can
-/// lift while reading is a tile you will lift by accident while scrolling.
-private struct Arrangeable: ViewModifier {
-    let enabled: Bool
-    let slotId: String
-    let onDrop: (String) -> Void
-    let onTargeted: (Bool) -> Void
-
-    func body(content: Content) -> some View {
-        if enabled {
-            content
-                .draggable(slotId) {
-                    // The lifted preview is the tile's own outline, not a
-                    // screenshot of a jiggling view mid-tilt.
-                    RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .frame(width: 120, height: 120)
-                }
-                .dropDestination(for: String.self) { items, _ in
-                    guard let dragged = items.first else { return false }
-                    onDrop(dragged)
-                    return true
-                } isTargeted: { onTargeted($0) }
-        } else {
-            content
         }
     }
 }

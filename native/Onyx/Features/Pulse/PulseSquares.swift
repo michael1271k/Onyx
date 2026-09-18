@@ -4,8 +4,18 @@ import OnyxCore
 import OnyxData
 
 // ─────────────────────────────────────────────────────────────────────────────
-// THE FOUR SQUARES (founder decision 5).
+// THE SIX SQUARES (founder decision 5; six and reorderable since W9, D9).
 //
+// ── W9: THE CAROUSEL IS GONE ────────────────────────────────────────────────
+// Fatigue and the stress log were a two-page horizontal pager above this grid
+// — the one side-scroll on Pulse, and the row that needed three
+// `scrollPosition` mitigations to survive a `List` recycle. They are squares
+// now, in the same grid, and the grid is 2 × 3 in an order the reader sets:
+// the toolbar's Edit puts the squares in the Today tab's jiggle, a drag moves
+// one onto another's place, and the order rides in `dashboard_layouts` under
+// `pulse` (`PulseLayout`). Every sheet is still presented by `DayScreen`.
+//
+// ── WHAT THE FOUR WERE (W3) ─────────────────────────────────────────────────
 // What these four were: the stress index as a full-width tile with a 96 pt
 // trace beside a 28 pt numeral; the scale and the stack as two 44 pt rows in a
 // section of their own; and soreness as a third of the carousel, spending a
@@ -40,20 +50,28 @@ import OnyxData
 // `StackRow`) are the originals this grid replaced, unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Stress index · Soreness · Scale · Stack.
+/// Stress index · Stress log · Soreness · Fatigue · Scale · Stack, in the
+/// stored order.
 ///
 /// Every door is a closure: this whole grid is one `List` row, and a `.sheet`
-/// declared on a recyclable cell is torn down with the cell — the same rule
-/// `StressLogCard` states and the reason `DayScreen` owns every presentation on
-/// this screen.
+/// declared on a recyclable cell is torn down with the cell — the reason
+/// `DayScreen` owns every presentation on this screen.
 struct PulseSquareGrid: View {
     let model: DayModel
     let onStress: () -> Void
+    let onLogStress: () -> Void
+    let onBrowseStress: () -> Void
     let onSoreness: () -> Void
+    let onFatigue: () -> Void
     let onScale: () -> Void
     let onStack: () -> Void
 
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var drops = 0
+
+    private var editing: Bool { model.editingSquares }
+    private var order: [PulseSquare] { model.pulseLayout.order }
 
     /// `OnyxSpace.l` between the cells, as decision 5 asks — and the same 16 pt
     /// the list already insets this row by, so the trench between two squares
@@ -65,18 +83,77 @@ struct PulseSquareGrid: View {
 
     var body: some View {
         if typeSize.isAccessibilitySize {
-            StressIndexRow(model: model, onOpen: onStress)
-            SorenessRow(model: model, onOpen: onSoreness)
-            ScaleRow(model: model, onEnter: onScale)
-            StackRow(model: model, onOpen: onStack)
+            // The rows reorder too — same drag, same jiggle — or Edit would
+            // be a button that does nothing at the sizes that need it most.
+            ForEach(order, id: \.self) { which in
+                row(which)
+                    .modifier(Jiggle(on: editing, seed: which.rawValue))
+                    .modifier(arrangeable(which))
+            }
         } else {
             LazyVGrid(columns: columns, spacing: OnyxSpace.l) {
-                StressSquare(model: model, action: onStress)
-                SorenessSquare(model: model, action: onSoreness)
-                ScaleSquare(model: model, action: onScale)
-                StackSquare(model: model, action: onStack)
+                ForEach(order, id: \.self) { which in
+                    square(which)
+                        .modifier(Jiggle(on: editing, seed: which.rawValue))
+                        .modifier(arrangeable(which))
+                }
             }
+            .environment(\.pulseEditing, editing)
+            .animation(reduceMotion ? OnyxMotion.fade : OnyxMotion.move, value: order)
+            .sensoryFeedback(.selection, trigger: drops)
         }
+    }
+
+    /// Drop `dragged` here: it takes this square's place, the rest close up.
+    private func arrangeable(_ target: PulseSquare) -> Arrangeable {
+        Arrangeable(enabled: editing, id: target.rawValue) { dragged in
+            guard let from = PulseSquare(rawValue: dragged) else { return }
+            drops += 1
+            model.moveSquare(from, to: target)
+        }
+    }
+
+    @ViewBuilder
+    private func square(_ which: PulseSquare) -> some View {
+        switch which {
+        case .stress:    StressSquare(model: model, action: onStress)
+        case .stressLog: StressLogSquare(model: model, action: onLogStress, onBrowse: onBrowseStress)
+        case .soreness:  SorenessSquare(model: model, action: onSoreness)
+        case .fatigue:   FatigueSquare(model: model, action: onFatigue)
+        case .scale:     ScaleSquare(model: model, action: onScale)
+        case .stack:     StackSquare(model: model, action: onStack)
+        }
+    }
+
+    /// The rows stay buttons while editing (`PulseRow` is shared chrome), so
+    /// their doors are shut here instead — a tap mid-arrangement opens nothing.
+    private func gated(_ open: @escaping () -> Void) -> () -> Void { editing ? {} : open }
+
+    @ViewBuilder
+    private func row(_ which: PulseSquare) -> some View {
+        switch which {
+        case .stress:    StressIndexRow(model: model, onOpen: gated(onStress))
+        case .stressLog: StressLogRow(model: model, onLog: gated(onLogStress), onBrowse: gated(onBrowseStress))
+        case .soreness:  SorenessRow(model: model, onOpen: gated(onSoreness))
+        case .fatigue:   FatigueRow(model: model, onOpen: gated(onFatigue))
+        case .scale:     ScaleRow(model: model, onEnter: gated(onScale))
+        case .stack:     StackRow(model: model, onOpen: gated(onStack))
+        }
+    }
+}
+
+/// Whether the grid is in jiggle mode, read by every square. An environment
+/// value rather than a parameter threaded through six inits: the squares do
+/// one thing with it — stop being buttons — and the one place that sets it is
+/// the grid.
+private struct PulseEditingKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var pulseEditing: Bool {
+        get { self[PulseEditingKey.self] }
+        set { self[PulseEditingKey.self] = newValue }
     }
 }
 
@@ -93,7 +170,7 @@ struct PulseSquareGrid: View {
 ///
 /// The whole square is the target. A chevron would be 12 pt of glyph in a 139 pt
 /// box saying what `.onyxPress` already says by moving.
-private struct PulseSquare<Content: View>: View {
+private struct SquareShell<Content: View>: View {
     let title: String
     /// The unit that names the square's axis — "14 days" against the log card's
     /// "3 today". Nil draws nothing rather than an empty slot.
@@ -101,30 +178,41 @@ private struct PulseSquare<Content: View>: View {
     /// What a reader who cannot see the square is told, after its title.
     let spoken: String
     let action: () -> Void
+    /// A second verb the face carries as a nested control — the stress log's
+    /// "earlier" — named for VoiceOver, which cannot reach a child of an
+    /// `.ignore` element.
+    var secondary: (title: String, action: () -> Void)?
     @ViewBuilder var content: () -> Content
 
+    @Environment(\.pulseEditing) private var editing
+
     init(_ title: String, trailing: String? = nil, spoken: String,
-         action: @escaping () -> Void, @ViewBuilder content: @escaping () -> Content) {
+         action: @escaping () -> Void, secondary: (title: String, action: () -> Void)? = nil,
+         @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.trailing = trailing
         self.spoken = spoken
         self.action = action
+        self.secondary = secondary
         self.content = content
     }
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: OnyxSpace.s) {
-                header
-                Spacer(minLength: 0)
-                content()
+        Group {
+            // ── NOT A BUTTON WHILE EDITING (W9) ─────────────────────────────
+            // `Arrangeable`'s `.draggable` wants the long press, and a button's
+            // own recogniser would race it. The face is the same view either
+            // way; only the chrome that makes it a control comes and goes —
+            // which is also what stops a tap opening a sheet mid-arrangement.
+            if editing {
+                face.transition(.identity)
+            } else {
+                Button(action: action) { face }
+                    .buttonStyle(.plain)
+                    .onyxPress(scale: 0.98)
+                    .transition(.identity)
             }
-            .padding(OnyxSpace.m)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
-        .onyxPress(scale: 0.98)
         // ── SQUARE BY RATIO, NOT BY A HEIGHT ────────────────────────────────
         // A fixed height would be wrong on every phone but the one it was
         // measured on, and would stop being square the moment the list's
@@ -136,6 +224,21 @@ private struct PulseSquare<Content: View>: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title), \(spoken)")
         .accessibilityAddTraits(.isButton)
+        .accessibilityHint(editing ? "Editing. Double-tap and hold to drag." : "")
+        .accessibilityActions {
+            if let secondary { Button(secondary.title, action: secondary.action) }
+        }
+    }
+
+    private var face: some View {
+        VStack(alignment: .leading, spacing: OnyxSpace.s) {
+            header
+            Spacer(minLength: 0)
+            content()
+        }
+        .padding(OnyxSpace.m)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .contentShape(.rect)
     }
 
     /// The same `ViewThatFits` escape `DayTile` and `PulseCard` take: half a
@@ -219,6 +322,21 @@ private struct SquareBlank: View {
     }
 }
 
+/// The verb a square that ASKS carries on its face — "Rate after training",
+/// "Log stress". The square is the control; this line says what it does.
+private struct SquareVerb: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .onyxType(.caption).fontWeight(.semibold)
+            .foregroundStyle(Color.onyx.accent(.recover))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 // MARK: - Stress index
 
 /// One number, its band word and the fortnight behind it (§U5.3).
@@ -244,7 +362,7 @@ private struct StressSquare: View {
         // "Stress index", not "Stress": the stress LOG card is one row above
         // this grid, and one word on two features is a screen where neither can
         // be read. See `PulseStressLog.swift`'s header.
-        PulseSquare("Stress index", trailing: "14 days", spoken: spoken, action: action) {
+        SquareShell("Stress index", trailing: "14 days", spoken: spoken, action: action) {
             if let index = today?.index {
                 SquareReading(value: "\(Int(index))", unit: band?.word, tint: tint)
             } else {
@@ -315,7 +433,7 @@ private struct SorenessSquare: View {
     private var sore: [(group: String, level: Int)] { Soreness.worstFirst(model.domsSeverity) }
 
     var body: some View {
-        PulseSquare("Soreness", spoken: spoken, action: action) {
+        SquareShell("Soreness", spoken: spoken, action: action) {
             HStack(alignment: .bottom, spacing: OnyxSpace.s) {
                 VStack(alignment: .leading, spacing: 2) {
                     if sore.isEmpty {
@@ -450,8 +568,25 @@ private struct ScaleSquare: View {
 
     private var log: DailyLogRow? { model.log }
 
+    @Environment(\.pulseEditing) private var editing
+
     var body: some View {
-        PulseSquare("Scale", spoken: spoken, action: action) {
+        Group {
+            // Never in edit mode: a context menu eats the long press the drag
+            // needs (`DashboardGrid` states the same rule for `TileMenu`).
+            if editing { square.transition(.identity) } else { square.contextMenu { menu }.transition(.identity) }
+        }
+        .confirmationDialog("Why no weigh-in?", isPresented: $choosingReason, titleVisibility: .visible) {
+            ForEach(WeighIn.skipReasons, id: \.self) { reason in
+                Button(reason) { model.setWeighInSkipReason(reason) }
+            }
+        } message: {
+            Text("Currently \(WeighIn.skipReason(log?.weighinSkipReason)). \"\(WeighIn.skipReason(nil))\" is the protocol and is not stored.")
+        }
+    }
+
+    private var square: some View {
+        SquareShell("Scale", spoken: spoken, action: action) {
             if let weight = log?.weightKg {
                 SquareReading(value: DayFormat.number(weight), unit: "kg")
                 if let fat = log?.bodyFatPct {
@@ -466,21 +601,16 @@ private struct ScaleSquare: View {
                 trace
             }
         }
-        // The reason is a SECOND control on a surface that has room for one, so
-        // it is a long press — the same affordance, and the same dialog, the row
-        // this square replaces carried.
-        .contextMenu {
-            Button("Enter InBody reading", systemImage: "square.and.pencil", action: action)
-            if log?.weightKg == nil {
-                Button("Why no weigh-in…", systemImage: "questionmark.circle") { choosingReason = true }
-            }
-        }
-        .confirmationDialog("Why no weigh-in?", isPresented: $choosingReason, titleVisibility: .visible) {
-            ForEach(WeighIn.skipReasons, id: \.self) { reason in
-                Button(reason) { model.setWeighInSkipReason(reason) }
-            }
-        } message: {
-            Text("Currently \(WeighIn.skipReason(log?.weighinSkipReason)). \"\(WeighIn.skipReason(nil))\" is the protocol and is not stored.")
+    }
+
+    /// The reason is a SECOND control on a surface that has room for one, so
+    /// it is a long press — the same affordance, and the same dialog, the row
+    /// this square replaces carried.
+    @ViewBuilder
+    private var menu: some View {
+        Button("Enter InBody reading", systemImage: "square.and.pencil", action: action)
+        if log?.weightKg == nil {
+            Button("Why no weigh-in…", systemImage: "questionmark.circle") { choosingReason = true }
         }
     }
 
@@ -507,6 +637,198 @@ private struct ScaleSquare: View {
         var parts = ["\(DayFormat.number(weight)) kilos"]
         if let fat = log?.bodyFatPct { parts.append("\(DayFormat.number(fat)) percent fat") }
         return parts.joined(separator: ", ")
+    }
+}
+
+// MARK: - Fatigue
+
+/// How tired you said you were, and the slot the day is asking about.
+///
+/// The carousel page this replaces (W3–W8) carried the sheet's door as a 44 pt
+/// verb on its face. A square IS the door, so the verb is one accent line —
+/// and it still names the slot, because "Rate after training" and "Rate
+/// waking" are different questions. The WORD is the reading: nothing here is a
+/// numeral, which belongs to the stress index and to nothing else.
+private struct FatigueSquare: View {
+    let model: DayModel
+    let action: () -> Void
+
+    private var day: FatigueDay { model.fatigue }
+    private var slots: [FatigueSlot] { model.fatigueSlots }
+    private var latest: FatigueReading? { Fatigue.latest(day) }
+    private var logged: Int { slots.filter { day[$0] != nil }.count }
+    /// The slot the day is asking for now (W10) — before the session, after
+    /// it, or the rest day's hour. The empty dot for it is drawn in the accent.
+    private var ask: FatigueSlot { model.fatigueAsk }
+
+    var body: some View {
+        SquareShell("Fatigue", trailing: "\(logged) of \(slots.count)", spoken: spoken, action: action) {
+            reading
+            slotRow
+            SquareVerb(title: "Rate \(ask.label.lowercased())")
+        }
+    }
+
+    @ViewBuilder
+    private var reading: some View {
+        if let latest, let word = Fatigue.level(latest.level)?.label {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
+                    Text(word)
+                        .onyxType(.secondary).fontWeight(.semibold)
+                        .foregroundStyle(Color.onyx.fatigue(latest.level))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 0)
+                    cost
+                }
+                Text(latest.slot.label)
+                    .onyxType(.caption)
+                    .foregroundStyle(Color.onyx.textSecondary)
+                    .lineLimit(1)
+            }
+        } else {
+            SquareBlank(text: "Not rated")
+        }
+    }
+
+    /// One dot per slot the day HAS (`Fatigue.slotsForDay`), named short —
+    /// the same filled-versus-stroked vocabulary the Stack square's dots use.
+    private var slotRow: some View {
+        HStack(spacing: OnyxSpace.s) {
+            ForEach(slots, id: \.self) { slot in
+                HStack(spacing: OnyxSpace.xs) {
+                    Circle()
+                        .fill(day[slot] != nil ? Color.onyx.fatigue(day[slot]) : .clear)
+                        .strokeBorder(
+                            day[slot] != nil ? .clear : (slot == ask ? Color.onyx.accent(.recover) : Color.onyx.textTertiary),
+                            lineWidth: slot == ask ? 1.5 : 1
+                        )
+                        .frame(width: 7, height: 7)
+                    Text(slot.short)
+                        .onyxType(.micro)
+                        .foregroundStyle(Color.onyx.textTertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// What the session cost, `post` − `pre`. Absent on a rest day and while
+    /// one end is unrated; `costSpoken` names the missing end for VoiceOver.
+    @ViewBuilder
+    private var cost: some View {
+        if let delta = Fatigue.delta(day) {
+            Text("\(delta >= 0 ? "+" : "")\(delta)")
+                .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
+                .foregroundStyle(delta > 1 ? Color.onyx.record : Color.onyx.textSecondary)
+                .padding(.horizontal, OnyxSpace.s)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.onyx.hairline))
+        }
+    }
+
+    private var spoken: String {
+        let verb = "Rate \(ask.label.lowercased())"
+        guard let latest, let word = Fatigue.level(latest.level)?.label else { return "not rated. \(verb)" }
+        return "\(word), \(latest.slot.label)\(costSpoken). \(verb)"
+    }
+
+    private var costSpoken: String {
+        if let delta = Fatigue.delta(day) { return ", session cost \(delta >= 0 ? "+" : "")\(delta)" }
+        if let missing = Fatigue.deltaMissing(day), slots.contains(missing) { return ", \(missing.label.lowercased()) not rated" }
+        return ""
+    }
+}
+
+// MARK: - Stress log
+
+/// What you typed, when you typed it — the day's readings as stamps, and the
+/// door that adds one.
+///
+/// ── TWO THINGS CALLED STRESS, TWO SQUARES APART ─────────────────────────────
+/// `StressSquare` is the INDEX: 0–100, computed, against your own fortnight.
+/// This is the LOG: any number of 1–5 readings a day, each stamped, and an
+/// input to the index. Four rules keep them apart on one grid:
+///   • the numeral is the index's and only the index's — nothing here is
+///     above `.secondary`, and the only figures are clock stamps;
+///   • the axis differs — "14 days" against "N today";
+///   • the ink differs — `StressBand.tint` there, `Color.onyx.fatigue(level)`
+///     here, the shared severity ramp the Fatigue square also wears;
+///   • the posture differs — that square opens a read-only breakdown, this
+///     one carries its verb.
+///
+/// The last two readings, newest at the bottom as the day happened, and the
+/// ones before them behind a marker standing where they would have been —
+/// leading, because a marker on the trailing edge would claim the hidden ones
+/// came last. Two, because a square is 139 pt of content and a stamp is a
+/// line of it. Delete lives in the full log (`StressLogListSheet`), whose
+/// rows have a swipe to give; a context menu here would eat the drag.
+private struct StressLogSquare: View {
+    let model: DayModel
+    let action: () -> Void
+    let onBrowse: () -> Void
+
+    private var readings: [StressReading] { model.stressReadings }
+    private var shown: [StressReading] { Array(readings.suffix(2)) }
+    private var hidden: Int { max(0, readings.count - shown.count) }
+
+    var body: some View {
+        SquareShell(
+            "Stress log",
+            // "today" only on today: `DayScreen` draws past dates too.
+            trailing: readings.isEmpty ? nil : "\(readings.count) \(model.isToday ? "today" : "logged")",
+            spoken: spoken, action: action,
+            secondary: hidden > 0 ? ("Browse the whole day's log", onBrowse) : nil
+        ) {
+            if readings.isEmpty {
+                // Not "0": a day nobody answered is a different fact from a
+                // calm one (`DayFormat.number`'s rule).
+                SquareBlank(text: "Not reported")
+            } else {
+                VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+                    earlier
+                    ForEach(shown) { reading in capsule(reading) }
+                }
+            }
+            SquareVerb(title: "Log stress")
+        }
+    }
+
+    @ViewBuilder
+    private var earlier: some View {
+        if hidden > 0 {
+            Button(action: onBrowse) {
+                Text("+\(hidden) earlier")
+                    .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
+                    .foregroundStyle(Color.onyx.textSecondary)
+                    .padding(.horizontal, OnyxSpace.s)
+                    .frame(minHeight: 24)
+                    .background(Capsule().fill(Color.onyx.hairline))
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func capsule(_ reading: StressReading) -> some View {
+        Text(StressStamp.label(reading))
+            .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
+            .foregroundStyle(Color.onyx.fatigue(reading.level))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .padding(.horizontal, OnyxSpace.s)
+            .frame(minHeight: 24)
+            .background(Capsule().fill(Color.onyx.fatigue(reading.level).opacity(0.16)))
+    }
+
+    private var spoken: String {
+        guard !readings.isEmpty else { return "not reported. Log stress" }
+        let latest = shown.map(StressStamp.spoken).joined(separator: "; ")
+        return latest + (hidden > 0 ? "; \(hidden) earlier" : "") + ". Log stress"
     }
 }
 
@@ -539,7 +861,7 @@ private struct StackSquare: View {
     private var credited: Int { doses.filter(\.credited).count }
 
     var body: some View {
-        PulseSquare("Stack", spoken: spoken, action: action) {
+        SquareShell("Stack", spoken: spoken, action: action) {
             if doses.isEmpty {
                 SquareBlank(text: "Nothing scheduled")
             } else {
@@ -642,7 +964,7 @@ private struct StackSquare: View {
     ///
     /// Filled for what has counted, hollow for what is still ahead, and the
     /// hairline fill for a dose said no to — the same filled-versus-stroked
-    /// vocabulary `FatigueCard`'s slot row uses two rows above this one, so the
+    /// vocabulary `FatigueSquare`'s slot row uses in the same grid, so the
     /// screen has one language for "answered" rather than two.
     ///
     /// `FlowRow` because a nine-item stack is wider than 139 pt and a square
@@ -695,6 +1017,52 @@ private struct StressIndexRow: View {
             spoken: index.map { "\($0), \(word). 50 is your normal." } ?? "no reading for this day",
             action: onOpen
         )
+    }
+}
+
+private struct FatigueRow: View {
+    let model: DayModel
+    let onOpen: () -> Void
+
+    private var latest: FatigueReading? { Fatigue.latest(model.fatigue) }
+
+    var body: some View {
+        let word = latest.flatMap { Fatigue.level($0.level)?.label }
+        PulseRow(
+            symbol: "battery.50",
+            title: "Fatigue",
+            detail: word.map { "\($0) · \(latest!.slot.label)" } ?? "Not rated",
+            tint: Color.onyx.accent(.recover),
+            spoken: (word.map { "\($0), \(latest!.slot.label)" } ?? "not rated") + ". Rate \(model.fatigueAsk.label.lowercased())",
+            action: onOpen
+        )
+    }
+}
+
+private struct StressLogRow: View {
+    let model: DayModel
+    let onLog: () -> Void
+    let onBrowse: () -> Void
+
+    private var readings: [StressReading] { model.stressReadings }
+
+    var body: some View {
+        PulseRow(
+            symbol: "plus.circle.fill",
+            title: "Stress log",
+            detail: readings.last.map { "\(readings.count) \(model.isToday ? "today" : "logged") · \(StressStamp.label($0))" } ?? "Not reported",
+            tint: Color.onyx.accent(.recover),
+            spoken: (readings.last.map { "\(readings.count) logged, latest \(StressStamp.spoken($0))" } ?? "not reported") + ". Log stress",
+            action: onLog
+        ) {
+            // The whole day's log, which the square reaches through "earlier".
+            if readings.count > 1 {
+                Button("All", action: onBrowse)
+                    .onyxType(.caption).fontWeight(.semibold)
+                    .foregroundStyle(Color.onyx.accent(.recover))
+                    .accessibilityLabel("Browse the whole day's log")
+            }
+        }
     }
 }
 

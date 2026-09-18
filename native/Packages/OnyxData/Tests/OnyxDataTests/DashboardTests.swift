@@ -100,6 +100,44 @@ struct DashboardLayoutStoreTests {
         #expect(db.trainLayout(userId: user).hidden == [.cardio])
     }
 
+    // ── W9: the Pulse squares ride in this row too ──────────────────────────
+
+    @Test("a pulse save keeps both dashboard sides and the train key; a dashboard save keeps the pulse key")
+    func pulseSharesTheRow() throws {
+        let db = try AppDatabase.inMemory(deviceId: "device-a")
+        let webRow = #"{"v":4,"desktop":{"slots":[{"id":"d1","size":"xl","items":["recovery"]}],"hidden":[],"updatedAt":5}}"#
+        try db.writer.write { try DashboardLayoutRow(userId: user, layout: JSONText(raw: webRow), updatedAt: Date()).insert($0) }
+
+        var layout = Dashboard.defaultLayout(.phone)
+        layout = Dashboard.resizeSlot(layout, slotId: "sl-sleep")
+        try db.saveDashboardLayout(userId: user, layout)
+        try db.saveTrainLayout(userId: user, TrainLayout.default.setting(.cardio, visible: false))
+        let order = PulseLayout.default.moving(.stack, to: .stress)
+        try db.savePulseLayout(userId: user, order)
+
+        #expect(db.pulseLayout(userId: user) == order)
+        #expect(db.trainLayout(userId: user).hidden == [.cardio])
+        let stored = try db.writer.read { try DashboardLayoutRow.filter(Column("user_id") == user).fetchOne($0) }
+        let object = try JSONSerialization.jsonObject(with: Data(stored!.layout.raw.utf8)) as! [String: Any]
+        #expect((object["desktop"] as! [String: Any])["slots"] != nil)
+        #expect(Dashboard.fromStored(object, surface: .phone) == layout)
+        // The stream's decoded row reads the same order.
+        #expect(StoredDashboardLayout(stored!).pulse == order)
+
+        // Arranging the dashboard again, or the Train tab, may not put the squares back.
+        try db.saveDashboardLayout(userId: user, Dashboard.resizeSlot(layout, slotId: "sl-vitals"))
+        try db.saveTrainLayout(userId: user, .default)
+        #expect(db.pulseLayout(userId: user) == order)
+        #expect(try db.pendingOutbox().allSatisfy { $0.kind == SyncKind.rowUpsert })
+    }
+
+    @Test("a store that has never held a layout row reads the squares in declaration order")
+    func pulseDefaultsOnAnEmptyStore() throws {
+        let db = try AppDatabase.inMemory(deviceId: "device-a")
+        #expect(db.pulseLayout(userId: user) == .default)
+        #expect(db.pulseLayout(userId: user).order == PulseSquare.allCases)
+    }
+
     @Test("a store that has never held a layout row reads as everything visible")
     func trainDefaultsOnAnEmptyStore() throws {
         let db = try AppDatabase.inMemory(deviceId: "device-a")

@@ -44,6 +44,43 @@ _Nothing yet._
 
 ---
 
+## [6.6.0] — 2026-09-18 · Pulse, six squares, your order
+
+Nothing on Pulse scrolls sideways any more. The two-page carousel that held
+Fatigue and the Stress log is gone; they are squares now, in the same grid as
+the stress index, soreness, the scale and the stack — a 2 × 3 the reader can
+rearrange exactly like the Today tab, with the order kept on the same row the
+dashboard and the Train tab already share.
+
+### Added
+- **Pulse → Edit.** A word in the toolbar puts the six squares in the Today
+  tab's jiggle; drag one onto another's place and the rest close up. Done
+  ends it. The order syncs with the dashboard row (`dashboard_layouts`,
+  under a new `pulse` key), so a second device draws the same grid, and a
+  reader who has turned motion off sees the squares stand still rather than
+  wobble.
+- **A Fatigue square** — the latest word, which slot it came from, the session
+  cost, one dot per slot the day has, and the slot the day is asking for now.
+  The square is the door to the rating sheet.
+- **A Stress log square** — the last two stamped readings, the ones before
+  them behind an "earlier" marker that opens the whole day's log, and the
+  door to logging one more.
+- **At the accessibility sizes** the six fall to rows in the same stored
+  order, and the rows rearrange too.
+
+### Changed
+- **Pulse grid** — 2 × 3 in the stored order; the default puts the stress
+  index and the log on one row, soreness and fatigue on the next, the scale
+  and the stack last.
+- **Today tab** — the jiggle and the drag are now the shared `Jiggle` and
+  `Arrangeable` in OnyxUI; the tiles move as they did.
+
+### Removed
+- **The Pulse carousel** and its page dots. Delete-from-the-face on a stress
+  reading went with it; the full log's rows still swipe to delete.
+
+---
+
 ## [6.5.0] — 2026-09-18 · The week, anywhere
 
 The weekly report leaves the Train tab. It is its own screen now, reachable

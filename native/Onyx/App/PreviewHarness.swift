@@ -440,7 +440,7 @@ enum PreviewHarness {
                 seededBody: nil
             )
             .environment(AppEnvironment.preview)
-        case "day", "day-rows", "day-past", "day-session", "day-two", "day-empty", "day-stress", "day-soreness", "day-hero",
+        case "day", "day-rows", "day-past", "day-session", "day-two", "day-empty", "day-stress", "day-edit", "day-soreness", "day-hero",
              "scale", "scale-first", "day-swap", "doms", "doms-rate",
              "pulse-squares", "pulse-squares-evening", "pulse-squares-empty", "stack", "stack-add", "stack-edit",
              "sleep-edit", "stress", "fatigue", "stress-log", "stress-day", "quick-log":
