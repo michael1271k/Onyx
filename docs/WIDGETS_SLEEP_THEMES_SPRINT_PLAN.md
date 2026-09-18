@@ -1,6 +1,6 @@
 # Widgets · Sleep v2 · Themes · Week · Pulse · Logger · Privacy — Sprint Plan
 
-**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0. **W4 next.**
+**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0. **W5 next.**
 **From:** `main` @ 5.0.1 (`3de461a7`).
 **Ships as:** eleven sequential waves, 5.1.0 → 6.8.0, plus a close-out wave that retires this file to `docs/Done/`.
 **Branches:** `onyx/sprint-widgets-w<N>`, each cut from current `main` and merged `--no-ff`
@@ -887,3 +887,137 @@ fixture = {"module": "scoring/score", "fn": "computeSleepScore",
   "cases": out}
 json.dump(fixture, open("native/Packages/OnyxCore/Tests/OnyxCoreTests/Fixtures/sleep-score-v2.json", "w"), indent=2)
 ```
+
+### W4 Wave Record — shipped 2026-09-18 as 6.1.0
+
+**Drift from the plan, on purpose:**
+- **A THIRD golden had to be hand-edited, and the plan named two.**
+  `layout-from-stored.json` pins `reconcile`'s output for 48 stored payloads,
+  and every one of them ends in the appended catalogue tail — so four new ids
+  before `daily` rewrite all 48 expected arrays. The edit is mechanical and was
+  scripted (insert the four, in declaration order, immediately before the
+  `sl-daily` slot, at each surface's default size) after proving three
+  preconditions on the file: every case's last slot IS `sl-daily`, no input
+  names `daily` at all, and a `json.dumps(indent=2)` round-trip of the file is
+  byte-identical to the file. Without the third the reformat would have been
+  the diff. Nothing was regenerated from `Dashboard`.
+- **`DomsMuscles.landmarks` moved from the app target into OnyxCore.** The
+  group→landmark map (`DOMS_TO_LANDMARK`) was emitted only into
+  `Onyx/Features/Pulse/DomsMap.swift`, and `gen-doms-swift.mjs` said in its own
+  header that the expansion "is a view concern and stays in the app".
+  `WidgetSnapshotBuilder` is a package and cannot see the app target, so the
+  Soreness payload could not have been built without either moving the map or
+  writing a second copy of it. The generator now emits it into
+  `DomsMuscles.swift` and `DomsMap.landmarks` aliases it, exactly as the other
+  seven lists already did. `npm run check:doms` covers both files, so the
+  split cannot rot.
+- **Day Rings kept its three readings; only the colour source changed.** The
+  brief said "three rings on `train/fuel/recover` ramps". The tile's three
+  rings are sleep, steps and calories — Recover, **Body** and Fuel — and steps
+  is the Body domain on every other surface in the app (`WidgetId.steps` →
+  `.body`, the Steps tile, the Lock Screen face). Recolouring the MOVE ring
+  Train would have put the Mega tile at odds with the Steps tile on the same
+  grid, and changing what the three rings MEASURE is a redesign, which the
+  wave's own non-goals forbid. So each arc is now stroked with its own
+  domain's two-stop gradient instead of `accent` (which is only the ramp's
+  first stop), the legend dot takes `at(0.5)` because a 6 pt dot cannot carry
+  a gradient, and `.accented` still flattens everything to white.
+- **`sleep.medianBedtime` is unscoped.** The plan put it with the other three
+  W4 fields; it is one short string off an array the fetch already reads, the
+  Bedtime face is a Small on every surface, and a tile reading "—" because the
+  scope was narrow looks broken rather than empty. The three genuinely
+  expensive blocks (`weekRings`, `soreness`, `stress`) are `.full` and `.body`
+  as specified.
+- **`OnyxTests/TodayModelTests.native()` had to change.** It pins
+  `OnyxTile.native.count == 17`; the four new faces make it 21. The assertion
+  gained the tail check the golden vectors make on the other side
+  (`suffix(5) == [.weekRings, .soreness, .stress, .bedtime, .daily]`).
+- **`scripts/native-shot.sh`'s widget page bound moved 23 → 27.** Fifteen new
+  contact-sheet cells repack the sheet. The comment now names what the number
+  is made of, and the bound still carries exactly one page of slack.
+
+**Root causes that were not where the plan guessed:**
+- **`weekRings` needed the target resolver hoisted, not a new read.** Grading
+  six PAST days against their own calorie targets looked like it needed
+  per-day `daily_targets` rows; it does not. `TargetSnapshot` resolves any
+  date off the ladder it already holds, and only today's row is loaded —
+  which is exactly what `batteryStackSlice` has always done
+  (`dayTarget: d == date ? … : nil`). One `let` moved up; no query added.
+- **The "0 regions" bug was an interpolation, not a nil check.** The Soreness
+  Small printed `"\(ranked.count)"` unconditionally, so a payload that had not
+  asked drew a confident **0** — this payload's own "missing is nil, never
+  zero" rule, broken by a string that cannot tell nil from empty. The first
+  fix drew an em dash, and the shot showed why that is also wrong: "—
+  regions" is a label with nothing to label. The block is absent now and the
+  line underneath says why. **Both defects were invisible until the tile was
+  photographed.**
+- **`sampleEmptySeries` made the Bedtime empty state unphotographable.** It
+  carries `sample.sleep` whole, so the "empty" Bedtime cell was a byte-for-byte
+  copy of the populated one and the only branch that tile has ("No usual
+  bedtime yet") was reviewed by nothing. It now clears `medianBedtime` alone —
+  a first week has last night, it does not have a fortnight behind it. The
+  sleep `trend` was briefly cleared with it and put back: no cell draws it,
+  which is precisely why a silent semantic change to a shared fixture is worth
+  reverting rather than keeping.
+- **`AppDatabase.bedtimeOffsets` is not reachable as `Self.` from the
+  builder.** It is a static on `AppDatabase`, and `Self` inside
+  `WidgetSnapshotBuilder` is the builder. One compile error, thirty seconds,
+  recorded only because the symbol reads like it belongs to whoever is calling
+  it.
+
+**Constraints discovered that the next wave must respect:**
+- **`Dashboard.widgetIds` is 24 now and `OnyxTile.native` is 21.** The three
+  still projected out are `bar`, `micros` and `stack`. W5's `TileOption`
+  `AppEnum` mirrors the native raw values and omits those three — it now has
+  twenty-one entries to mirror, and `weekRings` is camelCase in the raw value,
+  which an `AppEnum` case name has to survive.
+- **`weekRings` at Small has no room for its row labels.** The colour IS the
+  key at that size (Train indigo, Fuel solar, Sleep lunar, always top to
+  bottom). A wave that reorders those rows breaks a legend that is not written
+  down anywhere on the tile.
+- **The stress sparkline joins across a day nobody answered.** `StressSeries`
+  returns fourteen days with an empty one PRESENT, and `Sparkline` takes
+  `[Double]` — it cannot lift the pen. The empties are dropped and the "13 of
+  14 d" caption beside the band is what says so. A face that needs real gaps
+  needs a `Sparkline` that takes `[Double?]`, not a different series.
+- **`stressSeries` is fourteen `readinessHistory` reads per snapshot**, on top
+  of `batteryStackSlice`'s fourteen `scoringInputs`. Both are `ponytail:`-noted
+  and both have the same documented upgrade —
+  `daily_scores.stress_index`/`battery_breakdown` written by the scorer, never
+  a cache in the builder. W5 puts the generic kind at `.full`; if the timeline
+  budget bites, this is the first place to look.
+- **`medianBedtime` is a pre-rendered LOCAL clock string.** The offsets it
+  comes from are minutes past a UTC noon, and the builder is the only place
+  with a timezone, so nothing downstream may convert it again. A consequence:
+  in a FIXTURE it cannot track the device's zone the way `startTime` does, so
+  the contact sheet on a +3 simulator shows "01:41" over "Usually 23:12". Both
+  numbers are right; the pair is only readable together on a real device.
+- **A signed bedtime delta must be computed where the offsets are.** Two clock
+  times cannot be subtracted across midnight (23:30 and 00:16 are 46 minutes
+  apart and look like 23 hours) — that is the whole reason `bedtimeOffsets`
+  is noon-anchored. If the Bedtime tile ever wants a "+46 m later" chip, the
+  signed minutes belong in the payload beside `medianBedtime`.
+- **OnyxCore is 581 (unchanged — the layout suites are per-fixture loops) and
+  OnyxData is 604** (was 600; +4 in `WidgetSnapshotBuilderTests`).
+
+**Left open on purpose:**
+- **A `weekRings` tap goes nowhere yet.** D8 makes it the door to the weekly
+  report; that is W8's, and nothing in this wave knows about it.
+- **No WidgetKit kinds.** The four are dashboard tiles only, exactly as the
+  non-goals say. They reach the Home Screen when W5's generic kind lands.
+- **`fuelHit` is a ±10 % band and nothing configures it.** A band and not a
+  floor on purpose — on a cut, three hundred under target is not a better day
+  than the target — but the tenth is a constant in the builder.
+- **Soreness carries no laterality.** `doms_logs` has had a `side` column since
+  W9 and the payload folds left and right to the worse of the two, because
+  the atlas figure has no side-specific paths. The `@` side marker exists in
+  the app's own vocabulary and could be carried later.
+- **The Soreness sheet is the generic `stack` arm.** `DomainSheets` falls
+  through to "the Large face plus extras", which for Soreness is the Large
+  face and nothing else. It reads fine; a purpose-built sheet is W6-or-later
+  work if it is wanted at all.
+
+**Founder's manual steps still outstanding:** none for this wave. No DDL, no
+Supabase change, no App Store metadata. W3's `docs/sql/w3-sleep-onset.sql`
+paste is still the only one owed, and it must land before 6.0.0 or later is
+installed.
