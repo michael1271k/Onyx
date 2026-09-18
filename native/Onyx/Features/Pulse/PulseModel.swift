@@ -30,6 +30,14 @@ final class DayModel {
     let database: AppDatabase
     let userId: String
 
+    /// The cascade, when the screen holding this model has an environment to
+    /// run it on. See `setSleepOnsetTrouble`, the one writer that needs it.
+    ///
+    /// `weak` and `@ObservationIgnored`: this is a back-reference to the object
+    /// that owns the store this model reads, not a piece of published state,
+    /// and nothing redraws when it is set.
+    @ObservationIgnored weak var environment: AppEnvironment?
+
     /// The selected logical day, ISO. Never later than today.
     private(set) var date: String
     private(set) var today: String = LogicalDay.today()
@@ -66,10 +74,14 @@ final class DayModel {
     /// What the last swap did, echoed back until the date changes.
     private(set) var swapNote: String?
 
-    init(database: AppDatabase, userId: String, date: String = LogicalDay.today()) {
+    init(
+        database: AppDatabase, userId: String, date: String = LogicalDay.today(),
+        environment: AppEnvironment? = nil
+    ) {
         self.database = database
         self.userId = userId
         self.date = min(date, LogicalDay.today())
+        self.environment = environment
     }
 
     // MARK: - Date
@@ -1065,11 +1077,30 @@ final class DayModel {
         }
     }
 
+    /// "I could not get to sleep."
+    ///
+    /// ── AND IT MOVES NUMBERS, SO IT HAS TO CASCADE ──────────────────────────
+    /// Unlike its neighbour `setSleepInaccurate`, this flag is a SCORING INPUT:
+    /// `Stress.breakdown` reads it (`StressInputs.sleepOnsetTrouble`) and so
+    /// does `Battery.wellnessDrain` (`ScoringInputs.sleepOnsetTrouble`). It
+    /// wrote the row and stopped there, so the stored `daily_scores` for the
+    /// night went on describing the un-flagged version of it — and every day
+    /// inside the readiness window after it, because a battery is a walk over
+    /// the window and not a reading of one date.
+    ///
+    /// The cascade is requested through `AppEnvironment.rescore(from:reason:)`,
+    /// the app's single entry point, exactly as `editSleepWindow` does for the
+    /// other kind of sleep correction. `.dayEdit` because that is what this is:
+    /// a `daily_logs` edit, not a re-windowed night.
+    ///
+    /// Only after the write LANDS. A cascade over a row that failed to save
+    /// would rewrite the same scores from the same data and report work done.
     func setSleepOnsetTrouble(_ on: Bool) {
         log?.sleepOnsetTrouble = on
-        write { [database, userId, date] in
+        let saved = write { [database, userId, date] in
             try database.editDailyLog(userId: userId, date: date) { $0.sleepOnsetTrouble = on }
         }
+        if saved { environment?.rescore(from: date, reason: .dayEdit) }
     }
 
     /// "The watch got this night wrong."

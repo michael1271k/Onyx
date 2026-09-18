@@ -189,40 +189,91 @@ public struct SessionSeed: Codable, Sendable, Equatable {
     public var exercises: [SeedExercise]
 }
 
-/// The treadmill bout that opens every deck.
+/// The bout a deck may open with — the athlete's OWN warm-up, repeated.
 ///
-/// ── WHY IT IS A CONSTANT AND NOT A PROGRAM ENTRY ────────────────────────────
+/// ── WHY IT IS NOT A PROGRAM ENTRY ───────────────────────────────────────────
 /// `ProgramExercise` describes sets, reps and a load. A five-minute walk at 2 %
 /// has none of those and all of its content — `durationSec`, `distanceKm`,
-/// `inclinePct` — is in fields the program type does not have. Putting it in
-/// `Program.onyx5` would also make it count: `plannedSets` is the program's own
-/// sum, so the header would read `0/13` on a twelve-set day and the progression
-/// engine would start grading a walk.
+/// `inclinePct` — is in fields the program type does not have. Putting it in a
+/// deck would also make it count: `plannedSets` is the program's own sum, so
+/// the header would read `0/13` on a twelve-set day and the progression engine
+/// would start grading a walk.
 ///
-/// This is the Swift twin of `WARMUP_CARDIO` in the web app's `lib/sessions/seedTemplates.ts`
-/// and it carries the same three numbers, so a session opened on the phone and
-/// one opened on the web propose the same bout. It is logged as a WARM-UP, which
-/// is what `hotfix-polish.sql` wrote for the 7 September session and what keeps
-/// it out of tonnage, out of `workingSets` and out of the PR engine.
+/// It is logged as a WARM-UP, which keeps it out of tonnage, out of
+/// `workingSets` and out of the PR engine.
 ///
-/// ── AND WHY IT IS NOT TICKED FOR YOU ────────────────────────────────────────
+/// ── AND IT IS NOT TICKED FOR YOU ────────────────────────────────────────────
 /// The deck proposes; the athlete confirms. Every other row in the session
 /// works that way, and a session that recorded five minutes of walking nobody
-/// did would be a worse bug than the missing row this replaces. The web drops
-/// an unticked block at commit for the same reason (`draft.ts`'s `!ex.done`
-/// guard) — so on both clients the opener has to be tapped to become a fact.
+/// did would be a worse bug than the missing row this replaces.
+///
+/// ── WHAT USED TO BE HERE, AND WHY IT IS GONE ────────────────────────────────
+/// Three constants: `durationSec = 300`, `distanceKm = 0.37`, `inclinePct = 2`.
+/// They were ONE athlete's treadmill warm-up, prepended to the first session of
+/// every account that ever opened the app — five minutes of a machine the
+/// reader may not own, at a gradient nobody chose, under a movement name that
+/// was not theirs. (A fourth, a note reading "Pace rising 4.3 to 5.0", died
+/// earlier for the same reason.) The gate in front of them was a catalogue
+/// test: prescribe the walk only to somebody whose exercise list already held
+/// a Treadmill. That kept the numbers off a new account and left them exactly
+/// as arbitrary for the account they did reach.
+///
+/// The opener is now `seed(from:)` over the athlete's last logged `cardio_logs`
+/// row. No bout, no opener; a bout, and the deck proposes THAT one back.
 public enum WarmupCardio {
+
+    /// The LEGACY catalogue row's name — the slug `helix5-treadmill` resolves
+    /// off it, and the founder's uploaded treadmill sets are filed under it.
+    ///
+    /// It is NOT the opener's name any more. That comes from the bout being
+    /// repeated, so a person who cycles gets a card that says so.
     public static let name = "Treadmill"
-    public static let durationSec = 300
-    public static let distanceKm = 0.37
-    public static let inclinePct = 2.0
-    // ── THE NOTE IS GONE ────────────────────────────────────────────────────
-    // It read "Pace rising 4.3 to 5.0" — one athlete's treadmill, in units
-    // (km/h on his machine) nothing else in the app speaks, printed on the
-    // opener of every deck that qualified for one. What it was trying to say is
-    // now DERIVED and correct for whoever is holding the phone: the card prints
-    // the pace its own duration and distance produce (`CardioMetrics`), and a
-    // bout nobody has entered yet prints nothing at all.
+
+    /// How long an opener may be: ten minutes.
+    ///
+    /// The opener is a WARM-UP. Repeating last Sunday's forty-minute run at the
+    /// top of a lifting session would be proposing a different workout, so a
+    /// longer bout is cut to this and its distance cut with it — the pace the
+    /// card prints stays the pace that was actually run.
+    public static let maxSeconds = 600
+
+    /// One bout, in the units a deck prescribes in.
+    public struct Bout: Sendable, Equatable {
+        /// What to call the card. The athlete's own kind, not a movement name
+        /// from somebody else's gym.
+        public var name: String
+        public var durationSec: Int
+        public var distanceKm: Double?
+        public var inclinePct: Double?
+
+        public init(name: String, durationSec: Int, distanceKm: Double? = nil, inclinePct: Double? = nil) {
+            self.name = name
+            self.durationSec = durationSec
+            self.distanceKm = distanceKm
+            self.inclinePct = inclinePct
+        }
+    }
+
+    /// The opener a deck proposes, from the athlete's last logged bout.
+    ///
+    /// nil for nil, and nil for a bout with no duration on it — a `cardio_logs`
+    /// row can carry energy and nothing else (a HealthKit import with no
+    /// distance and no time), and a prescription of zero minutes is not a
+    /// prescription. A first session then opens with no warm-up at all, which
+    /// is the correct answer for somebody who has never logged one.
+    public static func seed(from lastBout: Bout?) -> Bout? {
+        guard let bout = lastBout, bout.durationSec > 0 else { return nil }
+        guard bout.durationSec > maxSeconds else { return bout }
+        let scale = Double(maxSeconds) / Double(bout.durationSec)
+        return Bout(
+            name: bout.name,
+            durationSec: maxSeconds,
+            // Two decimals, because the card prints kilometres and a scaled
+            // 1.6666666 is not a distance anybody walked.
+            distanceKm: bout.distanceKm.map { ($0 * scale * 100).rounded() / 100 },
+            inclinePct: bout.inclinePct
+        )
+    }
 
     /// Whether a deck already opens with cardio, by the same test the row
     /// itself uses (`SetRow.isCardio`): time, distance or gradient rather than

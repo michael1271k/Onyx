@@ -170,7 +170,10 @@ struct TodayTabView: View {
                     // without meaning the other.
                     Button {
                         if quickLog == nil {
-                            quickLog = DayModel(database: environment.database, userId: environment.userIdString)
+                            quickLog = DayModel(
+                                database: environment.database, userId: environment.userIdString,
+                                environment: environment
+                            )
                         }
                         showQuickLog = true
                     } label: {

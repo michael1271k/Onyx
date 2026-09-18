@@ -1,7 +1,7 @@
 {
   "module": "coach/scheduleReadiness",
   "fn": "scheduleAwareReadiness",
-  "note": "Travel first; a scheduled rest day with no session says so; a scheduled day never reads Rest — it goes light instead.",
+  "note": "Travel first; a scheduled rest day with no session says so; a scheduled day never reads Rest — it goes light instead. The rest line names the plan only when the caller passes one: the 64-cell sweep passes none, and the two cases after it pass Onyx-5.",
   "cases": [
     {
       "name": "base=0 day=null logged=false mode=normal reentry=false",
@@ -18,7 +18,7 @@
         "level": "rest",
         "label": "Zone-2 / Rest",
         "color": "#79808C",
-        "reason": "Scheduled rest in Onyx-5 — Zone-2 cardio (150–250 kcal) or full recovery."
+        "reason": "Scheduled rest — Zone-2 cardio or full recovery."
       }
     },
     {
@@ -36,7 +36,7 @@
         "level": "rest",
         "label": "Zone-2 / Rest",
         "color": "#79808C",
-        "reason": "Scheduled rest in Onyx-5 — Zone-2 cardio (150–250 kcal) or full recovery."
+        "reason": "Scheduled rest — Zone-2 cardio or full recovery."
       }
     },
     {
@@ -301,7 +301,7 @@
         "level": "rest",
         "label": "Zone-2 / Rest",
         "color": "#79808C",
-        "reason": "Scheduled rest in Onyx-5 — Zone-2 cardio (150–250 kcal) or full recovery."
+        "reason": "Scheduled rest — Zone-2 cardio or full recovery."
       }
     },
     {
@@ -324,7 +324,7 @@
         "level": "rest",
         "label": "Zone-2 / Rest",
         "color": "#79808C",
-        "reason": "Scheduled rest in Onyx-5 — Zone-2 cardio (150–250 kcal) or full recovery."
+        "reason": "Scheduled rest — Zone-2 cardio or full recovery."
       }
     },
     {
@@ -669,7 +669,7 @@
         "level": "rest",
         "label": "Zone-2 / Rest",
         "color": "#79808C",
-        "reason": "Scheduled rest in Onyx-5 — Zone-2 cardio (150–250 kcal) or full recovery."
+        "reason": "Scheduled rest — Zone-2 cardio or full recovery."
       }
     },
     {
@@ -692,7 +692,7 @@
         "level": "rest",
         "label": "Zone-2 / Rest",
         "color": "#79808C",
-        "reason": "Scheduled rest in Onyx-5 — Zone-2 cardio (150–250 kcal) or full recovery."
+        "reason": "Scheduled rest — Zone-2 cardio or full recovery."
       }
     },
     {
@@ -1037,7 +1037,7 @@
         "level": "rest",
         "label": "Zone-2 / Rest",
         "color": "#79808C",
-        "reason": "Scheduled rest in Onyx-5 — Zone-2 cardio (150–250 kcal) or full recovery."
+        "reason": "Scheduled rest — Zone-2 cardio or full recovery."
       }
     },
     {
@@ -1060,7 +1060,7 @@
         "level": "rest",
         "label": "Zone-2 / Rest",
         "color": "#79808C",
-        "reason": "Scheduled rest in Onyx-5 — Zone-2 cardio (150–250 kcal) or full recovery."
+        "reason": "Scheduled rest — Zone-2 cardio or full recovery."
       }
     },
     {
@@ -1376,6 +1376,44 @@
           "workoutToday": true,
           "contextMode": "travel",
           "reentry": true
+        }
+      },
+      "expected": {
+        "level": "train_light",
+        "label": "Travel Mode 🌴",
+        "color": "#8E9AAC",
+        "reason": "Vacation protocol — 2–3 short maintenance sessions this week is plenty. Prioritize rest, sun, and enjoying the trip."
+      }
+    },
+    {
+      "name": "base=0 day=null logged=false mode=normal reentry=false label=Onyx-5",
+      "input": {
+        "base": null,
+        "ctx": {
+          "dayLabel": null,
+          "workoutToday": false,
+          "contextMode": "normal",
+          "reentry": false,
+          "programLabel": "Onyx-5"
+        }
+      },
+      "expected": {
+        "level": "rest",
+        "label": "Zone-2 / Rest",
+        "color": "#79808C",
+        "reason": "Scheduled rest in Onyx-5 — Zone-2 cardio or full recovery."
+      }
+    },
+    {
+      "name": "base=0 day=null logged=false mode=travel reentry=false label=Onyx-5",
+      "input": {
+        "base": null,
+        "ctx": {
+          "dayLabel": null,
+          "workoutToday": false,
+          "contextMode": "travel",
+          "reentry": false,
+          "programLabel": "Onyx-5"
         }
       },
       "expected": {

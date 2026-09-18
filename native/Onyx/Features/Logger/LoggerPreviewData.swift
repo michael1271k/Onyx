@@ -16,6 +16,18 @@ import OnyxData
 #if DEBUG
 extension LoggerModel {
 
+    /// The bout the preview decks open with.
+    ///
+    /// HARNESS DATA, like every other number on this page. Five minutes at 2 %
+    /// over 0.37 km is what the founder's treadmill warm-up was, and it lived
+    /// in `WarmupCardio` as three constants prescribed to every account until
+    /// this wave. The opener is the athlete's own last `cardio_logs` row now,
+    /// so a fixture that wants the card has to bring a bout — and the shots
+    /// that review the cardio card (`set-row-cardio`, `logger`) need one.
+    nonisolated static let previewBout = WarmupCardio.Bout(
+        name: "Treadmill", durationSec: 300, distanceKm: 0.37, inclinePct: 2
+    )
+
     /// Upper B, cut phase. `logged: true` reproduces a real mid-session state;
     /// `resting: true` leaves the rest clock running, which is the only state
     /// the nav-bar capsule exists in and therefore the only one that can be
@@ -24,7 +36,8 @@ extension LoggerModel {
         let model = LoggerModel(
             day: PlanTemplates.day("onyx5", "cb_b"),
             phase: .cut,
-            startedAt: Date().addingTimeInterval(-22 * 60)
+            startedAt: Date().addingTimeInterval(-22 * 60),
+            warmupBout: previewBout
         )
         guard logged else { return model }
 
@@ -56,10 +69,10 @@ extension LoggerModel {
     /// Without one `SessionSeed` falls to the PROGRAM tier — `wk1Kg` at the rep
     /// floor, a load chosen in July — so `Top lifts` has nothing to compare
     /// against and the arrows it exists to draw are unreachable in a
-    /// screenshot. The catalogue has to carry the treadmill too, or the deck
-    /// opens without its bout (`catalogueHasWarmupCardio`) and the cardio dot —
-    /// the one dot on the timeline that could never fill before W3 — cannot be
-    /// photographed either.
+    /// screenshot. The opener is handed in (`previewBout`) rather than read
+    /// off this store: the deck would otherwise open without its bout and the
+    /// cardio dot — the one dot on the timeline that could never fill before
+    /// W3 — could not be photographed either.
     ///
     /// The previous loads are deliberately BELOW today's on the pulldown (47 →
     /// 49.5) and above them on the row (45 → 42.5), so one lift rises and
@@ -75,7 +88,7 @@ extension LoggerModel {
         ]
         let date = LogicalDay.iso(Date().addingTimeInterval(-7 * 24 * 3600))
         try? store.seedRows { db in
-            try Exercise(id: "pv-cardio", name: WarmupCardio.name).insert(db)
+            try Exercise(id: "pv-cardio", name: previewBout.name).insert(db)
             for (i, set) in previous.enumerated() {
                 try Exercise(id: "pv-\(i)", name: set.name).insert(db)
             }
@@ -99,7 +112,8 @@ extension LoggerModel {
             phase: .cut,
             store: store,
             userId: userId,
-            startedAt: Date().addingTimeInterval(-22 * 60)
+            startedAt: Date().addingTimeInterval(-22 * 60),
+            warmupBout: previewBout
         )
         model.fill("Chest Press", [(40, 12, 9), (40, 10, 9), (40, 10, 9.5)])
         model.fill("Neutral-Grip Lat Pulldown", [(47, 12, 8.5), (49.5, 11, 9.5)])
