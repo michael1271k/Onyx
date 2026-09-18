@@ -317,8 +317,12 @@ private struct SettingsForm: View {
     /// beside it would be a second fact to keep true across a hand-edited
     /// defaults blob. Presets are written as their normalised hexes, so a
     /// stored spec compares equal to the preset it came from.
+    ///
+    /// `base` and not `spec`: from W2 the drawn palette carries the training
+    /// block's mood offset on top of the pick, and no offset spec is in the
+    /// table — matching on `spec` would read "Custom" for the whole of a cut.
     private var themeName: String {
-        let spec = OnyxTheme.current.spec
+        let spec = OnyxTheme.current.base
         return OnyxTheme.presets.first { $0.spec == spec }?.name ?? "Custom"
     }
 

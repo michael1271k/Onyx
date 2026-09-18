@@ -44,6 +44,41 @@ _Nothing yet._
 
 ---
 
+## [5.2.0] — 2026-09-18 · The Palette Reads The Block
+
+### Added
+- **Nine themes in a 3 × 3 of live palettes** (Settings → Appearance). Each
+  swatch is a mesh of the four accents that theme actually resolves to —
+  training, nutrition, body and recovery — with the theme's name and its mood in
+  one word under it. Four new themes: **Ember**, **Glacier**, **Verdigris** and
+  **Nocturne**. Every pair was re-solved in OKLCH inside the contrast guard,
+  each secondary at h + 120°, and the nine primaries are now held ≥ 35° apart by
+  a test rather than by a comment.
+- **The training block tints the app.** A cut reads quieter and deeper, a bulk a
+  shade brighter, a deload drops the whole palette to one fixed low saturation —
+  and it all shifts back when the block ends. It reaches every screen, the
+  widgets and the watch; the two accents the theme is named for never move.
+- **Custom routines get real day colours.** A deck built in the app spreads the
+  Train mesh over its own days instead of drawing every training day in the grey
+  that means "rest".
+
+### Changed
+- **Water, deep sleep, REM and awake follow the theme.** They were the last four
+  fixed hexes in the palette, so they stayed the same blue, indigo, pink and
+  grey under every theme. Water is now Tide's far stop, the three sleeping
+  stages are three separated stops of Lunar in the order the night runs, and
+  awake is secondary ink — it is not a kind of sleep.
+
+### Removed
+- **The colour pickers and the two mood sliders.** A hand-picked pair of hues was
+  a palette nothing had been measured against, and the one hue band the contrast
+  sweep found under AA was reachable only through a picker. The nine presets are
+  each solved inside the guard; picking one of them is now the whole screen.
+- The derived-ramp preview and "Reset to Ion" went with them — every swatch in
+  the grid *is* that preview, and Ion is the first chip in it.
+
+---
+
 ## [5.1.0] — 2026-09-18 · Nobody Else's Numbers
 
 The founder's own figures had been shipping inside the app bundle and compiled

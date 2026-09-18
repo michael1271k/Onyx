@@ -86,13 +86,19 @@ struct OnyxIntentProvider<Configuration: WidgetConfigurationIntent & OnyxScoped>
     return entry(for: configuration)
   }
 
-  /// Re-read the theme the app persisted to the App Group.
+  /// Re-read the theme the app persisted to the App Group — BOTH keys.
   ///
   /// The bundle's `init` cannot be relied on for this: `reloadAllTimelines()`
   /// re-runs the provider, and WidgetKit may serve it from an extension process
   /// that is already running — one whose `OnyxTheme.current` is the palette
   /// from before the user picked a new one. Nearly free in that case; see the
   /// note on `OnyxWidgets.init`.
+  ///
+  /// `OnyxTheme.load` reads `OnyxTheme.key` AND `OnyxTheme.phaseKey`, so a tile
+  /// carries the training block's mood offset the same way every screen in the
+  /// app does. Without the second key a widget would be the one surface still
+  /// drawing the unshifted palette, sitting next to the app on the same Home
+  /// Screen — which is exactly how a themed install looks broken.
   private static func theme() async {
     await MainActor.run {
       OnyxTheme.load(AppDatabase.appGroupDefaults())

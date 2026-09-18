@@ -108,6 +108,68 @@ public struct OnyxThemeSpec: Codable, Equatable, Sendable {
         )
     }
 
+    // MARK: - The phase offset
+
+    /// The same theme, read the way the current training block wants it read.
+    ///
+    /// ── WHY A BLOCK MOVES THE PALETTE AND NOT A BADGE ───────────────────────
+    /// A phase is the one fact about the app that is true for weeks at a time
+    /// and true on every screen, and it was being told in one chip on one
+    /// header. A mood offset says it everywhere without adding a pixel: a cut
+    /// reads quieter and deeper, a bulk reads a shade brighter, and a deload
+    /// drops the whole palette to one fixed low saturation — the week where
+    /// nothing is supposed to shout.
+    ///
+    /// ── WHAT IT DELIBERATELY DOES NOT MOVE ──────────────────────────────────
+    /// The two CHOSEN accents, because `OnyxTheme` holds those at the hexes the
+    /// swatch draws whatever the knob says. So a phase tints the twenty-four
+    /// DERIVED colours and leaves the theme recognisably itself — Ember in a
+    /// deload is still Ember, muted.
+    ///
+    /// Pure, and through `normalised()`: an offset that walked out of
+    /// `chromaScale` or `liftOffset` is clamped by the same guard a hand-edited
+    /// defaults blob is, so no phase can put an ink under AA. `peak` and `nil`
+    /// are the identity — a peak block is the palette as picked, and no block
+    /// at all must look exactly like the app did before this existed.
+    ///
+    /// `deload` SETS chroma rather than offsetting it, which is why it is
+    /// written unsigned: the deload mood is one fixed quiet, not a relative
+    /// step, and no preset in `OnyxTheme.presets` sits below 0.70 — so it only
+    /// ever lowers.
+    public func reacting(to phase: PhaseKind?) -> OnyxThemeSpec {
+        guard let phase else { return normalised() }
+        switch phase {
+        case .cut:
+            return moved(chroma: chroma - 0.10, lift: lift - 0.03)
+        case .bulk:
+            return moved(chroma: chroma, lift: lift + 0.03)
+        case .deload:
+            return moved(chroma: 0.70, lift: lift)
+        case .peak:
+            return normalised()
+        }
+    }
+
+    private func moved(chroma: Double, lift: Double) -> OnyxThemeSpec {
+        OnyxThemeSpec(primary: primary, secondary: secondary, chroma: chroma, lift: lift).normalised()
+    }
+
+    /// The knob in one word — what the Appearance grid prints under a preset's
+    /// name now that the two sliders are gone.
+    ///
+    /// Derived rather than a third column in the preset table: a word written
+    /// beside the numbers is a second fact to keep true, and this one cannot
+    /// disagree with the mood it names. The ladder is read top to bottom, so a
+    /// theme that is both quiet and dark reads "Muted" — the saturation is the
+    /// louder of the two statements.
+    public var moodWord: String {
+        if chroma <= 0.75 { return "Muted" }
+        if lift >= 0.03 { return "Bright" }
+        if lift <= -0.02 { return "Deep" }
+        if chroma >= 0.95 { return "Vivid" }
+        return "Even"
+    }
+
     static let lightness = 0.60...0.78
     static let maxChroma = 0.20
 
