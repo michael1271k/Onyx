@@ -31,6 +31,23 @@ enum WidgetPreviews {
         }
     }
 
+    /// The extension's `+250` button, as a shape with no intent behind it. It
+    /// must stay the same size as the real one or the shot reviews a layout
+    /// that does not ship; it must NOT be the real one, because an `AppIntent`
+    /// button inside the app opens a different code path.
+    struct WaterButtonStandIn: View {
+        var body: some View {
+            HStack(spacing: 3) {
+                Image(systemName: "plus").font(OnyxWidgetType.face(9, weight: .bold))
+                Text("250").font(OnyxWidgetType.face(9, weight: .heavy))
+            }
+            .foregroundStyle(Color.onyx.water)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(Color.onyx.water.opacity(0.18)))
+        }
+    }
+
     static let entry = OnyxTileEntry(date: OnyxSnapshot.sampleDate, snapshot: .sample)
     /// The same date with every W12 series absent — the first-week state.
     static let emptyEntry = OnyxTileEntry(date: OnyxSnapshot.sampleDate, snapshot: .sampleEmptySeries)
@@ -42,7 +59,19 @@ enum WidgetPreviews {
         let home: [WidgetFamily] = [.systemSmall, .systemMedium, .systemLarge]
         var out: [Cell] = []
         func add<V: View>(_ id: String, _ family: WidgetFamily, _ view: V) {
-            out.append(Cell(id: "\(id)-\(family)", family: family, content: AnyView(view)))
+            out.append(Cell(
+                id: "\(id)-\(family)", family: family,
+                // ── THE WATER BUTTON'S SLOT, FILLED FOR THE SHEET (W6) ──────
+                // The Water faces draw whatever the host puts in
+                // `onyxWaterButton`, and the host on the Home Screen is the
+                // extension (`AddWaterIntent` cannot be reached from OnyxUI or
+                // from here). An inert stand-in of the same shape is what makes
+                // the layout reviewable: without it the contact sheet would
+                // photograph the one arrangement no device ever renders.
+                content: AnyView(
+                    view.environment(\.onyxWaterButton, OnyxWaterButton { AnyView(WaterButtonStandIn()) })
+                )
+            ))
         }
         // Size-major within a family, so two Smalls share a row and two Larges
         // share a page — focus-major would put every Large on a page of its own.

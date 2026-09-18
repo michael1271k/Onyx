@@ -45,8 +45,12 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
     public let minutes: Int?
     public let deepMin: Int?
     public let remMin: Int?
-    /// Stage TOTALS, not a timeline. The rainbow is a stacked bar and must never
-    /// be drawn as a hypnogram — the ordering it would imply is not in the data.
+    /// Stage TOTALS, not a timeline. Nothing here may be drawn against a CLOCK
+    /// axis: the ordering a real hypnogram implies is not in this data, and
+    /// `sleep_sessions` is the only table the builder reads (sample-level
+    /// stages would need `sleep_samples`, which does not exist — W6's stated
+    /// ceiling). W6's depth strip therefore lays the four stages out by DEPTH
+    /// and scales them by SHARE OF NIGHT, and says so on its own axis.
     public let coreMin: Int?
     public let awakeMin: Int?
     public let score: Int?
@@ -171,7 +175,22 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
     /// Tonnage the last time this same `dayKey` was trained — the number the
     /// due state is chasing.
     public let lastVolumeKg: Double?
-    public init(label: String, dayKey: String? = nil, logged: Bool, isRestDay: Bool, plannedExercises: Int? = nil, plannedSets: Int? = nil, lastVolumeKg: Double? = nil) {
+    /// The landmark muscles the day's DECK is built on, in deck order, each
+    /// named once. `LandmarkMuscle.rawValue`s — the payload carries strings so
+    /// a widget built against an older vocabulary decodes rather than throws.
+    ///
+    /// ── WHY IT IS ON `workout` AND NOT ON `today` (W6) ──────────────────────
+    /// The brief said `today.muscles`. `today` is nil until a session is
+    /// logged, and the face that wants this is the DUE state — the wash exists
+    /// to say what the session in front of you is about, hours before there is
+    /// a session to summarise. On `workout` it is the same fact in both
+    /// states, because a deck's muscles do not change when you finish it.
+    ///
+    /// Nil on a rest day and on a day the program cannot name: a wash with no
+    /// hues draws nothing, which is the honest picture of "nothing is planned"
+    /// (`PulseTabView.muscleWash` makes the same choice for the same reason).
+    public let muscles: [String]?
+    public init(label: String, dayKey: String? = nil, logged: Bool, isRestDay: Bool, plannedExercises: Int? = nil, plannedSets: Int? = nil, lastVolumeKg: Double? = nil, muscles: [String]? = nil) {
       self.label = label
       self.dayKey = dayKey
       self.logged = logged
@@ -179,6 +198,12 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
       self.plannedExercises = plannedExercises
       self.plannedSets = plannedSets
       self.lastVolumeKg = lastVolumeKg
+      self.muscles = muscles
+    }
+
+    /// The deck's muscles as landmarks, unknown tokens dropped.
+    public var landmarks: [LandmarkMuscle] {
+      (muscles ?? []).compactMap(LandmarkMuscle.init(rawValue:))
     }
   }
   public struct Week: Codable, Sendable, Equatable {
@@ -231,13 +256,48 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
     public let value: Double
     public let reps: Int?
     public let achievedOn: String
+    /// The standing mark this record CLEARED — `personal_records.floor_value`.
+    ///
+    /// ── WHY IT IS THE FLOOR AND NOT "THE PREVIOUS RECORD" (W6) ──────────────
+    /// W6's brief asked for the record before this one. There is no such row:
+    /// `personal_records` has a UNIQUE natural key on
+    /// `(user_id, exercise_key, axis)`, so the table holds ONE standing record
+    /// per lift per axis and a beaten record is overwritten, not kept. The
+    /// history is not thrown away by accident — `PrRecorder.carryFloor` keeps
+    /// the bar that was cleared in `floor_value` precisely because the row
+    /// replacing it would otherwise take the floor with it.
+    ///
+    /// So the margin is "how far past the bar this is", not "how much better
+    /// than last time". On a lift with three successive records that is the
+    /// distance from where the book opened, which is a true and more useful
+    /// statement than a delta against a row that no longer exists. Deriving the
+    /// previous record from `workout_sets` instead would be a second
+    /// implementation of PR eligibility — working sets, rep windows, the pair
+    /// rule — beside `PrRecorder`, which is the one thing this project has
+    /// learned not to do with records.
+    ///
+    /// Nil when nothing stood before it, and nil rather than an equal value: a
+    /// record that cleared nothing has no margin, and "+0.0 kg" under a trophy
+    /// claims a gain that did not happen. The face renders it "first on the
+    /// board".
+    public let previous: Double?
     public var id: String { "\(exercise)-\(axis)" }
-    public init(exercise: String, axis: String, value: Double, reps: Int? = nil, achievedOn: String) {
+    public init(exercise: String, axis: String, value: Double, reps: Int? = nil, achievedOn: String, previous: Double? = nil) {
       self.exercise = exercise
       self.axis = axis
       self.value = value
       self.reps = reps
       self.achievedOn = achievedOn
+      self.previous = previous
+    }
+
+    /// How far past the mark it cleared this record stands, in the axis's own
+    /// units. Nil when it cleared nothing, and nil when it did not actually
+    /// improve on it — a compiled floor ABOVE a logged record must not report a
+    /// negative gain.
+    public var margin: Double? {
+      guard let previous, previous < value else { return nil }
+      return value - previous
     }
   }
   public struct E1rm: Codable, Sendable, Equatable, Identifiable {
@@ -628,6 +688,24 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
   /// A declared context, as the server writes it: the vocabulary key and the
   /// label to draw. The label comes down rather than being mapped here so the
   /// two sides cannot disagree about what "refeed" is called.
+  /// One day of the energy ledger: what intake minus TDEE came to, or nil on a
+  /// day with a hole in it.
+  ///
+  /// Nil and never zero — `Energy.tdee` refuses a day missing BMR, active
+  /// energy or intake, because a missing sync counted as zero reports a ~400
+  /// kcal larger deficit in the same direction every time it happens
+  /// (`DeficitLedger.swift`'s header). A bar that is absent says so; a bar at
+  /// the axis says the day broke even.
+  public struct DayBalance: Codable, Sendable, Equatable, Identifiable {
+    public let d: String
+    public let kcal: Double?
+    public var id: String { d }
+    public init(d: String, kcal: Double? = nil) {
+      self.d = d
+      self.kcal = kcal
+    }
+  }
+
   public struct DayContext: Codable, Sendable, Equatable {
     public let mode: String
     public let label: String
@@ -752,7 +830,25 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
   /// The stress index and its fortnight. `.full` and `.body`.
   public let stress: StressFace?
 
-  public init(date: String, generatedAt: String, scope: String? = nil, battery: Int? = nil, score: Int? = nil, sleep: Sleep, weight: Weight, macros: Macros, water: Water, steps: Steps, workout: Workout, week: Week, weekPrev: WeekTotals? = nil, records: [Record]? = nil, e1rm: [E1rm]? = nil, muscleFocus: [MuscleVolume]? = nil, today: Today? = nil, streak: Streak? = nil, context: DayContext? = nil, cardio: Cardio? = nil, calendar: [CalendarDay]? = nil, volumeTrend: [Point]? = nil, body: Body? = nil, scores: Scores? = nil, readiness: Readiness? = nil, vitals: Vitals? = nil, consistency: Consistency? = nil, deficit: DeficitLedger? = nil, trajectory: Trajectory? = nil, batteryStack: [BatteryStackDay]? = nil, bodyComp: [BodyCompMetric]? = nil, coach: String? = nil, weekRings: [WeekRingDay]? = nil, soreness: [SorenessRegion]? = nil, stress: StressFace? = nil) {
+  // ── W6 ─────────────────────────────────────────────────────────────────────
+
+  /// The last SEVEN days of the energy ledger, oldest first — one signed
+  /// balance a day, a hole left as nil.
+  ///
+  /// ── WHY IT IS NOT A FIELD ON `DeficitLedger` ───────────────────────────────
+  /// It belongs there by shape and cannot go there by test: `deficit-ledger.json`
+  /// compares the whole built `DeficitLedger` against a hand-computed expected
+  /// value with `==`, so a new field — even an optional one — fails all ten
+  /// cases on a difference that is not a difference in the arithmetic. The
+  /// sprint's rule is that goldens are hand-edited only when the NUMBERS moved;
+  /// they have not. `DeficitLedgerSeries.dayBalanceKcal` is public and is the
+  /// one rule both surfaces call, so this is the same arithmetic in a second
+  /// window, not a second implementation of it.
+  ///
+  /// Lifestyle scope, beside `deficit` itself.
+  public let deficitDays: [DayBalance]?
+
+  public init(date: String, generatedAt: String, scope: String? = nil, battery: Int? = nil, score: Int? = nil, sleep: Sleep, weight: Weight, macros: Macros, water: Water, steps: Steps, workout: Workout, week: Week, weekPrev: WeekTotals? = nil, records: [Record]? = nil, e1rm: [E1rm]? = nil, muscleFocus: [MuscleVolume]? = nil, today: Today? = nil, streak: Streak? = nil, context: DayContext? = nil, cardio: Cardio? = nil, calendar: [CalendarDay]? = nil, volumeTrend: [Point]? = nil, body: Body? = nil, scores: Scores? = nil, readiness: Readiness? = nil, vitals: Vitals? = nil, consistency: Consistency? = nil, deficit: DeficitLedger? = nil, trajectory: Trajectory? = nil, batteryStack: [BatteryStackDay]? = nil, bodyComp: [BodyCompMetric]? = nil, coach: String? = nil, weekRings: [WeekRingDay]? = nil, soreness: [SorenessRegion]? = nil, stress: StressFace? = nil, deficitDays: [DayBalance]? = nil) {
     self.date = date
     self.generatedAt = generatedAt
     self.scope = scope
@@ -788,6 +884,7 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
     self.weekRings = weekRings
     self.soreness = soreness
     self.stress = stress
+    self.deficitDays = deficitDays
   }
 }
 

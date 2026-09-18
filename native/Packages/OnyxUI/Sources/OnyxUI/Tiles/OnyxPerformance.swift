@@ -67,6 +67,47 @@ extension OnyxSnapshot.Record {
     }
   }
 
+  /// "+5.0 kg" — how far past the bar it cleared this record stands, in the
+  /// axis's own units (W6).
+  ///
+  /// ── WHY THE MARGIN AND NOT THE DATE ──────────────────────────────────────
+  /// "yesterday" says the record is fresh and says nothing about it. The margin
+  /// is what makes a PR a result rather than a notification: 32.5 kg is a
+  /// number, and 32.5 kg where 30 stood is a sentence.
+  ///
+  /// The bar is `Record.previous` — the standing mark the book held, not "last
+  /// time". `OnyxSnapshot.Record.previous` says why the second thing does not
+  /// exist in the schema; `marginCaption` is the wording that keeps this
+  /// honest wherever there is room for it.
+  ///
+  /// Nil when nothing stood before it, and nil when the record did not clear
+  /// its own floor — the face prints "first on the board" rather than a
+  /// manufactured or a negative gain. Sub-unit margins still print: a record
+  /// taken by half a kilo is still a record, and rounding it to "+0" would say
+  /// the opposite.
+  public var marginText: String? {
+    guard let margin, margin > 0 else { return nil }
+    switch axis {
+    case "reps":    return "+\(Int(margin.rounded())) reps"
+    case "seconds": return "+\(Int(margin.rounded()))s"
+    case "volume":  return "+\(Int(margin.rounded())) kg"
+    default:        return "+" + String(format: "%.1f kg", margin)
+    }
+  }
+
+  /// "past 100.0 kg on the book", for a face with a line to spare. What the
+  /// margin is measured FROM, so the number above it cannot be read as a
+  /// delta against the last session.
+  public var marginCaption: String? {
+    guard margin != nil, let previous else { return nil }
+    switch axis {
+    case "reps":    return "past \(Int(previous.rounded())) reps on the book"
+    case "seconds": return "past \(Int(previous.rounded()))s on the book"
+    case "volume":  return "past \(Int(previous.rounded())) kg on the book"
+    default:        return String(format: "past %.1f kg on the book", previous)
+    }
+  }
+
   /// The axis as a glyph. Four axes and four shapes, so a ROW says which kind of
   /// record it is without spending a word of its width on the label.
   public var axisSymbol: String {
@@ -80,8 +121,128 @@ extension OnyxSnapshot.Record {
   }
 }
 
-// MARK: - Records · Small
+// MARK: - Records · one trophy
+//
+// ── WHAT A RECORD TILE IS FOR ────────────────────────────────────────────────
+// The Small printed a figure, an axis label, a lift name, a date and a weekly
+// count — five lines about one event, none of them saying what the event was
+// worth. The Medium led with the weekly COUNT and put the records themselves in
+// a column beside it, so the tile called "Latest PR" led with an integer that
+// was usually 0, 1 or 2.
+//
+// One trophy now: the lift, the figure, and the margin it beat. `Record.previous`
+// (W6) is what makes the margin possible, and the margin is the whole reading —
+// see `marginText`.
 
+/// One record, as a trophy. The shared face: the Small draws one and the Medium
+/// stacks three, so a record reads identically wherever it appears.
+struct TrophyFace: View {
+  let record: OnyxSnapshot.Record
+  let mono: Bool
+  /// The Medium's three stacked rows. The Small draws ONE trophy with the whole
+  /// face to itself and gets the taller, roomier arrangement.
+  var compact = false
+
+  private var gold: Color { mono ? .white : Color.onyx.record }
+  /// A margin is a gain, so it wears `good` — except in `.accented` rendering,
+  /// where every tile is one tint and a green figure reads as a rendering fault
+  /// rather than as a verdict (the `mono ? .white` rule).
+  private var marginInk: Color {
+    if mono { return .white }
+    return record.marginText == nil ? Color.onyx.textSecondary : Color.onyx.good
+  }
+
+  var body: some View {
+    if compact { row } else { column }
+  }
+
+  /// Medium · a row. Icon, name, and the figure with its margin beside it.
+  private var row: some View {
+    HStack(alignment: .center, spacing: 8) {
+      Image(systemName: "trophy.fill")
+        .font(OnyxWidgetType.face(13))
+        .foregroundStyle(gold)
+        .frame(width: 16)
+      VStack(alignment: .leading, spacing: 0) {
+        Text(record.exercise)
+          .font(OnyxWidgetType.face(10, weight: .semibold))
+          .foregroundStyle(Color.onyx.textPrimary)
+          .lineLimit(1)
+          .minimumScaleFactor(0.8)
+        Text(record.axisLabel)
+          .font(OnyxWidgetType.face(8))
+          .foregroundStyle(Color.onyx.textSecondary)
+          .lineLimit(1)
+      }
+      Spacer(minLength: 4)
+      Text(record.display)
+        .font(OnyxWidgetType.hero(15))
+        .foregroundStyle(gold)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+      Text(record.marginText ?? "1st")
+        .font(OnyxWidgetType.face(9, weight: .bold))
+        .foregroundStyle(marginInk)
+        .frame(width: 52, alignment: .trailing)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+    }
+  }
+
+  /// Small · a column.
+  ///
+  /// ── WHY NOT THE ROW, BIGGER ───────────────────────────────────────────────
+  /// It WAS the row, bigger, and it did not fit: a Small's content is about
+  /// 134 pt wide, and "32.5 kg" at 24 pt plus "+2.5 kg" beside it is 130 before
+  /// the trophy has been drawn. The first shot of this face read "32…". The
+  /// figure gets its own line, which is also what one-figure-per-face means.
+  private var column: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      HStack(spacing: 6) {
+        Image(systemName: "trophy.fill")
+          .font(OnyxWidgetType.face(12))
+          .foregroundStyle(gold)
+        Text(record.exercise)
+          .font(OnyxWidgetType.face(11, weight: .semibold))
+          .foregroundStyle(Color.onyx.textPrimary)
+          .lineLimit(2)
+          .minimumScaleFactor(0.8)
+      }
+      HStack(alignment: .firstTextBaseline, spacing: 5) {
+        Text(record.display)
+          .font(OnyxWidgetType.hero(20))
+          .foregroundStyle(gold)
+          .lineLimit(1)
+          .minimumScaleFactor(0.7)
+        // The margin, or the honest absence of one. Never a date in its place:
+        // `relativeDay` says the record is fresh and nothing about how much of
+        // a record it is.
+        Text(record.marginText ?? "first on the board")
+          .font(OnyxWidgetType.face(10, weight: .bold))
+          .foregroundStyle(marginInk)
+          .lineLimit(1)
+          .minimumScaleFactor(0.7)
+      }
+      Text([record.axisLabel, OnyxSnapshot.relativeDay(record.achievedOn)]
+             .compactMap { $0 }.joined(separator: " · "))
+        .font(OnyxWidgetType.face(9))
+        .foregroundStyle(Color.onyx.textSecondary)
+        .lineLimit(1)
+      // What the margin is measured FROM, so the number above it cannot be read
+      // as a delta against the last session. Only here: the Medium's three rows
+      // have no line to spare and drop it rather than truncate it.
+      if let caption = record.marginCaption {
+        Text(caption)
+          .font(OnyxWidgetType.face(8))
+          .foregroundStyle(Color.onyx.textTertiary)
+          .lineLimit(1)
+          .minimumScaleFactor(0.8)
+      }
+    }
+  }
+}
+
+/// Small · one trophy.
 struct RecordFocusFace: View {
   let entry: OnyxTileEntry
   let mono: Bool
@@ -90,7 +251,7 @@ struct RecordFocusFace: View {
   private var top: OnyxSnapshot.Record? { s?.records?.first }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
+    VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 4) {
         Caption("LATEST PR", color: mono ? .white : Color.onyx.record)
         Spacer(minLength: 0)
@@ -98,25 +259,12 @@ struct RecordFocusFace: View {
       }
 
       if let top {
-        BigValue(value: top.display, size: 26, color: Color.onyx.textPrimary)
-        Text(top.axisLabel)
-          .font(OnyxWidgetType.face(9, weight: .semibold))
-          .foregroundStyle(mono ? .white : Color.onyx.record)
-        Text(top.exercise)
-          .font(OnyxWidgetType.face(11, weight: .semibold))
-          .foregroundStyle(Color.onyx.textPrimary)
-          .lineLimit(2)
-          .minimumScaleFactor(0.8)
         Spacer(minLength: 0)
-        HStack(spacing: 4) {
-          if let when = OnyxSnapshot.relativeDay(top.achievedOn) {
-            Text(when).font(OnyxWidgetType.face(9, weight: .semibold)).foregroundStyle(Color.onyx.textSecondary)
-          }
-          Spacer(minLength: 0)
-          if let prs = s?.week.prs, prs > 0 {
-            Text("\(prs) this week")
-              .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
-          }
+        TrophyFace(record: top, mono: mono)
+        Spacer(minLength: 0)
+        if let prs = s?.week.prs, prs > 0 {
+          Text("\(prs) this week")
+            .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
         }
       } else {
         // A week without a record is an ordinary week, not a failure.
@@ -130,10 +278,10 @@ struct RecordFocusFace: View {
 
 // MARK: - Records · Medium
 //
-// The ask was "add a vs last week metric", and the payload already answers it:
-// `week.prs` against `weekPrev.prs` ships in every scope. So the hero becomes
-// the COUNT with its comparison, and the ledger beside it becomes the records
-// themselves — which is what the face is called.
+// Three trophies, stacked. The old Medium led with `week.prs` against
+// `weekPrev.prs` — a count, with a delta of a count — and put the records
+// themselves in a 40 % column beside it. The count is still there, as a caption
+// on the header where a count belongs; the width goes to the records.
 
 struct RecordLedgerFace: View {
   let entry: OnyxTileEntry
@@ -149,49 +297,41 @@ struct RecordLedgerFace: View {
   }
 
   var body: some View {
-    HStack(spacing: 12) {
-      Link(destination: OnyxLink.exercises ?? OnyxLink.home!) { heroColumn }
-      Hairline(vertical: true)
-      Link(destination: OnyxLink.exercises ?? OnyxLink.home!) { ledgerColumn }
-    }
-  }
-
-  private var heroColumn: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      HStack(spacing: 4) {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 6) {
         Caption("RECORDS", color: accent)
+        Spacer(minLength: 0)
+        // The week's count, as a caption. It is context for the trophies below
+        // and not a reading of its own, so it is typed as one.
+        if let week = s?.week {
+          Text("\(week.prs) this week")
+            .font(OnyxWidgetType.face(9, weight: .semibold))
+            .foregroundStyle(Color.onyx.textSecondary)
+          DeltaChip(delta: prDelta, decimals: 0, monochrome: mono)
+        }
         if entry.isStale { StaleTag(age: entry.age) }
       }
-      Spacer(minLength: 0)
-      BigValue(value: s.map { "\($0.week.prs)" }, size: 32,
-               color: (s?.week.prs ?? 0) > 0 ? accent : Color.onyx.textPrimary)
-      Text("this week").font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
-      HStack(spacing: 4) {
-        DeltaChip(delta: prDelta, decimals: 0, monochrome: mono)
-        Text("vs last").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
-      }
-      Spacer(minLength: 0)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-  }
+      // The corner belongs to the mark; this row's content runs to the edge.
+      .padding(.trailing, OnyxMark.faceInset)
 
-  private var ledgerColumn: some View {
-    VStack(alignment: .leading, spacing: 5) {
       if records.isEmpty {
         Text("no records in the book yet")
           .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       } else {
-        ForEach(records.prefix(3)) { record in
-          RecordRow(record: record, mono: mono, showDate: false)
+        // Three, not "up to six": a fourth trophy at this height is a row of
+        // 9 pt type, which is a ledger again.
+        VStack(spacing: 4) {
+          ForEach(Array(records.prefix(3).enumerated()), id: \.element.id) { index, record in
+            if index > 0 { Hairline() }
+            Link(destination: OnyxLink.exercises ?? OnyxLink.home!) {
+              TrophyFace(record: record, mono: mono, compact: true)
+            }
+          }
         }
-        Spacer(minLength: 0)
+        .frame(maxHeight: .infinity)
       }
     }
-    .frame(maxWidth: .infinity)
-    // This column reaches the face's trailing edge, and its first row is level
-    // with the corner the mark sits in.
-    .padding(.trailing, OnyxMark.faceInset)
   }
 }
 
@@ -499,6 +639,12 @@ private struct RecordRow: View {
   let mono: Bool
   var showDate = true
 
+  /// See `TrophyFace.marginInk`.
+  private var marginInk: Color {
+    if mono { return .white }
+    return record.marginText == nil ? Color.onyx.textSecondary : Color.onyx.good
+  }
+
   var body: some View {
     HStack(spacing: 8) {
       Image(systemName: record.axisSymbol)
@@ -519,6 +665,14 @@ private struct RecordRow: View {
       Text(record.display)
         .font(OnyxWidgetType.face(12, weight: .bold, design: .rounded)).monospacedDigit()
         .foregroundStyle(mono ? .white : Color.onyx.record)
+      // The margin travels with the record everywhere it is drawn (W6), so the
+      // ledger and the trophy report the same thing about the same row.
+      Text(record.marginText ?? "1st")
+        .font(OnyxWidgetType.face(9, weight: .bold))
+        .foregroundStyle(marginInk)
+        .frame(width: 48, alignment: .trailing)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
       if showDate, let when = OnyxSnapshot.relativeDay(record.achievedOn) {
         Text(when).font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
           .frame(width: 52, alignment: .trailing)

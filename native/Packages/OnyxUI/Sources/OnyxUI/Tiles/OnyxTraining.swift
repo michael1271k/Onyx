@@ -108,6 +108,59 @@ public struct TrainingView: View {
 // aggregates were computed, so the widget could say a session existed and
 // nothing whatsoever about it.
 
+/// The Pulse tab's muscle wash, on a tile.
+///
+/// ── ONE GRADIENT, TWO SURFACES ───────────────────────────────────────────────
+/// `PulseTabView.muscleWash` washes the top of the day's list with the first two
+/// distinct muscles the day's sessions train. This is the same drawing on the
+/// same rule, which is why it is here rather than re-invented per face: two
+/// gradients built from one idea drift the first time either is nudged, and the
+/// Today tile and the Pulse tab are the two surfaces a user sees a session on.
+///
+/// Two hues and not all of them: a gradient of six is a smear, and the first two
+/// are the ones the deck leads with. Nil hues — a rest day, or a deck of
+/// movements the map has never seen — draw NOTHING, not a grey band. "Nothing is
+/// planned" is a real answer and it has no colour.
+struct MuscleWash: View {
+  let muscles: [LandmarkMuscle]
+  var mono: Bool = false
+  /// The tile is small and the wash is behind type, so it sits well under the
+  /// Pulse tab's own 0.18 — that one has a whole screen to fade across.
+  var opacity: Double = 0.18
+  /// How far the wash bleeds past the face's own bounds, so it reaches the
+  /// TILE's edges rather than the content inset's.
+  ///
+  /// ── WHY A NUMBER AND NOT THE INSET ─────────────────────────────────────
+  /// The two hosts inset differently — `TileFrame` pads 12 and WidgetKit's
+  /// `containerBackground` uses the system's own content margin — and a wash
+  /// that stopped at either one drew a hard-edged rectangle floating inside the
+  /// tile, which is what the first shot of this face showed. Both hosts CLIP to
+  /// the tile's rounded rect (`onyxGlass` ends in `clipShape`;
+  /// `containerBackground` clips to the widget shape), so over-reaching is free
+  /// and the exact inset never has to be known here.
+  var bleed: CGFloat = 24
+
+  var body: some View {
+    let hues = muscles.prefix(2).map { Color.onyx.muscle($0) }
+    if !hues.isEmpty, !mono {
+      LinearGradient(
+        stops: hues.enumerated().map { index, hue in
+          .init(
+            color: hue.opacity(opacity),
+            location: hues.count > 1 ? Double(index) / Double(hues.count - 1) : 0
+          )
+        },
+        startPoint: .topLeading, endPoint: .topTrailing
+      )
+      .mask { LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom) }
+      .padding(.horizontal, -bleed)
+      .padding(.top, -bleed)
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
+    }
+  }
+}
+
 struct TodayFace: View {
   let entry: OnyxTileEntry
   let mono: Bool
@@ -123,18 +176,38 @@ struct TodayFace: View {
   private var done: OnyxSnapshot.Today? { s?.today }
 
   var body: some View {
+    stack
+      // The wash is the deck's own two hues, behind everything, fading out
+      // before the figures start. Top-aligned and height-bounded: a gradient
+      // that ran the whole tile would tint the stat grid too, and the grid is
+      // the one part of this face that is a table.
+      .background(alignment: .top) {
+        MuscleWash(muscles: s?.workout.landmarks ?? [], mono: mono)
+          .frame(height: compact ? 88 : 100)
+      }
+  }
+
+  private var stack: some View {
     VStack(alignment: .leading, spacing: compact ? 6 : 8) {
       TodayHeader(entry: entry, mono: mono, branded: !compact)
 
-      Text(s?.workout.label ?? "—")
-        // 20 on the Medium, up from 18: the stat grid below it grew to two
-        // rows and a headline that stayed put would have read as the smaller
-        // half of its own tile. `lineLimit(2)` and the scale factor are what
-        // keep "Legs & Core B" inside 338 pt at the larger size.
-        .font(OnyxWidgetType.label(compact ? 15 : 20, weight: .bold))
-        .foregroundStyle(Color.onyx.textPrimary)
-        .lineLimit(2)
-        .minimumScaleFactor(0.8)
+      // ── THE HEADLINE IS THE TAP TARGET (W6) ─────────────────────────────
+      // The face's root `widgetURL` already points at the deck, so the whole
+      // Small has always started a session. On a Medium and a Large it shares
+      // the face with a stat grid and a week strip, and a tap landing on the
+      // deck from any of those is a surprise — so the START is named, and the
+      // `Link` around it is the one region that means it.
+      if compact {
+        headline
+      } else {
+        Link(destination: OnyxLink.workout ?? OnyxLink.home!) {
+          HStack(alignment: .firstTextBaseline, spacing: 6) {
+            headline
+            Spacer(minLength: 4)
+            if !isRest, done == nil { StartChip(accent: accent) }
+          }
+        }
+      }
 
       if let sub {
         Text(sub).font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
@@ -178,6 +251,18 @@ struct TodayFace: View {
     }
   }
 
+  private var headline: some View {
+    Text(s?.workout.label ?? "—")
+      // 20 on the Medium, up from 18: the stat grid below it grew to two rows
+      // and a headline that stayed put would have read as the smaller half of
+      // its own tile. `lineLimit(2)` and the scale factor are what keep "Legs
+      // & Core B" inside 338 pt at the larger size.
+      .font(OnyxWidgetType.label(compact ? 15 : 20, weight: .bold))
+      .foregroundStyle(Color.onyx.textPrimary)
+      .lineLimit(2)
+      .minimumScaleFactor(0.8)
+  }
+
   /// Rest says what it is for; due says how much work it is; done says nothing
   /// here, because the metadata row below is already saying it.
   ///
@@ -212,6 +297,28 @@ struct TodayFace: View {
   private var sessionProgress: Double? {
     guard let week = s?.week, let target = week.sessionTarget, target > 0 else { return nil }
     return min(1, Double(week.sessions) / Double(target))
+  }
+}
+
+/// "START" — the one word that says the tap does something rather than opens
+/// something. Drawn only on a training day that has not been logged: a chip on
+/// a rest day would be an invitation the plan did not make, and one on a
+/// finished session would ask you to do it twice.
+private struct StartChip: View {
+  let accent: Color
+
+  var body: some View {
+    HStack(spacing: 3) {
+      Image(systemName: "play.fill").font(OnyxWidgetType.face(8))
+      Text("START").font(OnyxWidgetType.face(9, weight: .heavy)).tracking(0.8)
+    }
+    .foregroundStyle(accent)
+    .padding(.horizontal, 6)
+    .padding(.vertical, 2.5)
+    .background(
+      Capsule().fill(accent.opacity(0.16))
+    )
+    .fixedSize()
   }
 }
 
@@ -426,14 +533,29 @@ struct TodayLargeFace: View {
   }
 
   var body: some View {
+    stack
+      // The deck's own hues, behind the first register only — see `MuscleWash`.
+      .background(alignment: .top) {
+        MuscleWash(muscles: s?.workout.landmarks ?? [], mono: mono)
+          .frame(height: 120)
+      }
+  }
+
+  private var stack: some View {
     VStack(alignment: .leading, spacing: 10) {
       Register(title: "TODAY", accent: mono ? .white : accent) {
         TodayHeader(entry: entry, mono: mono, branded: true)
-        Text(s?.workout.label ?? "—")
-          .font(OnyxWidgetType.face(24, weight: .bold))
-          .foregroundStyle(Color.onyx.textPrimary)
-          .lineLimit(1)
-          .minimumScaleFactor(0.7)
+        Link(destination: OnyxLink.workout ?? OnyxLink.home!) {
+          HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(s?.workout.label ?? "—")
+              .font(OnyxWidgetType.face(24, weight: .bold))
+              .foregroundStyle(Color.onyx.textPrimary)
+              .lineLimit(1)
+              .minimumScaleFactor(0.7)
+            Spacer(minLength: 4)
+            if s?.workout.isRestDay != true, s?.today == nil { StartChip(accent: accent) }
+          }
+        }
         if let done = s?.today {
           TodayStats(done: done, mono: mono)
         } else if s?.workout.isRestDay == true {
@@ -842,10 +964,22 @@ private struct DayCell: View {
 
 // MARK: - Volume
 //
-// This week's tonnage, its delta against last week, and eight weeks of it as a
-// sparkline. The same grammar as the body WeightTrendFace on purpose: one headline,
-// one chip, one line — so the two read as the same kind of statement about two
-// different quantities.
+// This week's tonnage, its delta against last week, and the sixteen muscles the
+// tonnage was spent on.
+//
+// ── WHY THE TREND GAVE WAY TO THE STRIP (W6) ─────────────────────────────────
+// Every size of this tile drew the same eight-week series — a sparkline on the
+// Small, a `BarChart` on the Medium, the `BarChart` again on the Large — which
+// answers "is the block trending up". That is a real question and it is the
+// Trajectory tile's; asked here it left "Tonnage" as a tile about a number's
+// history rather than about the week. The reading the payload has carried per
+// LANDMARK since W3 and no face has drawn is the one a Tuesday can act on:
+// which muscle is behind.
+//
+// `HeatStrip` is that figure — sixteen cells ordered by how much of each
+// muscle's target the week has covered, so the ladder runs out from left to
+// right and the tail is the work that is missing. The eight weeks survive on
+// the Large, where a second register has somewhere to go.
 //
 // Zero-based, unlike weight. Tonnage has a meaningful zero and weeks between
 // 12.1 t and 14.2 t drawn on a 12.1–14.2 band look like a collapse and a
@@ -874,9 +1008,14 @@ struct VolumeFocusFace: View {
         DeltaChip(delta: deltaTonnes, decimals: 1, suffix: " t", monochrome: mono)
       }
       Spacer(minLength: 0)
-      if let trend = s?.volumeTrend, trend.count >= 2 {
-        Sparkline(points: trend.map(\.v), color: mono ? .white : OnyxDomain.train.accent, zeroBased: true)
-          .frame(height: 26)
+      let strip = HeatStrip(muscles: s?.muscleFocus ?? [], monochrome: mono, height: 22)
+      strip
+      if let behind = strip.laggard {
+        Text("\(behind.muscle) \(Int(behind.sets.rounded()))/\(behind.target)")
+          .font(OnyxWidgetType.face(9, weight: .semibold))
+          .foregroundStyle(Color.onyx.textSecondary)
+          .lineLimit(1)
+          .minimumScaleFactor(0.8)
       }
     }
   }
@@ -922,17 +1061,23 @@ struct VolumeFace: View {
       Hairline(vertical: true)
 
       VStack(alignment: .leading, spacing: 4) {
+        let strip = HeatStrip(muscles: s?.muscleFocus ?? [], monochrome: mono, height: 44)
+        // "SIXTEEN MUSCLES" plus a rubric is 215 pt of caption in a 160 pt
+        // column: it wrapped to two lines AND ran under the Onyx mark. The
+        // Large keeps the longer wording, where the register is full width.
         HStack(spacing: 4) {
-          Caption("EIGHT WEEKS", color: Color.onyx.textSecondary)
+          Caption("MUSCLES", color: Color.onyx.textSecondary)
           Spacer(minLength: 0)
-          if let mean = trailingMean(s) {
-            Text("mean \(OnyxSnapshot.tonnes(mean) ?? "—")")
-              .font(OnyxWidgetType.face(8)).foregroundStyle(Color.onyx.textSecondary)
-          }
         }
-        BarChart(points: s?.volumeTrend ?? [], goal: trailingMean(s), color: accent,
-                 label: { weekLabel($0.d) })
-          .frame(maxHeight: .infinity)
+        // The corner belongs to the mark; this row's content runs to the edge.
+        .padding(.trailing, OnyxMark.faceInset)
+        strip.frame(maxHeight: .infinity)
+        // The tail, named. The strip says WHICH end is short; only the word
+        // says which muscle, and a sixteen-cell ladder has no room for labels.
+        Text(strip.laggard.map { "\($0.muscle) is furthest behind — \(Int($0.sets.rounded())) of \($0.target)" }
+             ?? "every muscle at or past its target")
+          .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          .lineLimit(1).minimumScaleFactor(0.8)
       }
       .frame(maxWidth: .infinity)
     }
@@ -968,18 +1113,27 @@ struct VolumeLargeFace: View {
 
       Hairline()
 
+      Register(title: "SIXTEEN MUSCLES", accent: tint(OnyxDomain.train.accent)) {
+        let strip = HeatStrip(muscles: s?.muscleFocus ?? [], monochrome: mono, height: 54)
+        strip.frame(maxHeight: .infinity)
+        Text(strip.laggard.map { "\($0.muscle) is furthest behind — \(Int($0.sets.rounded())) of \($0.target)" }
+             ?? "every muscle at or past its target")
+          .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          .lineLimit(1)
+      }
+      .frame(maxHeight: .infinity)
+
+      Hairline()
+
+      // The eight weeks keep their register HERE and only here: a Large has
+      // room for both the week's shape and the block's, and the Small and
+      // Medium do not.
       Register(title: "EIGHT WEEKS", accent: tint(OnyxDomain.train.accent)) {
         BarChart(points: s?.volumeTrend ?? [], goal: trailingMean(s), color: tint(OnyxDomain.train.accent),
                  label: { weekLabel($0.d) })
           .frame(maxHeight: .infinity)
       }
       .frame(maxHeight: .infinity)
-
-      Hairline()
-
-      Register(title: "WHERE IT WENT", accent: tint(OnyxDomain.train.accent)) {
-        FamilySplit(families: s?.volumeByFamily ?? [], mono: mono, height: 30)
-      }
     }
   }
 }

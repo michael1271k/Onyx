@@ -28,6 +28,45 @@ import WidgetKit
 /// `EnvironmentValues.widgetFamily` has no setter, so the app's Today grid
 /// cannot pretend to be a Medium slot the honest way. Every tile reads this
 /// first and falls back to `widgetFamily`, which is what WidgetKit sets.
+/// An interactive affordance a HOST hands the water face (W6).
+///
+/// ── WHY THE TILE CANNOT WRITE ITS OWN BUTTON ────────────────────────────────
+/// The brief asks for `Button(intent: AddWaterIntent())` on this face, and
+/// OnyxUI cannot see that type: `AddWaterIntent` is a `Shared/` file compiled
+/// into the app and the widget extension, and it imports OnyxData for the App
+/// Group suite name. This package depends on OnyxCore and, by its own manifest,
+/// "never on OnyxData — a view that can reach the database is a view that
+/// will". Moving the intent down would move the database read with it.
+///
+/// So the face declares the SLOT and the host fills it: the extension puts the
+/// AppIntent button in, the contact sheet puts an inert one in so the layout is
+/// photographed, and the app's Today grid leaves it nil — a tap target inside a
+/// grid cell fights the cell's own tap and its edit-mode drag, and the app has
+/// the water row one tap away already.
+///
+/// Nil means "no button", not "a disabled button": a face with nothing in the
+/// slot draws the arc alone and gives the space back.
+/// A builder rather than a stored `AnyView`, for one reason: an environment
+/// key's `defaultValue` is a static property, and `AnyView` is not `Sendable`,
+/// so under Swift 6 a stored view in the environment is a hard error rather
+/// than a warning. A `@MainActor @Sendable` closure is Sendable and is built
+/// where it is drawn, which is also where it belongs.
+public struct OnyxWaterButton: Sendable {
+  let make: @MainActor @Sendable () -> AnyView
+  public init(_ make: @escaping @MainActor @Sendable () -> AnyView) { self.make = make }
+}
+
+private struct OnyxWaterButtonKey: EnvironmentKey {
+  static let defaultValue: OnyxWaterButton? = nil
+}
+
+public extension EnvironmentValues {
+  var onyxWaterButton: OnyxWaterButton? {
+    get { self[OnyxWaterButtonKey.self] }
+    set { self[OnyxWaterButtonKey.self] = newValue }
+  }
+}
+
 private struct OnyxTileFamilyKey: EnvironmentKey {
   static let defaultValue: WidgetFamily? = nil
 }
@@ -707,6 +746,53 @@ struct BarChart: View {
         }
       }
     }
+  }
+}
+
+/// A ±`extent` bar drawn from the CENTRE. The track is the hairline, the tick
+/// marks zero, and the bar grows left or right from it.
+///
+/// Not `ProgressView` and not a `Gauge`: both are floor-to-value shapes, and a
+/// signed reading drawn from a floor makes −2 and 0 look like the same small
+/// bar at the bottom of a scale.
+///
+/// ── WHY IT LIVES HERE NOW (W6) ─────────────────────────────────────────────
+/// It was private to `PulseStress.swift`, where the stress breakdown draws one
+/// per term. The Deficit tile's seven days are the same shape answering the
+/// same question — "which side of zero, and by how much" — and a second copy
+/// of a centred bar is a second set of decisions about what a zero-length bar
+/// looks like. `VitalBar` is deliberately NOT folded in with it: that one
+/// colours by the METRIC's direction rather than by the sign, which is the
+/// whole reason a resting heart rate five beats down reads as a good night.
+public struct DivergingBar: View {
+  let value: Double
+  let extent: Double
+  let tint: Color
+
+  public init(value: Double, extent: Double, tint: Color) {
+    self.value = value
+    self.extent = extent
+    self.tint = tint
+  }
+
+  public var body: some View {
+    GeometryReader { geo in
+      let half = geo.size.width / 2
+      let fraction = min(1, abs(value) / max(extent, 0.0001))
+      let length = half * CGFloat(fraction)
+      ZStack(alignment: .leading) {
+        Capsule().fill(Color.onyx.hairline)
+        Capsule()
+          .fill(tint)
+          .frame(width: max(length, value == 0 ? 0 : 2))
+          .offset(x: value >= 0 ? half : half - length)
+        Rectangle()
+          .fill(Color.onyx.textTertiary)
+          .frame(width: 1)
+          .offset(x: half)
+      }
+    }
+    .accessibilityHidden(true)
   }
 }
 

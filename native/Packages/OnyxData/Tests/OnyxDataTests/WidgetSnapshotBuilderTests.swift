@@ -512,6 +512,144 @@ struct WidgetSnapshotBuilderTests {
         AppDatabase.adoptLegacyStore(into: new, from: old)
         #expect(try String(contentsOf: new.appendingPathComponent("onyx.sqlite"), encoding: .utf8) == "history")
     }
+
+    // ══ W6 ═══════════════════════════════════════════════════════════════════
+
+    // ── THE DECK'S MUSCLES ARE THE PLAN'S, NOT THE SESSION'S ────────────────
+    // `workout.muscles` washes the Today tile, and the tile has to be right at
+    // 07:00 on a day nothing has been logged on. It therefore reads the PLAN —
+    // which also means it survives the session being finished, because a deck's
+    // muscles do not change when you tick its last set.
+    @Test("the day's deck names its muscles, in deck order, on a due day and a done one")
+    func deckMusclesFollowThePlan() throws {
+        let db = try seeded()
+        let due = try build(db, .training).workout
+        let muscles = try #require(due.muscles)
+        #expect(!muscles.isEmpty, "Upper B trains something")
+        #expect(muscles.count == Set(muscles).count, "each muscle named once")
+        #expect(muscles.allSatisfy { LandmarkMuscle(rawValue: $0) != nil },
+                "every token is a landmark the figure can paint: \(muscles)")
+        // `landmarks` is what the wash actually reads.
+        #expect(due.landmarks.map(\.rawValue) == muscles)
+        // Today already HAS a session in the fixture, so this is the done state
+        // and the answer is the same one.
+        #expect(try build(db, .full).workout.muscles == muscles)
+    }
+
+    // A rest day plans nothing, and a wash with no hues draws nothing. Nil and
+    // not `[]`: the face's own rule is that absence has no colour.
+    @Test("a rest day carries no muscles at all")
+    func restDayHasNoMuscles() throws {
+        let db = try seeded()
+        try db.writer.write { conn in
+            try ScheduleOverrideRow(userId: user, date: today, dayKey: Schedule.restOverride, updatedAt: now).insert(conn)
+        }
+        let workout = try build(db, .training).workout
+        #expect(workout.isRestDay)
+        #expect(workout.muscles == nil)
+        #expect(workout.landmarks.isEmpty)
+    }
+
+    // ── THE MARGIN IS THE FLOOR, BECAUSE THE PREVIOUS ROW DOES NOT EXIST ────
+    // `personal_records` is UNIQUE on (user_id, exercise_key, axis) — the first
+    // thing this test proved, and the reason `Record.previous` is
+    // `floor_value` and not "the row before". A beaten record is overwritten;
+    // the bar it cleared is what survives.
+    @Test("the standing record carries the bar it cleared, and a first record carries nothing")
+    func recordsCarryTheFloorTheyCleared() throws {
+        let db = try seeded()
+        try db.writer.write { conn in
+            // The natural key refuses a second row on the same lift and axis.
+            #expect(throws: (any Error).self) {
+                try PersonalRecordRow(userId: user, exerciseKey: "Back Squat", axis: "weight", value: 100,
+                                      reps: 5, sessionId: "s-mon", achievedOn: "2026-08-31").insert(conn)
+            }
+            // What a beaten floor actually looks like: the row that replaced it
+            // carries the old bar (`PrRecorder.carryFloor`).
+            try PersonalRecordRow
+                .filter(Column("exercise_key") == "Back Squat" && Column("axis") == "weight")
+                .updateAll(conn, [Column("floor_value").set(to: 100)])
+            // A second axis on the same lift, with nothing under it.
+            try PersonalRecordRow(userId: user, exerciseKey: "Back Squat", axis: "reps", value: 12, reps: 12,
+                                  sessionId: "s-today", achievedOn: today).insert(conn)
+        }
+        let records = try #require(build(db, .performance).records)
+
+        let weight = try #require(records.first { $0.axis == "weight" })
+        #expect(weight.previous == 100)
+        #expect(weight.margin == 5, "105 kg stands five past the bar it cleared")
+
+        let reps = try #require(records.first { $0.axis == "reps" })
+        #expect(reps.previous == nil, "nothing stood before it")
+        #expect(reps.margin == nil)
+    }
+
+    // A compiled floor can sit ABOVE a logged record — the book is asserted
+    // from a history the phone never saw. That is not a negative gain, it is no
+    // gain, and the face prints "first on the board" rather than "−5.0 kg".
+    @Test("a record that did not clear its own floor reports no margin")
+    func noMarginWithoutAnImprovement() throws {
+        let db = try seeded()
+        try db.writer.write { conn in
+            try PersonalRecordRow
+                .filter(Column("exercise_key") == "Back Squat" && Column("axis") == "weight")
+                .updateAll(conn, [Column("floor_value").set(to: 110)])
+        }
+        let records = try #require(build(db, .performance).records)
+        let weight = try #require(records.first { $0.axis == "weight" })
+        #expect(weight.previous == 110, "the floor is carried whatever it says")
+        #expect(weight.margin == nil, "105 did not clear a 110 bar")
+    }
+
+    // ── SEVEN BARS, ALWAYS, AND A HOLE IS NOT A ZERO ────────────────────────
+    // A day missing intake, BMR or active energy contributes nothing to the
+    // ledger, and the face draws no bar for it. Dropping the day instead would
+    // shift every bar after it and put the wrong weekday under each one.
+    @Test("the deficit face gets seven dated days, a day with a hole carrying nil")
+    func deficitDaysAreSevenAndHonest() throws {
+        let db = try seeded()
+        try db.writer.write { conn in
+            // Two complete days and one with no active energy at all.
+            for (i, active) in [(0, 600.0 as Double?), (1, 550.0 as Double?), (2, nil as Double?)] {
+                let date = ISODate.addDays(today, -i)!
+                try DailyLogRow.filter(Column("id") == "dl\(i)").deleteAll(conn)
+                // The seeded fixture already has a `daily` meal on some of
+                // these dates, and `ledgerDays` keys intake by DATE — two rows
+                // on one day is whichever came back last, which is not a test.
+                try NutritionEntryRow.filter(Column("date") == date).deleteAll(conn)
+                try DailyLogRow(
+                    id: "dl\(i)", userId: user, date: date,
+                    activeEnergy: active, bmr: 1600, createdAt: now, updatedAt: now,
+                    nutritionEstimated: false, sleepOnsetTrouble: false
+                ).insert(conn)
+                try NutritionEntryRow(id: "nd\(i)", userId: user, loggedAt: now, date: date, mealType: "daily",
+                                      calories: 2000, proteinG: 150, carbsG: 150, fatG: 60, createdAt: now).save(conn)
+            }
+        }
+        let days = try #require(build(db, .lifestyle).deficitDays)
+        #expect(days.count == 7, "seven bar positions, whatever the data")
+        #expect(days.map(\.d) == (0..<7).reversed().map { ISODate.addDays(today, -$0)! },
+                "oldest first, ending today")
+        // The value is the LEDGER's own rule and not a literal: `Energy.tdee`
+        // adds the thermic effect of the food on top of BMR and active energy,
+        // so a hand-written 2000 − 2200 would be testing the wrong arithmetic
+        // and would start failing the day the TEF coefficient moved.
+        #expect(days.last?.kcal == DeficitLedgerSeries.dayBalanceKcal(
+            DeficitDayIn(date: today, intakeKcal: 2000, bmrKcal: 1600, activeKcal: 600)))
+        #expect((days.last?.kcal ?? 0) < 0, "a 2000 kcal day against a 2200+ expenditure is a deficit")
+        #expect(days.first(where: { $0.d == ISODate.addDays(today, -2)! })?.kcal == nil,
+                "a day with no active energy is nil, never zero")
+    }
+
+    // Scope-gated like every other optional, and `deficit` is its neighbour.
+    @Test("the seven days ride with the ledger's own scope")
+    func deficitDaysAreScoped() throws {
+        let db = try seeded()
+        #expect(try build(db, .training).deficitDays == nil)
+        #expect(try build(db, .lifestyle).deficitDays?.count == 7)
+        #expect(try build(db, .full).deficitDays?.count == 7)
+    }
+
 }
 
 /// The widget's half of "the tab and the tile agree".

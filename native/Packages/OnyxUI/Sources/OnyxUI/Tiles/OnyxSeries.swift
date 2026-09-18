@@ -263,20 +263,45 @@ public struct ConsistencyView: View {
   @ViewBuilder private var face: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 4) {
-        Caption("CONSISTENCY", color: accent)
+        Caption(size == .small ? "WEEK" : "CONSISTENCY", color: accent)
         Spacer(minLength: 0)
         if entry.isStale { StaleTag(age: entry.age) } else { flame }
       }
+      // The corner belongs to the mark; this row's content runs to the edge.
+      // Without it the flame sat under the Onyx mark on a Small.
+      .padding(.trailing, OnyxMark.faceInset)
 
       if let model, model.planned > 0 {
+        // ── THIS WEEK, NOT EIGHT (W6) ────────────────────────────────────
+        // The hero was an eight-week adherence percentage — a figure that
+        // moves by one point when you train and by one point when you do not,
+        // and which on a Tuesday says nothing about Tuesday. The week is the
+        // unit the plan is written in and the unit a missed session is felt
+        // in, so the week leads and the eight-week rate becomes its caption.
+        // ── THE SMALL SAYS THE RATIO AND NOTHING ELSE ──────────────────────
+        // "2 of 3 planned · 89.5% over 8 wk" is 210 pt of sentence in a 134 pt
+        // face, and the first shot of it truncated both halves. The Small folds
+        // the denominator into the figure and drops the eight-week rate, which
+        // the grid underneath is a picture of anyway.
         HStack(alignment: .firstTextBaseline, spacing: 4) {
-          BigValue(value: model.adherencePct.map { OnyxSeriesFormat.trim($0) },
-                   size: size == .small ? 26 : 30, color: Color.onyx.textPrimary)
-          Text("%").font(OnyxWidgetType.face(12)).foregroundStyle(Color.onyx.textSecondary)
-          Spacer(minLength: 0)
-          Text("\(model.done) of \(model.planned)")
-            .font(OnyxWidgetType.face(11, weight: .semibold))
+          BigValue(
+            value: thisWeek.map { size == .small ? "\($0.done)/\($0.planned)" : "\($0.done)" },
+            size: size == .small ? 24 : 30, color: Color.onyx.textPrimary)
+          // The DENOMINATOR is the week's own planned count, not a literal 7.
+          // A five-day plan graded out of seven is the "0/0 reads as a
+          // failure" defect one axis over — `MuscleView.bar` states the same
+          // rule about a family the plan asks nothing of.
+          Text(size == .small ? "planned" : (thisWeek.map { "of \($0.planned) planned" } ?? "planned"))
+            .font(OnyxWidgetType.face(size == .small ? 10 : 11))
             .foregroundStyle(Color.onyx.textSecondary)
+            .lineLimit(1)
+          Spacer(minLength: 0)
+          if size != .small, let rate = model.adherencePct {
+            Text("\(OnyxSeriesFormat.trim(rate))% over 8 wk")
+              .font(OnyxWidgetType.face(9))
+              .foregroundStyle(Color.onyx.textSecondary)
+              .lineLimit(1)
+          }
         }
         Spacer(minLength: 0)
         grid(model)
@@ -285,6 +310,10 @@ public struct ConsistencyView: View {
       }
     }
   }
+
+  /// The week the snapshot is in — the LAST of the eight, which
+  /// `ConsistencySeries.build` runs up to `endingOn`.
+  private var thisWeek: ConsistencyWeek? { model?.weeks.last }
 
   /// The programme day, which counts up and never resets — `Streak.current` is
   /// days since the cut opened, not a consecutive run (see `Snapshot.Streak`).
@@ -298,14 +327,27 @@ public struct ConsistencyView: View {
     }
   }
 
-  /// Eight columns of seven. A column is a week and a row is a weekday, so a
+  /// Four columns of seven. A column is a week and a row is a weekday, so a
   /// Tuesday that keeps going missing is a horizontal gap rather than a
   /// scattering.
+  ///
+  /// ── WHY FOUR WEEKS AND NOT EIGHT (W6) ──────────────────────────────────
+  /// Eight columns at a Small's width put the dots 3 pt apart with 3 pt of air
+  /// between them, which is a texture — a reader could see that SOMETHING was
+  /// missing and not which day. Four columns is the same fifty-six-pixel budget
+  /// spent on twenty-eight marks instead of fifty-six, so a hollow ring is
+  /// legible as a hollow ring. The eight-week rate is still on the face, as the
+  /// caption above; it is the GRID that stops claiming to be readable at eight.
+  ///
+  /// The series is still built over eight weeks (`ConsistencySeries.build`) —
+  /// nothing about the arithmetic changed, only how much of it is drawn.
+  static let gridWeeks = 4
+
   private func grid(_ model: Consistency) -> some View {
-    let dot: CGFloat = size == .small ? 5 : 7
-    return HStack(spacing: size == .small ? 3 : 4) {
-      ForEach(model.weeks) { week in
-        VStack(spacing: size == .small ? 3 : 4) {
+    let dot: CGFloat = size == .small ? 7 : 9
+    return HStack(spacing: size == .small ? 4 : 6) {
+      ForEach(model.weeks.suffix(Self.gridWeeks)) { week in
+        VStack(spacing: size == .small ? 4 : 5) {
           ForEach(week.cells) { cell in
             Self.mark(cell, size: dot, mono: mono)
           }
@@ -313,7 +355,11 @@ public struct ConsistencyView: View {
       }
       Spacer(minLength: 0)
     }
-    .accessibilityHidden(true)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("The last four weeks, one column each")
+    .accessibilityValue(
+      thisWeek.map { "this week, \($0.done) of \($0.planned) planned" } ?? "no plan"
+    )
   }
 
   @ViewBuilder
@@ -365,6 +411,10 @@ public struct DeficitLedgerView: View {
     face.onyxMarked(monochrome: mono, hidden: entry.isStale)
   }
 
+  /// The seven days behind today. Nil on a payload built before W6, which is
+  /// the state the empty fixture photographs.
+  private var days: [OnyxSnapshot.DayBalance] { entry.snapshot?.deficitDays ?? [] }
+
   @ViewBuilder private var face: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 4) {
@@ -372,60 +422,120 @@ public struct DeficitLedgerView: View {
         Spacer(minLength: 0)
         if entry.isStale { StaleTag(age: entry.age) }
       }
+      // The corner belongs to the mark; this row's content runs to the edge.
+      .padding(.trailing, OnyxMark.faceInset)
 
       if let model, model.daysCounted > 0 {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-          BigValue(value: model.weeks.last?.balanceKcal.map { OnyxSeriesFormat.signed($0, decimals: 0) },
-                   size: size == .small ? 24 : 28, color: Color.onyx.textPrimary)
-          Text("kcal").font(OnyxWidgetType.face(11)).foregroundStyle(Color.onyx.textSecondary)
-          Spacer(minLength: 0)
-          Text("\(model.daysCounted) d counted")
-            .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+        // ── THE MEDIUM IS TWO COLUMNS, AND HAD TO BE ──────────────────────
+        // Seven rows stacked under a hero and over a reconciliation is about
+        // 160 pt of content in a Medium's 134, and SwiftUI answers that by
+        // clipping both ends — the first two shots of this face had no caption
+        // at the top and half a label row off the bottom. Making the rows
+        // compressible was not enough: a row's floor is its own TYPE, not its
+        // bar. Side by side, the seven days get the full height and the
+        // figures get a column of their own, which is the grammar every other
+        // Medium in this package already uses.
+        if size == .medium {
+          HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+              hero
+              Spacer(minLength: 0)
+              reconciliation(model)
+            }
+            .frame(width: 128, alignment: .leading)
+            Hairline(vertical: true)
+            dayBars
+          }
+          .frame(maxHeight: .infinity)
+        } else {
+          hero
+          dayBars
+          reconciliation(model)
         }
-        if size != .small { bars(model) }
-        reconciliation(model)
       } else {
         OnyxChartEmpty("A day needs intake AND expenditure to count.", compact: true)
       }
     }
   }
 
-  /// One bar per week, hanging off ONE zero line: a deficit below it and a
-  /// surplus above, so a week that went the other way is a shape rather than a
-  /// minus sign to read.
-  ///
-  /// The line is drawn once, across the whole plot. Eight bars each drawing
-  /// their own one-pixel rule is eight rules that never quite align, which
-  /// reads as a broken axis rather than as an axis.
-  private func bars(_ model: DeficitLedger) -> some View {
-    let peak = max(1, model.weeks.compactMap { $0.balanceKcal.map(abs) }.max() ?? 1)
-    return GeometryReader { geo in
-      let mid = geo.size.height / 2
-      ZStack(alignment: .top) {
-        HStack(alignment: .center, spacing: 3) {
-          ForEach(model.weeks) { week in
-            let value = week.balanceKcal ?? 0
-            let height = max(1, CGFloat(abs(value) / peak) * mid)
-            VStack(spacing: 0) {
-              // The surplus half and the deficit half are separate stacks
-              // pinned to the middle, so a bar never crosses the axis.
-              VStack { Spacer(minLength: 0); if value > 0 { Capsule().fill(surplusInk).frame(height: height) } }
-                .frame(height: mid)
-              VStack { if value <= 0 { Capsule().fill(deficitInk).frame(height: height) }; Spacer(minLength: 0) }
-                .frame(height: mid)
-            }
-            .frame(maxWidth: .infinity)
-            .opacity(week.balanceKcal == nil ? 0.25 : 1)
-          }
-        }
-        Rectangle()
-          .fill(Color.onyx.hairline)
-          .frame(height: 1)
-          .offset(y: mid)
+  /// The week's balance. The reconciliation underneath says what the scale did
+  /// about it; the seven bars say what the week was made of.
+  @ViewBuilder private var hero: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 4) {
+      BigValue(value: model?.weeks.last?.balanceKcal.map { OnyxSeriesFormat.signed($0, decimals: 0) },
+               size: size == .large ? 28 : 22, color: Color.onyx.textPrimary)
+      Text(size == .large ? "kcal this week" : "kcal")
+        .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+        .lineLimit(1)
+      Spacer(minLength: 0)
+      if size == .large, let model {
+        Text("\(model.daysCounted) d counted")
+          .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
       }
     }
-    .frame(maxHeight: .infinity)
-    .accessibilityHidden(true)
+  }
+
+  /// Seven days, each a bar hanging off ONE zero line.
+  ///
+  /// ── WHY DAYS REPLACED THE EIGHT WEEKS (W6) ──────────────────────────────
+  /// The bars used to be the same eight weeks the reconciliation underneath
+  /// already summarises — a chart of the row below it, on a tile whose hero is
+  /// also one of those weeks. Three registers, one window. The days are the
+  /// window nothing else on the face covers, and they are the one a reader can
+  /// act on: a single 900 kcal Saturday is invisible in a weekly bar and is
+  /// exactly what the week's number is made of.
+  ///
+  /// `DivergingBar` is shared with the stress breakdown (it moved into OnyxUI
+  /// for this face); horizontal rather than vertical columns because a day
+  /// needs its weekday beside it and seven initials under seven columns at a
+  /// Small's width is 18 pt a letter.
+  ///
+  /// A day with a HOLE draws no bar at all — nil is not zero, and a day that
+  /// broke even and a day that never synced must not look the same.
+  @ViewBuilder private var dayBars: some View {
+    if days.isEmpty {
+      // A payload from before the field existed. The weekly reconciliation
+      // below still reads, so this register simply stands down.
+      EmptyView()
+    } else {
+      let extent = max(400, days.compactMap { $0.kcal.map(abs) }.max() ?? 400)
+      let bar: CGFloat = size == .small ? 3 : 4
+      // ── THE ROWS SHARE THE HEIGHT; THEY DO NOT CLAIM IT ───────────────────
+      // Seven rows at their intrinsic height plus a hero and a reconciliation
+      // is taller than a Medium, and SwiftUI resolves that by clipping BOTH
+      // ends — the first shot of this face had no caption at the top and half a
+      // reconciliation row off the bottom. `maxHeight: .infinity` on each row
+      // makes the stack compressible, so the register gives way before the
+      // things around it do.
+      VStack(spacing: 1) {
+        ForEach(days) { day in
+          HStack(spacing: 6) {
+            Text(OnyxSnapshot.weekdayInitial(day.d))
+              .font(OnyxWidgetType.face(8, weight: .bold))
+              .foregroundStyle(Color.onyx.textSecondary)
+              .frame(width: 10, alignment: .leading)
+            if let kcal = day.kcal {
+              DivergingBar(value: kcal, extent: extent,
+                           tint: kcal > 0 ? surplusInk : deficitInk)
+                .frame(height: bar)
+            } else {
+              // The track alone: the day exists, the reading does not.
+              Capsule().fill(Color.onyx.hairline).frame(height: bar)
+            }
+            if size != .small {
+              Text(day.kcal.map { OnyxSeriesFormat.signed($0, decimals: 0) } ?? "—")
+                .font(OnyxWidgetType.figure(9))
+                .foregroundStyle(day.kcal == nil ? Color.onyx.textTertiary : Color.onyx.textSecondary)
+                .frame(width: 40, alignment: .trailing)
+            }
+          }
+          .frame(maxHeight: .infinity)
+        }
+      }
+      .frame(maxHeight: .infinity)
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("Seven days of energy balance")
+    }
   }
 
   /// A deficit is the point on a cut, so it wears the domain rather than a
@@ -440,7 +550,7 @@ public struct DeficitLedgerView: View {
            label: "PREDICTED", color: mono ? .white : accent)
       Stat(value: model.measuredKg.map { OnyxSeriesFormat.signed($0, decimals: 2) },
            label: "SCALE", color: Color.onyx.textPrimary)
-      if size != .small {
+      if size == .large {
         Stat(value: model.gapKg.map { OnyxSeriesFormat.signed($0, decimals: 2) },
              label: "GAP", color: Color.onyx.textSecondary)
       }
@@ -450,14 +560,38 @@ public struct DeficitLedgerView: View {
 
 // MARK: - Fatigue / stress stack
 
-/// Where the battery went, day by day.
+/// A fortnight of battery, and how long each of those days was.
 ///
-/// ── WHY THE SUM DOES NOT ALWAYS CLOSE ───────────────────────────────────────
-/// The reading is `clamp(charge − Σdrains, floor, 100)`, so on a heavy day the
-/// stack is taller than the gap it explains and the column runs past the charge
-/// line. That overflow is the day saying the model ran out of room, and it is
-/// drawn rather than scaled away — a stack normalised to always fit would erase
-/// the only days worth looking at.
+/// ── WHY THE STACK GAVE WAY TO A LINE (W6) ───────────────────────────────────
+/// The five-band stack is the right drawing for one question — where did today's
+/// battery GO — and it was answering it fourteen times at once. Fourteen columns
+/// of five bands is seventy rectangles on a 158 pt tile, and the legend under
+/// them needed five words to be read at all. What a tile called "Fatigue" is
+/// looked at for is the shape of the fortnight: is the battery recovering or is
+/// it grinding down.
+///
+/// So the reading is a line, and one band is kept behind it.
+///
+/// ── THE BAND IS THE DRAIN, AND THE BRIEF ASKED FOR AWAKE HOURS ──────────────
+/// W6's brief said "shaded by awake hours", and awake hours cannot be drawn
+/// from this payload: `WidgetSnapshotBuilder.batteryStackSlice` scores every
+/// FINISHED day with `hoursAwake` pinned to `Battery.defaults.maxAwake`, on
+/// purpose — "so a fortnight of bands does not shift under the wall clock" — so
+/// the `time` drain is the SAME NUMBER on thirteen of the fourteen days. Shading
+/// by it draws a flat grey rectangle that means nothing, which is what the first
+/// shot of this face showed.
+///
+/// `totalDrain` is what actually moves, and it is the same question one step
+/// up: how much the day took out of you. The five bands the stack used to draw
+/// are its parts, and the worst of them is still named beside the figure.
+/// Getting the brief's version needs a stored per-day awake figure, not a
+/// different drain here.
+///
+/// ── THE FORTNIGHT HAS HOLES AND THE LINE CANNOT LIFT THE PEN ────────────────
+/// `Sparkline` takes `[Double]`, so an unscored day is DROPPED rather than
+/// drawn as a zero, and the caption says how many of the fourteen the line
+/// actually covers — the same treatment, for the same reason, that the stress
+/// sparkline's "13 of 14 d" gets.
 public struct FatigueStackView: View {
   let entry: OnyxTileEntry
   @Environment(\.widgetFamily) private var hostFamily
@@ -508,18 +642,98 @@ public struct FatigueStackView: View {
           worst(today)
         }
         Spacer(minLength: 0)
-        columns
-        if size != .small { legend }
+        trace
+        if size != .small { footnote }
       } else {
         OnyxChartEmpty("Nothing scored in the last fortnight.", compact: true)
       }
     }
   }
 
-  /// The biggest single drain, named. A stack says where it all went; this says
-  /// which one to do something about.
+  /// The days the line can actually draw — every one that was scored. An
+  /// unscored day is absent from the series, not a zero in it.
+  private var scored: [BatteryStackDay] { days.filter { !$0.empty && $0.batteryPct != nil } }
+
+  /// The battery line, with the awake hours shaded behind it.
+  ///
+  /// The shading is per scored day, in the line's own order, so band N sits
+  /// under point N — which is why the empties are dropped from BOTH and not
+  /// just from the line. Opacity is the day's time drain against the fortnight's
+  /// largest, floored at a visible minimum: the bands vary, and a day with the
+  /// least of them still happened.
+  @ViewBuilder private var trace: some View {
+    let points = scored
+    if points.count >= 2 {
+      // ── THE SHADING IS A SPREAD, NOT AN ABSOLUTE ──────────────────────────
+      // Against zero, a fortnight of ordinary days is fourteen bands of nearly
+      // identical opacity — a flat grey rectangle behind the line, which reads
+      // as a loading state rather than as information (the first shot of this
+      // face was exactly that). Normalised against the fortnight's OWN range,
+      // the long days are dark and the short ones are not.
+      //
+      // And when there is no range — every day the same length, or one day
+      // scored — there is nothing to shade, so nothing is drawn. A uniform
+      // wash that means nothing is worse than no wash.
+      let drains = points.map { $0.totalDrain ?? 0 }
+      let lo = drains.min() ?? 0, hi = drains.max() ?? 0
+      let spread = hi - lo
+      ZStack {
+        if spread > 0.5 {
+          HStack(spacing: 0) {
+            ForEach(points) { day in
+              Rectangle()
+                .fill(Self.ink(.workout, mono: mono)
+                  .opacity(0.06 + 0.26 * (((day.totalDrain ?? 0) - lo) / spread)))
+                .frame(maxWidth: .infinity)
+            }
+          }
+        }
+        Sparkline(points: points.map { $0.batteryPct ?? 0 },
+                  color: mono ? .white : accent, zeroBased: true)
+      }
+      .frame(maxHeight: .infinity)
+      .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("Battery over the last fortnight, shaded by how much each day drained")
+    } else {
+      OnyxChartEmpty("Two scored days draw a line.", compact: true)
+    }
+  }
+
+  /// What the shading means, and how much of the fortnight the line covers. Both
+  /// halves are load-bearing: a gradient nobody explained is decoration, and a
+  /// line with four days missing that does not say so is a lie of omission.
+  private var footnote: some View {
+    let drains = scored.map { $0.totalDrain ?? 0 }
+    let shaded = (drains.max() ?? 0) - (drains.min() ?? 0) > 0.5
+    return HStack(spacing: 6) {
+      // The key appears only when there is shading to key — see `trace`.
+      if shaded {
+        HStack(spacing: 3) {
+          Rectangle()
+            .fill(Self.ink(.workout, mono: mono).opacity(0.32))
+            .frame(width: 10, height: 6)
+            .clipShape(RoundedRectangle(cornerRadius: 1.5))
+          Text("day's drain").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+        }
+      }
+      Spacer(minLength: 0)
+      Text("\(scored.count) of \(days.count) d")
+        .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+    }
+    .lineLimit(1)
+  }
+
+  /// The biggest single drain that is NOT the clock, named.
+  ///
+  /// ── WHY `.time` IS EXCLUDED ────────────────────────────────────────────
+  /// Being awake costs the same every day by construction (see `trace`), so
+  /// `time` is the largest drain on almost every day and the chip said "time
+  /// −35" for a fortnight — true, constant, and useless. What the chip is for
+  /// is the one to do something about, and there is nothing to do about having
+  /// been awake.
   @ViewBuilder private func worst(_ day: BatteryStackDay) -> some View {
-    let top = BatteryDrain.allCases.max { day.drain($0) < day.drain($1) }
+    let top = BatteryDrain.allCases.filter { $0 != .time }.max { day.drain($0) < day.drain($1) }
     if let top, day.drain(top) > 0 {
       Text("\(top.rawValue) −\(OnyxSeriesFormat.trim(day.drain(top)))")
         .font(OnyxWidgetType.face(10, weight: .semibold))
@@ -528,49 +742,6 @@ public struct FatigueStackView: View {
     }
   }
 
-  /// One column a day: the drains stacked down from the charge line, and what
-  /// was left of the charge underneath them.
-  private var columns: some View {
-    GeometryReader { geo in
-      HStack(alignment: .bottom, spacing: 2) {
-        ForEach(days) { day in
-          let charge = day.charge ?? 0
-          let unit = geo.size.height / 100
-          VStack(spacing: 0) {
-            Spacer(minLength: 0)
-            ForEach(BatteryDrain.allCases, id: \.self) { drain in
-              let h = CGFloat(day.drain(drain)) * unit
-              if h > 0.5 {
-                Rectangle().fill(Self.ink(drain, mono: mono)).frame(height: h)
-              }
-            }
-            Rectangle()
-              .fill(mono ? Color.white.opacity(0.35)
-                         : Color.onyx.battery(day.batteryPct.map { Int($0.rounded()) }).opacity(0.85))
-              .frame(height: max(0, CGFloat(charge - (day.totalDrain ?? 0)) * unit))
-          }
-          .frame(maxWidth: .infinity)
-          .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-          .opacity(day.empty ? 0.15 : 1)
-        }
-      }
-    }
-    .frame(maxHeight: .infinity)
-    .accessibilityHidden(true)
-  }
-
-  private var legend: some View {
-    HStack(spacing: 6) {
-      ForEach(BatteryDrain.allCases, id: \.self) { drain in
-        HStack(spacing: 3) {
-          Circle().fill(Self.ink(drain, mono: mono)).frame(width: 5, height: 5)
-          Text(drain.rawValue).font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
-        }
-      }
-      Spacer(minLength: 0)
-    }
-    .lineLimit(1)
-  }
 }
 
 // MARK: - Formatting
