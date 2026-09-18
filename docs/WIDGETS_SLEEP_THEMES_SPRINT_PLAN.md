@@ -1,6 +1,6 @@
 # Widgets · Sleep v2 · Themes · Week · Pulse · Logger · Privacy — Sprint Plan
 
-**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0, W6 shipped 6.3.0, W7 shipped 6.4.0, W8 shipped 6.5.0. **W9 next.**
+**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0, W6 shipped 6.3.0, W7 shipped 6.4.0, W8 shipped 6.5.0, W9 shipped 6.6.0. **W10 next.**
 **From:** `main` @ 5.0.1 (`3de461a7`).
 **Ships as:** eleven sequential waves, 5.1.0 → 6.8.0, plus a close-out wave that retires this file to `docs/Done/`.
 **Branches:** `onyx/sprint-widgets-w<N>`, each cut from current `main` and merged `--no-ff`
@@ -1556,6 +1556,109 @@ device builds by construction.
   view — not `Schedule.sessionTargetIn(context)`, which is what the app-target
   test uses. The two agree for ONYX-5; they would not for a plan with a rest
   day in its `days` array.
+
+**Founder's manual steps still outstanding:**
+- W3's `docs/sql/w3-sleep-onset.sql` paste. Unchanged.
+- Xcode → `OnyxWatch` **and** `OnyxWatchWidgets` → App Groups
+  (`group.app.onyx.health.watch`). Paid program. Unchanged from W7.
+
+### W9 Wave Record — shipped 2026-09-18 as 6.6.0
+
+**Drift from the plan, on purpose:**
+- **The toolbar control is a glyph, not the word "Edit".** The word as a
+  third trailing item beside the calendar and the trends door clipped
+  "Pulse" to "F" on a 402 pt phone. The glyph is `square.grid.2x2` — the one
+  Today's long-press menu already puts beside "Edit Dashboard" — with
+  "Edit squares" as its label; "Done" stays a bold word, as on Today.
+- **The inline title is removed from the bar, deliberately.** Even the glyph
+  left the title no room, and what iOS does with a title that does not fit
+  is width-dependent (clipped on one phone, hidden on another). A
+  `.principal` toolbar item of a 1 pt clear colour makes the bar the same
+  bar everywhere. `navigationTitle("Pulse")` stays, because it is the back
+  button on Body trends; the tab bar and the Now strip's date name the
+  screen.
+- **The private square view is `SquareShell`, not `PulseSquare`.** The plan
+  names the OnyxCore enum `PulseSquare` and the app already had a private
+  generic view of that name; the app's `PulseSquare(rawValue:)` resolved to
+  the view. The shape was renamed, the enum keeps the plan's name.
+- **`day-stress` photographs a stored order, not a page.** The carousel's
+  second page is gone; the screen now seeds
+  `savePulseLayout(.default.moving(.stressLog, to: .stress))` and opens on
+  the grid, so the shot IS the round trip a drag writes. `day-edit` is new.
+- **Delete-from-the-face on a stress reading is gone.** The card's capsules
+  wore a context menu + VoiceOver action per reading; a context menu eats
+  the long press the drag needs (`DashboardGrid` states the rule for
+  `TileMenu`), and a square has no room for a per-capsule target anyway.
+  `StressLogListSheet`'s rows still swipe to delete. The Scale square keeps
+  its menu OUTSIDE edit mode only, same reason.
+- **`DayModel` streams the order rather than reading it once.** The plan's
+  `pulseLayout(userId:)` exists (and is what the store test round-trips),
+  but the model watches `dashboardLayoutStream` and reads
+  `StoredDashboardLayout.pulse` off each yield — the save echoes back as a
+  yield, so a drag here and a drag on another device land the same way.
+  `DayModel` is a streams model; a one-shot read would have been the only
+  stale value on it.
+
+**Root causes that were not where the plan guessed:**
+- **There is no jiggle in `OnyxMotion`.** The plan said "the existing jiggle
+  (OnyxMotion)"; the wobble lived in `TileFrame` (app target) with its
+  stagger hash in `SmartStackView`. Both are now `Jiggle` in
+  `OnyxUI/Dashboard/Arrangeable.swift`; `TileFrame` and `SmartStackView`
+  forward their statics so `TodayModelTests` still compiles and passes.
+  `onyxForcesReducedMotion` moved to OnyxUI with it (public).
+- **The first edit-mode shot photographed empty states frozen over loaded
+  faces** ("Not reported" over the capsules, "No weigh-in / As Planned" over
+  the Scale trace). Cause: `.animation(_:value: wiggle)` hands a
+  repeat-forever spring to EVERY change in the subtree that lands in the
+  same transaction as the flip — and the harness sets `editingSquares` in
+  `.task`, so the GRDB streams' first yield (an `if isEmpty` swap) rode that
+  spring and never finished its transition. `Jiggle` now uses
+  `animation(_:body:)`, scoped to the rotation and offset only. The same
+  leak was latent in `TileFrame` since W7 and is fixed by the move.
+- **`Arrangeable.swift` failed the watchOS cross-build.** `.draggable` and
+  `.dropDestination` do not exist on watchOS; OnyxUI builds for both. Law 6
+  ("every tile file is `#if os(iOS)`") applies to this file too.
+
+**Constraints discovered that the next wave must respect:**
+- **A square is not a `Button` while editing.** `SquareShell` renders the
+  face bare in edit mode and wraps it in a `Button` otherwise, both branches
+  `.transition(.identity)`; `Arrangeable` sits outside. This is what stops a
+  tap opening a sheet mid-arrangement and what keeps the button's
+  recogniser off the drag's long press. The AX rows stay `PulseRow` buttons
+  (shared chrome) and their doors are shut with `gated(_:)` instead.
+- **`pulseEditing` is an environment value set once on the grid**, read by
+  `SquareShell` and by the Scale square's menu. A seventh square reads it
+  the same way; do not thread a Bool through inits.
+- **Any new `PulseSquare` case goes LAST in the enum** — declaration order is
+  the default order and where `reconcile` appends it for every stored row —
+  and it needs a square AND a row (`square(_:)` / `row(_:)` both switch
+  exhaustively).
+- **`layout-serialize.json` now has nine cases; the ninth is hand-written**
+  and carries a `pulse` object with an unknown key to prove the writer
+  copies it byte for byte. Never regenerate.
+- **Counts:** OnyxCore **593** (was 585; +8 `PulseLayoutTests`), OnyxData
+  **627** (was 625; +2), `swift:ui` 40 in 8 suites, app + watch schemes
+  green, `check:swift` both platforms. `OnyxTests` by hand: **64 tests,
+  11 issues**, the documented baseline, all in `WorkoutWeekTests`
+  (`LoggerModel` untouched; `TodayModelTests` green on the moved jiggle).
+
+**Left open on purpose:**
+- **No first-load write gate on the order.** `TodayModel.hasLoaded` refuses a
+  drag before the row's first yield; `DayModel.moveSquare` does not. The
+  store reads the existing row at write time, so nothing but the order
+  itself can be clobbered, and edit mode is behind a toolbar tap that no
+  finger reaches inside one database round trip. Add the gate if a trace
+  ever shows a default order overwriting a synced one.
+- **The Fatigue square dropped "Post not rated" from its face** (the card
+  printed it beside the word). Width: "Exhausted" and "Post not rated" do
+  not share 139 pt. VoiceOver still hears it (`costSpoken`), and the hollow
+  accent dot names the slot.
+- **The grid is still ~1.5 screens tall** on a 402 pt phone at default type
+  — three rows of true squares where W3 measured two. The lever is
+  unchanged: `SquareShell`'s `.aspectRatio(1)` → `4/3`. Decision 5's
+  "strictly squares" was not reopened.
+- **The drop has no merge/hold semantics** — no stacking on Pulse, so
+  `Arrangeable.onTargeted` is the default no-op here.
 
 **Founder's manual steps still outstanding:**
 - W3's `docs/sql/w3-sleep-onset.sql` paste. Unchanged.

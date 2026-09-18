@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/App/PreviewHarness.swift": {
-    "mtime": 1789756831.3068056,
-    "ast_hash": "be903f03ee220e1d1fdcbc859432b520",
+    "mtime": 1789758934.811974,
+    "ast_hash": "04f02c74f35e1e1055554c233ddc8487",
     "semantic_hash": ""
   },
   "native/Onyx/App/SyncCoordinating.swift": {
@@ -300,18 +300,18 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseFatigue.swift": {
-    "mtime": 1789670039.658993,
-    "ast_hash": "9c507c86575956f06867181e9c58e71d",
+    "mtime": 1789758934.8121634,
+    "ast_hash": "36d05437600ffd8582db3950d6f94b9e",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseModel.swift": {
-    "mtime": 1789734005.1534166,
-    "ast_hash": "a2415c1eec1bbf7b801e5917e48c87e9",
+    "mtime": 1789758934.812408,
+    "ast_hash": "8cb024c3605a4ac626aed0ec43715e39",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulsePreviews.swift": {
-    "mtime": 1789737298.1546135,
-    "ast_hash": "d12138bd73aacff6042c57a32d44e322",
+    "mtime": 1789758934.8128238,
+    "ast_hash": "4ee9f7c031b39ab276ed1eeda084281d",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseScale.swift": {
@@ -335,13 +335,13 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseTabView.swift": {
-    "mtime": 1789734005.1539166,
-    "ast_hash": "8111d9f3a8d29f6a1f9adc2a62238367",
+    "mtime": 1789758934.8134682,
+    "ast_hash": "af2e1fb6b03717c8369e4c77ca274c94",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseVitals.swift": {
-    "mtime": 1789504025.8959894,
-    "ast_hash": "c001ef379fcf35d174bc0524874d8d73",
+    "mtime": 1789758934.8136234,
+    "ast_hash": "289d3c7f196cb16b0ef8c7607d0be3a2",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseWorkout.swift": {
@@ -460,8 +460,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Today/DashboardGrid.swift": {
-    "mtime": 1789231722.255071,
-    "ast_hash": "dc42185966eb55d834b5d5047c09758b",
+    "mtime": 1789758934.8137689,
+    "ast_hash": "587974bcaead70886ac30cdd76517561",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Today/DomainSheets.swift": {
@@ -475,13 +475,13 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Today/SmartStackView.swift": {
-    "mtime": 1789562314.8931193,
-    "ast_hash": "3fb7fc57a1edecbe423ba950585edc3d",
+    "mtime": 1789758934.8139431,
+    "ast_hash": "787f54d1a212d5258c6d9138677c5d3d",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Today/TileFrame.swift": {
-    "mtime": 1789591371.9246888,
-    "ast_hash": "a2fb743729f17c5f5060bcaecc81604d",
+    "mtime": 1789758934.8141038,
+    "ast_hash": "42c3b3004de10e4090770e50cccac3b1",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Today/TileSheets.swift": {
@@ -800,7 +800,7 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Dashboard/Layout.swift": {
-    "mtime": 1789757348.4352484,
+    "mtime": 1789758934.8143046,
     "ast_hash": "decb1b0d61ccf0a6bacba73dacd78573",
     "semantic_hash": ""
   },
@@ -1665,8 +1665,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/Fixtures/layout-serialize.json": {
-    "mtime": 1789561752.7697709,
-    "ast_hash": "deb6d0cff2a40db30dd8b1c2d1e941a9",
+    "mtime": 1789758934.8145583,
+    "ast_hash": "4b0f79d33d7b52fddaa1e88a850982b9",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/Fixtures/layout-sizes-for.json": {
@@ -2625,8 +2625,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Dashboard/DashboardLayoutStore.swift": {
-    "mtime": 1789558019.4422212,
-    "ast_hash": "fa1317a340c07c7f55acf563f2c605bb",
+    "mtime": 1789758934.814872,
+    "ast_hash": "b019acc3f500ec2af2e2d5b616add76e",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Dashboard/TodayFeedBuilder.swift": {
@@ -3005,8 +3005,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Tests/OnyxDataTests/DashboardTests.swift": {
-    "mtime": 1789562314.900507,
-    "ast_hash": "96cbab386b322a8b2f4c75bee1ef91e6",
+    "mtime": 1789758934.815029,
+    "ast_hash": "3d38adf8f2b52d0a49e3752d59c0c7cc",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Tests/OnyxDataTests/DayEditingTests.swift": {
@@ -3405,8 +3405,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1789756831.3095067,
-    "ast_hash": "38e268d53a053137ff8ec769bef5a924",
+    "mtime": 1789758934.815446,
+    "ast_hash": "7ce6d38fb51584858e433f0d16d6f077",
     "semantic_hash": ""
   },
   "scripts/check-swift.sh": {
@@ -3440,8 +3440,8 @@
     "semantic_hash": ""
   },
   "scripts/native-shot.sh": {
-    "mtime": 1789752631.174665,
-    "ast_hash": "1891df8930bf2546bcfab8e4a8bbee90",
+    "mtime": 1789758934.815589,
+    "ast_hash": "de0be39a85c7666ec878f6b736c97953",
     "semantic_hash": ""
   },
   "scripts/store-shots.sh": {
@@ -3470,8 +3470,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1789756831.3066192,
-    "ast_hash": "13a23e0af098f4cd3ff81ebd953eca9a",
+    "mtime": 1789758934.795031,
+    "ast_hash": "ae5c17efadc99fa95a02daac217ee169",
     "semantic_hash": ""
   },
   "docs/GIT.md": {
@@ -3500,8 +3500,8 @@
     "semantic_hash": ""
   },
   "native/project.yml": {
-    "mtime": 1789756831.30937,
-    "ast_hash": "9eb23c30e08eaeb342cc023dfc0fe592",
+    "mtime": 1789758934.815312,
+    "ast_hash": "240a0067580e194949a824bcfdd320fc",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png": {
@@ -3655,13 +3655,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseStressLog.swift": {
-    "mtime": 1789506314.5745635,
-    "ast_hash": "6a1c165d1c92e47703dee8c0e4a877a6",
-    "semantic_hash": ""
-  },
-  "native/Onyx/Features/Pulse/PulseCarousel.swift": {
-    "mtime": 1789670039.6586561,
-    "ast_hash": "2554e8e31e17c81bde12159a0fb3f496",
+    "mtime": 1789758934.8132782,
+    "ast_hash": "0f428fda4a213379a8eb31ffe310d5b4",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Settings/AppearanceView.swift": {
@@ -3750,8 +3745,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Pulse/PulseSquares.swift": {
-    "mtime": 1789591371.922591,
-    "ast_hash": "f1df4491f765e544f71f7c459f8a2193",
+    "mtime": 1789758934.81306,
+    "ast_hash": "3f88c32332db816588f5545d43229b85",
     "semantic_hash": ""
   },
   "native/Onyx/Features/History/SessionFallbackCard.swift": {
@@ -3920,8 +3915,8 @@
     "semantic_hash": ""
   },
   "docs/WIDGETS_SLEEP_THEMES_SPRINT_PLAN.md": {
-    "mtime": 1789756849.9522045,
-    "ast_hash": "a8c98329d9cc5c93baee0f63cc301eb2",
+    "mtime": 1789758992.6156955,
+    "ast_hash": "fc8a77a065572810ab4d7c0bfee83cc4",
     "semantic_hash": ""
   },
   "docs/sql/w3-sleep-onset.sql": {
@@ -4025,8 +4020,18 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Dashboard/PulseLayout.swift": {
-    "mtime": 1789757348.4209325,
+    "mtime": 1789758934.8144035,
     "ast_hash": "33500f99bda9de9977b641d966706460",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxCore/Tests/OnyxCoreTests/PulseLayoutTests.swift": {
+    "mtime": 1789758934.8146617,
+    "ast_hash": "b073b1db1e52cdcc0ce366eb198ce8fe",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxUI/Sources/OnyxUI/Dashboard/Arrangeable.swift": {
+    "mtime": 1789758934.8151448,
+    "ast_hash": "2d70a608e9bfcda0cbf3551c5cfac902",
     "semantic_hash": ""
   }
 }
