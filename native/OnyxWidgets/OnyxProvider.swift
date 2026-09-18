@@ -34,7 +34,19 @@ enum WidgetStore {
   static func snapshot(scope: OnyxScope, now: Date = Date()) -> OnyxSnapshot? {
     do {
       let (db, userId) = try open()
-      return try WidgetSnapshotBuilder(database: db, userId: userId).build(scope: scope, now: now)
+      var snap = try WidgetSnapshotBuilder(database: db, userId: userId).build(scope: scope, now: now)
+      // The glasses Control Center queued and the app has not drained yet
+      // (`PendingWater`). Added here, once, so every water reader — the
+      // Water faces, Daily's ledger, the Lock Screen — shows the tap landing
+      // without any of them learning about the queue. `nil + 250` is 250: a
+      // day with no reading yet has one now.
+      let pending = PendingWater.pending(in: AppDatabase.appGroupDefaults())
+      if pending > 0 {
+        snap.water = OnyxSnapshot.Water(
+          ml: (snap.water.ml ?? 0) + pending, goalMl: snap.water.goalMl, trend: snap.water.trend
+        )
+      }
+      return snap
     } catch {
       return nil
     }
@@ -120,7 +132,9 @@ struct OnyxIntentProvider<Configuration: WidgetConfigurationIntent & OnyxScoped>
   private func entry(for configuration: Configuration) -> OnyxEntry {
     let now = Date()
     let snap = WidgetStore.snapshot(scope: configuration.scope, now: now)
-    return OnyxEntry(tile: OnyxTileEntry(date: now, snapshot: snap, focus: configuration.onyxFocus))
+    var tile = OnyxTileEntry(date: now, snapshot: snap, focus: configuration.onyxFocus)
+    tile.tileId = (configuration as? TileConfiguration)?.tile.id
+    return OnyxEntry(tile: tile)
   }
 
   /// One gallery tile per focus.

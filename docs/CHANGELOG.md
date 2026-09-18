@@ -44,6 +44,36 @@ _Nothing yet._
 
 ---
 
+## [6.2.0] — 2026-09-18 · One Tile, Three Buttons
+
+The Home Screen gallery now has ONE Onyx entry that draws any dashboard tile,
+and Control Center has three Onyx buttons. The six family widgets you may
+already have placed keep working for this release and then go.
+
+### Added
+- **The Onyx tile** (Home Screen, Small/Medium/Large) — one widget kind whose
+  "Edit Widget" picker lists every tile the Today dashboard can draw, under the
+  same names, in the same order. The gallery offers each one. A tile placed at
+  a size it has no body for draws the largest size it does have (a Medium
+  inside a Large); a tile with nothing at or below that size — Day Rings at
+  Small — says "Needs a larger widget" instead of drawing half of itself.
+- **Control Center: Start session, +250 ml, Log stress.** The first and last
+  open the app on the Train and Pulse tabs through the same `onyx://` deep
+  links the widgets use. The water button adds a glass WITHOUT opening the
+  app: every water face shows the new figure at once, and the glass lands in
+  the day's ledger — the same row a tap on the Pulse water row writes — the
+  next time the app is in front, and the day is rescored.
+- **Lock Screen: Bedtime** — a fifth accessory focus: last night's bedtime in
+  the ring, on the two-line face, and beside the clock.
+
+### Changed
+- **Fuel, Training, Body, Progress, Daily and Vitals are shells.** Same faces,
+  same placement, now described "Moved to the Onyx tile" in the gallery. They
+  are removed in the release after this one; re-place them as the Onyx tile
+  before then.
+
+---
+
 ## [6.1.0] — 2026-09-18 · Four More Faces
 
 Four new tiles join the Today dashboard — and, because a dashboard tile IS the

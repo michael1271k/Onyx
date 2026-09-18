@@ -84,6 +84,10 @@ struct OnyxApp: App {
             // already running, this is a no-op.
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
+                // The Control Center glasses first: the sync that follows
+                // writes today's row too, and the ledger it sums should
+                // already hold them.
+                environment?.drainPendingWater()
                 environment?.refreshHealth()
             }
         }

@@ -96,6 +96,14 @@ enum WidgetPreviews {
         }
         // Large only — the widget declares `.systemLarge` alone (see OnyxDaily).
         add("daily", .systemLarge, DailyView(entry: entry))
+        // ── The generic kind's clamp (W5) ────────────────────────────────
+        // One kind, three families, and a catalogue that gives Day Rings a
+        // Large alone and Recovery no Small: the two states `OnyxTile.clamped`
+        // has that no family kind could reach. A Large placed at Small draws
+        // the note; a Medium placed at Large draws the Medium, with air.
+        add("clamp-daily", .systemSmall, OnyxTile.clamped(.daily, host: .systemSmall, entry: entry))
+        add("clamp-recovery", .systemSmall, OnyxTile.clamped(.recovery, host: .systemSmall, entry: entry))
+        add("clamp-water", .systemLarge, OnyxTile.clamped(.water, host: .systemLarge, entry: entry))
         for f in LockFocus.allCases {
             for fam in [WidgetFamily.accessoryCircular, .accessoryRectangular, .accessoryInline] {
                 add("lock-\(f.rawValue)", fam, LockView(entry: entry, focus: f))

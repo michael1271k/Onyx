@@ -8,15 +8,17 @@ import OnyxUI
 
 /// The native app's widget extension.
 ///
-/// Wave 5: the five Home Screen families, the Lock Screen accessory and the
-/// running-workout Live Activity. Every tile is a `OnyxUI` view drawing a
-/// `OnyxSnapshot` that `OnyxProvider` builds from the App Group database —
-/// no network, no snapshot route, no token. The web-shell extension that did
-/// all of this over HTTP is gone.
+/// One Home Screen kind that draws every dashboard tile (`OnyxTileWidget`,
+/// the sprint's W5), the Lock Screen accessory, three Control Center controls
+/// (`OnyxControls.swift`) and the running-workout Live Activity. Every tile is
+/// a `OnyxUI` view drawing a `OnyxSnapshot` that `OnyxProvider` builds from the
+/// App Group database — no network, no snapshot route, no token.
 ///
 /// ⚠️ `kind:` strings are load-bearing: a kind that disappears takes every
-/// placed instance of it off the Home Screen. They are the same five strings
-/// the web-shell extension used, so a re-install keeps what the user placed.
+/// placed instance of it off the Home Screen. Which is why the six family
+/// kinds below are still here: they are SHELLS now — same bodies, described
+/// as "Moved to the Onyx tile" — for one release, so a widget placed on 6.1.0
+/// survives the upgrade. They are deleted the release after (W12's gate).
 @main
 struct OnyxWidgets: WidgetBundle {
     /// The theme, on a cold extension launch.
@@ -45,21 +47,56 @@ struct OnyxWidgets: WidgetBundle {
     }
 
     var body: some Widget {
-        // Gallery order: what to eat, what to train, how the body is doing,
-        // the whole day at once, the overnight readings, the running session,
-        // and then the accessory sizes.
+        // Gallery order: the tile, the running session, the accessory sizes,
+        // then the six shells at the bottom where a new install never needs
+        // them. Ten entries is a `WidgetBundleBuilder`'s ceiling; the controls
+        // are a bundle of their own for that reason alone.
+        OnyxTileWidget()
+        OnyxWorkoutActivityWidget()
+        OnyxLockWidget()
         OnyxFuelWidget()
         OnyxTrainingWidget()
         OnyxBodyWidget()
         OnyxProgressWidget()
         OnyxDailyWidget()
         OnyxVitalsWidget()
-        OnyxWorkoutActivityWidget()
-        OnyxLockWidget()
+        OnyxControls().body
     }
 }
 
-// MARK: - Home Screen families
+// MARK: - The tile (W5)
+
+/// Every dashboard tile, one kind. The picker is `TileOption` (= `WidgetId`);
+/// the face is `OnyxTile.face`, the same view the Today grid draws.
+///
+/// ── THE FAMILY TRAP ─────────────────────────────────────────────────────────
+/// `supportedFamilies` is static per kind and this kind draws tiles whose
+/// catalogue sizes range from `[.s]` (Bedtime) to `[.l]` (Day Rings). All three
+/// are declared and `OnyxTile.clamped` draws the largest size at or below the
+/// host that the tile has a body for — or a one-line note when there is none.
+struct OnyxTileWidget: Widget {
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(kind: "OnyxTile", intent: TileConfiguration.self, provider: OnyxIntentProvider<TileConfiguration>()) { entry in
+            TileFace(entry: entry)
+        }
+        .configurationDisplayName("Onyx")
+        .description("Any tile from the Today dashboard. Pick which in Edit Widget.")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+    }
+}
+
+/// `widgetFamily` is an environment value, and a `Widget`'s content closure
+/// has no environment to read — so the clamp lives one view down.
+private struct TileFace: View {
+    let entry: OnyxEntry
+    @Environment(\.widgetFamily) private var family
+
+    var body: some View {
+        OnyxTile.clamped(entry.tile.tileId ?? .train, host: family, entry: entry.tile)
+    }
+}
+
+// MARK: - Home Screen families — SHELLS since W5, deleted next release
 
 struct OnyxFuelWidget: Widget {
     var body: some WidgetConfiguration {
@@ -67,7 +104,7 @@ struct OnyxFuelWidget: Widget {
             FuelView(entry: entry.tile, focus: entry.tile.fuelFocus)
         }
         .configurationDisplayName("Fuel")
-        .description("Calories, macros and hydration. Tap through to Nutrition.")
+        .description("Moved to the Onyx tile.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
@@ -78,7 +115,7 @@ struct OnyxTrainingWidget: Widget {
             TrainingView(entry: entry.tile, focus: entry.tile.trainingFocus)
         }
         .configurationDisplayName("Training")
-        .description("Today's session, the month, volume, streak and records.")
+        .description("Moved to the Onyx tile.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
@@ -89,7 +126,7 @@ struct OnyxBodyWidget: Widget {
             BodyView(entry: entry.tile, focus: entry.tile.bodyFocus)
         }
         .configurationDisplayName("Body")
-        .description("Weight, sleep and the daily score. Tap through to Pulse.")
+        .description("Moved to the Onyx tile.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
@@ -105,7 +142,7 @@ struct OnyxProgressWidget: Widget {
             ProgressTileView(entry: entry.tile, focus: entry.tile.progressFocus)
         }
         .configurationDisplayName("Progress")
-        .description("Is the block working — the trajectory, the record, the ledger and the cost.")
+        .description("Moved to the Onyx tile.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -116,7 +153,7 @@ struct OnyxDailyWidget: Widget {
             DailyView(entry: entry.tile)
         }
         .configurationDisplayName("Daily")
-        .description("Fuel, water, steps and training in one register.")
+        .description("Moved to the Onyx tile.")
         .supportedFamilies([.systemLarge])
     }
 }
@@ -127,7 +164,7 @@ struct OnyxVitalsWidget: Widget {
             VitalsView(entry: entry.tile, focus: entry.tile.vitalsFocus)
         }
         .configurationDisplayName("Vitals")
-        .description("Overnight readings against your own normal — HRV, resting HR, temperature, blood oxygen, breathing.")
+        .description("Moved to the Onyx tile.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
@@ -138,7 +175,7 @@ struct OnyxLockWidget: Widget {
             LockView(entry: entry.tile, focus: entry.tile.lockFocus)
         }
         .configurationDisplayName("Lock Screen")
-        .description("One fact on the Lock Screen: battery, calories, steps or today's session.")
+        .description("One fact on the Lock Screen: battery, calories, steps, today's session or last night's bedtime.")
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }

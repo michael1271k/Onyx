@@ -98,6 +98,13 @@ public struct LockView: View {
         Image(systemName: workoutGlyph).font(OnyxWidgetType.face(15, weight: .semibold))
         Text(shortLabel).font(OnyxWidgetType.face(9, weight: .semibold)).lineLimit(1)
       }
+
+    case .bedtime:
+      // A clock time has no goal either. The glyph and the time, like Workout.
+      VStack(spacing: 1) {
+        Image(systemName: "bed.double.fill").font(OnyxWidgetType.face(14, weight: .semibold))
+        Text(bedtime).font(OnyxWidgetType.figure(10)).lineLimit(1).minimumScaleFactor(0.7)
+      }
     }
   }
 
@@ -155,6 +162,9 @@ public struct LockView: View {
     case .steps:
       guard let steps = s?.steps.count else { return state }
       return "\(state) · \(steps) steps"
+    case .bedtime:
+      guard let bed = OnyxSnapshot.clockTime(s?.sleep.startTime) else { return state }
+      return "\(state) · bed \(bed)"
     }
   }
 
@@ -171,10 +181,15 @@ public struct LockView: View {
       return Text("\(s?.steps.count.map { "\($0)" } ?? "—") steps")
     case .workout:
       return Text(s?.workout.label ?? "—")
+    case .bedtime:
+      return Text("Bed \(bedtime)")
     }
   }
 
   // MARK: Shared
+
+  /// Last night's bedtime in the DEVICE's zone (`clockTime`), or the dash.
+  private var bedtime: String { OnyxSnapshot.clockTime(s?.sleep.startTime) ?? "—" }
 
   private var workoutGlyph: String {
     if s?.workout.isRestDay == true { return "moon.zzz.fill" }
