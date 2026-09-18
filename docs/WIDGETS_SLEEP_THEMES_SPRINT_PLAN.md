@@ -1,6 +1,6 @@
 # Widgets · Sleep v2 · Themes · Week · Pulse · Logger · Privacy — Sprint Plan
 
-**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0. **W5 next.**
+**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0. **W6 next.**
 **From:** `main` @ 5.0.1 (`3de461a7`).
 **Ships as:** eleven sequential waves, 5.1.0 → 6.8.0, plus a close-out wave that retires this file to `docs/Done/`.
 **Branches:** `onyx/sprint-widgets-w<N>`, each cut from current `main` and merged `--no-ff`
@@ -1021,3 +1021,105 @@ json.dump(fixture, open("native/Packages/OnyxCore/Tests/OnyxCoreTests/Fixtures/s
 Supabase change, no App Store metadata. W3's `docs/sql/w3-sleep-onset.sql`
 paste is still the only one owed, and it must land before 6.0.0 or later is
 installed.
+
+---
+
+### W5 Wave Record — shipped 2026-09-18 as 6.2.0
+
+**Drift from the plan, on purpose:**
+- **The six shells keep their own bodies; only the gallery description
+  changed.** The brief said "body maps focus → `WidgetId`, renders
+  `OnyxTile.face`". Seven of the twenty-two family focuses have no `WidgetId`
+  to map to — Fuel's Macros, Training's Calendar, Program Day and Estimated
+  1RM, Vitals' Recovery, Breathing and Temperature — so the mapping either
+  drops a placed widget's face to a neighbour (Macros → Calories) or falls
+  back to the old view for those seven, which is the old body with a switch
+  in front of it. A shell's whole job is that a widget placed on 6.1.0 draws
+  on 6.2.0 exactly as it did; the bodies are untouched and the descriptions
+  read "Moved to the Onyx tile." Deletion is still W12's gate.
+- **`TileOption`'s titles are a literal, not derived from `WidgetId.title`.**
+  The AppIntents metadata extractor halts the build on anything else:
+  `Value of 'caseDisplayRepresentations' must be a dictionary` and `requires
+  'caseDisplayRepresentations' to be exhaustive`. Twenty-one strings copied
+  from `OnyxTile.swift`, and a comment on both sides saying so.
+- **The clamp lives in OnyxUI, not the extension.** `OnyxTile.clamped(_:host:
+  entry:)` and `drawableFamily` sit beside `face` so the app's contact sheet
+  can photograph the two states no family kind could reach (Day Rings and
+  Recovery at Small draw the note; Water at Large draws the Medium). The
+  extension's `TileFace` is four lines that read `widgetFamily` and call it.
+- **The optimistic water figure is added in `WidgetStore.snapshot`, not in the
+  tile.** `OnyxSnapshot.water` became the one `var` on the payload, and the
+  extension adds the pending millilitres to it once per build — so the Water
+  Small/Medium/Large, Daily's ledger and the Lock Screen all show the tap
+  landing without any of them learning about the queue. The Today grid in the
+  app never sees the queue: the app drains it on `.active` before the grid
+  reads.
+- **`AddWaterIntent.swift` imports OnyxData.** `RestSkipIntent`'s header says a
+  Shared file may import nothing the extension lacks; the extension links
+  OnyxData, and `AppDatabase.appGroupDefaults()` is the one place the App
+  Group suite name is spelled. A second literal of `group.app.onyx.health` in
+  Shared would be the thing that silently breaks on a rename.
+- **The controls are a nested `WidgetBundle`.** `WidgetBundleBuilder` takes
+  ten entries; the main body is at nine with the tile added. `OnyxControls`
+  holds the three and the main body includes `OnyxControls().body`.
+- **`OpenOnyxIntent` is one intent with a `path` parameter**, not two. Start
+  session is `/workout`; Log stress is `/day?section=stress`. Both go through
+  `OpenURLIntent` and land in `RootView.onOpenURL` → `DeepLink.safePath`, the
+  same allow-list every widget tap uses.
+
+**Root causes that were not where the plan guessed:**
+- None this wave. The two build failures were the extractor's (above) and a
+  `=` at the start of a shell word that zsh reads as a command-path
+  expansion — a tooling quirk, not the code.
+
+**Constraints discovered that the next wave must respect:**
+- **`Button(intent: AddWaterIntent())` cannot be written inside OnyxUI.** W6's
+  brief puts the water button on `OnyxLifestyle.swift`, and `AddWaterIntent`
+  is a Shared file in the app and extension targets — OnyxUI is a package and
+  cannot see it. Either the intent moves into a package the tile can import
+  (OnyxData is the candidate: it already owns `appGroupDefaults`), or the
+  tile takes the button as a closure/`AnyView` from the extension. Decide
+  before drawing the arc.
+- **`scenePhase == .active` is the only drain.** A glass tapped while the app
+  is already in front waits for the next inactive→active transition — which
+  pulling Control Center down and letting it go IS, so in practice the drain
+  fires as the sheet closes. There is no timer and no observer on the key.
+- **A queued glass lands on `LogicalDay.today()` at DRAIN time**, not at tap
+  time. A glass tapped at 23:58 and drained at 00:02 is tomorrow's. Carrying a
+  date in the mailbox is the fix if it ever matters; it does not yet.
+- **The clamp draws a STRETCHED medium inside a Large**, not a Medium with air
+  under it (`clamp-water` on page 26 of the sheet). That is what the brief
+  asked for and it reads as a tile, not a bug; a face pinned to 158 pt with
+  half a Large empty below it would read as the bug. If W6's redesigns give
+  Water a real Large, this cell disappears on its own.
+- **The gallery offers 63 previews for one kind** — twenty-one ids at three
+  families. It is what the brief said ("gallery = every native id"); if it
+  proves to be a wall, `galleryOptions` is the one list to trim.
+- **`TileConfiguration.onyxFocus` is `.training(.today)` and means nothing.**
+  `OnyxScoped` requires one; `OnyxTile.face` picks by `tileId`. A reader who
+  sees `.training` on a Bedtime entry should not go looking for a bug.
+- **The widget contact sheet is 28 pages now** (`native-shot.sh` bound 0…28;
+  page 27 holds the three Bedtime accessory faces). Six new cells: three
+  clamp states, three Bedtime lock faces.
+- **Counts:** OnyxCore 581, OnyxData 604 (both unchanged), OnyxTests **11
+  issues** (unchanged baseline) plus the new `PendingWaterTests` suite, green.
+
+**Left open on purpose:**
+- **No gallery check in the simulator.** `xcrun simctl` has no door to the
+  widget gallery, and the extractor's metadata export (the thing the gallery
+  reads) is what failed on the first build and passes now. Placing the tile
+  is the founder's first-launch check on device.
+- **Log stress lands on the Pulse tab, not in the stress sheet.** `RootView.
+  tab(for:)` drops `section` and the date today (its own `ponytail:` note);
+  the control carries `?section=stress` so the day the router learns to read
+  it, the button already says the right thing.
+- **The shells are not hidden from the gallery.** WidgetKit has no "keep
+  placed, hide from gallery" switch; the description is the only lever.
+- **The extension still has no tests.** `TileOption` ↔ `WidgetId` parity is
+  a force-unwrap at first render, as every focus option before it.
+
+**Founder's manual steps still outstanding:** none new. W3's
+`docs/sql/w3-sleep-onset.sql` paste is still the only one owed. Gate 0 (App
+Group) still means the tile and the controls are empty on this machine's
+device builds by construction.
+
