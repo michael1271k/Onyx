@@ -44,6 +44,73 @@ _Nothing yet._
 
 ---
 
+## [6.3.0] — 2026-09-18 · One Figure a Tile
+
+Ten tile faces redrawn so a glance answers the question the tile is named for.
+Every one of them had the number already; what most of them did not have was a
+shape you could read without reading. The same faces are the Home Screen
+widgets, so this is the widget refresh too — and the Water tile now has a
+button on it.
+
+### Added
+- **+250 ml on the Water widget.** The Water tile at every size draws the day
+  as `goal ÷ 250 ml` segments around an arc — seven of twelve glasses, not
+  "63 %" — with a `+250` button beside it on the Home Screen. It lands
+  immediately (the figure includes the tap before the app has seen it) and the
+  app folds it into the ledger the next time you open it, through the same
+  water row the Pulse tab uses.
+- **A record now says what it beat.** The Latest PR tile is one trophy: the
+  lift, the figure, and the margin over the bar it cleared — "32.5 kg, +2.5 kg,
+  past 30.0 kg on the book". A first record on a lift says "first on the
+  board" rather than inventing a gain. The Medium stacks three; the Large's
+  ledger gained the same column.
+- **The next session wears its own muscles.** The Today tile washes its top in
+  the first two muscles the day's deck trains — the same gradient the Pulse tab
+  has drawn on a session card since W2 — and the Medium and Large name the tap:
+  **START**, which opens the deck.
+- **Sixteen muscles on the Tonnage tile.** A ladder of sixteen cells ordered by
+  how much of each muscle's target the week has covered, with the tail named in
+  words ("Side delts is furthest behind — 3 of 9"). The per-landmark reading
+  has been in the payload since W3 and no face had ever shown it.
+- **Seven days of energy balance on the Deficit tile**, one signed bar a day
+  around a zero line. A day missing intake or expenditure draws no bar at all
+  rather than a bar at zero.
+
+### Changed
+- **Recovery leads with a charge arc** whose fill begins at last night's
+  bedtime, the score in the middle and the day's verdict — "Ready to train" —
+  as the only words under it. The second ring (the battery) became a figure
+  beside the verdict; two gauges on one face was two claims about one morning.
+- **Sleep is a depth strip**: the four stages as blocks at their own depth,
+  widths in proportion to the night. It is captioned *share of night* and is
+  not a hypnogram — the app stores four stage totals and no timestamps, so
+  nothing here is drawn against a clock. The Medium gained the seven-night
+  chart; the Large keeps the stage rows.
+- **Vitals leads with whatever actually moved.** The reading furthest from its
+  own normal — measured in its own scale, so 0.3 °C and 12 ms are comparable —
+  takes the figure, and three chips carry the rest. Picking Temperature or
+  Breathing still pins that reading; it is the two "show me the readings"
+  focuses that now choose.
+- **Fuel is framed on what is left.** Every macro on every Fuel and Macros face
+  reads "42 g left" / "met" / "+12 g over" instead of "128 / 165 g", in one
+  wording. The bar still carries the proportion.
+- **Consistency leads with this week** — "2 of 3 planned" — over a four-week
+  dot grid instead of eight. Eight columns on a Small put the dots three points
+  apart, which shows that something was missed and not which day. The
+  eight-week rate is still on the face, as a caption.
+- **Fatigue is a battery line** over a fortnight, shaded by how much each day
+  drained, with the biggest drain you can do something about named beside the
+  figure. The five-band stack said where one day went, fourteen times at once.
+
+### Fixed
+- A macro remainder and a record margin no longer paint green in the Lock
+  Screen's tinted rendering, where every tile is one colour and a green figure
+  reads as a fault rather than as a verdict.
+- The Vitals Large drew a band of nothing above its first row and below its
+  last; three things were claiming the same leftover height.
+
+---
+
 ## [6.2.0] — 2026-09-18 · One Tile, Three Buttons
 
 The Home Screen gallery now has ONE Onyx entry that draws any dashboard tile,

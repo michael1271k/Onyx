@@ -265,34 +265,6 @@ private struct TermRow: View {
     }
 }
 
-/// A ±`extent` bar drawn from the CENTRE. The track is the hairline, the tick
-/// marks zero, and the bar grows left or right from it.
-///
-/// Not `ProgressView` and not a `Gauge`: both are floor-to-value shapes, and a
-/// signed reading drawn from a floor makes −2 and 0 look like the same small
-/// bar at the bottom of a scale.
-private struct DivergingBar: View {
-    let value: Double
-    let extent: Double
-    let tint: Color
-
-    var body: some View {
-        GeometryReader { geo in
-            let half = geo.size.width / 2
-            let fraction = min(1, abs(value) / max(extent, 0.0001))
-            let length = half * CGFloat(fraction)
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.onyx.hairline)
-                Capsule()
-                    .fill(tint)
-                    .frame(width: max(length, value == 0 ? 0 : 2))
-                    .offset(x: value >= 0 ? half : half - length)
-                Rectangle()
-                    .fill(Color.onyx.textTertiary)
-                    .frame(width: 1)
-                    .offset(x: half)
-            }
-        }
-        .accessibilityHidden(true)
-    }
-}
+// `DivergingBar` moved to OnyxUI in W6 — the Deficit tile draws seven of them
+// and a second centred bar would be a second set of decisions about what a
+// zero-length one looks like. It is imported with the rest of the package.

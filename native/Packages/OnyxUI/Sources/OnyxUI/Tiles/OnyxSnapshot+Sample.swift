@@ -78,6 +78,13 @@ public extension OnyxSnapshot {
         weightKg: t % 3 == 0 ? (66.4 - Double(t) * 0.021 * 10).rounded() / 10 : nil)
     }
     let deficit = DeficitLedgerSeries.build(ledgerDays, endingOn: today, weeks: 8)
+    // The last seven of the same days, through the ledger's own rule — so the
+    // W6 day bars and the weekly reconciliation above them cannot disagree, and
+    // the day the fixture holes (every eleventh) draws as an absent bar rather
+    // than as a day that broke even.
+    let deficitDays: [DayBalance] = ledgerDays.suffix(7).map {
+      DayBalance(d: $0.date, kcal: DeficitLedgerSeries.dayBalanceKcal($0))
+    }
 
     // Thirty mornings on the scale, every second one, drifting down through a
     // half-kilo of water noise — the shape the EWMA exists to see through.
@@ -217,14 +224,27 @@ public extension OnyxSnapshot {
         trend: series([10200, 8600, 11400, 9100, 7300, 12100, 7412])),
       workout: Workout(
         label: "Delts & Arms", dayKey: "arms", logged: false, isRestDay: false,
-        plannedExercises: 7, plannedSets: 21, lastVolumeKg: 5840),
+        plannedExercises: 7, plannedSets: 21, lastVolumeKg: 5840,
+        // A real Onyx-5 Delts & Arms deck in deck order — the wash takes the
+        // first two, which is why the order is not alphabetical and must not be
+        // "tidied". Side delts leads because the lateral raise opens the day.
+        muscles: ["Side delts", "Front delts", "Rear delts", "Triceps", "Biceps", "Forearms"]),
       week: Week(sessions: 2, volumeKg: 13400, prs: 3, sets: 44, sessionTarget: 5),
       weekPrev: WeekTotals(sessions: 5, volumeKg: 31200, prs: 1, sets: 108),
+      // `previous` is the BAR THE RECORD CLEARED (`personal_records
+      // .floor_value`), not the record before it — the table has no room for a
+      // record before it, and `OnyxSnapshot.Record.previous` says why.
+      //
+      // Four records, and one of them deliberately cleared nothing. The trophy
+      // face has two states — a margin, and "first on the board" — and the
+      // second is the one that would otherwise ship unphotographed. It sits
+      // SECOND so the Medium's stack of three shows both states in one cell,
+      // while the Small's hero shows the ordinary one.
       records: [
-        Record(exercise: "Incline DB Press", axis: "weight", value: 32.5, reps: 8, achievedOn: days(1)),
+        Record(exercise: "Incline DB Press", axis: "weight", value: 32.5, reps: 8, achievedOn: days(1), previous: 30),
         Record(exercise: "Hack Squat", axis: "e1rm", value: 148.2, reps: nil, achievedOn: days(2)),
-        Record(exercise: "Neutral-Grip Lat Pulldown", axis: "volume", value: 780, reps: nil, achievedOn: days(2)),
-        Record(exercise: "Hanging Knee Raise", axis: "reps", value: 18, reps: 18, achievedOn: days(4)),
+        Record(exercise: "Neutral-Grip Lat Pulldown", axis: "volume", value: 780, reps: nil, achievedOn: days(2), previous: 735),
+        Record(exercise: "Hanging Knee Raise", axis: "reps", value: 18, reps: 18, achievedOn: days(4), previous: 16),
       ],
       e1rm: [
         E1rm(exercise: "Incline DB Press", kg: 41.2, deltaKg: 1.6, trend: series([38.9, 39.4, 40.1, 40.6, 41.2], step: 6)),
@@ -302,7 +322,8 @@ public extension OnyxSnapshot {
         SorenessRegion(landmark: "Side delts", level: 1),
         SorenessRegion(landmark: "Rear delts", level: 1),
       ],
-      stress: StressFace(index: stressSeries.last { $0.d == today }?.index, series14: stressSeries))
+      stress: StressFace(index: stressSeries.last { $0.d == today }?.index, series14: stressSeries),
+      deficitDays: deficitDays)
   }()
 
   /// The same fixture with every W12 series removed, and the muscle split with
@@ -334,7 +355,10 @@ public extension OnyxSnapshot {
       muscleFocus: nil, today: s.today, streak: nil, context: s.context, cardio: s.cardio,
       calendar: s.calendar, volumeTrend: s.volumeTrend, body: nil, scores: s.scores,
       readiness: s.readiness, vitals: s.vitals,
-      consistency: nil, deficit: nil, trajectory: nil, batteryStack: nil, bodyComp: nil)
+      // `deficitDays` goes with `deficit`: a first week has neither, and the
+      // Deficit face's own empty state is what that cell photographs.
+      consistency: nil, deficit: nil, trajectory: nil, batteryStack: nil, bodyComp: nil,
+      deficitDays: nil)
   }()
 
   /// The same fixture with today's session FINISHED.
@@ -368,7 +392,8 @@ public extension OnyxSnapshot {
       readiness: s.readiness, vitals: s.vitals,
       consistency: s.consistency, deficit: s.deficit, trajectory: s.trajectory,
       batteryStack: s.batteryStack, bodyComp: s.bodyComp, coach: s.coach,
-      weekRings: s.weekRings, soreness: s.soreness, stress: s.stress)
+      weekRings: s.weekRings, soreness: s.soreness, stress: s.stress,
+      deficitDays: s.deficitDays)
   }()
 }
 

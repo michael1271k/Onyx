@@ -93,6 +93,45 @@ private struct TileFace: View {
 
     var body: some View {
         OnyxTile.clamped(entry.tile.tileId ?? .train, host: family, entry: entry.tile)
+            // ── THE ONE PLACE THE WATER BUTTON IS BUILT (W6) ─────────────────
+            // The Water face declares a slot (`EnvironmentValues.onyxWaterButton`)
+            // and cannot fill it: `AddWaterIntent` is a `Shared/` type that
+            // imports OnyxData, and OnyxUI is forbidden OnyxData by its own
+            // manifest. The extension has both, so it builds the button here.
+            //
+            // Set for EVERY tile rather than only for Water: the environment is
+            // read by the face that wants it and ignored by the twenty that do
+            // not, and a conditional keyed on `tileId` would be a second list
+            // of which tiles are water tiles.
+            .environment(\.onyxWaterButton, OnyxWaterButton { AnyView(AddWaterButton()) })
+    }
+}
+
+/// +250 ml, without leaving the Home Screen.
+///
+/// `AddWaterIntent` does not write the ledger — the extension opens the store
+/// read-only — it adds a glass to the App Group mailbox and reloads the
+/// timelines; `WidgetStore.snapshot` adds the pending millilitres to the figure
+/// so the tap lands visibly, and the app drains the mailbox on its next
+/// `.active`. See `AddWaterIntent.swift` for the whole chain.
+private struct AddWaterButton: View {
+    @Environment(\.widgetRenderingMode) private var mode
+
+    var body: some View {
+        Button(intent: AddWaterIntent()) {
+            HStack(spacing: 3) {
+                Image(systemName: "plus").font(OnyxWidgetType.face(9, weight: .bold))
+                Text("250").font(OnyxWidgetType.face(9, weight: .heavy))
+            }
+            .foregroundStyle(mode == .accented ? Color.white : Color.onyx.water)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                Capsule().fill((mode == .accented ? Color.white : Color.onyx.water).opacity(0.18))
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add a glass of water")
     }
 }
 

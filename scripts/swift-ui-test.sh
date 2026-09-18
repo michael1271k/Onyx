@@ -29,6 +29,12 @@ xcodebuild test -project "$ROOT/native/Onyx.xcodeproj" -scheme Onyx \
   CODE_SIGNING_ALLOWED=NO >"$LOG" 2>&1
 status=$?
 set -e
-grep -E "Test Suite|Executed|error:|Test run with|✘" "$LOG" | tail -20
+# ── THE FILTER HAS TO SHOW A CRASH, NOT JUST A FAILURE (W6) ────────────────
+# A test that crashes the HOST prints none of the patterns above: Swift Testing
+# relaunches, the per-suite lines start over, and the only record of what went
+# wrong is the "Failing tests:" block and "** TEST FAILED **" at the very end.
+# Without them this script exited 65 and printed four cheerful "Selected tests
+# passed" lines, which is a gate that fails silently — the worst kind.
+grep -E "Test Suite|Executed|error:|Test run with|✘|Failing tests|^\s+[A-Za-z0-9_]+\.[A-Za-z0-9_]+\(\)|\*\* TEST" "$LOG" | tail -24
 rm -f "$LOG"
 exit $status

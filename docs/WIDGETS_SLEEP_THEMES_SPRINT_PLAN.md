@@ -1,6 +1,6 @@
 # Widgets · Sleep v2 · Themes · Week · Pulse · Logger · Privacy — Sprint Plan
 
-**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0. **W6 next.**
+**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0, W6 shipped 6.3.0. **W7 next.**
 **From:** `main` @ 5.0.1 (`3de461a7`).
 **Ships as:** eleven sequential waves, 5.1.0 → 6.8.0, plus a close-out wave that retires this file to `docs/Done/`.
 **Branches:** `onyx/sprint-widgets-w<N>`, each cut from current `main` and merged `--no-ff`
@@ -1123,3 +1123,185 @@ installed.
 Group) still means the tile and the controls are empty on this machine's
 device builds by construction.
 
+### W6 Wave Record — shipped 2026-09-18 as 6.3.0
+
+**Drift from the plan, on purpose:**
+- **`Record.previous` is the FLOOR the record cleared, not the record before
+  it — because there is no record before it.** `personal_records` has a UNIQUE
+  natural key on `(user_id, exercise_key, axis)`: one standing row per lift per
+  axis, and a beaten record is OVERWRITTEN. The first draft of this wave built a
+  "previous row" map off the ledger and the seeded test proved the premise false
+  with `SQLite error 19: UNIQUE constraint failed`. The bar that IS kept is
+  `floor_value`, which `PrRecorder.carryFloor` maintains for exactly this
+  reason, so the margin is "how far past the bar" rather than "how much better
+  than last time" — a true statement, and on a lift with three successive
+  records a more useful one. Deriving the previous record from `workout_sets`
+  instead would be a second implementation of PR eligibility (working sets, rep
+  windows, the pair rule) beside `PrRecorder`.
+- **The muscle wash reads `workout.muscles`, not `today.muscles`.** The brief
+  named `today`, which is nil until a session is logged — and the face the wash
+  exists for is the DUE state, hours before there is a session to summarise. On
+  `workout` it is the same fact in both states, because a deck's muscles do not
+  change when you finish it. It is the PLAN's movements (`MuscleMap
+  .primaryLandmarks` over `ProgramDay.exercises(for:)`), in deck order, nil on a
+  rest day.
+- **The seven-day balance is `OnyxSnapshot.deficitDays`, not a field on
+  `DeficitLedger`.** It belongs there by shape and cannot go there by test:
+  `deficit-ledger.json` compares the whole built `DeficitLedger` with `==`, so a
+  new optional field fails all ten cases on a difference that is not a
+  difference in the arithmetic. The sprint's rule is that goldens are hand-edited
+  only when the numbers moved; they did not. `DeficitLedgerSeries
+  .dayBalanceKcal` is public and both windows call it, so this is one rule in a
+  second window rather than a second implementation.
+- **The fatigue tile is shaded by TOTAL DRAIN, and the brief said awake hours.**
+  Awake hours cannot be drawn from this payload: `batteryStackSlice` scores every
+  FINISHED day with `hoursAwake` pinned to `Battery.defaults.maxAwake`, on
+  purpose ("so a fortnight of bands does not shift under the wall clock"), so the
+  `time` drain is the same number on thirteen of fourteen days. The first shot of
+  the face was a flat grey rectangle. `totalDrain` is the same question one step
+  up and it moves. The same discovery retired the worst-drain chip's `time`
+  branch, which had been printing "time −35" every day of the fortnight.
+- **The Sleep face is a DEPTH STRIP, and it is not a hypnogram.** `Snapshot
+  .Sleep`'s own doc forbids a clock axis — four stage totals, no timestamps —
+  so the axis is *share of night*, the blocks sit at their own depth and the
+  silhouette is a strictly rising staircase (deep at the floor, awake on the
+  roof, ramp order left to right). That monotonic shape is load-bearing: no real
+  night rises monotonically, so the drawing cannot be misread as a timeline the
+  way a zig-zag would be. Sample-level stages are the stated ceiling and the
+  figure's header says so.
+- **`ConsistencyView`'s denominator is the week's own planned count, not a
+  literal 7.** "N of 7 planned" graded a five-day plan out of seven, which is the
+  "0/0 reads as a failure" defect one axis over (`MuscleView.bar` states the same
+  rule). The grid is four weeks, not eight: eight columns on a Small put the dots
+  three points apart, which shows that something was missed and not which day.
+  The series is still built over eight weeks and the rate is still on the face.
+- **The heat strip is ONE hue, not sixteen.** The first draft tinted each cell
+  with `Color.onyx.muscle(_:)` — the app's own vocabulary, and what the atlas
+  paints with. At sixteen cells across a 158 pt tile it is a rainbow with no two
+  adjacent cells comparable. The palette earns its keep on the FIGURE, where a
+  hue sits on a body part and is therefore a label; here there are no labels and
+  no room for any, so the colour carries the reading (train ramp, lit by
+  coverage) and the muscle that matters is named in words.
+- **Recovery keeps its five sub-score rails on the Medium and Large.** The brief
+  said "state word only", which is a Small-face instruction: the Small is the arc,
+  the numeral and the word, full stop. A Medium that threw away five readings to
+  say one word would be a smaller tile in a larger frame. What DID go is the
+  second gauge — the battery ring beside the score was two circles' worth of
+  claim about one morning, and the battery is a figure beside the verdict now.
+- **The water button is handed IN, not written in the tile.** W5's record left
+  this open and the answer is neither of its two options: `AddWaterIntent` stays
+  in `Shared/` and OnyxUI declares a slot (`EnvironmentValues.onyxWaterButton`,
+  carrying a `@MainActor @Sendable` builder rather than an `AnyView`, which is
+  not `Sendable` and is a hard error under Swift 6). The extension fills it, the
+  contact sheet fills it with an inert stand-in so the layout is photographed,
+  and the app's Today grid leaves it nil — a tap target inside a grid cell fights
+  the cell's own tap and its edit-mode drag, and the app has the water row one
+  tap away already.
+
+**Root causes that were not where the plan guessed:**
+- **`DivergingBar` was `private` in `PulseStress.swift` and is now public in
+  OnyxUI** — the move the brief asked for. `VitalBar` was deliberately NOT folded
+  in with it: that one colours by the METRIC's direction rather than by the sign,
+  which is the whole reason a resting heart rate five beats down reads as a good
+  night.
+- **The Deficit Medium could not be a single column at all.** Seven rows under a
+  hero and over a reconciliation is ~160 pt of content in a Medium's 134, and
+  SwiftUI answers that by clipping BOTH ends — two shots in a row had no caption
+  at the top and half a label row off the bottom. Making the rows compressible
+  (`maxHeight: .infinity` per row) was not enough: a row's floor is its own TYPE,
+  not its bar. It is two columns now, which is the grammar every other Medium in
+  the package already uses.
+- **The wash drew a hard-edged rectangle inside the tile.** `.background` covers
+  the FACE's bounds, and the two hosts inset differently — `TileFrame` pads 12,
+  WidgetKit's `containerBackground` uses the system content margin. Both clip to
+  the tile's rounded rect (`onyxGlass` ends in `clipShape`), so the wash
+  over-reaches by a flat 24 and the exact inset never has to be known.
+- **The Vitals Large had three things claiming the same leftover height** — the
+  rows' `maxHeight: .infinity`, an outer `Spacer` and the stack's own centring —
+  so it drew a band of obsidian above the first row AND below the last.
+- **A Large drawing both the three chips and the five rows says every reading
+  twice.** The chips and the panel are alternatives: the Medium has no room for
+  five rows and takes the chips, the Large has room and takes the rows.
+- **`Energy.tdee` adds the thermic effect of food**, so the deficit test's
+  hand-written `2000 − (1600 + 600)` was the wrong arithmetic. The expectation is
+  `DeficitLedgerSeries.dayBalanceKcal` itself plus a sign assertion, which is what
+  stops it failing the day the TEF coefficient moves.
+
+**Constraints discovered that the next wave must respect:**
+- **`personal_records` is UNIQUE on `(user_id, exercise_key, axis)`.** There is
+  no record history in that table. Anything that wants "the record before this
+  one" needs `floor_value` or a new table, never a second walk of `workout_sets`.
+- **`EnvironmentValues` cannot hold an `AnyView` under Swift 6** — `defaultValue`
+  is a static property and `AnyView` is not `Sendable`. A `@MainActor @Sendable`
+  closure wrapped in a `Sendable` struct is the shape that compiles
+  (`OnyxWaterButton`).
+- **`scripts/native-shot.sh` only expands `widgets` into its 29 pages when
+  `$1` is exactly `widgets` or `all`.** `native-shot.sh "widgets today"` shoots
+  one page and looks like it worked.
+- **`batteryStackSlice` pins `hoursAwake` for every finished day**, so anything
+  per-day derived from the `time` drain is a constant. A real awake-hours reading
+  needs a stored column.
+- **Counts:** OnyxCore 581 (unchanged), OnyxData **610** (was 604; +6 in
+  `WidgetSnapshotBuilderTests`), OnyxUI `swift:ui` green with the new
+  `W6FigureTests` suite (7 tests). `npm run check`, `check:swift`, the iOS
+  `xcodebuild` line and the watchOS one all pass.
+- **`OnyxTests` is 64 tests, 11 failing — the W1 baseline exactly** — but W2's
+  record says "all in `WorkoutWeekTests`" and that is not the set. It is
+  `WorkoutWeekTests` (5 tests), `SessionSummaryHotfixTests` (3),
+  `HistoryWeeksTests` (2) and `PreviewCatalogueTests` (1). None is in W6's diff.
+- **A test that reaches into a SwiftUI `View` HANGS the OnyxUITests host** —
+  and the harness then names the wrong culprit. A `View` carries main-actor
+  isolation; a nonisolated test calling into one deadlocks, Swift Testing times
+  it out, relaunches, hangs again, and finally reports **the tests that never
+  got to run** as the failures. `chargeArcTurn` and `glassArcSegments` were
+  named on two consecutive runs while the test that never returned was
+  `heatStripOrder`.
+  - Making the rules `static func`s on the view was NOT enough — the isolation
+    is the type's. The fix is `enum MuscleLadder`, a plain namespace holding
+    `rows` / `coverage` / `laggard`, which is where a sort over payload rows
+    belonged anyway: it is data, it has nothing to do with drawing, and out
+    there it is reachable from a test, from the app's sheets and from the watch.
+  - The arithmetic was never wrong. Reproducing it in a 20-line
+    `swift /tmp/ladder.swift` returned the asserted values instantly, which is
+    what proved the hang was the harness and not the logic — a minute's work
+    that two four-minute simulator cycles of guessing had not settled.
+- **`scripts/swift-ui-test.sh`'s output filter could not show that.** Its grep
+  matched none of what a crash-restart prints, so the script exited 65 while
+  printing four "Selected tests passed" lines. `Failing tests`, the indented
+  test names and `** TEST FAILED **` were added to the pattern. **And
+  `npm run check | head` reports `head`'s exit code, not npm's** — this wave
+  read three false greens that way before capturing the status properly.
+- **A shot run KILLS an `xcodebuild test` on the same simulator.** The first
+  attempt died with "Early unexpected exit … Test crashed with signal kill
+  before establishing connection" because `native-shot.sh` was reinstalling the
+  app underneath it. Separate derived paths are not enough; the simulator is
+  the shared resource.
+- **The `.accented` audit was by inspection, not by render.** `widgetRenderingMode`
+  is get-only outside WidgetKit, so neither the app nor the contact sheet can
+  force tinted mode; every new colour was checked by hand against the
+  `mono ? .white` rule and two ungated verdict colours were fixed
+  (`TrophyFace`/`RecordRow` margins, `MacroLine.remainderColor`). Three ungated
+  ones remain in faces W6 did not touch: `OnyxSeries.swift:97,99`
+  (`TrajectoryView`'s pace verdict) and `OnyxCardio.swift:107`.
+
+**Left open on purpose:**
+- **The Sleep SHEET still draws `DepthArc`.** `DomainSheets`' sleep arm is its
+  own surface, not a tile face, and the brief scoped the tiles. The two are not
+  contradictory — the sheet answers "was it enough" with a gauge and then lists
+  the stages — but a wave that wants one drawing of a night should look at it.
+- **`TrajectoryView`'s Small truncates its own hero** ("−0.…", "25 S…"). Visible
+  on the same contact-sheet page as three faces W6 fixed; it is not one of the
+  ten and was left alone.
+- **`CompositionRow`'s labels truncate on the Weight Medium** ("LEAN S…",
+  "SKELETAL M…"). Same reason.
+- **`FamilySplit` lost its caller on the Volume Large** and survives on the
+  Records Large. It is still the right register for "where the tonnage went";
+  the Volume tile now answers a different question.
+- **The `+250` button is not on the app's Today grid** (above). If a wave wants
+  it there, the tile already reads the slot — the work is making a `Button`
+  inside `TileFrame` not eat the cell's tap and its edit-mode drag.
+
+**Founder's manual steps still outstanding:** none new. W3's
+`docs/sql/w3-sleep-onset.sql` paste is still the only one owed. Gate 0 (App
+Group) still means the tile and its `+250` button are empty on this machine's
+device builds by construction.

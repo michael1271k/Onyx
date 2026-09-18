@@ -36,6 +36,10 @@ public struct WidgetSnapshotBuilder: Sendable {
     static let bodyCompDays = 30
     /// How many days the fatigue stack draws.
     static let batteryStackDays = 14
+    /// How many days of signed energy balance the Deficit face draws (W6).
+    /// Seven and not the ledger's eight weeks: the face is a week of days, and
+    /// the eight weeks are still carried whole beside it in `deficit`.
+    static let deficitDayCount = 7
     /// How many days the Week Rings tile draws, and how many the stress
     /// sparkline does. Seven is a week; fourteen is what `StressSeries`
     /// already builds everywhere else, and a second window here would be a
@@ -132,6 +136,22 @@ public struct WidgetSnapshotBuilder: Sendable {
         func prescribed(_ dayKey: String?) -> (exercises: Int, sets: Int)? {
             guard let dayKey, let day = program.day(key: dayKey) else { return nil }
             return (day.exercises(for: schedule.phase).count, max(1, day.plannedSets(for: schedule.phase)))
+        }
+        // The deck's muscles in deck order, each named once — what the Today
+        // tile washes itself with (W6). The PLAN's movements and not the
+        // session's sets: the wash is what the day is ABOUT, and it has to be
+        // right at 07:00 on a day nothing has been logged on. `primary` only,
+        // and no credit arithmetic — this reaches no accumulator, it picks two
+        // hues (`MuscleMap.cardioMovers`' header states the same boundary).
+        func deckMuscles(_ dayKey: String?) -> [String]? {
+            guard let dayKey, let day = program.day(key: dayKey) else { return nil }
+            var out: [LandmarkMuscle] = []
+            for exercise in day.exercises(for: schedule.phase) {
+                for muscle in MuscleMap.primaryLandmarks(exercise.name) where !out.contains(muscle) {
+                    out.append(muscle)
+                }
+            }
+            return out.isEmpty ? nil : out.map(\.rawValue)
         }
 
         // ── The targets this day is graded against ────────────────────────
@@ -257,10 +277,29 @@ public struct WidgetSnapshotBuilder: Sendable {
                 endingOn: date, weeks: Self.volumeWeeks, startDay: weekStartDay
             )
             : nil
+        let ledgerWindow = wantsLifestyle ? ledgerDays(rows) : []
         let deficit: DeficitLedger? = wantsLifestyle
             ? DeficitLedgerSeries.build(
-                ledgerDays(rows), endingOn: date, weeks: Self.volumeWeeks, startDay: weekStartDay
+                ledgerWindow, endingOn: date, weeks: Self.volumeWeeks, startDay: weekStartDay
             )
+            : nil
+        // The same window's last seven days, one signed balance each — the W6
+        // Deficit face's diverging bars. `dayBalanceKcal` is the ledger's own
+        // rule, so the bars and the weekly reconciliation above them cannot
+        // disagree about what a day came to. A day with no ROW at all still
+        // gets a bar position with a nil value: seven bars, always, or the
+        // weekday under bar four stops naming bar four.
+        let deficitDays: [OnyxSnapshot.DayBalance]? = wantsLifestyle
+            ? {
+                let byDate = Dictionary(
+                    ledgerWindow.map { ($0.date, DeficitLedgerSeries.dayBalanceKcal($0)) },
+                    uniquingKeysWith: { _, last in last }
+                )
+                return (0..<Self.deficitDayCount).reversed().map { back in
+                    let d = ISODate.addDays(date, -back) ?? date
+                    return OnyxSnapshot.DayBalance(d: d, kcal: byDate[d] ?? nil)
+                }
+            }()
             : nil
         // ── ONE SET OF READINGS ─────────────────────────────────────────
         // `BodyVitals.readings` is what Pulse, Body trends and the History
@@ -468,7 +507,10 @@ public struct WidgetSnapshotBuilder: Sendable {
                 // to do", the one thing it cannot mean.
                 plannedExercises: planned?.exercises,
                 plannedSets: planned?.sets,
-                lastVolumeKg: lastVolumeKg
+                lastVolumeKg: lastVolumeKg,
+                // Nil on a rest day rather than an empty array: nothing is
+                // planned and the wash draws nothing, which is a real answer.
+                muscles: isTraining ? deckMuscles(day?.dayKey) : nil
             ),
             week: {
                 let t = Self.totals(weekSessions)
@@ -514,7 +556,8 @@ public struct WidgetSnapshotBuilder: Sendable {
             coach: coach,
             weekRings: weekRings,
             soreness: soreness,
-            stress: stress
+            stress: stress,
+            deficitDays: deficitDays
         )
     }
 
@@ -804,9 +847,35 @@ public struct WidgetSnapshotBuilder: Sendable {
             .sorted { $0.achievedOn > $1.achievedOn }
             .prefix(Self.ledgerLimit)
             .map { LedgerRow(exerciseKey: $0.exerciseKey, axis: $0.axis, value: $0.value, reps: $0.reps.map(Double.init), achievedOn: $0.achievedOn) }
+        // ── THE MARGIN IS THE FLOOR THE RECORD CLEARED (W6) ─────────────────
+        // `personal_records` is UNIQUE on (user_id, exercise_key, axis): one
+        // standing row per lift per axis, and a beaten record is overwritten.
+        // The bar it cleared survives in `floor_value`, which `PrRecorder
+        // .carryFloor` maintains for exactly this reason. `OnyxSnapshot.Record
+        // .previous` says the rest.
+        //
+        // Read off `rows.ledger` — every row this user owns, no date bound and
+        // no limit — rather than off the forty-row window below it, and carried
+        // here rather than through `WidgetDerive.topRecords`, which is pinned by
+        // `widget-records.json`: the selection rule did not change.
+        let floorByKey: [String: Double] = {
+            var out: [String: Double] = [:]
+            for row in rows.ledger {
+                guard let floor = row.floorValue else { continue }
+                out["\(row.exerciseKey)|\(row.axis)"] = floor
+            }
+            return out
+        }()
         return (
             WidgetDerive.topRecords(Array(ledger), limit: 6).map {
-                OnyxSnapshot.Record(exercise: $0.exercise, axis: $0.axis, value: $0.value, reps: $0.reps.map { Int($0) }, achievedOn: $0.achievedOn)
+                OnyxSnapshot.Record(
+                    exercise: $0.exercise, axis: $0.axis, value: $0.value,
+                    reps: $0.reps.map { Int($0) }, achievedOn: $0.achievedOn,
+                    // `Record.margin` drops a floor that is not below the
+                    // record, so a compiled bar ABOVE a logged mark reports no
+                    // gain rather than a negative one.
+                    previous: floorByKey["\($0.exercise)|\($0.axis)"]
+                )
             },
             WidgetDerive.e1rmTrends(sets, asOf: date, limit: 5).map {
                 OnyxSnapshot.E1rm(exercise: $0.exercise, kg: $0.kg, deltaKg: $0.deltaKg, trend: Self.points($0.trend))
@@ -1002,6 +1071,7 @@ public struct WidgetSnapshotBuilder: Sendable {
 
     /// `sessionVolumeKg` over the local rows — a unilateral pair is one set.
     static func volume(_ sets: [WorkoutSet]) -> Double { AppDatabase.volume(sets) }
+
 
     /// `countCommittedSets`: solo sets plus distinct pairs. A ghost is a pencil
     /// mark, not a set.
