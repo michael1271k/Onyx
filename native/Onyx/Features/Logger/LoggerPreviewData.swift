@@ -95,8 +95,39 @@ extension LoggerModel {
             let start = LogicalDay.date(fromISO: date)!.addingTimeInterval(17 * 3600)
             try WorkoutSession(
                 id: "pv-session", userId: userId, dayKey: "cb_b", date: date, startedAt: start,
-                endedAt: start.addingTimeInterval(58 * 60), durationMin: 58
+                endedAt: start.addingTimeInterval(58 * 60), durationMin: 58,
+                // In the same range the deck itself logs (~3,400 kg over eight
+                // sets). A fixture whose history is three times its own session
+                // photographs a −68 % trail and reviews an arithmetic bug that
+                // does not exist.
+                totalVolumeKg: 3_640
             ).insert(db)
+            // ── FOUR MORE, OLDER, AND NOTHING BUT A TONNAGE (W10) ───────────
+            // The finish sheet's trail is `splitTonnage`, which reads
+            // `workout_sessions.total_volume_kg` and no sets at all — so these
+            // carry the column and nothing else. Without them the spark has
+            // one point behind today's and `Sparkline` refuses to draw under
+            // two, which would photograph the sheet as it looked before the
+            // trail existed.
+            //
+            // OLDER than `pv-session`, deliberately. `SessionSeedBuilder
+            // .sessionsForSeed` takes the most recent qualifying session as
+            // the seed, and a set-less session in front of `pv-session` would
+            // become "last time" — the deck would open on the program's July
+            // loads and `Top lifts` would lose every arrow it exists to draw.
+            //
+            // The shape is a real one: two steady weeks, a lighter one, then a
+            // build. A monotone ramp would draw a straight line and prove
+            // nothing about a trail whose whole job is to show a wobble.
+            for (back, tonnage) in [(5, 3_180.0), (4, 3_420.0), (3, 2_960.0), (2, 3_510.0)] {
+                let day = LogicalDay.iso(Date().addingTimeInterval(Double(-back * 7 * 24 * 3600)))
+                let began = LogicalDay.date(fromISO: day)!.addingTimeInterval(17 * 3600)
+                try WorkoutSession(
+                    id: "pv-session-w\(back)", userId: userId, dayKey: "cb_b", date: day,
+                    startedAt: began, endedAt: began.addingTimeInterval(56 * 60),
+                    durationMin: 56, totalVolumeKg: tonnage
+                ).insert(db)
+            }
             for (i, set) in previous.enumerated() {
                 try WorkoutSet(
                     id: "pv-session-\(i)", sessionId: "pv-session", exerciseId: "pv-\(i)",

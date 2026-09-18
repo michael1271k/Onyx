@@ -1,5 +1,6 @@
 import Foundation
 import OnyxCore
+import OnyxUI
 
 /// Effort, in words — the vocabulary the logger and the finish sheet share.
 ///

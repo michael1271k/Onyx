@@ -1002,18 +1002,32 @@ struct LiveStatsView: View {
 
     /// Heart rate and calories, and where they came from.
     ///
-    /// Both are POST-HOC: the watch writes its own `HKWorkout` and the sync
-    /// folds it in, which can be a day later. Live wrist heart rate is Phase 4
-    /// (decision 1), so this card's honest job today is to say whether the two
-    /// numbers are measured, estimated, or not there yet — and to never present
-    /// an estimate as a reading.
+    /// Calories are POST-HOC: the watch writes its own `HKWorkout` and the sync
+    /// folds it in, which can be a day later. So this card's honest job is to
+    /// say whether a number is measured, estimated, or not there yet — and to
+    /// never present an estimate as a reading.
+    ///
+    /// ── THE HEART RATE IS NO LONGER ONE OF THEM (W10, decision 3) ───────────
+    /// It was, and this comment said "live wrist heart rate is Phase 4". The
+    /// consequence was that the cell read "—" for the whole of every session
+    /// and filled in the next morning, on the one card called Effort. The wrist
+    /// now sends its rate on the rest pulse (`RestPulse.bpm`), so while a watch
+    /// is talking this cell is a LIVE reading and says so; when it goes quiet
+    /// it falls back to the session's stored average, which is the number it
+    /// always drew. `PhoneWatchBridge.liveBpm` has already aged the reading
+    /// out, so there is no window in which a stale rate outranks a real one.
+    private var liveBpm: Int? { environment?.watchBridge.liveBpm }
+
     private var effortCard: some View {
         card("Effort") {
             VStack(alignment: .leading, spacing: OnyxSpace.m) {
                 HStack(spacing: OnyxSpace.m) {
                     effortCell(
-                        "Avg HR", "heart.fill",
-                        value: session?.avgBpm.map { "\($0)" },
+                        // The label is the provenance. "Avg HR" over a reading
+                        // taken four seconds ago is the card mislabelling the
+                        // only number on it that is not an average.
+                        liveBpm != nil ? "Heart rate" : "Avg HR", "heart.fill",
+                        value: (liveBpm ?? session?.avgBpm).map { "\($0)" },
                         unit: "bpm",
                         tint: Color.onyx.danger
                     )
@@ -1056,6 +1070,13 @@ struct LiveStatsView: View {
     }
 
     private var provenance: String {
+        // Said first, because it is the one line here about a number that is
+        // true RIGHT NOW rather than one the sync will correct later.
+        if liveBpm != nil {
+            return session?.caloriesBurned == nil
+                ? "Heart rate live from your watch. Calories fill in from Apple Health once it has synced this workout."
+                : "Heart rate live from your watch."
+        }
         guard let session, session.avgBpm != nil || session.caloriesBurned != nil else {
             return "Fills in from Apple Health once the watch has synced this workout."
         }

@@ -178,8 +178,8 @@ struct WatchPayloadTests {
     }
 
     /// The same story one payload down: `RestPulse` gained the set that earned
-    /// the rest and the session's clock origin, and a phone that predates them
-    /// sends none of the four keys.
+    /// the rest, the session's clock origin and the wrist's heart rate, and a
+    /// phone that predates them sends none of the five keys.
     ///
     /// ── AND THIS ONE FAILS WORSE THAN THE CONTEXT ───────────────────────────
     /// A context that stops decoding leaves the watch saying "Open Onyx on your
@@ -187,19 +187,20 @@ struct WatchPayloadTests {
     /// decoding is dropped by `WatchLink.receive`'s `try?` and the rest cover
     /// simply never appears — no clock, no ladder, no haptic at zero, and the
     /// rating for every set goes unasked. Nothing anywhere says why.
-    @Test("a rest pulse from a build with none of the four keys decodes with them nil")
+    @Test("a rest pulse from a build with none of the five keys decodes with them nil")
     func restPulseWithoutTheSetDecodes() throws {
         let endsAt = Date(timeIntervalSince1970: 1_790_000_000)
         let full = RestPulse(
             sessionId: "s-1", endsAt: endsAt, duration: 150, exercise: "Hack Squat",
-            loadKg: 102.5, reps: 8, rpe: 8.5, timerOrigin: endsAt.addingTimeInterval(-3_600)
+            loadKg: 102.5, reps: 8, rpe: 8.5, timerOrigin: endsAt.addingTimeInterval(-3_600),
+            bpm: 141
         )
         var object = try #require(
             try JSONSerialization.jsonObject(
                 with: try OnyxJSON.encoder.encode(full)
             ) as? [String: Any]
         )
-        for key in ["loadKg", "reps", "rpe", "timerOrigin"] { object.removeValue(forKey: key) }
+        for key in ["loadKg", "reps", "rpe", "timerOrigin", "bpm"] { object.removeValue(forKey: key) }
 
         let back = try OnyxJSON.decoder.decode(
             RestPulse.self, from: try JSONSerialization.data(withJSONObject: object)
@@ -215,6 +216,9 @@ struct WatchPayloadTests {
         #expect(back.reps == nil)
         #expect(back.rpe == nil)
         #expect(back.timerOrigin == nil)
+        // Nil rather than zero for the same reason, one reading further: a
+        // `bpm` of 0 is a stopped heart and the deck would print it.
+        #expect(back.bpm == nil)
         // Identity is still the clock, so `.fullScreenCover(item:)` behaves
         // exactly as it did before the four fields existed.
         #expect(back.id == endsAt)
@@ -223,7 +227,7 @@ struct WatchPayloadTests {
     /// The encode half, and the direction nobody thinks to check: a NEW phone
     /// with nothing to say must put the OLD payload on the wire, so an OLD
     /// watch is not asked for a key it has never heard of.
-    @Test("a rest pulse with the four fields nil encodes exactly the old keys")
+    @Test("a rest pulse with the five fields nil encodes exactly the old keys")
     func restPulseNilFieldsAreNotEncoded() throws {
         let sent = RestPulse(
             sessionId: "s-1", endsAt: Date(timeIntervalSince1970: 1_790_000_000),
@@ -246,10 +250,49 @@ struct WatchPayloadTests {
         full.reps = 8
         full.rpe = 8.5
         full.timerOrigin = sent.endsAt.addingTimeInterval(-3_600)
+        full.bpm = 141
         let back = try OnyxJSON.decoder.decode(
             RestPulse.self, from: try OnyxJSON.encoder.encode(full)
         )
         #expect(back == full)
         #expect(back.rpe == 8.5)
+        #expect(back.bpm == 141)
+    }
+
+    /// The direction `bpm` alone travels, and the one an old build must survive.
+    ///
+    /// ── WHY THIS IS NOT THE SAME TEST AS THE TWO ABOVE ──────────────────────
+    /// The four fields before it are phone→watch and the watch reads them. The
+    /// heart rate goes the other way: the WATCH puts it on the phone's own
+    /// pulse and sends it straight back (`WatchModel.answerWithHeartRate`), and
+    /// the phone takes the rate and ignores every other field on it
+    /// (`PhoneWatchBridge.receive`). So the echo has to round-trip with the
+    /// clock it was sent with UNCHANGED — if `endsAt` or `duration` moved in
+    /// transit, a future phone that did read them would have its own countdown
+    /// rewritten by the wrist's copy of it.
+    @Test("the watch's heart-rate echo returns the phone's clock untouched")
+    func heartRateEchoPreservesTheClock() throws {
+        let endsAt = Date(timeIntervalSince1970: 1_790_000_000)
+        let fromPhone = RestPulse(
+            sessionId: "s-1", endsAt: endsAt, duration: 150, exercise: "Hack Squat",
+            loadKg: 102.5, reps: 8, rpe: 8.5, timerOrigin: endsAt.addingTimeInterval(-3_600)
+        )
+        // What `answerWithHeartRate` does, exactly: the pulse it was handed,
+        // with one field written.
+        var echo = try OnyxJSON.decoder.decode(
+            RestPulse.self, from: try OnyxJSON.encoder.encode(fromPhone)
+        )
+        echo.bpm = 141
+
+        let back = try OnyxJSON.decoder.decode(
+            RestPulse.self, from: try OnyxJSON.encoder.encode(echo)
+        )
+        #expect(back.bpm == 141)
+        #expect(back.endsAt == fromPhone.endsAt)
+        #expect(back.duration == fromPhone.duration)
+        #expect(back.timerOrigin == fromPhone.timerOrigin)
+        #expect(back.sessionId == fromPhone.sessionId)
+        // Identity is still the clock, so an echo cannot re-present a cover.
+        #expect(back.id == fromPhone.id)
     }
 }

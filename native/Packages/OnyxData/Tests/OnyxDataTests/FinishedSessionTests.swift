@@ -198,4 +198,55 @@ struct FinishedSessionTests {
         #expect(cold.avgBpm == nil)
         #expect(cold.calories == nil)
     }
+
+    // MARK: - The finish sheet's trail (W10)
+
+    /// Four rules in one read, and every one of them has a way to be wrong that
+    /// draws a plausible-looking line: the split, the direction, the live
+    /// session, and a row whose aggregates were never computed.
+    @Test("splitTonnage is this split's finished sessions, oldest first, nils dropped")
+    func tonnageTrail() throws {
+        let db = try AppDatabase.inMemory(deviceId: "device-a")
+        try db.applyPulledSessions([
+            // Oldest first in the ANSWER; deliberately not in the order given.
+            RemoteSessionRow(
+                id: "s-newer", userId: user, startedAt: Date(timeIntervalSince1970: 1_756_900_000),
+                splitDay: "arms", endedAt: Date(timeIntervalSince1970: 1_756_903_600),
+                dayKey: "arms", totalVolumeKg: 9_400
+            ),
+            RemoteSessionRow(
+                id: "s-older", userId: user, startedAt: Date(timeIntervalSince1970: 1_756_400_000),
+                splitDay: "arms", endedAt: Date(timeIntervalSince1970: 1_756_403_600),
+                dayKey: "arms", totalVolumeKg: 8_200
+            ),
+            // A Legs day's tonnage is not an answer about an Arms day.
+            RemoteSessionRow(
+                id: "s-legs", userId: user, startedAt: Date(timeIntervalSince1970: 1_756_950_000),
+                splitDay: "legs", endedAt: Date(timeIntervalSince1970: 1_756_953_600),
+                dayKey: "legs_a", totalVolumeKg: 19_000
+            ),
+            // Still being logged: its aggregate is true of half a workout, and
+            // plotted as a finished week it would draw every live session as a
+            // collapse.
+            RemoteSessionRow(
+                id: "s-live", userId: user, startedAt: Date(timeIntervalSince1970: 1_757_000_000),
+                splitDay: "arms", dayKey: "arms", totalVolumeKg: 1_100
+            ),
+            // Finished, and nobody ever computed its aggregates. Absent, never
+            // a zero — a zero would be a claim that this session weighed
+            // nothing.
+            RemoteSessionRow(
+                id: "s-blank", userId: user, startedAt: Date(timeIntervalSince1970: 1_756_500_000),
+                splitDay: "arms", endedAt: Date(timeIntervalSince1970: 1_756_503_600),
+                dayKey: "arms"
+            ),
+        ])
+
+        #expect(
+            try db.splitTonnage(userId: user, dayKey: "arms", before: date) == [8_200, 9_400],
+            "oldest first, this split only, finished only, and no nil as a zero"
+        )
+        #expect(try db.splitTonnage(userId: user, dayKey: "cb_a", before: date).isEmpty)
+        #expect(try db.splitTonnage(userId: user, dayKey: nil, before: date).isEmpty)
+    }
 }

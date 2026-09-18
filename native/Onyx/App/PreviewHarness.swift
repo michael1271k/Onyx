@@ -452,6 +452,8 @@ enum PreviewHarness {
         case "mini-player":
             MiniPlayerHarness().environment(AppEnvironment.preview)
         case "logger", "logger-stats", "logger-lifts", "logger-paused", "logger-finish", "logger-options", "logger-timer",
+             // W10: the rest bar and the progression cue, on one card.
+             "logger-rest",
              "set-row", "set-row-split", "set-row-cardio", "set-row-records", "set-options", "effort-picker":
             LoggerPreviews.view(screen)
         // ── THE CARDIO SHEET, IN BOTH OF ITS STATES ────────────────────────
@@ -487,6 +489,8 @@ enum PreviewHarness {
              // W2 (refinement): the ledger header's row 2, swapped.
              "session-ledger-assists",
              "session-atlas", "session-edit", "session-records",
+             // W10: the two seconds a record row opens on.
+             "session-margin",
              // W4: the pair table, and a day that is only a bout.
              // W1 (refinement): the same table with its agreeing pairs merged.
              "session-pairs", "session-pairs-merged", "session-cardio":

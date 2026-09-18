@@ -86,7 +86,7 @@ struct SessionTableTests {
             rows: SessionDetail.toRows(sets),
             prevDate: nil, previousSets: previous, cue: nil,
             stats: SessionDetail.exerciseStats(detail),
-            window: nil, atCeiling: 0, spark: [], records: [:]
+            window: nil, atCeiling: 0, trail: [], records: [:], rest: [:]
         )
     }
 

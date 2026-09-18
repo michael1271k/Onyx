@@ -79,6 +79,28 @@ public enum ProgressionQueue {
         public var timed: Bool
         public var ceiling: Double?
         public var state: ProgressionState
+
+        /// Public because the type is, and its fields are. The synthesised
+        /// memberwise init is internal, so until now the only way to build one
+        /// outside this module was to decode JSON — which the app's shot
+        /// harness was reduced to doing to photograph a chip.
+        public init(
+            exerciseId: String, name: String, dayKey: String? = nil,
+            dayLabel: String? = nil, dayColor: String? = nil,
+            suggestKg: Double? = nil, currentKg: Double? = nil,
+            timed: Bool = false, ceiling: Double? = nil, state: ProgressionState
+        ) {
+            self.exerciseId = exerciseId
+            self.name = name
+            self.dayKey = dayKey
+            self.dayLabel = dayLabel
+            self.dayColor = dayColor
+            self.suggestKg = suggestKg
+            self.currentKg = currentKg
+            self.timed = timed
+            self.ceiling = ceiling
+            self.state = state
+        }
     }
 
     static func key(_ dayKey: String, _ exerciseId: String) -> String { "\(dayKey)|\(exerciseId)" }

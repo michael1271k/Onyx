@@ -356,6 +356,59 @@ struct ExerciseCardView: View {
         }
         .padding(.horizontal, OnyxSpace.m)
         .padding(.vertical, OnyxSpace.s)
+        // ── THE REST, AS A LENGTH (W10) ────────────────────────────────────
+        // An OVERLAY on the band's own bottom edge, which is why it costs the
+        // header no height at all: the band is already the tallest thing on the
+        // card and the one place a 4 pt bar can land without pushing a set row
+        // down. It sits exactly where the header meets the table, so it reads
+        // as the card's own progress rather than as a control in the row above.
+        .overlay(alignment: .bottom) { restBar }
+    }
+
+    /// The rest, drawn rather than counted — how much of THIS movement's
+    /// prescription is left, against the whole of it.
+    ///
+    /// ── WHY A BAR WHEN THE DIGITS ARE ALREADY THERE ─────────────────────────
+    /// `restControl` prints `1:23`, and a number is the wrong instrument for
+    /// the question you actually ask mid-rest, which is "am I nearly up" — a
+    /// fraction you read at arm's length with a bar in your hands. Reading it
+    /// off `1:23` needs the prescription in your head to divide by.
+    ///
+    /// ── AND WHY IT IS ACTUAL AGAINST PLANNED, NOT AGAINST A CONSTANT ────────
+    /// The denominator is `model.restDuration`, which is what the PLAN
+    /// prescribed for this movement and what `adjustRest` moves when you take
+    /// 15 seconds off or add them. So a nudged rest redraws against its new
+    /// total rather than overflowing its old one — the same fix the Lock
+    /// Screen's bar and the watch's ring took (`RestPulse.duration`,
+    /// `WatchModel.adjustRest`), and the reason `restCountdown` takes `total:`
+    /// at all.
+    ///
+    /// ── AND WHY IT COSTS NO REDRAWS ─────────────────────────────────────────
+    /// `ProgressView(timerInterval:)` is ticked by the SYSTEM, off this view
+    /// tree — the same trade `Text(timerInterval:)` two points above it makes,
+    /// and the reason a bar that moves every second is affordable on the screen
+    /// you are also typing into. A hand-rolled fraction would need a
+    /// `TimelineView` per card.
+    ///
+    /// Nothing is drawn when nothing is resting. Not an empty track: the deck
+    /// is a list of cards and a hairline under every header would read as a
+    /// separator, and `LiveStatsView`'s empty `OnyxProgressBar` exists because
+    /// THAT row must not change height — this one is an overlay and cannot.
+    @ViewBuilder
+    private var restBar: some View {
+        if let countdown = liveRest {
+            ProgressView(timerInterval: countdown, countsDown: true) {
+                EmptyView()
+            } currentValueLabel: {
+                EmptyView()
+            }
+            .progressViewStyle(.linear)
+            .tint(Color.onyx.day(model.day.key))
+            // The countdown beside it is already spoken, and a bar that
+            // announced itself would say the same thing twice.
+            .accessibilityHidden(true)
+            .transition(.opacity)
+        }
     }
 
     private var title: some View {
@@ -457,7 +510,19 @@ struct ExerciseCardView: View {
         if typeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: OnyxSpace.xs) {
                 HStack(spacing: OnyxSpace.xs) {
-                    if !isCardio { repWindow }
+                    // ── THE WINDOW LEAVES WHILE THE CLOCK RUNS, AT AX5 ─────
+                    // The non-AX branch below already drops the tags and the
+                    // progression chip for the rest control and says why. This
+                    // branch kept the rep window, and at AX5 `@ 10–12` is
+                    // ~200 pt of a ~327 pt line — so the countdown between the
+                    // two nudge buttons was squeezed past its own scale floor
+                    // and rendered as `…`. A control showing an ellipsis where
+                    // its value goes is a control that has stopped working.
+                    //
+                    // The window is a prescription you read BEFORE the set and
+                    // it is back the instant the clock stops; the countdown is
+                    // the one thing on this card that is only true right now.
+                    if !isCardio, liveRest == nil { repWindow }
                     if let pace { tag(pace, Color.onyx.cardio) }
                     Spacer(minLength: 0)
                     progress
@@ -494,7 +559,18 @@ struct ExerciseCardView: View {
                     // is a claim about a movement pattern that does not exist
                     // here, next to a rep window reading `@ 5–5` because the
                     // prescription "5 min" parses as a number.
-                    if !isCardio, let first = tags.first {
+                    //
+                    // ── AND NOT BESIDE THE CUE EITHER (W10) ─────────────────
+                    // Same trade the rest control makes one branch up, one
+                    // chip smaller: `1 more @ 12` is ~135 pt and this line is
+                    // already full at 375 pt, so on a COMPLETE movement the
+                    // five items squeezed `Done` down to its seal with the
+                    // word cut off — a status that has stopped saying what it
+                    // is. "Compound" is the least load-bearing thing on the
+                    // row, it is what leaves at an accessibility size for the
+                    // same reason, and the cue is an instruction where it is a
+                    // classification.
+                    if !isCardio, oneMore == nil, let first = tags.first {
                         tag(first.label, Color.onyx.textSecondary)
                     }
                 }
@@ -691,6 +767,42 @@ struct ExerciseCardView: View {
         }
     }
 
+    /// One more session at the ceiling and the load goes up — or nil.
+    ///
+    /// ── THE STATE THE ROWS CANNOT CARRY (W10) ───────────────────────────────
+    /// `progression` below reads the ROWS, and that is right for the `.ready`
+    /// verdict: `.ready` pre-fills a heavier load, so the row IS the evidence.
+    /// `.oneMore` changes no number at all — it is a fact about the LAST two
+    /// sessions, not about this one — so there is nothing in the deck for a
+    /// row-backed chip to find, and until now the queue's second verdict was
+    /// computed on every open of the logger and drawn nowhere
+    /// (`LoggerModel.progressionAlerts`, staged since wave U1).
+    ///
+    /// It is worth drawing precisely because it is actionable while you are
+    /// standing there: hitting the ceiling on THIS session is what triggers the
+    /// bump next time, and knowing that before the last set is the difference
+    /// between stopping at eleven and finding a twelfth.
+    ///
+    /// ── MATCHED ON THE CANONICAL NAME, AS THE SEED IS ───────────────────────
+    /// `AppDatabase.progressionQueue` builds its targets from
+    /// `ExerciseAliases.canonicalName`, and `SessionSeedBuilder` matches its
+    /// `ready` alerts to the deck by that same name (`SeedProgression.name`).
+    /// The catalogue id is NOT the key: a merged alias leaves one lift under
+    /// two ids and the queue folds them onto whichever it saw first, which is
+    /// not necessarily the one `plan.exerciseId` carries.
+    ///
+    /// Suppressed whenever a bump has already landed. Two progression chips on
+    /// one header would be the card saying both "the load goes up today" and
+    /// "one more session and it goes up", and only the first is true.
+    private var oneMore: ProgressionQueue.Alert? {
+        guard !exercise.rows.contains(where: { $0.progressed }) else { return nil }
+        let canonical = ExerciseAliases.canonicalName(exercise.name).lowercased()
+        return model.progressionAlerts.first {
+            $0.state == .oneMore
+                && ExerciseAliases.canonicalName($0.name).lowercased() == canonical
+        }
+    }
+
     /// The engine said the load goes up today, and this row opened on it.
     ///
     /// Read from the ROWS rather than from `progressionAlerts`: the alert is
@@ -698,6 +810,9 @@ struct ExerciseCardView: View {
     /// in the field. If a rebuild has since dropped the bump — a phase change,
     /// a set trimmed — the chip goes with it, which an alert-backed chip would
     /// not. `E4` sets `progressed` on exactly the rows it pre-filled.
+    ///
+    /// The `.oneMore` verdict has no row to be read off and takes the same slot
+    /// — see `oneMore`, and see `cue` for why it is not painted `good`.
     @ViewBuilder
     private var progression: some View {
         if let bump = exercise.rows.first(where: { $0.progressed }), let kg = bump.weightKg {
@@ -715,7 +830,58 @@ struct ExerciseCardView: View {
             )
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Load goes up today, to \(OnyxFormat.kg(kg)) kilograms")
+        } else if let alert = oneMore {
+            cue(alert)
         }
+    }
+
+    /// The `.oneMore` chip. The same shape as the bump, in a quieter ink.
+    ///
+    /// ── WHY IT IS NOT `good` ────────────────────────────────────────────────
+    /// Green is this app's word for a thing that has HAPPENED — a measured
+    /// figure, a completed movement, a load that went up. Nothing has happened
+    /// here: the chip is a condition on a session that is still being logged,
+    /// and painting a prediction in the colour reserved for facts is how a
+    /// reader learns to stop believing the colour. `textSecondary` on the
+    /// card's own glass is what the rep window beside it already uses for the
+    /// same register — a prescription, not a result.
+    ///
+    /// ── AND WHY THE CEILING IS ON IT ────────────────────────────────────────
+    /// "One more" is useless without "one more WHAT". The ceiling is the number
+    /// every working set has to reach, it is already in the alert, and it is
+    /// the same figure `repWindow` two chips away prints in the accent — so the
+    /// chip names the target rather than restating the verdict.
+    private func cue(_ alert: ProgressionQueue.Alert) -> some View {
+        HStack(spacing: 2) {
+            // The same glyph as the bump: one family, two strengths. A second
+            // symbol would read as a different KIND of claim.
+            Image(systemName: "arrow.up.right")
+            Text(ceilingLabel(alert)).onyxNumeral()
+        }
+        .onyxType(.caption).fontWeight(.semibold)
+        .foregroundStyle(Color.onyx.textSecondary)
+        .fixedSize()
+        .padding(.horizontal, OnyxSpace.s)
+        .padding(.vertical, OnyxSpace.xs)
+        .background(
+            Capsule(style: .continuous).fill(Color.onyx.textSecondary.opacity(0.12))
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            alert.timed
+                ? "One more session holding every set to the target and the hold goes up"
+                : "One more session with every set at the ceiling and the load goes up"
+        )
+    }
+
+    /// `1 more @ 12`, or `1 more` when the plan prescribes no ceiling.
+    ///
+    /// A timed hold's ceiling is SECONDS, and the unit has to be on it or the
+    /// chip claims a rep count — the same split `ExerciseReport.window` makes.
+    private func ceilingLabel(_ alert: ProgressionQueue.Alert) -> String {
+        guard let ceiling = alert.ceiling else { return "1 more" }
+        let figure = jsIntegerString(ceiling)
+        return alert.timed ? "1 more @ \(figure)s" : "1 more @ \(figure)"
     }
 
     private func tag(_ text: String, _ color: Color) -> some View {

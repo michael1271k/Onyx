@@ -386,7 +386,11 @@ struct LiveLoggerView: View {
                 // way on every surface and a bar added here later is right.
                 restCountdown: restCountdown(model.restEndsAt, total: Int(model.restDuration)),
                 onSkipRest: { withAnimation(OnyxMotion.drawer) { model.stopRest() } },
-                onAdjustRest: { model.adjustRest(by: $0) }
+                onAdjustRest: { model.adjustRest(by: $0) },
+                // The wrist, if one is on it and has spoken recently. The
+                // bridge is `@Observable`, so reading this registers and the
+                // band redraws on the next pulse without anything polling.
+                liveBpm: environment?.watchBridge.liveBpm
             )
             if let storeError = model.storeError { banner(storeError) }
             faces(page: page)
