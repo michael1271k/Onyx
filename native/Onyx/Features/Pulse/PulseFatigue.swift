@@ -16,7 +16,7 @@ import OnyxCore
 /// then the rest of the sheet is the five words, at the size of something you
 /// hit without looking. One tap writes and closes.
 ///
-/// The session cost left with the pickers: `FatigueCard` already prints the
+/// The session cost left with the pickers: `FatigueSquare` already prints the
 /// delta on the card this sheet opens from, and a sheet that repeats the thing
 /// that opened it is a sheet you read twice to learn nothing.
 struct FatigueSheet: View {

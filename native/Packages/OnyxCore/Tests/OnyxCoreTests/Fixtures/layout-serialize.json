@@ -2399,6 +2399,134 @@
           "updatedAt": 7
         }
       }
+    },
+    {
+      "name": "phone over a v4 carrying train and pulse keys keeps all three unparsed",
+      "note": "W9 (6.6.0) — hand-written. The Pulse squares' order rides in this row beside the Train key; a dashboard write carries both through byte for byte, exactly as it carries the desktop side. Never regenerated from Layout.swift.",
+      "input": {
+        "layout": {
+          "slots": [
+            {
+              "id": "sl-sleep",
+              "size": "m",
+              "items": [
+                "sleep"
+              ]
+            },
+            {
+              "id": "sl-water",
+              "size": "s",
+              "items": [
+                "water"
+              ]
+            }
+          ],
+          "hidden": [],
+          "updatedAt": 9
+        },
+        "surface": "phone",
+        "other": {
+          "v": 4,
+          "phone": {
+            "slots": [
+              {
+                "id": "old",
+                "size": "s",
+                "items": [
+                  "steps"
+                ]
+              }
+            ],
+            "hidden": [],
+            "updatedAt": 1
+          },
+          "desktop": {
+            "slots": [
+              {
+                "id": "d1",
+                "size": "xl",
+                "items": [
+                  "recovery"
+                ]
+              }
+            ],
+            "hidden": [],
+            "updatedAt": 5
+          },
+          "train": {
+            "hidden": [
+              "cardio"
+            ],
+            "updatedAt": 6
+          },
+          "pulse": {
+            "order": [
+              "stack",
+              "scale",
+              "stressLog",
+              "stress",
+              "soreness",
+              "fatigue"
+            ],
+            "updatedAt": 8,
+            "unknownKey": "kept too"
+          }
+        }
+      },
+      "expected": {
+        "v": 4,
+        "phone": {
+          "slots": [
+            {
+              "id": "sl-sleep",
+              "size": "m",
+              "items": [
+                "sleep"
+              ]
+            },
+            {
+              "id": "sl-water",
+              "size": "s",
+              "items": [
+                "water"
+              ]
+            }
+          ],
+          "hidden": [],
+          "updatedAt": 9
+        },
+        "desktop": {
+          "slots": [
+            {
+              "id": "d1",
+              "size": "xl",
+              "items": [
+                "recovery"
+              ]
+            }
+          ],
+          "hidden": [],
+          "updatedAt": 5
+        },
+        "train": {
+          "hidden": [
+            "cardio"
+          ],
+          "updatedAt": 6
+        },
+        "pulse": {
+          "order": [
+            "stack",
+            "scale",
+            "stressLog",
+            "stress",
+            "soreness",
+            "fatigue"
+          ],
+          "updatedAt": 8,
+          "unknownKey": "kept too"
+        }
+      }
     }
   ]
 }

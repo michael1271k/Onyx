@@ -44,6 +44,16 @@ enum PulsePreviews {
         return model
     }
 
+    /// The full day with the stress log square moved to the first cell — the
+    /// row a drag writes, seeded.
+    @MainActor
+    static func stressLogFirst() -> DayModel {
+        model { db in
+            try seedFullDay(db, withSession: false)
+            try db.savePulseLayout(userId: userId, PulseLayout.default.moving(.stressLog, to: .stress))
+        }
+    }
+
     /// A full training day.
     ///
     /// `withSession` adds the workout that was actually performed, which is
@@ -458,13 +468,19 @@ enum PulsePreviews {
         case "day-rows":
             NavigationStack { PulseTabView(seeded: pinned(fullDay()), startAtRows: true) }
                 .environment(AppEnvironment.preview)
-        // ── THE CAROUSEL'S OTHER TWO PAGES ──────────────────────────────────
-        // A pager shows one page, and `simctl` can film a simulator but cannot
-        // swipe one (the same reason `widgets-nudge` has a self-pressing
-        // button). `startAtPage` writes the page binding a finger would write,
-        // so each of the three is photographable without a second code path.
+        // ── A STORED ORDER (W9) ─────────────────────────────────────────────
+        // The grid in an arrangement the reader made: the stress log dragged
+        // to the first cell. This is the round trip photographed — the row
+        // seeded below is what a drag on the device writes — and it keeps the
+        // name pointing at the stress log, which was the carousel's second
+        // page until W9.
         case "day-stress":
-            NavigationStack { PulseTabView(seeded: pinned(fullDay()), startAtPage: .stress) }
+            NavigationStack { PulseTabView(seeded: pinned(stressLogFirst()), startAtRows: true) }
+                .environment(AppEnvironment.preview)
+        // The squares jiggling, with the toolbar's Done up — the edit mode a
+        // drag runs in, which a long press cannot start on a simulator.
+        case "day-edit":
+            NavigationStack { PulseTabView(seeded: pinned(fullDay()), startAtRows: true, startEditing: true) }
                 .environment(AppEnvironment.preview)
         // Where the soreness square's door leads. It was the carousel's third
         // page until W3; the page is gone and the sheet it opened is what the
@@ -645,7 +661,10 @@ enum PulsePreviews {
             NavigationStack {
                 ScrollView {
                     if let model {
-                        PulseSquareGrid(model: model, onStress: {}, onSoreness: {}, onScale: {}, onStack: {})
+                        PulseSquareGrid(
+                            model: model, onStress: {}, onLogStress: {}, onBrowseStress: {},
+                            onSoreness: {}, onFatigue: {}, onScale: {}, onStack: {}
+                        )
                             .padding(OnyxSpace.l)
                     }
                 }
@@ -768,7 +787,8 @@ enum PulsePreviews {
 #Preview("Pulse — fatigue") { PulsePreviews.view("fatigue") }
 #Preview("Pulse — stress log") { PulsePreviews.view("stress-log") }
 #Preview("Pulse — stress day") { PulsePreviews.view("stress-day") }
-#Preview("Pulse — carousel") { PulsePreviews.view("day-stress") }
+#Preview("Pulse — stress log first") { PulsePreviews.view("day-stress") }
+#Preview("Pulse — editing") { PulsePreviews.view("day-edit") }
 #Preview("Pulse — a promoted vital") { PulsePreviews.view("day-hero") }
 #Preview("Pulse — two sessions") { PulsePreviews.view("day-two") }
 #Preview("Quick Log") { PulsePreviews.view("quick-log") }

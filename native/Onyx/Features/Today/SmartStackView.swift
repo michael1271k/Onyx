@@ -125,7 +125,7 @@ struct SmartStackView: View {
     /// One face, nine seconds.
     static let period: TimeInterval = 9
     /// Just under one period, so the offsets spread across a whole turn.
-    static let staggerWindowMs = 7_000
+    static let staggerWindowMs = Jiggle.staggerWindowMs
     /// A tile never turns over in the blink the grid came back in.
     static let grace: TimeInterval = 2
     /// How far the finger travels before the stack takes the drag from the
@@ -181,11 +181,7 @@ struct SmartStackView: View {
 
     /// A deterministic offset per slot — the id's Java hash, as the web did,
     /// so the phase survives a remount and is the same on every device.
-    static func stagger(_ slotId: String) -> Int {
-        var h: Int32 = 0
-        for unit in slotId.utf16 { h = h &* 31 &+ Int32(unit) }
-        return Int(abs(Int(h))) % staggerWindowMs
-    }
+    static func stagger(_ slotId: String) -> Int { Jiggle.stagger(slotId) }
 
     /// Seconds until this slot's next beat — see the header.
     ///

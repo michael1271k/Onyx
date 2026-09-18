@@ -800,8 +800,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Dashboard/Layout.swift": {
-    "mtime": 1789738881.8278713,
-    "ast_hash": "f2f97339e17b4037ebc92439e4660e61",
+    "mtime": 1789757348.4352484,
+    "ast_hash": "decb1b0d61ccf0a6bacba73dacd78573",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Dashboard/StepMarks.swift": {
@@ -4022,6 +4022,11 @@
   "native/Packages/OnyxData/Tests/OnyxDataTests/WeekReportTests.swift": {
     "mtime": 1789756831.3090396,
     "ast_hash": "ef999908ab4ca76b20aadd58dffa5628",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxCore/Sources/OnyxCore/Dashboard/PulseLayout.swift": {
+    "mtime": 1789757348.4209325,
+    "ast_hash": "33500f99bda9de9977b641d966706460",
     "semantic_hash": ""
   }
 }

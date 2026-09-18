@@ -80,7 +80,6 @@ struct TileFrame<Content: View>: View {
     let onResize: () -> Void
     @ViewBuilder let content: () -> Content
 
-    @State private var wiggle = false
     @State private var resizes = 0
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.onyxForcesReducedMotion) private var forcedReduceMotion
@@ -98,51 +97,14 @@ struct TileFrame<Content: View>: View {
     /// motion off must never have it turned back on by a flag.
     private var reduceMotion: Bool { systemReduceMotion || forcedReduceMotion }
 
-    // Computed, not stored: `TileFrame` is generic over its content and Swift
-    // has no static STORED properties on a generic type. A separate namespace
-    // would put the numbers somewhere the view that uses them is not.
-
-    /// How far the tile leans, each way. The Home Screen's own amplitude.
-    static var tilt: Double { 1.1 }
-    /// The NOMINAL half-cycle. Every tile runs at its own rate around this —
-    /// see `beat(_:)` and the header.
-    static var beat: TimeInterval { 0.2 }
-    /// How far the tile slides as it leans. Sub-point on purpose: at 0.6 pt it
-    /// is never legible as a movement of its own, which is exactly what makes
-    /// the rotation stop reading as a hinge.
-    static var drift: CGFloat { 0.6 }
-
-    /// This tile's OWN half-cycle: `beat` ±10%, from the slot id's hash.
-    ///
-    /// The same hash `stagger` reads, at a different modulus — one source of
-    /// per-tile variation rather than two that could agree by accident. The
-    /// spread is deliberately small: past about ±15% the grid stops reading as
-    /// one surface and starts reading as tiles that are animating separately.
-    static func beat(_ slotId: String) -> TimeInterval {
-        Self.beat * (0.9 + Double(SmartStackView.stagger(slotId) % 21) / 100)
-    }
-
-    /// Which way this tile slides. Split by the same hash, so about half the
-    /// grid goes one way and half the other — a drift every tile shared would
-    /// be the grid itself moving.
-    ///
-    /// ── NOT THE LOW BIT ─────────────────────────────────────────────────────
-    /// `stagger` is `h = h * 31 + c`, and 31 is odd, so the parity of the whole
-    /// hash is just the parity of the SUM OF THE CHARACTERS. Every default slot
-    /// id is `sl-` plus a widget's own raw value, and they collide on that sum
-    /// constantly — `% 2` put all five of the tiles the test names on the same
-    /// side, which is the shared drift this exists to avoid. Bit four is far
-    /// enough up the hash to have been mixed.
-    static func driftSign(_ slotId: String) -> CGFloat {
-        (SmartStackView.stagger(slotId) >> 4) & 1 == 0 ? 1 : -1
-    }
-
-    /// This tile's half-cycle and slide direction, resolved once.
-    private var beat: TimeInterval { Self.beat(slot.id) }
-    private var driftSign: CGFloat { Self.driftSign(slot.id) }
-    /// The whole wobble is off for a reader who has turned motion off, and the
-    /// hairline stands in for it — see the header.
-    private var wobbling: Bool { editing && !reduceMotion }
+    // The wobble itself is `Jiggle` (OnyxUI) since W9, when the Pulse squares
+    // took it up too. The numbers stay reachable here for `TodayModelTests`;
+    // the reasoning behind each is in the header above and beside them.
+    static var tilt: Double { Jiggle.tilt }
+    static var beat: TimeInterval { Jiggle.beat }
+    static var drift: CGFloat { Jiggle.drift }
+    static func beat(_ slotId: String) -> TimeInterval { Jiggle.beat(slotId) }
+    static func driftSign(_ slotId: String) -> CGFloat { Jiggle.driftSign(slotId) }
 
     private var sizes: [WidgetSize] { Dashboard.sizesFor(slot.items) }
 
@@ -164,29 +126,10 @@ struct TileFrame<Content: View>: View {
             .overlay { if editing, reduceMotion { stillOutline } }
             .overlay(alignment: .topLeading) { if editing { removeBadge } }
             .overlay(alignment: .bottomTrailing) { if editing, sizes.count > 1 { resizeBadge } }
-            .rotationEffect(.degrees(wobbling ? (wiggle ? Self.tilt : -Self.tilt) : 0))
-            // The second channel. It rides the SAME toggle as the rotation, so
-            // the tile leans and slides as one gesture rather than as two
-            // animations that happen to overlap — and the sign is per-tile, so
-            // two neighbours never slide together.
-            .offset(
-                x: wobbling ? (wiggle ? Self.drift : -Self.drift) * driftSign : 0,
-                y: wobbling ? (wiggle ? -Self.drift : Self.drift) * driftSign : 0
-            )
-            .animation(
-                wobbling
-                    ? .spring(duration: beat, bounce: 0.35).repeatForever(autoreverses: true)
-                    : .default,
-                value: wiggle
-            )
-            .onChange(of: editing, initial: true) { _, on in
-                // A different phase per tile, so the grid does not shiver in
-                // lockstep. `stagger` is the slot id's hash and is already what
-                // spreads the stacks' rotation; taking it modulo THIS TILE's
-                // half-cycle spreads the wobble across its own beat.
-                if on { Task { try? await Task.sleep(for: .milliseconds(SmartStackView.stagger(slot.id) % Int(beat * 1000))); wiggle = true } }
-                else { wiggle = false }
-            }
+            // The whole wobble is off for a reader who has turned motion off
+            // (`Jiggle` reads the same two flags), and the hairline above
+            // stands in for it — see the header.
+            .modifier(Jiggle(on: editing, seed: slot.id))
             .sensoryFeedback(.selection, trigger: resizes)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(Self.label(slot, up: up))
@@ -230,19 +173,5 @@ struct TileFrame<Content: View>: View {
         .buttonStyle(OnyxPressStyle(scale: 0.9))
         .offset(x: 6, y: 6)
         .accessibilityLabel("Resize, currently \(slot.size.rawValue.uppercased())")
-    }
-}
-
-/// The shot harness's stand-in for a setting SwiftUI will not let anything
-/// write — see `TileFrame.reduceMotion`. False everywhere except one `#if
-/// DEBUG` preview.
-private struct OnyxForcesReducedMotionKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-extension EnvironmentValues {
-    var onyxForcesReducedMotion: Bool {
-        get { self[OnyxForcesReducedMotionKey.self] }
-        set { self[OnyxForcesReducedMotionKey.self] = newValue }
     }
 }

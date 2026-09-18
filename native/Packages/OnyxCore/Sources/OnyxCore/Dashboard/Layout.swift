@@ -437,6 +437,8 @@ public enum Dashboard {
         // the identical reason: dragging a dashboard tile must not put the Train
         // tab's Cardio card back, and this writer has no opinion about it.
         if let train = (other as? [String: Any])?[trainKey], !(train is NSNull) { out[trainKey] = train }
+        // And the Pulse squares' order (W9, `PulseLayout`), for the same reason.
+        if let pulse = (other as? [String: Any])?[pulseKey], !(pulse is NSNull) { out[pulseKey] = pulse }
         return out
     }
 

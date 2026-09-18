@@ -12,12 +12,13 @@ import OnyxData
 /// the web app's shape, and §3.6 names it exactly ("every list is a `List`, not
 /// a `ScrollView` of cards").
 ///
-/// What it is now, after W3: a Now strip, one hero vital over a grid of eight,
-/// a two-page carousel carrying the day's two self-reports, and a 2 × 2 grid of
-/// squares holding the four things the day MEASURED — the stress index, what is
-/// sore, what the scale said and what the stack counted. The Schedule tile is
-/// gone (swap moved to the Workout tab's session card, where the thing you are
-/// swapping actually lives) and so is Cardio (§5.2 item 5).
+/// What it is now, after W9: a Now strip, one hero vital over a grid of eight,
+/// and a 2 × 3 grid of squares in the reader's own order — the two things the
+/// day ASKS (fatigue, the stress log) and the four it MEASURED (the stress
+/// index, what is sore, what the scale said, what the stack counted). Nothing
+/// on it scrolls sideways. The Schedule tile is gone (swap moved to the Workout
+/// tab's session card, where the thing you are swapping actually lives) and so
+/// is Cardio (§5.2 item 5).
 struct PulseTabView: View {
     @Environment(AppEnvironment.self) private var environment
 
@@ -26,24 +27,23 @@ struct PulseTabView: View {
     /// Harness only: which section to open scrolled to. Half this screen is
     /// below the fold and a single shot cannot reach it.
     var startAtRows = false
-    /// Harness only: which carousel page to open on. One of the two pages is
-    /// off-screen by definition, and `simctl` can film a simulator but cannot
-    /// swipe one.
-    var startAtPage: PulsePage?
+    /// Harness only: open with the squares already jiggling. A long press
+    /// cannot be filmed; the mode can.
+    var startEditing = false
     @State private var resolved: DayModel?
 
     init() {}
 
-    init(seeded: DayModel, startAtRows: Bool = false, startAtPage: PulsePage? = nil) {
+    init(seeded: DayModel, startAtRows: Bool = false, startEditing: Bool = false) {
         self.seeded = seeded
         self.startAtRows = startAtRows
-        self.startAtPage = startAtPage
+        self.startEditing = startEditing
     }
 
     var body: some View {
         Group {
             if let resolved {
-                DayScreen(model: resolved, startAtRows: startAtRows, startAtPage: startAtPage)
+                DayScreen(model: resolved, startAtRows: startAtRows, startEditing: startEditing)
             } else {
                 ProgressView().controlSize(.large)
             }
@@ -68,7 +68,7 @@ struct DayScreen: View {
     let model: DayModel
     /// Harness only — see `PulseTabView.startAtRows`.
     var startAtRows = false
-    var startAtPage: PulsePage?
+    var startEditing = false
 
     @State private var showCalendar = false
     @State private var ratingFatigue = false
@@ -84,17 +84,6 @@ struct DayScreen: View {
     /// cell. `StressTile` owned this presentation until W3 and was the one
     /// surface on Pulse that still did.
     @State private var showingStress = false
-    /// Which carousel page is showing.
-    ///
-    /// ── WHY IT LIVES HERE AND NOT IN `PulseCarousel` ────────────────────────
-    /// The carousel is one `List` row, and a row scrolled out of the window and
-    /// back is re-hosted with its inner scroll view at offset zero — the reader
-    /// who was on Soreness comes back to Fatigue. `.scrollPosition(id:)` is a
-    /// two-way binding and re-applies its value on that relayout, so the
-    /// selection has to outlive the row for the offset to be recoverable at
-    /// all. Optional because that is the only shape the modifier takes, and
-    /// SwiftUI writes nil back while a scroll is between pages.
-    @State private var page: PulsePage? = .fatigue
     /// The session the Workout summary card was tapped on. `item:` rather than
     /// `isPresented:` because a day can hold two sessions and each card has to
     /// push its own.
@@ -180,36 +169,22 @@ struct DayScreen: View {
             // alarming vital takes the lead from the night (`VitalsSection`).
             VitalsSection(model: model) { editingSleep = true }
 
-            // ── AND THEN THE TWO IT ASKS YOU ────────────────────────────────
-            // Fatigue and the stress log were 44 pt rows at the BOTTOM of this
-            // screen, under a body map and five doors. They are the only things
-            // on Pulse that cannot be answered by a watch, and a row has no room
-            // for the answer AND the control. One page each, swiped between,
-            // with the verb on the card's face.
-            PulseCarousel(
-                model: model,
-                page: $page,
-                onFatigue: { ratingFatigue = true },
-                onLogStress: { loggingStress = true },
-                onBrowseStress: { browsingStress = true }
-            )
-            .plainRow(edgeToEdge: true)
-            .id(Self.carouselAnchor)
-
-            // ── AND THE FOUR IT MEASURES (W3) ───────────────────────────────
-            // The stress index was a full-width tile, the scale and the stack
-            // were a two-row section, and soreness was a third of the carousel
-            // above. Four readings, four kinds of chrome, ~560 pt. One 2 × 2
-            // grid of squares says all four in ~340 (`PulseSquareGrid`).
-            //
-            // Under the carousel, not above it: the index's `self` term is
-            // built from the fatigue slots and the stress log on the cards
-            // above, and a number placed above the thing it is partly made of
-            // asks to be read as a cause of it.
+            // ── AND THE SIX: TWO IT ASKS YOU, FOUR IT MEASURED (W9) ─────────
+            // Fatigue and the stress log were a two-page carousel here — the
+            // one side-scroll on Pulse — over a 2 × 2 of the measurements. One
+            // 2 × 3 grid now, in the order the reader keeps (toolbar Edit,
+            // then drag), stored beside the Today tab's arrangement
+            // (`PulseLayout`). The default puts the index first and the log
+            // beside it: the index's `self` term is built from those two
+            // answers, and the two sit on one row rather than one above the
+            // other so neither reads as the other's cause.
             PulseSquareGrid(
                 model: model,
                 onStress: { showingStress = true },
+                onLogStress: { loggingStress = true },
+                onBrowseStress: { browsingStress = true },
                 onSoreness: { showSoreness = true },
+                onFatigue: { ratingFatigue = true },
                 onScale: { entering = true },
                 onStack: { showStack = true }
             )
@@ -268,6 +243,14 @@ struct DayScreen: View {
         .navigationTitle("Pulse")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // ── NO TITLE IN THE BAR (W9) ────────────────────────────────────
+            // Five items across two pills leave "Pulse" no room on a phone,
+            // and what iOS does with a title that does not fit depends on the
+            // width: clipped to its first letter on one, hidden on another.
+            // Removed on purpose instead, so the bar is the same bar
+            // everywhere. `navigationTitle` stays — it is the back button on
+            // Body trends — and the tab bar and the Now strip name the screen.
+            ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
             // The date walks on the LEADING side and the doors sit trailing:
             // four glyphs crowded into one group left "Pulse" with no room for
             // its own title, and a chevron beside a chart icon reads as a
@@ -296,6 +279,21 @@ struct DayScreen: View {
                     Image(systemName: "chart.xyaxis.line").frame(minWidth: 44, minHeight: 44)
                 }
                 .accessibilityLabel("Body trends")
+
+                // The squares' arrangement (W9) — the Today tab's Edit/Done,
+                // for the same mode. The glyph is the one Today's long-press
+                // menu already puts beside "Edit Dashboard"; the WORD "Edit"
+                // as a third trailing item left "Pulse" one letter of title.
+                if model.editingSquares {
+                    Button("Done") { withAnimation(OnyxMotion.flick) { model.editingSquares = false } }
+                        .fontWeight(.bold)
+                } else {
+                    Button { withAnimation(OnyxMotion.flick) { model.editingSquares = true } } label: {
+                        Image(systemName: "square.grid.2x2").frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("Edit squares")
+                    .accessibilityHint("Rearrange the squares")
+                }
             }
         }
         .tint(Color.onyx.accent(.body))
@@ -307,13 +305,12 @@ struct DayScreen: View {
                     .padding(OnyxSpace.s)
             }
         }
-        // ── EVERY SHEET IS PRESENTED FROM HERE, INCLUDING THE CARDS' ────────
-        // The carousel's three cards live inside a `List` row, which is
-        // re-hosted when it scrolls out of the window. A `.sheet` declared on a
-        // card would be torn down with it — the sheet dismisses itself the
-        // first time the list scrolls far enough, mid-typing. So the cards take
-        // closures and the screen owns the presentation, which is the rule this
-        // file already followed for the four rows they replace.
+        // ── EVERY SHEET IS PRESENTED FROM HERE, INCLUDING THE SQUARES' ──────
+        // The grid is one `List` row, which is re-hosted when it scrolls out
+        // of the window. A `.sheet` declared on a square would be torn down
+        // with it — the sheet dismisses itself the first time the list scrolls
+        // far enough, mid-typing. So the squares take closures and the screen
+        // owns the presentation.
         .sheet(isPresented: $ratingFatigue) { FatigueSheet(model: model) }
         .sheet(isPresented: $loggingStress) { StressLogSheet(model: model) }
         .sheet(isPresented: $browsingStress) { StressLogListSheet(model: model) }
@@ -374,36 +371,16 @@ struct DayScreen: View {
             sessionHeaders = loaded
         }
         .task {
-            guard startAtPage != nil || startAtRows else { return }
-            // ── THE WAIT IS NOT OPTIONAL, FOR EITHER OPENING ────────────────
+            guard startEditing || startAtRows else { return }
+            // `startEditing` flips the SAME flag the toolbar flips, so the shot
+            // photographs the real mode rather than a second code path.
+            if startEditing { model.editingSquares = true }
+            guard startAtRows else { return }
+            // ── THE WAIT IS NOT OPTIONAL ────────────────────────────────────
             // The same 400 ms the ledger shot needs (Wave 2.8): a `List` picks
             // its anchor at first layout, which happens while it is still
             // empty, so the scroll has to wait for the rows to exist.
-            //
-            // `.scrollPosition(id:)` has the same rule and fails WORSE: written
-            // before the carousel's children have laid out, the binding keeps
-            // the new page — so the dots move — and the scroll view never
-            // applies it. The first shot of page two was page one with page
-            // two's dot lit, which reviews as a broken pager and is in fact a
-            // harness writing too early.
             try? await Task.sleep(for: .milliseconds(400))
-            // `startAtPage` writes the SAME binding a swipe writes, so the shot
-            // photographs the real paging path rather than a second code path
-            // that only runs in a screenshot.
-            if let startAtPage {
-                // ── SCROLL FIRST, THEN PAGE ─────────────────────────────────
-                // At an accessibility size the carousel starts well below the
-                // fold, so its row is not realised yet and `.scrollPosition`
-                // has nothing to apply the page to — the binding takes the
-                // value, the pager does not move, and the shot is page one with
-                // page two's dot lit. The same failure the 400 ms above exists
-                // for, one layer down: bring the row on screen, let it lay out,
-                // then ask it to page.
-                scroller.scrollTo(Self.carouselAnchor, anchor: .top)
-                try? await Task.sleep(for: .milliseconds(300))
-                page = startAtPage
-            }
-            guard startAtRows else { return }
             scroller.scrollTo(Self.rowsAnchor, anchor: .top)
         }
     }
@@ -413,13 +390,6 @@ struct DayScreen: View {
     /// cards — is below the fold on a phone, and everything above it is what
     /// the default `day` shot already photographs.
     private static let rowsAnchor = "pulse.rows"
-
-    /// The carousel row. At an accessibility size the Now strip alone is most
-    /// of the screen, so the cards are below the fold by definition and a shot
-    /// of "page two at AX5" photographs the strip — which is how the time
-    /// strip's own accessibility layout went unreviewed for a round.
-    private static let carouselAnchor = "pulse.carousel"
-
 
     /// "Thu 3 Sept" — a date, formatted; never the ISO string. It rides in the
     /// Now strip rather than the nav bar: the tab is called Pulse everywhere
