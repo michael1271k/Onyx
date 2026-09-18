@@ -127,14 +127,14 @@ fi
 
 # `widgets` is a contact sheet of every tile; the harness pages it because a
 # scroll view screenshots its first screen only. Page count = WidgetPreviews.pages,
-# which packs rows to 372pt and pages to 760pt — 27 since the Widgets/Sleep/Themes
-# sprint's W4 added fifteen cells (weekRings, soreness, stress and bedtime, each
-# populated and empty, at the sizes the catalogue gives them). A page number past
-# the end renders the whole scroll view instead, so this bound is not free to be
+# which packs rows to 372pt and pages to 760pt — 28 since the Widgets/Sleep/Themes
+# sprint's W5 added six cells (three clamp states of the generic kind, three
+# Bedtime accessory faces) on top of W4's fifteen. A page number past the end
+# renders the whole scroll view instead, so this bound is not free to be
 # generous — it carries exactly one page of slack, as it did before.
 if [ "$SCREEN" = "widgets" ] || [ "$SCREEN" = "all" ]; then
   SCREENS=("${SCREENS[@]/widgets}")
-  for i in $(seq 0 27); do SCREENS+=("widgets-$i"); done
+  for i in $(seq 0 28); do SCREENS+=("widgets-$i"); done
   # Two pages since W2: the three Lock Screen cards, then the Dynamic Island's
   # expanded and compact faces plus the Smart Stack card. One page was taller
   # than the display and photographed its own middle.

@@ -125,7 +125,7 @@ enum ProgressFocusOption: String, AppEnum {
 }
 
 enum LockFocusOption: String, AppEnum {
-  case battery, calories, steps, workout
+  case battery, calories, steps, workout, bedtime
 
   static let typeDisplayRepresentation: TypeDisplayRepresentation = "Show"
   static let caseDisplayRepresentations: [LockFocusOption: DisplayRepresentation] = [
@@ -133,6 +133,7 @@ enum LockFocusOption: String, AppEnum {
     .calories: DisplayRepresentation(title: "Calories", subtitle: "Calories left today"),
     .steps:    DisplayRepresentation(title: "Steps", subtitle: "Steps against the goal"),
     .workout:  DisplayRepresentation(title: "Workout", subtitle: "Today's session, or rest"),
+    .bedtime:  DisplayRepresentation(title: "Bedtime", subtitle: "When you went to bed last night"),
   ]
 
   /// The tile's own enum. Same raw values by construction; a case added on one
@@ -300,7 +301,8 @@ struct LockConfiguration: WidgetConfigurationIntent, OnyxScoped {
     [(recommendation(.battery), "Battery"),
      (recommendation(.calories), "Calories"),
      (recommendation(.steps), "Steps"),
-     (recommendation(.workout), "Workout")]
+     (recommendation(.workout), "Workout"),
+     (recommendation(.bedtime), "Bedtime")]
   }
 
   static func recommendation(_ focus: LockFocusOption) -> LockConfiguration {
@@ -326,3 +328,97 @@ struct DailyConfiguration: WidgetConfigurationIntent, OnyxScoped {
   }
 }
 
+
+// MARK: - The generic kind (W5)
+//
+// ── ONE KIND, EVERY TILE ─────────────────────────────────────────────────────
+// The seven families above were the gallery's answer before the dashboard
+// tiles WERE the widget faces. Now that they are (`OnyxTile.face`), the only
+// honest gallery entry is "a tile", with the tile as its picker: every
+// `WidgetId` the phone can draw, in catalogue order, under the name the Today
+// grid gives it. The families stay one release as shells (`OnyxWidgets.swift`
+// says why) and then go.
+
+/// `WidgetId`, for the picker.
+///
+/// The AppIntents extractor refuses an enum "implemented in an imported
+/// framework or library", so — like every focus option above — this is the
+/// same raw values spelled again here, and `id` bridges. Every NATIVE id
+/// (`OnyxTile.native`) and nothing else: `bar`, `micros` and `stack` have no
+/// face, and an option that draws "No face for this one yet" is not an option.
+/// `weekRings` keeps its camelCase because the raw value is the bridge.
+enum TileOption: String, AppEnum {
+  case recovery, sleep, vitals, fuel, water, deficit, train
+  case body, trajectory, muscle, volume, pr, consistency, steps, cardio, fatigue
+  case weekRings, soreness, stress, bedtime
+  case daily
+
+  static let typeDisplayRepresentation: TypeDisplayRepresentation = "Tile"
+
+  /// Display names = `WidgetId.title`, the Today grid's own captions, so the
+  /// picker and the dashboard call one tile one thing.
+  ///
+  /// Spelled out rather than derived: the AppIntents metadata extractor reads
+  /// this dictionary at BUILD time and halts on anything but a literal
+  /// ("Value of 'caseDisplayRepresentations' must be a dictionary"). A title
+  /// changed in `OnyxTile.swift` has to be changed here too.
+  static let caseDisplayRepresentations: [TileOption: DisplayRepresentation] = [
+    .recovery:    "Recovery",
+    .sleep:       "Sleep",
+    .vitals:      "Vitals",
+    .fuel:        "Fuel",
+    .water:       "Water",
+    .deficit:     "Deficit Ledger",
+    .train:       "Workout",
+    .body:        "Body",
+    .trajectory:  "Trajectory",
+    .muscle:      "Muscle Focus",
+    .volume:      "Tonnage",
+    .pr:          "Latest PR",
+    .consistency: "Consistency",
+    .steps:       "Steps",
+    .cardio:      "Cardio",
+    .fatigue:     "Fatigue",
+    .weekRings:   "Week Rings",
+    .soreness:    "Soreness",
+    .stress:      "Stress",
+    .bedtime:     "Bedtime",
+    .daily:       "Day Rings",
+  ]
+
+  /// The catalogue's own id. Same raw values by construction; a native id
+  /// missing here is invisible in the picker, and a case here that the
+  /// catalogue lacks is a crash on the first render, loudly.
+  var id: WidgetId { WidgetId(rawValue: rawValue)! }
+}
+
+struct TileConfiguration: WidgetConfigurationIntent, OnyxScoped {
+  static var title: LocalizedStringResource { "Onyx" }
+  static var description: IntentDescription {
+    IntentDescription("Any tile from the Today dashboard, on the Home Screen.")
+  }
+
+  @Parameter(title: "Tile", default: .train)
+  var tile: TileOption
+
+  /// ponytail: `.full` for every tile — the whole payload per timeline. A
+  /// per-id scope map (`recovery`→`.body`, `pr`→`.performance` …) is the
+  /// upgrade if timelines get slow; `stressSeries` and `batteryStackSlice`
+  /// are the two reads that would show it first (W4's record).
+  var scope: OnyxScope { .full }
+  /// `OnyxScoped` wants a focus; the face is chosen by `tile`, not by this.
+  var onyxFocus: OnyxFocus { .training(.today) }
+
+  /// One gallery tile per native id, in catalogue order.
+  static var galleryOptions: [(intent: TileConfiguration, title: LocalizedStringResource)] {
+    OnyxTile.native.map { id in
+      (recommendation(TileOption(rawValue: id.rawValue)!), "\(id.title)")
+    }
+  }
+
+  static func recommendation(_ tile: TileOption) -> TileConfiguration {
+    let intent = TileConfiguration()
+    intent.tile = tile
+    return intent
+  }
+}

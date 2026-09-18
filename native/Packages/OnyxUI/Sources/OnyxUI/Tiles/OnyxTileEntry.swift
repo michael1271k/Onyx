@@ -39,6 +39,9 @@ public struct OnyxTileEntry: Sendable {
   public let date: Date
   public let snapshot: OnyxSnapshot?
   public var focus: OnyxFocus?
+  /// The generic kind's pick (W5): which dashboard tile this entry draws. Nil
+  /// on every family kind and on a placeholder, which has no configuration.
+  public var tileId: WidgetId?
 
   public init(date: Date = Date(), snapshot: OnyxSnapshot?, focus: OnyxFocus? = nil) {
     self.date = date
@@ -261,6 +264,9 @@ public enum ProgressFocus: String, CaseIterable, Sendable {
 
 public enum LockFocus: String, CaseIterable, Sendable {
   case battery, calories, steps, workout
+  /// W5: last night's bedtime beside the clock — the one reading the Lock
+  /// Screen is actually looked at for, at the hour it is decided.
+  case bedtime
 
   /// See `FuelFocus.link(_:)` for why this takes the payload's date.
   ///
@@ -273,6 +279,9 @@ public enum LockFocus: String, CaseIterable, Sendable {
     case .calories: return OnyxLink.nutrition
     case .steps:    return OnyxLink.progress
     case .workout:  return OnyxLink.workout
+    // The night lives on Progress with the rest of the sleep readings, and
+    // the tab-root rule above holds for it.
+    case .bedtime:  return OnyxLink.progress
     }
   }
 }

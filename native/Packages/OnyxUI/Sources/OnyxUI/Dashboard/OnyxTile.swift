@@ -186,6 +186,46 @@ public enum OnyxTile {
             TileNote(caption: id.title.uppercased(), text: "No face for this one yet.")
         }
     }
+
+    // MARK: The generic kind's family trap (W5)
+    //
+    // `supportedFamilies` is static per WidgetKit kind, and ONE kind now draws
+    // every tile — so a Bedtime placed at Large and a Day Rings placed at Small
+    // are both legal placements the catalogue has no body for. The face clamps
+    // DOWN: the largest size at or below the host that `Dashboard.widgetSizes`
+    // lists, drawn through `onyxTileFamily` exactly as the app's grid asks for
+    // a size. Down and never up, because a Small drawn inside a Large is a
+    // tile with air around it, and a Large drawn inside a Small is a tile with
+    // its bottom two thirds cut off.
+
+    /// The family the tile actually draws at inside `host`, or nil when the
+    /// catalogue has nothing at or below it (`daily` at Small).
+    public static func drawableFamily(_ id: WidgetId, host: WidgetFamily) -> WidgetFamily? {
+        let sizes = Dashboard.widgetSizes[id] ?? []
+        let cap: Int
+        switch OnyxSize(host) {
+        case .small: cap = 0
+        case .medium: cap = 1
+        case .large: cap = 2
+        }
+        return [WidgetSize.s, .m, .l].prefix(cap + 1).last { sizes.contains($0) }?.family
+    }
+
+    /// `face`, clamped to a size the tile has a body for; the note when it has
+    /// none. The widget extension's one call for the generic kind.
+    @MainActor
+    @ViewBuilder
+    public static func clamped(_ id: WidgetId, host: WidgetFamily, entry: OnyxTileEntry) -> some View {
+        if let family = drawableFamily(id, host: host) {
+            face(id, entry: entry).environment(\.onyxTileFamily, family)
+        } else {
+            // Its own container background: the faces set theirs at their
+            // root, and a widget body with none is drawn on WidgetKit's
+            // default white.
+            TileNote(caption: id.title.uppercased(), text: "Needs a larger widget")
+                .containerBackground(Color.onyx.base, for: .widget)
+        }
+    }
 }
 
 // MARK: - Steps

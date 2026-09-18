@@ -475,6 +475,34 @@ public final class AppEnvironment {
         Task { await syncNow(reason: .foreground) }
     }
 
+    /// The glasses Control Center queued while the app was away (W5).
+    ///
+    /// `AddWaterIntent` runs in the widget extension, which has the store
+    /// read-only, so it leaves the millilitres under `PendingWater.key` in the
+    /// App Group and the app lands them here, on every return to `.active`,
+    /// through the same `addWaterGlass` the Pulse tab's water row uses — one
+    /// row per drain under the glass sentinel, the ledger re-summed, the day
+    /// rescored like any other day edit. The key is taken BEFORE the write and
+    /// put back if the write fails, so a glass is never counted twice and never
+    /// lost: the next foreground retries it.
+    ///
+    /// Signed out there is no user to write under; the key waits.
+    func drainPendingWater() {
+        guard case .signedIn(let userID) = auth else { return }
+        let defaults = AppDatabase.appGroupDefaults()
+        let ml = PendingWater.take(from: defaults)
+        guard ml > 0 else { return }
+        let date = LogicalDay.today()
+        do {
+            try database.addWaterGlass(userId: OnyxJSON.canonicalUserID(userID), date: date, ml: ml)
+        } catch {
+            PendingWater.add(ml, to: defaults)
+            NSLog("onyx-water: pending %.0f ml not drained: %@", ml, String(describing: error))
+            return
+        }
+        rescore(from: date, reason: .dayEdit)
+    }
+
     /// One sync, awaited — the shape `.refreshable` needs.
     ///
     /// `.refreshable` holds the spinner for exactly as long as its body runs,

@@ -647,7 +647,11 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
   public let sleep: Sleep
   public let weight: Weight
   public let macros: Macros
-  public let water: Water
+  /// `var`, alone among the blocks: the widget extension adds the glasses
+  /// Control Center has queued and the app has not yet drained (W5,
+  /// `PendingWater`), so the Water face reads the optimistic figure without
+  /// every water reader learning about the queue.
+  public var water: Water
   public let steps: Steps
   public let workout: Workout
   public let week: Week
