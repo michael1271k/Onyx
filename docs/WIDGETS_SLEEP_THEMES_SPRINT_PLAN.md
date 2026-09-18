@@ -1,6 +1,6 @@
 # Widgets · Sleep v2 · Themes · Week · Pulse · Logger · Privacy — Sprint Plan
 
-**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0, W6 shipped 6.3.0. **W7 next.**
+**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0, W6 shipped 6.3.0, W7 shipped 6.4.0. **W8 next.**
 **From:** `main` @ 5.0.1 (`3de461a7`).
 **Ships as:** eleven sequential waves, 5.1.0 → 6.8.0, plus a close-out wave that retires this file to `docs/Done/`.
 **Branches:** `onyx/sprint-widgets-w<N>`, each cut from current `main` and merged `--no-ff`
@@ -1305,3 +1305,141 @@ device builds by construction.
 `docs/sql/w3-sleep-onset.sql` paste is still the only one owed. Gate 0 (App
 Group) still means the tile and its `+250` button are empty on this machine's
 device builds by construction.
+
+### W7 Wave Record — shipped 2026-09-18 as 6.4.0
+
+**Drift from the plan, on purpose:**
+- **`WatchTiles.week` is seven `WeekDay {trained, fuelHit, sleepHit}`, not
+  seven bools.** The plan's "weekRings 7 bools" would have carried one ring of
+  the three and the rectangular face would have had nothing to draw the other
+  two rows with. Twenty-one bools under short keys is ~150 bytes; the whole
+  payload with every field populated encodes to well under a kilobyte and
+  `WatchTilesTests` pins the 2 KB ceiling. The rectangular Week face draws the
+  three rows of seven marks in the phone tile's row order (Train, Fuel, Sleep).
+- **Three fields the brief did not list ride too:** `restDay` (a rest day is a
+  distinct face state the Lock Screen has always drawn and "label/logged"
+  cannot express), `lastBedtime` (the Lock Screen's Bedtime face draws last
+  night, the tile draws the median; both are pre-rendered clock strings) and
+  `date` (so a later wave can blank the today-fields past midnight without a
+  second push — see Left open). `sorenessCount` is nil when the payload did
+  not ask and 0 when nothing hurts, the W4 distinction.
+- **`OnyxTile.accessory` takes `WatchTiles?`, not a snapshot.** The watch has
+  no snapshot; the phone's `LockView` cuts its snapshot down with
+  `WatchTiles.init(_:)` — the SAME projection `pushWatchContext` sends — and
+  delegates. "One face, both devices" is therefore the type signature, not a
+  promise.
+- **The `OnyxTile` namespace and the `WidgetId` title/domain/symbol strings
+  moved above the iOS fence.** `OnyxTile.accessory` cannot be declared on an
+  enum that does not exist on watchOS, and the watch bundle names its gallery
+  entries with `id.title`. `Dashboard/OnyxTile.swift`'s fence now starts at
+  `WidgetSize.family`, the first thing in the file that touches a system
+  family; the header says so.
+- **Ten widget structs, one line each, not one struct with an `id`.** `Widget`
+  requires `init()` — a `WidgetBundle` constructs its members itself — so the
+  id has to be in the type. `tileConfiguration(_:)` is the one body.
+- **The watch's theme lands via `OnyxTheme.save(_:to:)`, not `set`.** The
+  complication is a second process on the wrist and reads the palette back out
+  of the suite with `OnyxTheme.load`, exactly as the phone's widgets do. The
+  phone sends the already-reacted spec and the watch has no phase key, so
+  `save`'s normalise-and-set is the identity there.
+- **The contact sheet's fifteen `lock-*` cells became forty `acc-*` cells**
+  (ten ids × three families, plus ten empty rectangulars). The five Lock
+  focuses are a subset of the ten ids (`LockFocus.widgetId`), so the old
+  cells would have been duplicates. The sheet is 29 pages; `native-shot.sh`'s
+  bound moved 28 → 29.
+
+**Root causes that were not where the plan guessed:**
+- **Gate 0 is not only about device builds — the free team strips the App
+  Group from SIMULATOR builds too.** A clean, signed `xcodebuild` for the
+  watch simulator produced an EMPTY `.xcent` (and the console said
+  `container_create_or_lookup_app_group_path_by_app_group_identifier: client
+  is not entitled`, beside the same for HealthKit). So on this machine the
+  watch app writes `WatchTiles` to its `.standard` fallback, the extension
+  reads ITS OWN `.standard`, and the complication is "—" everywhere — on the
+  simulator as well as on the wrist. This is why the "watch simulator
+  complication gallery" step in the brief could not review a populated face
+  here; the faces were reviewed on the phone's contact sheet, which is the
+  same view.
+- **`OnyxWidgetType` is behind the iOS fence** (`OnyxPrimitives.swift`), so
+  the accessory faces have their own four-line `AccessoryType` of TEXT STYLES
+  (`.title3`/`.footnote`/`.caption2`, rounded) — the rule `WatchType` states:
+  a point size ignores the watch's Text Size setting and the phone's table is
+  iOS metrics anyway.
+- **Under strict concurrency a nonisolated helper cannot return `some
+  WidgetConfiguration`.** `.configurationDisplayName`/`.description`/
+  `.supportedFamilies` are main-actor methods returning a non-`Sendable`
+  value; the helper is `@MainActor`, as `Widget.body` already is. And
+  `UserDefaults` cannot cross `MainActor.assumeIsolated` — the suite is looked
+  up twice (Foundation caches `suiteName` lookups).
+- **`TimelineProviderContext` has to be spelled out on the watch too** —
+  OnyxCore's nutrition `Context` shadows `Self.Context`, the same trap the
+  phone's provider records.
+- **Three rectangular strings truncated on the phone's sheet** ("Week · 5
+  trained", "Open Onyx on your iPhone", "nothing answered today"). The
+  rectangular face beside the week marks holds ~14 characters; the watch's is
+  narrower still. "5/7 trained", "Open Onyx on iPhone", "nothing answered".
+- **`scripts/native-shot.sh "widgets-28"` wrote nothing.** A single page name
+  is skipped by the `widgets*` case in the harness loop; only `widgets` or
+  `all` expand the sheet (W6's record says the same for `"widgets today"`).
+  Every reshoot in this wave was the full sheet.
+
+**Constraints discovered that the next wave must respect:**
+- **`WatchContext.tiles` is the last optional field.** Anything after it is
+  also optional-and-last; `contextWithoutTilesDecodes` pins the old-JSON
+  decode. `WatchTiles`' own keys are short and permanent — a renamed key is a
+  face that silently reads "—" on an older wrist.
+- **The complication refreshes when the WATCH APP runs.** Application context
+  is delivered to the app, not the extension; a phone push while the watch
+  app has not launched since sits in the one slot until it does. If that
+  proves stale in practice, `transferCurrentComplicationUserInfo` (50 wakes a
+  day, launches the app in the background) is the upgrade — chosen against on
+  purpose this wave, because the brief's reasons for application context
+  (one slot, newest wins, no FIFO of stale snapshots) still hold and the
+  budget is small.
+- **The 30 s throttle is TRAILING, and a direct push cancels it.**
+  `scheduleWatchPush` arms once and absorbs every commit in the window; sign-in,
+  midnight and a theme pick call `pushWatchContext`, which cancels the pending
+  task. A wave that adds a third immediate caller should route through
+  `pushWatchContext` and not `watchBridge.send` directly, or the two race.
+- **`pushWatchContext` now builds a `.full` snapshot on the main actor** —
+  `ponytail:`-noted. It is the same ~30 store reads the widget timeline pays;
+  if a trace shows it, move the build off-main before touching the throttle.
+- **The `WidgetId` strings above the fence are what the watch gallery reads.**
+  A new wearable id needs a `WidgetId.wearable` entry, an `AccessoryReading`
+  arm, an eleventh struct in the bundle (which means a NESTED bundle — ten is
+  `WidgetBundleBuilder`'s ceiling, and the watch body is at ten), and a
+  `description(for:)` line.
+- **`check:swift` now needs the WatchSimulator SDK**; it skips with a message
+  where there is none, but a face that uses a system family in `Accessory/`
+  only fails where the SDK exists.
+- **Counts:** OnyxCore **585** (was 581; +4 `WatchTilesTests`), OnyxData
+  **611** (was 610; +1 `WatchPayloadTests`), `swift:ui` 40 in 8 suites, both
+  `xcodebuild` schemes green with `CODE_SIGNING_ALLOWED=NO`. `OnyxTests` not
+  run — `LoggerModel` untouched.
+
+**Left open on purpose:**
+- **A face that outlives the day keeps saying yesterday's session is due.**
+  `WatchTiles.date` is carried and nothing reads it yet; the phone pushes at
+  midnight so on a normal night the watch has fresh tiles at its next launch.
+  Blanking the today-fields when `date != LogicalDay.iso()` is a five-line
+  change in `WatchTileProvider.entry()`.
+- **`.accessoryCorner` was reviewed by build only.** The phone cannot draw it
+  and the simulator cannot populate it (Gate 0 above). The corner face is a
+  hero numeral with a curved gauge in `widgetLabel` where there is a goal and
+  a glyph with the inline text where there is not.
+- **No `widgetURL` on the watch.** The phone's `LockView` keeps its deep link;
+  a complication tap opens the watch app at its root, which is the set or the
+  start card — the right place on a wrist.
+- **The watch's own `DashboardView` still draws four rows of text** and does
+  not read `WatchTiles`. It could now; the brief scoped the complications.
+- **The phone's `OnyxLockWidget` kind is unchanged** (five focuses). The ten
+  wearable ids are reachable on the Lock Screen only through those five; a
+  Lock Screen picker over all ten is a `LockFocus` change, not a face change.
+
+**Founder's manual steps still outstanding:**
+- Xcode → `OnyxWatch` **and** `OnyxWatchWidgets` → Signing & Capabilities →
+  App Groups → `group.app.onyx.health.watch`. Paid program. Until then the
+  complication is "—" on the wrist and on the simulator alike (verified).
+- W3's `docs/sql/w3-sleep-onset.sql` paste is still owed. Gate 0 for the
+  phone (`group.app.onyx.health`) unchanged.
+
