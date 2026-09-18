@@ -1,6 +1,6 @@
 # Widgets · Sleep v2 · Themes · Week · Pulse · Logger · Privacy — Sprint Plan
 
-**Status:** approved 2026-09-18 · step 0 done (this file). W1 next.
+**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0. **W3 next.**
 **From:** `main` @ 5.0.1 (`3de461a7`).
 **Ships as:** eleven sequential waves, 5.1.0 → 6.8.0, plus a close-out wave that retires this file to `docs/Done/`.
 **Branches:** `onyx/sprint-widgets-w<N>`, each cut from current `main` and merged `--no-ff`
@@ -49,7 +49,7 @@ Three explorers measured the repo first. Several brief premises were false and r
 6. Every tile file is `#if os(iOS)`. Watch faces live in unfenced files using `WatchInk` (two ink levels, no glass/mesh).
 7. Wire format rule: new `WatchContext`/`RestPulse` fields are **optional-and-last**.
 8. Theme-derived tokens are `static var`; `TokenDisciplineTests` fails the build on any hex outside the three token files; `AppearanceCoverageTests` requires every root screen to ground; `mono ? .white` in `.accented` rendering stays.
-9. Appearance writes once on exit and refuses during a live workout (root `.id(themeJSON)` rebuild destroys `LoggerModel`).
+9. Appearance writes once on exit and refuses during a live workout (root `.id(themeJSON + phase)` rebuild destroys `LoggerModel`). **From W2 the theme has a SECOND writer** — `AppEnvironment.publishPhase` writes `OnyxTheme.phaseKey` when the dated block moves — and it takes the same refusal: anything that writes either key must check `isSessionLive` first, and let the debounced commit hook be its retry.
 10. One `.hero` per screen (`OnyxType.swift:46`). Pulse's is the Now strip Score; the weekly report's is the `PhaseBand` numeral.
 11. Every sheet on Pulse is presented from `DayScreen`, never from a recyclable cell. `LazyHStack` is banned in a List row (VoiceOver).
 12. Missing is `nil`, never zero — scorer (`Score.swift:60-68`) and store (`Sleep.aggregate` returns nil).
@@ -730,3 +730,36 @@ Whole-sprint acceptance, on a device:
 - **`volumeTargets` in the bundled templates are still the founder's tuned numbers** for anyone who picks a template deck. `NewAccountPathTests` pins that the onboarding path uses the MEV table instead, so no new account receives them — but the file still ships them.
 
 **Founder's manual steps still outstanding:** none for this wave. No DDL, no App Store metadata, no Supabase change.
+
+### W2 Wave Record — shipped 2026-09-18 as 5.2.0
+
+**Drift from the plan, on purpose:**
+- **Two of the four drafted hues were geometrically impossible, and both moved a long way.** With the five kept themes fixed (Solstice 77.7°, Aurora 149.9°, Meridian 192.7°, Ion 275.3°, Vesper 315.2°), the ≥ 35° rule leaves exactly TWO openings on the hue circle — 113.8° and 352.0° — because a tenth hue needs 70° of room between two neighbours and the Aurora→Meridian gap is 42.8°, the Ion→Vesper gap 39.9°. Drafted Verdigris (169.8°) sat 19.9° from Aurora; drafted Nocturne (286.3°) sat 11.0° from Ion. Verdigris took the green opening (`0xA6AF4B`) — which is what the pigment is. **Nocturne took 352.0° and is a deep rose (`0xD95D9B`), not a night violet.** Ember (39.6°, `0xE8734A`) and Glacier (238.6°, `0x5FB3E8`) shipped at their drafted primaries. Minimum pairwise separation now 36.1°. Renaming Nocturne, or freeing the violet band by retiring Vesper, are both one line in `OnyxTheme.presets`.
+- **`OnyxTheme` grew a second spec field, `base`.** The plan said `OnyxTheme.set(spec.reacting(to:))` and stopped there. That alone silently destroys a preset: `SettingsTabView.themeName`, `AppearanceView`'s draft seed and its `commit()` guard all match the live spec against the preset table, and no reacted spec is in that table — Settings would read "Custom" for a whole cut, and the first `commit()` would write the phase-shifted spec back over the user's pick. `spec` is now what is DRAWN, `base` is what was PICKED, and everything that NAMES a theme reads `base`. `save(_:to:)` persists `base` for the same reason.
+- **`deload chroma 0.70` was read as ABSOLUTE, not as a scale.** Cut and bulk are written signed (−0.10, +0.03); deload is written unsigned, which reads as "set". It is also only safe as a set: no preset in the shipped table sits below 0.70, so it never raises saturation. A legacy stored blob at chroma 0.62 (reachable only through the sliders this wave deleted) would get *louder* on a deload — noted, not defended.
+- **"Reset to Ion" and the derived-ramp preview were deleted too.** The plan named the pickers and sliders. Both survivors were duplicates the moment the grid became live palettes: every swatch IS the ramp preview, and Ion is the first chip.
+- **`OnyxSleepStage.core` moved.** The plan said deep and REM take recover ramp stops; core already held `recover.start`, so three stages needed three points and core took the midpoint. Order is now deep (near stop) → core (0.5) → REM (far stop), which is the order the night runs in lightness.
+- **`Color.onyxHex` moved to `OnyxThemeTests.swift` rather than being deleted outright.** It existed only to serve a `ColorPicker`, but the contrast sweep and the muscle-ladder test both need a number out of a resolved `Color`.
+- **Shots ran under `SHOT_DERIVED=…/shot-derived`, not `…/shot-w2`.** Single worktree, nothing else shooting. Harmless here; the per-wave path still matters the moment two waves overlap.
+
+**Root causes that were not where the plan guessed:**
+- **The phase write is a second trigger for the law-9 rebuild, and the plan did not see it.** `.id(themeJSON + phase)` means `AppEnvironment` writing `phaseKey` tears down the view tree exactly as a theme pick does — so a block rolling over at midnight *mid-session* would have destroyed the live `LoggerModel`'s clock, rest timer and deck cursor with nobody touching the phone. `publishPhase` now declines while `isSessionLive`; the debounced commit hook is the retry, and a finished session is a commit. Law 9 above was amended.
+- **The block is not `ScheduleContext.phase`.** That field is `ProgramPhase` — cut/bulk, the direction the deck follows — and has never had a deload or a peak in it. The four-valued `PhaseKind` only exists on the dated `plan_phases` rows, so the phase is `Phases.span(for: today, in: schedule.phases)?.def.kind`, nil between blocks.
+- **`OnyxProvider.swift:96-100` needed no code at all.** It already called `OnyxTheme.load(defaults)`; teaching `load` to read both keys made the widget correct for free. Only its doc comment changed.
+- **There is no `OnyxWidgets` scheme.** The sprint-level verification line asks for one. `xcodebuild -list` shows five schemes — Onyx, OnyxCore, OnyxData, OnyxUI, OnyxWatch — and the widget extension builds as an embedded target of the `Onyx` scheme. The app line covers it; the watch needs `-destination 'generic/platform=watchOS'`.
+- **The ≥ 35° rule was prose and nothing enforced it.** Like the contrast sweep before it, a hand-written spacing claim passed with the defect in place. `presetPrimariesStayThirtyFiveDegreesApart` now measures all 36 pairs.
+
+**Constraints discovered that the next wave must respect:**
+- **The Lunar ramp is only 0.139 of lightness wide** — `recover.start` L 0.729, `recover.end` L 0.868 — so the three sleeping stages now sit ~0.07 of L apart. They read as three steps in a shot at both text sizes, but this is the same shape as the v1 "four lavender bars" the file's own comment warns about. **W3 owns the sleep surfaces and should look at this with real data.** If the three prove too close at a widget's 9 pt legend, the fix is a wider spread on the Lunar ramp — never a fourth literal, which is the defect that was just removed.
+- **`OnyxTheme.current.base` is the theme's identity from now on.** Any new surface that names, matches or persists a theme reads `base`; `spec` is for drawing only.
+- **`OnyxTheme.phaseKey` is a second App Group key** and `OnyxTheme.load(_:)` reads both. Anything that applies a theme from a string must pass the phase too (`apply(json:phase:)`) or it silently drops the block.
+- **The OnyxTests baseline is still 11**, all in `WorkoutWeekTests`, byte-identical to W1's set. W2 did not touch that path. (Run under the `Onyx` scheme, `OnyxDataTests` also reports one Keychain entitlement failure — environmental, not a regression.)
+- **`AppearanceCoverageTests` passed untouched** — the rewritten screen still grounds. `swift:ui` is 31 tests in 7 suites.
+
+**Left open on purpose:**
+- **`Color.onyx.day(_:in program:)` has no caller.** It was specified as an addition and is tested by nothing but its own arithmetic. The three sites that hold a `Program` already and still call the table-driven `day(_:)` are `SessionDetailView.split`, `PulseModel` and `TrainingTrendsView`; wiring them is a small follow-up and was outside "add".
+- **The first day of a custom deck lands on `train.start`**, which §3.2 keeps off a split so a day does not read as "selected". `i / n` over an unknown `n` has no room for the 0.35…0.65 window the shipped keys use. One day of a custom deck pays it instead of all of them reading as rest.
+- **Nocturne's name and its hue disagree** (above). Left for the founder.
+- **A legacy stored spec below chroma 0.70 gets louder on a deload** (above). Unreachable now that the sliders are gone, but not guarded.
+
+**Founder's manual steps still outstanding:** none for this wave. No DDL, no Supabase change, no App Store metadata. W3's `docs/sql/w3-sleep-onset.sql` paste is still the next one.

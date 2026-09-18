@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/App/AppEnvironment.swift": {
-    "mtime": 1789672966.112652,
-    "ast_hash": "c0294c585247aa61f8c88d63b2a14f39",
+    "mtime": 1789735554.9722488,
+    "ast_hash": "9c982fdb73dd4fd2c9f55d6fe64d422c",
     "semantic_hash": ""
   },
   "native/Onyx/App/AppEnvironmentPreview.swift": {
@@ -15,8 +15,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/App/OnyxApp.swift": {
-    "mtime": 1789563937.3935256,
-    "ast_hash": "9effc2586eddddfe9719135e500c530c",
+    "mtime": 1789735554.9723928,
+    "ast_hash": "2ac676e5d28672afa6e52630391ac654",
     "semantic_hash": ""
   },
   "native/Onyx/App/PhoneWatchBridge.swift": {
@@ -425,8 +425,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Settings/SettingsTabView.swift": {
-    "mtime": 1789485445.5817802,
-    "ast_hash": "fc3df86ddc6eac4d460763074b61c513",
+    "mtime": 1789735554.9726834,
+    "ast_hash": "32e70d7e95b2d3cb6675b6a7e47cdd8a",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Settings/SyncStatusView.swift": {
@@ -680,8 +680,8 @@
     "semantic_hash": ""
   },
   "native/OnyxWidgets/OnyxProvider.swift": {
-    "mtime": 1789563937.3941412,
-    "ast_hash": "bf878068c1c5ed2599fcf4519dfa925c",
+    "mtime": 1789735554.9728217,
+    "ast_hash": "7428bd9e0564010983f74541726dd32a",
     "semantic_hash": ""
   },
   "native/OnyxWidgets/OnyxWidgets.swift": {
@@ -3300,8 +3300,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxUI/Sources/OnyxUI/DesignSystem/OnyxTokens.swift": {
-    "mtime": 1789639531.9020154,
-    "ast_hash": "c8db180059457cbe7ecf5aa1c2cd00e5",
+    "mtime": 1789735554.9732845,
+    "ast_hash": "6ad1fd99a8962eba30a742dc2b8e2b80",
     "semantic_hash": ""
   },
   "native/Packages/OnyxUI/Sources/OnyxUI/DesignSystem/OnyxType.swift": {
@@ -3410,8 +3410,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1789734005.158803,
-    "ast_hash": "f5140d3d3894f4ef85ca43b495b97c47",
+    "mtime": 1789735554.973701,
+    "ast_hash": "9a4a0df150c02c714d50897e81461ec7",
     "semantic_hash": ""
   },
   "scripts/check-swift.sh": {
@@ -3475,8 +3475,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1789734005.1510727,
-    "ast_hash": "0d2a04fa689d6c77856f5ea765d3fe57",
+    "mtime": 1789735554.9719994,
+    "ast_hash": "4c9e03d3adeef7046d96492758a12cd4",
     "semantic_hash": ""
   },
   "docs/GIT.md": {
@@ -3505,8 +3505,8 @@
     "semantic_hash": ""
   },
   "native/project.yml": {
-    "mtime": 1789734005.158674,
-    "ast_hash": "3cc6516aa758d0c854a08bb372e491a0",
+    "mtime": 1789735554.9735785,
+    "ast_hash": "03eff44ad434e8c03779e85e2d034a0e",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png": {
@@ -3610,18 +3610,18 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Design/OnyxThemeSpec.swift": {
-    "mtime": 1789663914.4245126,
-    "ast_hash": "ca60f6f22329b30562d5068486a2522e",
+    "mtime": 1789735554.9729667,
+    "ast_hash": "79542bb90f0bb18bef9688a73e42cf0c",
     "semantic_hash": ""
   },
   "native/Packages/OnyxUI/Tests/OnyxUITests/OnyxThemeTests.swift": {
-    "mtime": 1789663914.4265504,
-    "ast_hash": "a418ba519de519b8363407d27c19abd6",
+    "mtime": 1789735554.9734411,
+    "ast_hash": "e32ca5cba89800b70a16b3d9a9efd02b",
     "semantic_hash": ""
   },
   "native/Packages/OnyxUI/Sources/OnyxUI/DesignSystem/OnyxTheme.swift": {
-    "mtime": 1789663914.4261718,
-    "ast_hash": "d20f7162b144eb07290e215e06f39ce1",
+    "mtime": 1789735554.9731083,
+    "ast_hash": "dc3caf21f8d3702b7e3385d16d4bd914",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/TopLiftsTests.swift": {
@@ -3670,8 +3670,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Settings/AppearanceView.swift": {
-    "mtime": 1789663914.4234705,
-    "ast_hash": "a5c1a59f17c74356f063e3c36adc4927",
+    "mtime": 1789735554.9725423,
+    "ast_hash": "93634dc1476d2331919cc8ffc198f7d9",
     "semantic_hash": ""
   },
   "native/OnyxTests/WaterRowTests.swift": {
@@ -3930,8 +3930,8 @@
     "semantic_hash": ""
   },
   "docs/WIDGETS_SLEEP_THEMES_SPRINT_PLAN.md": {
-    "mtime": 1789734019.793181,
-    "ast_hash": "f79fcc07d4df4b7874f59d97e6667347",
+    "mtime": 1789735574.8981364,
+    "ast_hash": "a13dc04c4ba5afbb2e4abd0275ab5c41",
     "semantic_hash": ""
   }
 }
