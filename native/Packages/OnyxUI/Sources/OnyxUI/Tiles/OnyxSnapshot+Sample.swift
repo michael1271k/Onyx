@@ -140,6 +140,47 @@ public extension OnyxSnapshot {
     }
     let bodyComp = BodyCompSeries.build(compReadings, endingOn: today, days: 30)
 
+    // ── The fortnight of stress, RUN and not typed ──────────────────────────
+    //
+    // Same argument as the W12 series above: a hand-written index is a second
+    // implementation of `Stress.breakdown`, and it would go on photographing a
+    // number the model had stopped producing. The inputs are the same shape
+    // the battery stack's are — a hard day every fifth, one day nobody
+    // answered — so the sparkline and the fatigue tile tell one story about
+    // the same fortnight.
+    let stressDays: [StressDayIn] = (0..<14).reversed().map { back in
+      let t = 13 - back
+      guard t != 6 else { return StressDayIn(date: days(back), breakdown: nil) }
+      let hard = t % 5 == 0
+      var inputs = StressInputs()
+      inputs.hrvZ = hard ? -0.9 : 0.4
+      inputs.rhrZ = hard ? 0.8 : -0.3
+      inputs.fragZ = hard ? 0.7 : -0.2
+      inputs.sleepOnsetTrouble = t % 7 == 2
+      inputs.fatigueDayMean = hard ? 4 : 2.5
+      inputs.stressDayMean = hard ? 4 : 2
+      inputs.acwr = 1.05 + Double(t) * 0.03
+      inputs.strainZ = Double(t) * 0.08 - 0.3
+      return StressDayIn(date: days(back), breakdown: Stress.breakdown(inputs))
+    }
+    let stressSeries = StressSeries.build(stressDays, endingOn: today, limit: 14)
+
+    // ── The week's rings ────────────────────────────────────────────────────
+    //
+    // The same rotation the calendar and the consistency grid draw, so the
+    // three tiles agree about which days were training days. Two of the seven
+    // miss their calorie band and one night falls short — a week with holes in
+    // it is the week worth photographing, because a full board proves only
+    // that the filled mark renders.
+    let weekRings: [WeekRingDay] = (0..<7).reversed().map { back in
+      let slot = rotation[(6 - back) % 7]
+      return WeekRingDay(
+        date: days(back),
+        trained: slot != nil && back > 0,
+        fuelHit: back % 3 != 1,
+        sleepHit: back != 2 && back != 5)
+    }
+
     return OnyxSnapshot(
       date: today,
       generatedAt: "2026-09-03T08:15:00.000Z",
@@ -149,7 +190,21 @@ public extension OnyxSnapshot {
       sleep: Sleep(
         minutes: 437, deepMin: 68, remMin: 92, coreMin: 251, awakeMin: 26, score: 84,
         startTime: "2026-09-02T22:41:00.000Z", endTime: "2026-09-03T06:04:00.000Z",
-        goalMin: 480, trend: series([412, 455, 398, 470, 431, 402, 437])),
+        goalMin: 480, trend: series([412, 455, 398, 470, 431, 402, 437]),
+        // Half an hour later than the usual — a night the regularity term has
+        // something to say about, which a fixture at the median would not.
+        //
+        // ── AND IT WILL NOT AGREE WITH `startTime` ON THE CONTACT SHEET ─────
+        // `startTime` is an ISO instant that every face renders in the DEVICE's
+        // zone; `medianBedtime` is a clock string the BUILDER already rendered,
+        // because the offsets it comes from are minutes past a UTC noon and a
+        // face has no business converting those twice. So a fixture can make
+        // the two agree in exactly one timezone, and the shot simulator's is
+        // not UTC — 22:41Z draws as 01:41 on a +3 machine beside a flat
+        // "Usually 23:12". Nothing is wrong with either number; the pair is
+        // only readable together on a real device, where both came from the
+        // same clock.
+        medianBedtime: "23:12"),
       weight: Weight(
         kg: 64.3, deltaKg: -0.4, measuredOn: today, targetKg: 62, prevWeekMeanKg: 65.1,
         trend: series([66.1, 65.9, 65.8, 65.4, 65.5, 65.2, 64.9, 65.0, 64.8, 64.7, 64.6, 64.5, 64.7, 64.3])),
@@ -233,7 +288,21 @@ public extension OnyxSnapshot {
       // debt behind it, which is the table's "the only thing behind" branch —
       // the most useful one to have a picture of, because it is the one that
       // has to fit two lines under the rings.
-      coach: CoachSentence.sentence(CoachSentence.Inputs(batteryPct: 72, sleepDebtHours: 3.2)))
+      coach: CoachSentence.sentence(CoachSentence.Inputs(batteryPct: 72, sleepDebtHours: 3.2)),
+      weekRings: weekRings,
+      // A leg day two days ago, still felt. Both a whole group rated (Quads)
+      // and one that expands to three landmarks (Shoulders → the delts), so
+      // the figure's group-to-landmark fan-out is exercised in the shot rather
+      // than assumed.
+      soreness: [
+        SorenessRegion(landmark: "Quads", level: 3),
+        SorenessRegion(landmark: "Glutes", level: 2),
+        SorenessRegion(landmark: "Hamstrings", level: 2),
+        SorenessRegion(landmark: "Front delts", level: 1),
+        SorenessRegion(landmark: "Side delts", level: 1),
+        SorenessRegion(landmark: "Rear delts", level: 1),
+      ],
+      stress: StressFace(index: stressSeries.last { $0.d == today }?.index, series14: stressSeries))
   }()
 
   /// The same fixture with every W12 series removed, and the muscle split with
@@ -249,7 +318,18 @@ public extension OnyxSnapshot {
     let s = sample
     return OnyxSnapshot(
       date: s.date, generatedAt: s.generatedAt, scope: s.scope, battery: s.battery, score: s.score,
-      sleep: s.sleep, weight: s.weight, macros: s.macros, water: s.water, steps: s.steps,
+      // ── THE NIGHT STAYS; THE FORTNIGHT BEHIND IT DOES NOT ────────────────
+      // A first week has last night — it does not have a usual bedtime, which
+      // `median` refuses under five nights. Carrying `sample.sleep` whole made
+      // the "empty" Bedtime cell an exact copy of the populated one, so the
+      // one branch that tile has ("No usual bedtime yet") was photographed by
+      // nothing. Same argument as the series below, one field over.
+      sleep: Sleep(
+        minutes: s.sleep.minutes, deepMin: s.sleep.deepMin, remMin: s.sleep.remMin,
+        coreMin: s.sleep.coreMin, awakeMin: s.sleep.awakeMin, score: s.sleep.score,
+        startTime: s.sleep.startTime, endTime: s.sleep.endTime, goalMin: s.sleep.goalMin,
+        trend: s.sleep.trend, medianBedtime: nil),
+      weight: s.weight, macros: s.macros, water: s.water, steps: s.steps,
       workout: s.workout, week: s.week, weekPrev: s.weekPrev, records: s.records, e1rm: s.e1rm,
       muscleFocus: nil, today: s.today, streak: nil, context: s.context, cardio: s.cardio,
       calendar: s.calendar, volumeTrend: s.volumeTrend, body: nil, scores: s.scores,
@@ -287,7 +367,8 @@ public extension OnyxSnapshot {
       calendar: s.calendar, volumeTrend: s.volumeTrend, body: s.body, scores: s.scores,
       readiness: s.readiness, vitals: s.vitals,
       consistency: s.consistency, deficit: s.deficit, trajectory: s.trajectory,
-      batteryStack: s.batteryStack, bodyComp: s.bodyComp, coach: s.coach)
+      batteryStack: s.batteryStack, bodyComp: s.bodyComp, coach: s.coach,
+      weekRings: s.weekRings, soreness: s.soreness, stress: s.stress)
   }()
 }
 

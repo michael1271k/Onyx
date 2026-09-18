@@ -36,6 +36,12 @@ public struct WidgetSnapshotBuilder: Sendable {
     static let bodyCompDays = 30
     /// How many days the fatigue stack draws.
     static let batteryStackDays = 14
+    /// How many days the Week Rings tile draws, and how many the stress
+    /// sparkline does. Seven is a week; fourteen is what `StressSeries`
+    /// already builds everywhere else, and a second window here would be a
+    /// second answer to "the fortnight".
+    static let weekRingDays = 7
+    static let stressSeriesDays = 14
 
     /// One session with the figures the route read off `workout_sessions`
     /// columns; the local table has none, so they come from the sets.
@@ -87,6 +93,14 @@ public struct WidgetSnapshotBuilder: Sendable {
         /// The phase's own rate band and target weight — the `plan_phase_goals`
         /// row. No compiled fallback since W2: no row, no destination.
         var phaseGoals: PlanPhaseGoalRow?
+        /// TODAY's soreness ratings — what the Soreness tile paints.
+        var doms: [DomsLogRow]
+        /// Minutes past each night window's UTC noon for the fortnight BEFORE
+        /// tonight, newest first — `bedtimeOffsets`, the same array the
+        /// regularity term takes its median of. Read here rather than
+        /// separately so the tile's "usual bedtime" and the score's baseline
+        /// can never be two different fortnights.
+        var bedtimeOffsets: [Double]
     }
 
     public func build(scope: OnyxScope, now: Date = Date()) throws -> OnyxSnapshot {
@@ -121,10 +135,17 @@ public struct WidgetSnapshotBuilder: Sendable {
         }
 
         // ── The targets this day is graded against ────────────────────────
-        let resolved = TargetSnapshot(
+        //
+        // Hoisted since W4: the Week Rings tile grades six PAST days as well
+        // as today, and each of those has its own lever rung and its own
+        // context. Only today's `daily_targets` row is loaded, so a past day
+        // resolves off the ladder — which is what `batteryStackSlice` already
+        // does for the same reason (`dayTarget: d == date ? … : nil`).
+        let targets = TargetSnapshot(
             goals: goals, dailyTargets: rows.dayTarget.map { [$0.date: $0] } ?? [:], profiles: rows.profiles,
             overrides: rows.overrides, periods: rows.periods, schedule: schedule
-        ).targets(for: date, today: date)
+        )
+        let resolved = targets.targets(for: date, today: date)
         let resolvedGoals = resolved.goals
 
         // ── Today, picked out of the week ─────────────────────────────────
@@ -342,6 +363,29 @@ public struct WidgetSnapshotBuilder: Sendable {
             ))
         }() : nil
 
+        // ── The sprint's W4 faces ─────────────────────────────────────────
+        //
+        // `.full` and `.body` — the two scopes that already resolve the day's
+        // score, so the reads these add sit beside reads that have happened
+        // anyway rather than on top of a lifestyle refresh.
+        let weekRings: [OnyxSnapshot.WeekRingDay]? = wantsBody
+            ? weekRingsSlice(rows, date: date, targets: targets, sessions: allSessions)
+            : nil
+        let soreness: [OnyxSnapshot.SorenessRegion]? = wantsBody
+            ? Self.sorenessRegions(rows.doms)
+            : nil
+        // ponytail: `stressSeries` is fourteen `readinessHistory` reads, the
+        // same cost `batteryStackSlice` above already pays for its fourteen
+        // `scoringInputs`. The documented upgrade is the one
+        // `StressInputsBuilder`'s own header names — `daily_scores.stress_index`
+        // written by the scorer — not a cache here.
+        let stress: OnyxSnapshot.StressFace? = wantsBody
+            ? {
+                let series = (try? database.stressSeries(userId: userId, endingOn: date, limit: Self.stressSeriesDays)) ?? []
+                return OnyxSnapshot.StressFace(index: series.last { $0.d == date }?.index, series14: series)
+            }()
+            : nil
+
         let bodyComp: [BodyCompMetric]? = wantsBody
             ? BodyCompSeries.build(
                 bodyReadings.map {
@@ -372,7 +416,12 @@ public struct WidgetSnapshotBuilder: Sendable {
                 trend: wantsBody ? Self.points(WidgetDerive.dailySeries(
                     rows.sleep.map { DatedValue(date: Night.nightOf(Self.iso($0.startTime)), value: Double($0.durationMin)) },
                     limit: Self.trendDays, combine: .max
-                )) : nil
+                )) : nil,
+                // Unscoped, like `startTime` beside it: it is one short string
+                // off an array already read, the Bedtime face is a Small on
+                // every surface, and a tile that reads "—" because the scope
+                // was narrow is a tile that looks broken.
+                medianBedtime: medianBedtime(rows, date: date)
             ),
             weight: OnyxSnapshot.Weight(
                 kg: latest?.kg,
@@ -462,7 +511,10 @@ public struct WidgetSnapshotBuilder: Sendable {
             trajectory: trajectory,
             batteryStack: batteryStack,
             bodyComp: bodyComp,
-            coach: coach
+            coach: coach,
+            weekRings: weekRings,
+            soreness: soreness,
+            stress: stress
         )
     }
 
@@ -568,7 +620,9 @@ public struct WidgetSnapshotBuilder: Sendable {
                 phaseGoals: try PlanPhaseGoalRow
                     .filter(user && Column("plan_id") == programId
                             && Column("phase") == phase.rawValue)
-                    .fetchOne(db)
+                    .fetchOne(db),
+                doms: try DomsLogRow.filter(user && Column("date") == date).fetchAll(db),
+                bedtimeOffsets: try AppDatabase.bedtimeOffsets(db, userId: userId, before: date, limit: Self.vitalsBaselineDays)
             )
         }
     }
@@ -779,6 +833,105 @@ public struct WidgetSnapshotBuilder: Sendable {
                 }
             }()
         )
+    }
+
+    /// The last seven days, one row each: trained, fuel hit, sleep hit.
+    ///
+    /// ── WHAT EACH MARK MEANS, AND WHY ────────────────────────────────────
+    /// `trained` is a session LOGGED, never one scheduled — `consistency` is
+    /// the tile that grades against the plan, and two tiles disagreeing about
+    /// a Tuesday is the split the one-accumulator rule exists to prevent.
+    ///
+    /// `fuelHit` is intake within a tenth of THAT day's calorie target. A band
+    /// and not a floor: on a cut, eating three hundred under is not a better
+    /// day than eating the target, and a one-sided rule would light the week
+    /// brightest for the days that went worst. A day with nothing logged is a
+    /// miss — see `WeekRingDay` for why that is a reading and not an
+    /// invention.
+    ///
+    /// `sleepHit` is the night that ended that morning reaching the goal, off
+    /// the same union the Sleep face draws (`sleep_sessions` first, the log's
+    /// own minutes behind it). No goal set, no hit: a ring cannot be met
+    /// against nothing.
+    func weekRingsSlice(
+        _ rows: Rows, date: String, targets: TargetSnapshot, sessions: [SessionTotals]
+    ) -> [OnyxSnapshot.WeekRingDay] {
+        let trained = Set(sessions.map(\.date))
+        var intake: [String: Double] = [:]
+        for n in rows.nutrition { intake[n.date] = (intake[n.date] ?? 0) + n.calories }
+        // Sleep, bucketed by the night it ENDED on — never by `start_time`'s
+        // own date, which files every pre-midnight bedtime under the evening.
+        var slept: [String: Double] = [:]
+        for row in rows.sleep {
+            let night = Night.nightOf(Self.iso(row.startTime))
+            slept[night] = max(slept[night] ?? 0, Double(row.durationMin))
+        }
+        for log in rows.logs {
+            guard slept[log.date] == nil, let minutes = log.sleepMinutes else { continue }
+            slept[log.date] = Double(minutes)
+        }
+        let sleepGoalMin = rows.goals?.sleepGoalHours.map { $0 * 60 }
+
+        var out: [OnyxSnapshot.WeekRingDay] = []
+        var d = ISODate.addDays(date, -(Self.weekRingDays - 1)) ?? date
+        while d <= date {
+            let goal = targets.targets(for: d, today: date).goals.calorie
+            let kcal = intake[d]
+            let fuelHit = goal > 0 && kcal.map { abs($0 - goal) <= goal * 0.1 } ?? false
+            out.append(OnyxSnapshot.WeekRingDay(
+                date: d,
+                trained: trained.contains(d),
+                fuelHit: fuelHit,
+                sleepHit: zip2(slept[d], sleepGoalMin).map { $0 >= $1 } ?? false
+            ))
+            guard let next = ISODate.addDays(d, 1) else { break }
+            d = next
+        }
+        return out
+    }
+
+    /// The day's ratings, folded to one severity per GROUP and expanded onto
+    /// the atlas's landmarks.
+    ///
+    /// Max within a group and not a mean, for `foldDomsSeverity`'s own reason:
+    /// "left quad severe, right quad fine" is a severe quad, and averaging it
+    /// to moderate paints a day nobody had. A rating of None is dropped — the
+    /// array is what is SORE, and the figure lights what is in it.
+    static func sorenessRegions(_ rows: [DomsLogRow]) -> [OnyxSnapshot.SorenessRegion] {
+        var peak: [String: Int] = [:]
+        for row in rows where DomsMuscles.recognised.contains(row.muscleGroup) {
+            peak[row.muscleGroup] = max(peak[row.muscleGroup] ?? 0, row.severity)
+        }
+        var byLandmark: [LandmarkMuscle: Int] = [:]
+        for (group, severity) in peak where severity > 0 {
+            for landmark in DomsMuscles.landmarks[group] ?? [] {
+                byLandmark[landmark] = max(byLandmark[landmark] ?? 0, severity)
+            }
+        }
+        // `allCases` order, so the face's list is the atlas's order however the
+        // rows arrived — a dictionary's is not an order.
+        return LandmarkMuscle.allCases.compactMap { landmark in
+            byLandmark[landmark].map { OnyxSnapshot.SorenessRegion(landmark: landmark.rawValue, level: $0) }
+        }
+    }
+
+    /// "23:30" — the usual bedtime as a LOCAL clock time.
+    ///
+    /// The offsets are minutes past each night window's UTC noon, so the
+    /// median is a UTC instant and printing its hour raw would read three
+    /// hours wrong on a phone in Jerusalem. Anchored on TONIGHT's window and
+    /// rendered in the builder's own zone: a DST change moves every offset by
+    /// sixty together and the median absorbs it within a fortnight.
+    ///
+    /// Nil under five nights — `median`'s own floor. "Usual" over four is a
+    /// guess, and a guess printed as a baseline is worse than no baseline.
+    func medianBedtime(_ rows: Rows, date: String) -> String? {
+        guard let offset = AppDatabase.median(rows.bedtimeOffsets),
+              let window = NightWindow.range(date) else { return nil }
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        f.timeZone = timeZone
+        return f.string(from: window.from.addingTimeInterval(offset * 60))
     }
 
     /// Five overnight readings, each against its own fortnight baseline.

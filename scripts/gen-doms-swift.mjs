@@ -39,11 +39,16 @@ const SOURCES = {
 /**
  * Two files, because two targets need this and they cannot see each other.
  *
- *   · `OnyxCore/Training/DomsMuscles.swift` — the plain vocabulary. OnyxData's
- *     scorer imports OnyxCore, and the fold has to know which muscle_group
- *     values are readable; the app target is invisible from a package.
- *   · `Onyx/Features/Pulse/DomsMap.swift`   — the vocabulary joined to the atlas
- *     (landmarks, worked, summary), which is a view concern and stays in the app.
+ *   · `OnyxCore/Training/DomsMuscles.swift` — the vocabulary AND the landmark
+ *     expansion. OnyxData's scorer imports OnyxCore, and the fold has to know
+ *     which muscle_group values are readable; the app target is invisible from
+ *     a package. The expansion moved down here in the sprint's W4, when
+ *     `WidgetSnapshotBuilder` — also a package — had to put the sixteen
+ *     landmarks in the widget payload for the Soreness tile. It is a
+ *     vocabulary, not a view: which anatomy a word covers does not change
+ *     because a different screen is asking.
+ *   · `Onyx/Features/Pulse/DomsMap.swift`   — what the app DOES with it
+ *     (worked, summary, the reverse lookup a tap on the body needs).
  */
 export const TARGETS = {
   core: join(ROOT, 'native/Packages/OnyxCore/Sources/OnyxCore/Training/DomsMuscles.swift'),
@@ -156,6 +161,17 @@ ${subRows}
     public static let parentOfSubRegion: [String: String] = subRegions.reduce(into: [:]) { out, pair in
         for sub in pair.value { out[sub] = pair.key }
     }
+
+    /// The anatomy each rated GROUP covers — \`DOMS_TO_LANDMARK\`.
+    ///
+    /// Ten words in, sixteen landmarks out: a sore arm is rated once and lights
+    /// the biceps, the triceps and the forearms, because that is what the word
+    /// means. Here rather than in the app since the sprint's W4 — the widget
+    /// payload carries the expanded form (\`OnyxSnapshot.soreness\`), and
+    /// \`WidgetSnapshotBuilder\` is a package that cannot see the app target.
+    public static let landmarks: [String: [LandmarkMuscle]] = [
+${landmarkRows}
+    ]
 }
 `
 
@@ -189,10 +205,7 @@ enum DomsMap {
     static let joints = DomsMuscles.joints
     static let subRegions = DomsMuscles.subRegions
     static let parentOfSubRegion = DomsMuscles.parentOfSubRegion
-
-    static let landmarks: [String: [LandmarkMuscle]] = [
-${landmarkRows}
-    ]
+    static let landmarks = DomsMuscles.landmarks
 
     /// \`domsToWorked\` — group → severity becomes landmark → 0…1, max-merged.
     static func worked(_ severity: [String: Int]) -> [LandmarkMuscle: Double] {

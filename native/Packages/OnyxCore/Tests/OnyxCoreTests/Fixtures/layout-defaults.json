@@ -1,7 +1,7 @@
 {
   "module": "dashboard/layout",
   "fn": "defaultLayout",
-  "note": "One slot per catalogue widget, in catalogue order, id sl-<widget>, nothing hidden, updatedAt 0. W7: `reconcile` appends `daily` last in every case.",
+  "note": "One slot per catalogue widget, in catalogue order, id sl-<widget>, nothing hidden, updatedAt 0. W7: `reconcile` appends `daily` last in every case. The Widgets/Sleep/Themes sprint's W4 adds four slots before it — sl-weekRings, sl-soreness, sl-stress, sl-bedtime — at the defaults layout-catalogue.json pins. Hand-edited, never regenerated.",
   "cases": [
     {
       "name": "phone",
@@ -141,6 +141,34 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -293,6 +321,34 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {

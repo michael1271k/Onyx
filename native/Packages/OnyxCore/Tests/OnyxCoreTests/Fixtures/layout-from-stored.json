@@ -1,7 +1,7 @@
 {
   "module": "dashboard/layout",
   "fn": "fromStored",
-  "note": "v1 upgrades order/size/hidden; v2/v3 read slots at top level; v4 reads the asked-for side (absent side → defaults). Then reconcile: unique ids, hidden narrowed by placed, missing catalogue widgets appended. Minted ids → new-N; a stamped updatedAt → -1. Never called with null. W7: `reconcile` appends `daily` last in every case.",
+  "note": "v1 upgrades order/size/hidden; v2/v3 read slots at top level; v4 reads the asked-for side (absent side → defaults). Then reconcile: unique ids, hidden narrowed by placed, missing catalogue widgets appended. Minted ids → new-N; a stamped updatedAt → -1. Never called with null. W7: `reconcile` appends `daily` last in every case. The Widgets/Sleep/Themes sprint's W4 adds four ids before it in the catalogue, so every appended tail here grows by sl-weekRings, sl-soreness, sl-stress, sl-bedtime — in declaration order, immediately before sl-daily, which stays last. No input names any of the four, so this is the SAME reconcile these cases already pin, one catalogue longer. Hand-edited, never regenerated.",
   "cases": [
     {
       "name": "empty object @phone",
@@ -142,6 +142,34 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -298,6 +326,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -448,6 +504,34 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -604,6 +688,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -754,6 +866,34 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -910,6 +1050,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -1060,6 +1228,34 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -1216,6 +1412,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -1365,6 +1589,34 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -1519,6 +1771,34 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -1686,6 +1966,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -1847,6 +2155,34 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -2017,6 +2353,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -2182,6 +2546,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -2340,6 +2732,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -2495,6 +2915,34 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -2670,6 +3118,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -2842,6 +3318,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -3006,6 +3510,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -3167,6 +3699,34 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -3341,6 +3901,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -3512,6 +4100,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -3670,6 +4286,34 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -3836,6 +4480,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -3999,6 +4671,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -4159,6 +4859,34 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -4330,6 +5058,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -4493,6 +5249,34 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -4675,6 +5459,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -4853,6 +5665,34 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -5065,6 +5905,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -5272,6 +6140,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -5438,6 +6334,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -5601,6 +6525,34 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -5779,6 +6731,34 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -5962,6 +6942,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -6129,6 +7137,34 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -6300,6 +7336,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -6465,6 +7529,34 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -6636,6 +7728,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -6793,6 +7913,34 @@
             "size": "s",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -6965,6 +8113,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -7133,6 +8309,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -7298,6 +8502,34 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {
@@ -7476,6 +8708,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -7651,6 +8911,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -7808,6 +9096,34 @@
             ]
           },
           {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "s",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "s",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
+            ]
+          },
+          {
             "id": "sl-daily",
             "size": "l",
             "items": [
@@ -7962,6 +9278,34 @@
             "size": "m",
             "items": [
               "fatigue"
+            ]
+          },
+          {
+            "id": "sl-weekRings",
+            "size": "m",
+            "items": [
+              "weekRings"
+            ]
+          },
+          {
+            "id": "sl-soreness",
+            "size": "l",
+            "items": [
+              "soreness"
+            ]
+          },
+          {
+            "id": "sl-stress",
+            "size": "m",
+            "items": [
+              "stress"
+            ]
+          },
+          {
+            "id": "sl-bedtime",
+            "size": "s",
+            "items": [
+              "bedtime"
             ]
           },
           {

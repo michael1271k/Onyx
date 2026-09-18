@@ -52,6 +52,10 @@ public extension WidgetId {
         case .cardio: "Cardio"
         case .stack: "Stack"
         case .fatigue: "Fatigue"
+        case .weekRings: "Week Rings"
+        case .soreness: "Soreness"
+        case .stress: "Stress"
+        case .bedtime: "Bedtime"
         // Not "Daily": the Home Screen already has a widget kind by that name
         // (`OnyxDaily`, the 2x2 ledger) and two things called Daily on one
         // phone is a gallery you cannot choose from. This one is the whole day
@@ -70,8 +74,18 @@ public extension WidgetId {
         // to every domain has to wear ONE, and the screen's own is the only
         // one that does not claim a winner.
         case .recovery, .sleep, .vitals, .fatigue, .daily: .recover
+        // The three the sprint's W4 added that are recovery readings:
+        // `OnyxDomain`'s own list puts sleep, readiness, fatigue AND DOMS on
+        // Lunar, and the stress index is built out of the same scalars the
+        // battery reads. A bedtime is a sleep surface.
+        case .soreness, .stress, .bedtime: .recover
         case .fuel, .water, .micros, .deficit, .stack: .fuel
-        case .train, .bar, .muscle, .volume, .pr, .consistency: .train
+        // `weekRings` draws three domains at once, like `daily` — and takes
+        // Train's rather than the screen's, because it is the door to the
+        // WEEK (the sprint's W8) and a week is a block of training with food
+        // and sleep underneath it. `daily` takes the screen's ground for the
+        // opposite reason: it belongs to today, and today has no winner.
+        case .train, .bar, .muscle, .volume, .pr, .consistency, .weekRings: .train
         case .body, .steps, .cardio, .trajectory: .body
         }
     }
@@ -97,6 +111,10 @@ public extension WidgetId {
         case .cardio: "heart.fill"
         case .stack: "pills.fill"
         case .fatigue: "battery.25percent"
+        case .weekRings: "circle.grid.3x3"
+        case .soreness: "bandage.fill"
+        case .stress: "brain.head.profile"
+        case .bedtime: "bed.double.fill"
         case .daily: "circle.circle"
         }
     }
@@ -159,6 +177,10 @@ public enum OnyxTile {
         case .cardio: TrainingView(entry: entry, focus: .cardio)
         case .deficit: DeficitLedgerView(entry: entry)
         case .fatigue: FatigueStackView(entry: entry)
+        case .weekRings: WeekRingsView(entry: entry)
+        case .soreness: SorenessView(entry: entry)
+        case .stress: StressView(entry: entry)
+        case .bedtime: BedtimeView(entry: entry)
         case .daily: MegaView(entry: entry)
         case .bar, .micros, .stack:
             TileNote(caption: id.title.uppercased(), text: "No face for this one yet.")

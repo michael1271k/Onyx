@@ -48,4 +48,24 @@ public enum DomsMuscles {
     public static let parentOfSubRegion: [String: String] = subRegions.reduce(into: [:]) { out, pair in
         for sub in pair.value { out[sub] = pair.key }
     }
+
+    /// The anatomy each rated GROUP covers — `DOMS_TO_LANDMARK`.
+    ///
+    /// Ten words in, sixteen landmarks out: a sore arm is rated once and lights
+    /// the biceps, the triceps and the forearms, because that is what the word
+    /// means. Here rather than in the app since the sprint's W4 — the widget
+    /// payload carries the expanded form (`OnyxSnapshot.soreness`), and
+    /// `WidgetSnapshotBuilder` is a package that cannot see the app target.
+    public static let landmarks: [String: [LandmarkMuscle]] = [
+        "Chest": [.chest],
+        "Back": [.lats, .upperBack, .lowerBack],
+        "Arms": [.biceps, .triceps, .forearms],
+        "Shoulders": [.frontDelts, .sideDelts, .rearDelts],
+        "Abs": [.absCore],
+        "Glutes": [.glutes],
+        "Quads": [.quads],
+        "Hamstrings": [.hamstrings],
+        "Inner thighs": [.adductors],
+        "Calves": [.calves],
+    ]
 }

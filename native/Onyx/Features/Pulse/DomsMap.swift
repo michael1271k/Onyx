@@ -28,19 +28,7 @@ enum DomsMap {
     static let joints = DomsMuscles.joints
     static let subRegions = DomsMuscles.subRegions
     static let parentOfSubRegion = DomsMuscles.parentOfSubRegion
-
-    static let landmarks: [String: [LandmarkMuscle]] = [
-        "Chest": [.chest],
-        "Back": [.lats, .upperBack, .lowerBack],
-        "Arms": [.biceps, .triceps, .forearms],
-        "Shoulders": [.frontDelts, .sideDelts, .rearDelts],
-        "Abs": [.absCore],
-        "Glutes": [.glutes],
-        "Quads": [.quads],
-        "Hamstrings": [.hamstrings],
-        "Inner thighs": [.adductors],
-        "Calves": [.calves],
-    ]
+    static let landmarks = DomsMuscles.landmarks
 
     /// `domsToWorked` — group → severity becomes landmark → 0…1, max-merged.
     static func worked(_ severity: [String: Int]) -> [LandmarkMuscle: Double] {
