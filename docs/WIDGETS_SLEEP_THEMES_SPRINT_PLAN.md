@@ -1,6 +1,6 @@
 # Widgets · Sleep v2 · Themes · Week · Pulse · Logger · Privacy — Sprint Plan
 
-**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0. **W3 next.**
+**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0. **W4 next.**
 **From:** `main` @ 5.0.1 (`3de461a7`).
 **Ships as:** eleven sequential waves, 5.1.0 → 6.8.0, plus a close-out wave that retires this file to `docs/Done/`.
 **Branches:** `onyx/sprint-widgets-w<N>`, each cut from current `main` and merged `--no-ff`
@@ -763,3 +763,127 @@ Whole-sprint acceptance, on a device:
 - **A legacy stored spec below chroma 0.70 gets louder on a deload** (above). Unreachable now that the sliders are gone, but not guarded.
 
 **Founder's manual steps still outstanding:** none for this wave. No DDL, no Supabase change, no App Store metadata. W3's `docs/sql/w3-sleep-onset.sql` paste is still the next one.
+
+### W3 Wave Record — shipped 2026-09-18 as 6.0.0
+
+**Drift from the plan, on purpose:**
+- **The "affected `daily-score.json` cases" were zero, and that is a property, not an omission.** A nil term drops and the rest renormalise, so an input carrying none of the five new fields — every one of the 138 composite cases, and every row written before W3 — is the v1 duration number exactly. The file is byte-identical and still passes; nothing was recomputed by hand because nothing moved. The one case in `sleep-score-v2.json` named "a pre-W3 row is the v1 number" pins it.
+- **`awakenings` counts only episodes AFTER onset, and the builder feeds fragmentation `awake_min − latency`.** The watch labels the lie-awake before sleep as *awake*, so the reference night as HealthKit would actually write it (awake_min 180: 169 waiting + 11 real) was being charged twice — once in latency, once in fragmentation — and landed at 49, below D5's 55–60. Netting the latency out puts it at 57.7 in the builder test and 58.9 in the golden (which uses awake 0, the founder's own phrasing). `awake_min` itself is untouched: the arc, the stress fragmentation denominator and Strategy B all read it as every awake minute in the window. A `ponytail:` note in the builder names the ceiling: a phone-only night labels the wait *inBed*, which `awake_min` never held, so the subtraction over-credits a 10-weight term; exact needs a third column.
+- **`penaltyMult` relaxes every term's penalty**, not only the duration's. The prompt said "penaltyMult still scales penalties"; an emergency that excuses a short night excuses a broken one. Four context-mode cases pin it.
+- **No store-side "owed" bit.** The first draft read GRDB's applied migrations before migrating to know whether `v31` was about to land. One `UserDefaults` key (`onyx.rescore.sleepV2.done`) does the same job with less: set when the `.migration` run completes with `failed == 0`, or immediately on a store with nothing scored. A launch killed mid-cascade re-runs, which is the right side to err on.
+- **`RescoreQueue.request(from:through:reason:)` is new.** `request(from:)` clamps to the 48-day reach of an edit; a formula change reaches every stored day, so the migration run asks for an explicit range from `earliestScoredDate` to today.
+- **The sheet's closed row grew the latency** ("23:02 – 6:20 · 18m to sleep"). The plan named only the third wheel; the whole point of the row is that a reader who came to see the window opens nothing, and the one number the wheel adds belongs there.
+- **`inBedMinutes` is computed from `bedStart`/`bedEnd`, not stored.** The builder reads `end_time − start_time` off the row for the same number; a second column would be a copy of two that exist.
+
+**Root causes that were not where the plan guessed:**
+- **There was no "Fell asleep" label to relabel.** The plan's `Pulse vitals label "Fell asleep" → "In bed" while onset_time is nil` names a string that appears nowhere in the app. The sheet's first wheel read "Asleep at" (it is the bedtime, and now says "In bed"); the Today vitals sheet prints `from → to` with no label at all. The premise was a memory of an earlier tile.
+- **A `DatePicker` range bounds what the wheel shows, not what the value is.** Moving "In bed" past "Fell asleep" leaves the onset where it was, outside its own range. Two `.onChange` clamps drag it along — and those clamps must NOT mark the wheel as touched, or an untouched middle wheel becomes a latency-0 claim that overrides Strategy A's re-aggregated onset on save. `onsetTouched` is set only in the wheel's own binding setter.
+- **Goldens compare at 1e-12.** The first fixture carried values rounded to three decimals and failed on every case; expected values are full-precision floats from the spreadsheet below.
+- **`zsh` treats `echo ====X` as an `=command` lookup.** Not a code finding; it cost two tool calls and is the reason the section markers in this wave's shell history are quoted.
+
+**Constraints discovered that the next wave must respect:**
+- **`Score.sleep` reads five optional fields that are nil on every row until a sync writes them.** Any new consumer of `sleep_sessions` that copies a row (the weekly export, a future watch payload) should carry `onset_time` and `awakenings` or say why not; `WeeklyExportBuilder` does not yet.
+- **`bedtimeOffsets` is UTC-noon-anchored.** A DST change moves every offset by sixty together and the median absorbs it within a fortnight; a wave that shows "usual bedtime" as a clock time must convert from the offset, not read `start_time`'s local hour.
+- **The sleep-edit shot photographs the CLOSED window row.** The harness has no knob to open the `DisclosureGroup`, so the three wheels have been reviewed by build only. A wave that touches the wheels should add a `windowOpen` seed to `PulsePreviews` before trusting the shot.
+- **OnyxData baseline is 600** (was 591; `SleepV2Tests` adds 9). OnyxCore stays 581 (one retired sweep, one new fixture). `OnyxTests` was not run — `LoggerModel` untouched.
+
+**Left open on purpose:**
+- **`Rescore.Work.absorb` keeps the FIRST request's reason.** A sleep edit queued before the migration run folds the migration into a `.sleepEdit` run and the done-flag stays unset for one more launch. Idempotent and cheap; not defended.
+- **The weekly export does not carry the two new columns.**
+- **Usual bedtime is not shown anywhere.** The regularity term is a number the user cannot see the baseline of.
+
+**Founder's manual steps still outstanding:**
+- Paste `docs/sql/w3-sleep-onset.sql` in the Supabase SQL editor as `postgres` **before** installing 6.0.0. Proved 3× on a throwaway PG17 cluster at 127.0.0.1 (fixture: the pre-W3 table shape; probe: the legacy row keeps NULLs, a W3-shaped upsert lands). Then `/schema`.
+
+**The spreadsheet** (the hand computation behind `sleep-score-v2.json`; independent of `Score.swift`, never regenerated from it):
+
+```python
+"""W3 sleep-score-v2 spreadsheet — computed HERE, independent of Score.swift.
+Each case is worked by hand below (the arithmetic is printed so a reviewer can
+follow it), then written to the fixture with a note naming W3."""
+import json
+
+PM = {None: 1.0, "normal": 1.0, "travel": 0.70, "illness": 0.55, "emergency": 0.35}
+def clamp(v, lo, hi): return max(lo, min(hi, v))
+def term(q, pm): return clamp(100 - (1 - clamp(q, 0, 1)) * 100 * pm, 0, 100)
+
+def sleep(h, deep, rem, goal, ctx=None, inBed=None, lat=None, awake=None, n=None, delta=None):
+    if h <= 0: return None
+    if goal == 0: return 100
+    pm = PM[ctx]
+    diff = h - goal
+    if diff >= -0.5: dur = 100
+    else:
+        d = -diff - 0.5
+        dur = clamp(100 - (d*d*18 + d*8) * pm, 0, 100)
+    parts = [(dur, 40)]
+    if inBed is not None and inBed > 0: parts.append((term((h / inBed - 0.75) / 0.25, pm), 20))
+    if lat is not None: parts.append((term(1 - lat / 90, pm), 15))
+    if awake is not None: parts.append((term(clamp(1 - awake/90, 0, 1) * clamp(1 - (n or 0)/6, 0, 1), pm), 10))
+    if delta is not None: parts.append((term(1 - abs(delta)/120, pm), 15))
+    w = sum(p[1] for p in parts)
+    base = sum(v * (wt / w) for v, wt in parts)
+    return clamp(base + (5 if deep >= 90 else 0) + (5 if rem >= 90 else 0), 0, 100)
+
+# The 2026-09-18 reference night: in bed 00:16, asleep 03:05, awake 10:30, usual bedtime 23:30.
+# asleep = 03:05→10:30 = 7 h 25 = 445 min = 7.41667 h; in bed = 00:16→10:30 = 614 min = 10.2333 h;
+# latency 169 min; awake after onset 0, awakenings 0; Δ bedtime = 00:16 − 23:30 = +46 min.
+REF = dict(h=445/60, deep=60, rem=80, goal=8, inBed=614/60, lat=169, awake=0, n=0, delta=46)
+# duration: diff −0.5833 → deficit 0.0833 → 18·0.00694 + 8·0.0833 = 0.125 + 0.6667 = 0.7917 → 99.208
+# efficiency: 445/614 = 0.7247 → (0.7247−0.75)/0.25 < 0 → 0
+# latency: 1 − 169/90 < 0 → 0 ; fragmentation: 1×1 → 100 ; regularity: 1 − 46/120 = 0.6167 → 61.667
+# base = (99.208·40 + 0·20 + 0·15 + 100·10 + 61.667·15)/100 = 39.683 + 10 + 9.25 = 58.933 ; no bonus → 58.93
+
+cases = [
+  ("2026-09-18 reference night — in bed 00:16, asleep 03:05, awake 10:30, usual 23:30", REF),
+  ("reference night, emergency — every penalty ×0.35",  dict(REF, ctx="emergency")),
+  ("reference night, illness — every penalty ×0.55",    dict(REF, ctx="illness")),
+  ("reference night, travel — every penalty ×0.70",     dict(REF, ctx="travel")),
+  ("reference night, normal — same as no context",      dict(REF, ctx="normal")),
+  ("nil latency, nil everything — a pre-W3 row is the v1 number: 6.5 h → 74, +5 +5 → 84",
+      dict(h=6.5, deep=90, rem=90, goal=8)),
+  ("five-night baseline present, Δ = 0 — regularity 100 beside duration 100",
+      dict(h=8, deep=0, rem=0, goal=8, delta=0)),
+  ("four nights only — Δ nil, regularity drops, duration alone = 100",
+      dict(h=8, deep=0, rem=0, goal=8, delta=None)),
+  ("efficiency floor — 6 h asleep in 8 h in bed is 0.75 → 0; (100·40 + 0·20)/60",
+      dict(h=6, deep=0, rem=0, goal=6, inBed=8)),
+  ("efficiency midpoint — 7 h in 8 h = 0.875 → 50",
+      dict(h=7, deep=0, rem=0, goal=7, inBed=8)),
+  ("latency 45 min → 50; 90 → 0 would be the floor",
+      dict(h=8, deep=0, rem=0, goal=8, lat=45)),
+  ("latency 90 min — zero credit, nothing below it",
+      dict(h=8, deep=0, rem=0, goal=8, lat=90)),
+  ("fragmentation — 45 awake and 3 awakenings is 0.5 × 0.5 → 25",
+      dict(h=8, deep=0, rem=0, goal=8, awake=45, n=3)),
+  ("fragmentation with no count — 30 awake, awakenings nil → (1 − 30/90) × 1 → 66.667",
+      dict(h=8, deep=0, rem=0, goal=8, awake=30)),
+  ("regularity — an hour early is Δ −60 → 50",
+      dict(h=8, deep=0, rem=0, goal=8, delta=-60)),
+  ("regularity — two hours late is the floor, three is still the floor",
+      dict(h=8, deep=0, rem=0, goal=8, delta=200)),
+  ("all five terms, a good night — 7.6 h in 8 h, 12 min to sleep, 9 awake once, Δ +10, REM bonus only: 90.25 + 5",
+      dict(h=7.6, deep=80, rem=100, goal=8, inBed=8, lat=12, awake=9, n=1, delta=10)),
+  ("stage bonuses cannot push past 100",
+      dict(h=8, deep=90, rem=90, goal=8, inBed=8, lat=0, awake=0, n=0, delta=0)),
+  ("goal 0 short-circuits to 100 whatever the night",
+      dict(h=3, deep=0, rem=0, goal=0, inBed=9, lat=170, awake=80, n=6, delta=180)),
+  ("no sleep is nil, never a zero — even with v2 fields present",
+      dict(h=0, deep=0, rem=0, goal=8, inBed=8, lat=10, awake=0, n=0, delta=0)),
+]
+
+out = []
+for name, k in cases:
+    e = sleep(**{kk: k.get(kk) for kk in ("h","deep","rem","goal","ctx","inBed","lat","awake","n","delta")})
+    # full precision: the harness compares at 1e-12; the printed 3 dp is for the reader
+    inp = {"sleepHours": k["h"], "deepMinutes": k["deep"], "remMinutes": k["rem"], "sleepGoalHours": k["goal"],
+           "contextMode": k.get("ctx"), "sleepInBedHours": k.get("inBed"), "sleepLatencyMin": k.get("lat"),
+           "sleepAwakeMin": k.get("awake"), "sleepAwakenings": k.get("n"), "sleepBedtimeDeltaMin": k.get("delta")}
+    print(f"{(round(e,3) if e is not None else None)!s:>8}  {name}")
+    out.append({"name": name, "input": inp, "expected": e})
+
+fixture = {"module": "scoring/score", "fn": "computeSleepScore",
+  "note": "W3 Sleep v2 (6.0.0) — hand-computed in the wave's spreadsheet (docs/WIDGETS_SLEEP_THEMES_SPRINT_PLAN.md, W3 Wave Record). Five terms: duration 40 (v1 curve) · efficiency 20 (asleep÷in-bed, linear 0.75→1) · latency 15 (1−min/90) · fragmentation 10 ((1−awake/90)(1−awakenings/6)) · regularity 15 (1−|Δ|/120); a nil term drops and the rest renormalise; context relaxes every term's penalty; +5 deep≥90 +5 REM≥90; clamp 0…100. sleepHours<=0 is null, goal 0 is 100. Never regenerated from Score.swift.",
+  "cases": out}
+json.dump(fixture, open("native/Packages/OnyxCore/Tests/OnyxCoreTests/Fixtures/sleep-score-v2.json", "w"), indent=2)
+```
