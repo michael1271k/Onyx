@@ -58,7 +58,23 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
     /// Seven nights of duration, oldest first. Body scope. One night is a
     /// reading; seven is the thing worth changing a bedtime over.
     public let trend: [Point]?
-    public init(minutes: Int? = nil, deepMin: Int? = nil, remMin: Int? = nil, coreMin: Int? = nil, awakeMin: Int? = nil, score: Int? = nil, startTime: String? = nil, endTime: String? = nil, goalMin: Int? = nil, trend: [Point]? = nil) {
+    /// "23:30" — the usual bedtime, as a LOCAL clock time, over the fortnight
+    /// before tonight.
+    ///
+    /// ── WHY A STRING AND NOT A NUMBER ─────────────────────────────────────
+    /// The store holds this as minutes past the night window's UTC noon
+    /// (`bedtimeOffsets`), which is the only form that does not wrap around
+    /// midnight and the only form the regularity term can take a median of. It
+    /// is also unreadable: 690 is half past eleven and nothing about it says
+    /// so. The conversion needs the device's zone, and the builder is the one
+    /// place that has one — a face converting it would be a second timezone
+    /// decision on the same fact, which is how a bedtime reads three hours
+    /// wrong on a phone in Jerusalem (see `clockTime`).
+    ///
+    /// Nil under five nights: `median` refuses a baseline it cannot call
+    /// usual, and this is that same refusal with a clock on it.
+    public let medianBedtime: String?
+    public init(minutes: Int? = nil, deepMin: Int? = nil, remMin: Int? = nil, coreMin: Int? = nil, awakeMin: Int? = nil, score: Int? = nil, startTime: String? = nil, endTime: String? = nil, goalMin: Int? = nil, trend: [Point]? = nil, medianBedtime: String? = nil) {
       self.minutes = minutes
       self.deepMin = deepMin
       self.remMin = remMin
@@ -69,6 +85,7 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
       self.endTime = endTime
       self.goalMin = goalMin
       self.trend = trend
+      self.medianBedtime = medianBedtime
     }
   }
   public struct Weight: Codable, Sendable, Equatable {
@@ -523,6 +540,91 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
     }
   }
 
+  /// One day of the week's three rings.
+  ///
+  /// ── WHY THREE BOOLEANS AND NOT THREE PERCENTAGES ────────────────────────
+  /// The tile draws seven columns of three marks in about 150 pt. A column of
+  /// three part-filled arcs at that size is three greys; a column of three
+  /// marks that are either on or off is a week you read in one look, which is
+  /// the only reading this shape can carry. The percentages already have tiles
+  /// of their own — Day Rings for today, the Fuel and Sleep faces for the
+  /// number — and this one answers a different question: how many of the
+  /// seven.
+  ///
+  /// ── AND WHY A MISSED DAY AND AN UNLOGGED ONE ARE THE SAME `false` ───────
+  /// This breaks the file's own "missing is nil" rule on purpose and it is the
+  /// only place that does. The rule exists so a reading is never INVENTED — a
+  /// zero standing in for a number nobody took. A ring is not a reading: it is
+  /// whether the day's goal was met, and a day with no food logged did not
+  /// meet its calorie target however good the eating was. "Not hit" is the
+  /// honest answer to the question the mark asks, and a third state would be a
+  /// third mark in a column that has room for three.
+  public struct WeekRingDay: Codable, Sendable, Equatable, Identifiable {
+    /// `YYYY-MM-DD`.
+    public let date: String
+    /// A session landed. Not "was scheduled" — `consistency` is the tile that
+    /// grades against the plan, and two tiles disagreeing about a Tuesday is
+    /// the split this payload's one-accumulator rule exists to prevent.
+    public let trained: Bool
+    /// Intake was logged and landed within a tenth of that day's calorie
+    /// target — the day's own target, phase- and lever-resolved, not today's.
+    public let fuelHit: Bool
+    /// The night that ended that morning reached the sleep goal.
+    public let sleepHit: Bool
+    public var id: String { date }
+    public init(date: String, trained: Bool, fuelHit: Bool, sleepHit: Bool) {
+      self.date = date
+      self.trained = trained
+      self.fuelHit = fuelHit
+      self.sleepHit = sleepHit
+    }
+  }
+
+  /// One sore LANDMARK, at the severity its group was rated.
+  ///
+  /// ── THE GROUP IS RATED, THE LANDMARK IS DRAWN ───────────────────────────
+  /// `doms_logs.muscle_group` is one of ten words a user can tap ("a sore arm
+  /// is a sore arm"); the atlas paints sixteen. The expansion is
+  /// `DomsMuscles.landmarks`, one vocabulary in one generated file, so the
+  /// tile's figure and the Pulse sheet's figure light the same shapes. The
+  /// payload carries the expanded form because the tile is in OnyxUI and the
+  /// map is in OnyxCore — a face that expanded it itself would be the second
+  /// implementation this project has already paid for once.
+  public struct SorenessRegion: Codable, Sendable, Equatable, Identifiable {
+    /// `LandmarkMuscle.rawValue` — the display spelling the atlas keys on,
+    /// exactly as `MuscleVolume.muscle` carries it.
+    public let landmark: String
+    /// 1…3 — Mild, Moderate, Severe. A rating of None is not carried: the
+    /// array is what is SORE, and a zero in it would draw a lit muscle.
+    public let level: Int
+    public var id: String { landmark }
+    public init(landmark: String, level: Int) {
+      self.landmark = landmark
+      self.level = level
+    }
+    public var muscle: LandmarkMuscle? { LandmarkMuscle(rawValue: landmark) }
+  }
+
+  /// The stress index and the fortnight behind it.
+  ///
+  /// `index` is nil on a day nothing was answered — never a 50, which is the
+  /// centre of the scale and would read as an ordinary day. `series14` is
+  /// exactly fourteen days ending today, oldest first, a day with no reading
+  /// present and empty (`StressSeries`' own rule), so the sparkline draws a
+  /// gap rather than a dive to the floor.
+  public struct StressFace: Codable, Sendable, Equatable {
+    public let index: Double?
+    public let series14: [StressDay]
+    public init(index: Double? = nil, series14: [StressDay] = []) {
+      self.index = index
+      self.series14 = series14
+    }
+    /// Calm … Overreached, or nil with no reading. Derived rather than
+    /// carried: `Stress.band` is a pure function of the index and a second
+    /// copy of it in the payload is a second thing that can disagree.
+    public var band: StressBand? { index.map(Stress.band) }
+  }
+
   /// A declared context, as the server writes it: the vocabulary key and the
   /// label to draw. The label comes down rather than being mapped here so the
   /// two sides cannot disagree about what "refeed" is called.
@@ -629,7 +731,24 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
   /// that today: `.daily` is a dashboard tile and the grid builds at `.full`.
   public let coach: String?
 
-  public init(date: String, generatedAt: String, scope: String? = nil, battery: Int? = nil, score: Int? = nil, sleep: Sleep, weight: Weight, macros: Macros, water: Water, steps: Steps, workout: Workout, week: Week, weekPrev: WeekTotals? = nil, records: [Record]? = nil, e1rm: [E1rm]? = nil, muscleFocus: [MuscleVolume]? = nil, today: Today? = nil, streak: Streak? = nil, context: DayContext? = nil, cardio: Cardio? = nil, calendar: [CalendarDay]? = nil, volumeTrend: [Point]? = nil, body: Body? = nil, scores: Scores? = nil, readiness: Readiness? = nil, vitals: Vitals? = nil, consistency: Consistency? = nil, deficit: DeficitLedger? = nil, trajectory: Trajectory? = nil, batteryStack: [BatteryStackDay]? = nil, bodyComp: [BodyCompMetric]? = nil, coach: String? = nil) {
+  // ── The sprint's W4 faces ──────────────────────────────────────────────────
+  //
+  // Three blocks for the three new WidgetIds that need one; `bedtime` needs no
+  // field of its own because it draws `sleep.medianBedtime` beside the night
+  // `sleep` already carries. Filled at `.full` and `.body` — the two scopes
+  // that already pay for the day's scoring reads — and nil everywhere else,
+  // which every face renders as "—" like any other missing reading.
+
+  /// The last seven days, one row each. `.full` and `.body`.
+  public let weekRings: [WeekRingDay]?
+  /// TODAY's soreness, expanded onto the atlas's landmarks. Only what is sore:
+  /// an empty array is a day nothing hurts, which is a real answer, and nil is
+  /// a payload that did not ask.
+  public let soreness: [SorenessRegion]?
+  /// The stress index and its fortnight. `.full` and `.body`.
+  public let stress: StressFace?
+
+  public init(date: String, generatedAt: String, scope: String? = nil, battery: Int? = nil, score: Int? = nil, sleep: Sleep, weight: Weight, macros: Macros, water: Water, steps: Steps, workout: Workout, week: Week, weekPrev: WeekTotals? = nil, records: [Record]? = nil, e1rm: [E1rm]? = nil, muscleFocus: [MuscleVolume]? = nil, today: Today? = nil, streak: Streak? = nil, context: DayContext? = nil, cardio: Cardio? = nil, calendar: [CalendarDay]? = nil, volumeTrend: [Point]? = nil, body: Body? = nil, scores: Scores? = nil, readiness: Readiness? = nil, vitals: Vitals? = nil, consistency: Consistency? = nil, deficit: DeficitLedger? = nil, trajectory: Trajectory? = nil, batteryStack: [BatteryStackDay]? = nil, bodyComp: [BodyCompMetric]? = nil, coach: String? = nil, weekRings: [WeekRingDay]? = nil, soreness: [SorenessRegion]? = nil, stress: StressFace? = nil) {
     self.date = date
     self.generatedAt = generatedAt
     self.scope = scope
@@ -662,6 +781,9 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
     self.batteryStack = batteryStack
     self.bodyComp = bodyComp
     self.coach = coach
+    self.weekRings = weekRings
+    self.soreness = soreness
+    self.stress = stress
   }
 }
 
@@ -700,6 +822,22 @@ extension OnyxSnapshot {
       targets: Dictionary(rows.map { ($0.0, $0.1.target) }, uniquingKeysWith: { a, _ in a })
     )
     return Dictionary(worked.map { ($0.key.rawValue, $0.value) }, uniquingKeysWith: { a, _ in a })
+  }
+
+  /// Landmark → 0…1 for the atlas, from SORENESS rather than from work done.
+  ///
+  /// The same shape `muscleWorked` returns and read by the same figure, so the
+  /// Soreness tile and the Muscle Focus tile are one drawing with two inputs.
+  /// Severity over `DomsMuscles.maxSeverity`, which is the intensity the Pulse
+  /// figure has always used (`DomsMap.worked`) — the atlas paints AMOUNT and
+  /// passes no verdicts, so a severe quad is a strong tint, not a red one.
+  public var soreWorked: [String: Double] {
+    var out: [String: Double] = [:]
+    for region in soreness ?? [] where region.level > 0 {
+      let intensity = min(1, max(0, Double(region.level) / Double(DomsMuscles.maxSeverity)))
+      out[region.landmark] = max(out[region.landmark] ?? 0, intensity)
+    }
+    return out
   }
 
   /// One composition metric out of the W12 series, or nil when the payload

@@ -47,6 +47,13 @@ public enum WidgetId: String, Codable, Sendable, CaseIterable {
     // `reconcile` appends in, so a new id lands where it reads rather than at
     // the end of the grid.
     case body, trajectory, muscle, volume, pr, consistency, steps, cardio, stack, fatigue
+    // ── THE FOUR THE SPRINT'S W4 ADDED, AND WHY THEY SIT HERE ───────────────
+    // Before `daily` and after everything that was already in the catalogue:
+    // `reconcile` appends in declaration order, so a device carrying a v4 row
+    // gets these four handed to it in this order and `daily` stays where it
+    // has always been — last. Putting any of them earlier would shift the tail
+    // of every stored layout, which is what the golden vectors pin.
+    case weekRings, soreness, stress, bedtime
     // `daily` is W7's Mega Widget and is declared LAST on purpose. Declaration
     // order is the order `reconcile` appends in, so a twentieth id put anywhere
     // else would shift the tail of every stored layout — and the golden vectors
@@ -156,6 +163,24 @@ public enum Dashboard {
         .cardio: [.s, .m],
         .stack: [.s, .m],
         .fatigue: [.s, .m],
+        // ── THE SPRINT'S W4 FOUR ───────────────────────────────────────────
+        // Seven columns of three rings. A Small draws the columns and nothing
+        // else; a Medium buys the weekday letters and the week's tally. No
+        // Large — seven days is seven days, and a taller grid of it is a
+        // stretched Medium, the shape `layout.ts` warns about.
+        .weekRings: [.s, .m],
+        // The only one of the four with a Large, and the figure is why: a body
+        // at 158 pt is a key, at 338 × 354 it is the reading. Small draws the
+        // count and the worst region, Medium adds the figure, Large gives the
+        // figure the room to be pointed at.
+        .soreness: [.s, .m, .l],
+        // The index and a fortnight of it. A Large would be the same sparkline
+        // with more air under it.
+        .stress: [.s, .m],
+        // ── ONE SIZE, AND IT IS THE SMALL ONE ──────────────────────────────
+        // One clock time and the night's own. That is a Small's worth of
+        // content at every size, and a Medium of it is a Small with a hole.
+        .bedtime: [.s],
         // ── ONE SIZE, AND IT IS THE BIG ONE (W7) ───────────────────────────
         // Three concentric arcs, a battery in the hole and a sentence under
         // it. A Small is 158 pt square: the arcs would be 40 pt across and the
@@ -172,7 +197,12 @@ public enum Dashboard {
         .sleep: .m, .vitals: .m, .fuel: .m, .water: .s, .micros: .s, .deficit: .m,
         .train: .m, .bar: .s, .body: .m, .trajectory: .m, .muscle: .s, .volume: .s,
         .pr: .s, .consistency: .s, .steps: .s, .cardio: .s, .stack: .s,
-        .fatigue: .s, .daily: .l,
+        .fatigue: .s,
+        // Week Rings lands Medium because seven columns of three rings at
+        // 158 pt have no room for the weekday letters under them, and a grid
+        // whose columns are unlabelled is a grid you have to count along.
+        .weekRings: .m, .soreness: .s, .stress: .s, .bedtime: .s,
+        .daily: .l,
     ]
 
     static let defaultSizeDesktop: [WidgetId: WidgetSize] = defaultSizePhone.merging([
@@ -182,6 +212,11 @@ public enum Dashboard {
         .vitals: .l, .fuel: .l, .deficit: .l, .train: .l, .muscle: .l, .volume: .l,
         .micros: .m, .bar: .m, .consistency: .m, .steps: .m,
         .water: .m, .pr: .m, .cardio: .m, .stack: .m, .fatigue: .m, .trajectory: .m,
+        // The desktop's rule is one size up where a body for it exists.
+        // `bedtime` has only the Small, so it stays there: `defaultLayout`
+        // takes this number UNCLAMPED (see `daily` below) and a default
+        // outside `widgetSizes` mints a slot no face can draw.
+        .weekRings: .m, .soreness: .l, .stress: .m, .bedtime: .s,
         // `.l` on a desktop too, and not `.xl`: `defaultLayout` takes this
         // number UNCLAMPED, so a default outside `widgetSizes` mints a slot
         // whose size no face can draw.

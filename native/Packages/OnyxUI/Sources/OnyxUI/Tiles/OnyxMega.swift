@@ -77,12 +77,29 @@ public struct MegaView: View {
   static let pitch: CGFloat = 20
   static let stroke: CGFloat = 14
 
-  /// One ring: what it measures, how far round it is, and the hue it wears.
+  // ── THE ARCS ARE RAMPS, NOT ACCENTS (the sprint's W4) ────────────────────
+  //
+  // Each ring is stroked with its domain's whole two-stop gradient rather than
+  // with `accent`, which is only the FIRST stop (`OnyxDomain.accent` is
+  // `start`, and its header says so). Three flat hues at 14 pt on a black tile
+  // read as three plastic bands; the same three as ramps read as one palette
+  // seen from three angles, and they move when the theme does — which is the
+  // whole of what the theme grid bought (W2).
+  //
+  // The legend's dot takes the ramp's MIDPOINT and not its start: a 6 pt dot
+  // cannot carry a gradient, and the start is the lightest end of the arc it
+  // is keying, so a dot drawn at `accent` looks like a different colour from
+  // the ring beside it.
+  //
+  // `.accented` flattens all of it to white — the rule the whole package
+  // follows, and a gradient in a tinted render reads as a bug.
+
+  /// One ring: what it measures, how far round it is, and the ramp it wears.
   struct Ring: Identifiable {
     let id: String
     let label: String
     let progress: Double?
-    let color: Color
+    let domain: OnyxDomain
     /// 0 outermost.
     let depth: Int
   }
@@ -92,19 +109,29 @@ public struct MegaView: View {
       Ring(
         id: "sleep", label: "SLEEP",
         progress: OnyxSnapshot.progress(s?.sleep.minutes.map(Double.init), s?.sleep.goalMin.map(Double.init)),
-        color: mono ? .white : OnyxDomain.recover.accent, depth: 0
+        domain: .recover, depth: 0
       ),
       Ring(
         id: "move", label: "MOVE",
         progress: OnyxSnapshot.progress(s?.steps.count.map(Double.init), s?.steps.goal.map(Double.init)),
-        color: mono ? .white : OnyxDomain.body.accent, depth: 1
+        domain: .body, depth: 1
       ),
       Ring(
         id: "fuel", label: "FUEL",
         progress: OnyxSnapshot.progress(s?.macros.kcal, s?.macros.kcalGoal),
-        color: mono ? .white : OnyxDomain.fuel.accent, depth: 2
+        domain: .fuel, depth: 2
       ),
     ]
+  }
+
+  /// The gradient an arc is stroked with — flat white in a tinted render.
+  private func arcStyle(_ ring: Ring) -> AnyShapeStyle {
+    mono ? AnyShapeStyle(Color.white) : AnyShapeStyle(ring.domain.ramp)
+  }
+
+  /// The solid the legend's dot wears — see the note above.
+  private func keyColor(_ ring: Ring) -> Color {
+    mono ? .white : ring.domain.at(0.5)
   }
 
   public var body: some View {
@@ -164,7 +191,7 @@ public struct MegaView: View {
           if let p = ring.progress {
             Circle()
               .trim(from: 0, to: Self.full * p)
-              .stroke(ring.color, style: Self.style)
+              .stroke(arcStyle(ring), style: Self.style)
           }
         }
         // Trim starts at 3 o'clock; a day that reads clockwise from the top is
@@ -232,7 +259,7 @@ public struct MegaView: View {
   private func row(_ ring: Ring, value: String?, goal: String?) -> some View {
     VStack(alignment: .leading, spacing: 1) {
       HStack(spacing: 4) {
-        Circle().fill(ring.color).frame(width: 6, height: 6)
+        Circle().fill(keyColor(ring)).frame(width: 6, height: 6)
         Text(ring.label)
           .font(OnyxWidgetType.face(8, weight: .heavy)).tracking(1)
           .foregroundStyle(Color.onyx.textSecondary)

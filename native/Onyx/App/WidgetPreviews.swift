@@ -62,6 +62,24 @@ enum WidgetPreviews {
             add("fatigue", fam, FatigueStackView(entry: entry))
             add("muscle", fam, MuscleView(entry: entry))
         }
+        // ── The sprint's W4 tiles ────────────────────────────────────────
+        // Each at the sizes `Dashboard.widgetSizes` gives it and no others: a
+        // cell photographed at a family the catalogue does not offer reviews a
+        // layout nothing can reach. `soreness` is the only one of the four
+        // with a Large, and `bedtime` is a Small everywhere.
+        for fam in grid {
+            add("weekrings", fam, WeekRingsView(entry: entry))
+            add("soreness", fam, SorenessView(entry: entry))
+            add("stress", fam, StressView(entry: entry))
+        }
+        add("soreness", .systemLarge, SorenessView(entry: entry))
+        add("bedtime", .systemSmall, BedtimeView(entry: entry))
+        for fam in grid {
+            add("weekrings-empty", fam, WeekRingsView(entry: emptyEntry))
+            add("soreness-empty", fam, SorenessView(entry: emptyEntry))
+            add("stress-empty", fam, StressView(entry: emptyEntry))
+        }
+        add("bedtime-empty", .systemSmall, BedtimeView(entry: emptyEntry))
         for fam in grid {
             add("trajectory-empty", fam, TrajectoryView(entry: emptyEntry))
             add("consistency-empty", fam, ConsistencyView(entry: emptyEntry))

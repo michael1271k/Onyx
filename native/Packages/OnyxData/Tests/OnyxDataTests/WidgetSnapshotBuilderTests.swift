@@ -203,6 +203,153 @@ struct WidgetSnapshotBuilderTests {
         #expect(s.battery != nil)
         #expect(s.scores?.sleep != nil)
         #expect(s.readiness != nil)
+
+        // ── The sprint's W4 faces ────────────────────────────────────────
+        let rings = try #require(s.weekRings)
+        #expect(rings.count == 7)
+        #expect(rings.first?.date == "2026-08-28" && rings.last?.date == today)
+        // Nothing rated today is an EMPTY array, not a nil one: "nothing
+        // hurts" is an answer and "nobody asked" is not the same statement.
+        #expect(s.soreness == [])
+        #expect(s.stress?.series14.count == 14)
+        // One night in the store and it is TONIGHT's, so the baseline has
+        // nothing before the window to take a median of.
+        #expect(s.sleep.medianBedtime == nil)
+    }
+
+    // ── THE SPRINT'S W4 FACES ───────────────────────────────────────────────
+
+    @Test("the week's rings count the days the goals were actually met")
+    func weekRingsCountWhatHappened() throws {
+        let db = try seeded()
+        try db.writer.write { conn in
+            // A night that CLEARS the 7.5 h goal, on the night of Aug 31 — the
+            // seed's only other night is tonight's 7 h, which misses it, so
+            // without this the sleep row would be seven falses and prove only
+            // that `false` renders.
+            let night = try #require(NightWindow.range("2026-08-31"))
+            try SleepSessionRow(id: "sl-long", userId: user, startTime: night.from.addingTimeInterval(10 * 3600),
+                                endTime: night.to.addingTimeInterval(-2 * 3600), durationMin: 480, createdAt: now).insert(conn)
+        }
+        let rings = try #require(build(db, .full).weekRings)
+        func day(_ d: String) throws -> OnyxSnapshot.WeekRingDay { try #require(rings.first { $0.date == d }) }
+
+        // Sessions on Aug 31 (Legs A) and today. Aug 27's is outside the week.
+        #expect(try day("2026-08-31").trained)
+        #expect(try day(today).trained)
+        #expect(try !day("2026-09-01").trained)
+
+        // 1850 and 1900 against a 2000 goal are both inside the tenth; a day
+        // with nothing logged is a miss, which is the rule `WeekRingDay`
+        // states and the only place this payload does not treat missing as nil.
+        #expect(try day(today).fuelHit, "1850 of 2000")
+        #expect(try day("2026-09-02").fuelHit, "1900 of 2000")
+        #expect(try !day("2026-09-01").fuelHit, "nothing logged is not a hit")
+
+        #expect(try day("2026-08-31").sleepHit, "480 min clears the 450 goal")
+        #expect(try !day(today).sleepHit, "420 min does not")
+    }
+
+    /// The tile paints the atlas's sixteen; the user taps one of ten words.
+    @Test("a rated group lights every landmark it covers, at the worst of its rows")
+    func sorenessFansOutToLandmarks() throws {
+        let db = try seeded()
+        try db.writer.write { conn in
+            // One shoulder rated on each side, differently: max within the
+            // group, never a mean — "left severe, right fine" is a severe
+            // shoulder, and averaging it reports a day nobody had.
+            try DomsLogRow(id: "d1", userId: user, date: today, muscleGroup: "Shoulders", severity: 1,
+                           createdAt: now, side: "left", subRegion: "").insert(conn)
+            try DomsLogRow(id: "d2", userId: user, date: today, muscleGroup: "Shoulders", severity: 3,
+                           createdAt: now, side: "right", subRegion: "").insert(conn)
+            try DomsLogRow(id: "d3", userId: user, date: today, muscleGroup: "Quads", severity: 2,
+                           createdAt: now, side: "both", subRegion: "").insert(conn)
+            // Rated None — the array is what is SORE.
+            try DomsLogRow(id: "d4", userId: user, date: today, muscleGroup: "Calves", severity: 0,
+                           createdAt: now, side: "both", subRegion: "").insert(conn)
+            // A word the vocabulary does not know can never be read back as a
+            // rating (`DomsMuscles.recognised`) — the same guard the scorer's
+            // fold applies, for the same reason.
+            try DomsLogRow(id: "d5", userId: user, date: today, muscleGroup: "Tail", severity: 3,
+                           createdAt: now, side: "both", subRegion: "").insert(conn)
+            // Yesterday's rating is yesterday's.
+            try DomsLogRow(id: "d6", userId: user, date: "2026-09-02", muscleGroup: "Chest", severity: 3,
+                           createdAt: now, side: "both", subRegion: "").insert(conn)
+        }
+        let s = try build(db, .full)
+        let sore = try #require(s.soreness)
+        let byLandmark = Dictionary(sore.map { ($0.landmark, $0.level) }, uniquingKeysWith: { a, _ in a })
+
+        #expect(byLandmark["Front delts"] == 3)
+        #expect(byLandmark["Side delts"] == 3)
+        #expect(byLandmark["Rear delts"] == 3)
+        #expect(byLandmark["Quads"] == 2)
+        #expect(byLandmark["Calves"] == nil)
+        #expect(byLandmark["Chest"] == nil, "yesterday's rating is yesterday's")
+        #expect(sore.count == 4)
+        // `allCases` order, so the face's list does not shuffle between two
+        // refreshes that read the same rows.
+        #expect(sore.map(\.landmark) == ["Front delts", "Side delts", "Rear delts", "Quads"])
+
+        // And the figure takes it as 0…1 over the vocabulary's own maximum —
+        // the identical shape `muscleWorked` hands the same view.
+        #expect(s.soreWorked["Side delts"] == 1)
+        #expect(s.soreWorked["Quads"] == 2.0 / 3.0)
+    }
+
+    /// The regularity baseline, made visible — W3 scored against it and no
+    /// surface printed it.
+    @Test("the usual bedtime is a local clock time, and needs five nights to exist")
+    func medianBedtimeIsAClock() throws {
+        // Six nights before tonight's window, at 22:00, 22:00, 22:30, 21:30,
+        // 23:00 and 21:00 UTC — a median of exactly ten hours past the night's
+        // opening noon. Not all equal, so this pins the MEDIAN rather than the
+        // newest row.
+        func seedNights(_ db: AppDatabase, offsetsMin: [Double]) throws {
+            try db.writer.write { conn in
+                for (i, offset) in offsetsMin.enumerated() {
+                    let night = ISODate.addDays("2026-09-02", -i)!
+                    let window = try #require(NightWindow.range(night))
+                    try SleepSessionRow(
+                        id: "bn\(i)", userId: user,
+                        startTime: window.from.addingTimeInterval(offset * 60),
+                        endTime: window.from.addingTimeInterval(offset * 60 + 7 * 3600),
+                        durationMin: 420, createdAt: now
+                    ).insert(conn)
+                }
+            }
+        }
+
+        let four = try seeded()
+        try seedNights(four, offsetsMin: [600, 600, 630, 570])
+        #expect(try build(four, .full).sleep.medianBedtime == nil, "four nights is not a usual")
+
+        let six = try seeded()
+        try seedNights(six, offsetsMin: [600, 600, 630, 570, 660, 540])
+        #expect(try build(six, .full).sleep.medianBedtime == "22:00")
+
+        // The same store read from a phone three hours east prints the local
+        // clock, not the UTC one. A bedtime read in UTC in Jerusalem is three
+        // hours wrong, every night.
+        let east = try WidgetSnapshotBuilder(
+            database: six, userId: user, timeZone: TimeZone(secondsFromGMT: 3 * 3600)!
+        ).build(scope: .full, now: now)
+        #expect(east.sleep.medianBedtime == "01:00")
+    }
+
+    @Test("the three W4 blocks are body-scope; the bedtime is on every payload")
+    func w4ScopeGating() throws {
+        let db = try seeded()
+        for scope in [OnyxScope.lifestyle, .performance, .training] {
+            let s = try build(db, scope)
+            #expect(s.weekRings == nil, "\(scope) carries no week")
+            #expect(s.soreness == nil, "\(scope) carries no soreness")
+            #expect(s.stress == nil, "\(scope) carries no stress")
+        }
+        let body = try build(db, .body)
+        #expect(body.weekRings?.count == 7)
+        #expect(body.soreness != nil)
+        #expect(body.stress != nil)
     }
 
     @Test("lifestyle keeps its own quarter and nothing else")

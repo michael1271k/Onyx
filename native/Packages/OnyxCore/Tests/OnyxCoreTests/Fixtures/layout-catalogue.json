@@ -1,7 +1,7 @@
 {
   "module": "dashboard/layout",
   "fn": "WIDGET_IDS / WIDGET_SIZES / defaultSizeFor",
-  "note": "Catalogue order is first-run order. Sizes are the bodies each widget actually has; defaults differ per surface. W7 appends `daily`, the Mega Widget: one body, Large, on both surfaces.",
+  "note": "Catalogue order is first-run order. Sizes are the bodies each widget actually has; defaults differ per surface. W7 appends `daily`, the Mega Widget: one body, Large, on both surfaces. The Widgets/Sleep/Themes sprint's W4 inserts `weekRings`, `soreness`, `stress` and `bedtime` BEFORE it — `daily` stays the tail, which is what a device carrying a v4 row experiences when `reconcile` appends the four in declaration order. Hand-edited, never regenerated: `bedtime` has one body (Small) on both surfaces, `soreness` is the only one of the four with a Large, and `weekRings` opens at Medium because seven labelled columns do not fit 158 pt.",
   "cases": [
     {
       "name": "catalogue",
@@ -27,6 +27,10 @@
           "cardio",
           "stack",
           "fatigue",
+          "weekRings",
+          "soreness",
+          "stress",
+          "bedtime",
           "daily"
         ],
         "sizes": {
@@ -124,6 +128,22 @@
             "s",
             "m"
           ],
+          "weekRings": [
+            "s",
+            "m"
+          ],
+          "soreness": [
+            "s",
+            "m",
+            "l"
+          ],
+          "stress": [
+            "s",
+            "m"
+          ],
+          "bedtime": [
+            "s"
+          ],
           "daily": [
             "l"
           ]
@@ -148,6 +168,10 @@
           "cardio": "s",
           "stack": "s",
           "fatigue": "s",
+          "weekRings": "m",
+          "soreness": "s",
+          "stress": "s",
+          "bedtime": "s",
           "daily": "l"
         },
         "defaultDesktop": {
@@ -170,6 +194,10 @@
           "cardio": "m",
           "stack": "m",
           "fatigue": "m",
+          "weekRings": "m",
+          "soreness": "l",
+          "stress": "m",
+          "bedtime": "s",
           "daily": "l"
         }
       }

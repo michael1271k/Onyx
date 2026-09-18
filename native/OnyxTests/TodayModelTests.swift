@@ -32,19 +32,27 @@ struct TodayModelTests {
         #expect(rows.map { $0.slots.map(\.id) } == [["a"], ["b"], ["c", "d"], ["e"], ["f"]])
     }
 
-    /// Seventeen since W7, which added the Mega Widget. Sixteen before that:
-    /// `trajectory` is W12's, and `deficit` and `fatigue` stopped being
-    /// projected out when they got their series. The three without a face are
-    /// `bar`, `micros` and `stack`.
+    /// Twenty-one since the Widgets/Sleep/Themes sprint's W4, which added
+    /// `weekRings`, `soreness`, `stress` and `bedtime`. Seventeen since W7,
+    /// which added the Mega Widget; sixteen before that — `trajectory` is
+    /// W12's, and `deficit` and `fatigue` stopped being projected out when
+    /// they got their series. The three without a face are still `bar`,
+    /// `micros` and `stack`.
     @Test("the catalogue the phone offers is every widget with a face, in catalogue order")
     func native() {
-        #expect(OnyxTile.native.count == 17)
+        #expect(OnyxTile.native.count == 21)
         #expect(OnyxTile.native.first == .recovery)
         // The Mega Widget is declared last, so it is offered last.
         #expect(OnyxTile.native.last == .daily)
         #expect(OnyxTile.native.contains(.deficit))
         #expect(OnyxTile.native.contains(.fatigue))
         #expect(OnyxTile.native.contains(.trajectory))
+        for id in [WidgetId.weekRings, .soreness, .stress, .bedtime] {
+            #expect(OnyxTile.native.contains(id), "\(id.rawValue) has a face")
+        }
+        // The four land BEFORE the Mega Widget and after everything that was
+        // already in the catalogue — the tail the golden vectors pin.
+        #expect(OnyxTile.native.suffix(5) == [.weekRings, .soreness, .stress, .bedtime, .daily])
         // The order is the catalogue's, so the tray reads the way the grid does.
         #expect(OnyxTile.native == Dashboard.widgetIds.filter(\.isNative))
         for id in [WidgetId.bar, .micros, .stack] {

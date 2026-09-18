@@ -44,6 +44,40 @@ _Nothing yet._
 
 ---
 
+## [6.1.0] — 2026-09-18 · Four More Faces
+
+Four new tiles join the Today dashboard — and, because a dashboard tile IS the
+Home Screen face, they arrive on both at once. Nothing has to be re-arranged:
+they are appended to the end of the grid above Day Rings, and a layout you have
+already tuned keeps every slot where you put it.
+
+### Added
+- **Week Rings** (Today, Small/Medium) — three rows of seven: did you train,
+  did you eat to target, did you sleep to goal, for each of the last seven
+  days. The tally beside each row is out of seven; the weekday letters come out
+  of the dates, so the columns are labelled however the week falls. A day with
+  nothing logged counts as a miss, which is what the row is asking.
+- **Soreness** (Today, Small/Medium/Large) — today's DOMS painted on the body,
+  the same figure Muscle Focus uses for the week's work. One rating covers the
+  anatomy the word covers: a sore shoulder lights all three delts. The Large
+  lists every sore region with its severity in the words you tapped; the Medium
+  lists four and the Small names the worst one.
+- **Stress** (Today, Small/Medium) — the stress index and the fortnight behind
+  it, read against the scale's own centre of 50 rather than against its own
+  average, so a fortnight that is high stays high.
+- **Bedtime** (Today, Small) — when you went to bed, when you got up, and the
+  usual bedtime underneath. Sleep v2 grades regularity against the median of
+  the previous fortnight and until now that baseline was a number you were
+  marked on and could not see. It appears after five nights; under five,
+  "usual" would be a guess.
+
+### Changed
+- **Day Rings wears the theme.** The three arcs are stroked with each domain's
+  full gradient instead of a single flat colour, so the tile moves with the
+  palette you picked in Appearance instead of sitting slightly outside it.
+
+---
+
 ## [6.0.0] — 2026-09-18 · A Night Is More Than Its Length
 
 **MAJOR: every stored sleep score is rewritten.** The first launch on this build
