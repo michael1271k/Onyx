@@ -12,8 +12,7 @@
               "name" : "Incline DB Press",
               "reps" : "8–12",
               "restSec" : 120,
-              "sets" : 3,
-              "wk1Kg" : 32
+              "sets" : 3
             },
             {
               "compound" : true,
@@ -21,8 +20,7 @@
               "name" : "Lat Pulldown",
               "reps" : "8–12",
               "restSec" : 135,
-              "sets" : 3,
-              "wk1Kg" : 45
+              "sets" : 3
             },
             {
               "compound" : true,
@@ -30,8 +28,7 @@
               "name" : "Chest Press",
               "reps" : "10–12",
               "restSec" : 135,
-              "sets" : 3,
-              "wk1Kg" : 34
+              "sets" : 3
             },
             {
               "compound" : true,
@@ -40,8 +37,7 @@
               "note" : "V-grip",
               "reps" : "10–12",
               "restSec" : 120,
-              "sets" : 3,
-              "wk1Kg" : 38.5
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -49,8 +45,7 @@
               "name" : "Pec Deck",
               "reps" : "12–15",
               "restSec" : 120,
-              "sets" : 2,
-              "wk1Kg" : 47.5
+              "sets" : 2
             },
             {
               "compound" : false,
@@ -58,8 +53,7 @@
               "name" : "Straight-Arm Pulldown",
               "reps" : "12–15",
               "restSec" : 105,
-              "sets" : 3,
-              "wk1Kg" : 15
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -67,8 +61,7 @@
               "name" : "Face Pull",
               "reps" : "12–15",
               "restSec" : 105,
-              "sets" : 3,
-              "wk1Kg" : 13.75
+              "sets" : 3
             }
           ],
           "key" : "cb_a",
@@ -87,8 +80,7 @@
               "note" : "1 warm-up @40kg",
               "reps" : "8–12",
               "restSec" : 135,
-              "sets" : 4,
-              "wk1Kg" : 70
+              "sets" : 4
             },
             {
               "compound" : true,
@@ -104,8 +96,7 @@
               "name" : "Leg Extension",
               "reps" : "12–15",
               "restSec" : 120,
-              "sets" : 3,
-              "wk1Kg" : 37.5
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -113,8 +104,7 @@
               "name" : "Seated Leg Curl",
               "reps" : "10–15",
               "restSec" : 105,
-              "sets" : 3,
-              "wk1Kg" : 40
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -122,8 +112,7 @@
               "name" : "Calf Press",
               "reps" : "10–15",
               "restSec" : 90,
-              "sets" : 4,
-              "wk1Kg" : 65
+              "sets" : 4
             },
             {
               "compound" : false,
@@ -131,8 +120,7 @@
               "name" : "Crunch Machine",
               "reps" : "10–12",
               "restSec" : 90,
-              "sets" : 3,
-              "wk1Kg" : 52.5
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -158,8 +146,7 @@
               "name" : "Shoulder Press",
               "reps" : "8–10",
               "restSec" : 105,
-              "sets" : 3,
-              "wk1Kg" : 28
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -168,8 +155,7 @@
               "note" : "per side",
               "reps" : "12–20",
               "restSec" : 105,
-              "sets" : 5,
-              "wk1Kg" : 5
+              "sets" : 5
             },
             {
               "compound" : false,
@@ -177,8 +163,7 @@
               "name" : "Seated Incline DB Curl",
               "reps" : "8–12",
               "restSec" : 105,
-              "sets" : 3,
-              "wk1Kg" : 14
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -186,8 +171,7 @@
               "name" : "Overhead Triceps Extension",
               "reps" : "10–15",
               "restSec" : 90,
-              "sets" : 3,
-              "wk1Kg" : 9
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -195,8 +179,7 @@
               "name" : "Hammer Curl",
               "reps" : "10–12",
               "restSec" : 105,
-              "sets" : 3,
-              "wk1Kg" : 16
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -204,8 +187,7 @@
               "name" : "Rope Triceps Pushdown",
               "reps" : "12–15",
               "restSec" : 90,
-              "sets" : 2,
-              "wk1Kg" : 13.5
+              "sets" : 2
             },
             {
               "compound" : false,
@@ -213,8 +195,7 @@
               "name" : "Reverse EZ-Bar Curl",
               "reps" : "12–15",
               "restSec" : 90,
-              "sets" : 2,
-              "wk1Kg" : 15
+              "sets" : 2
             },
             {
               "compound" : false,
@@ -222,8 +203,7 @@
               "name" : "Seated DB Wrist Curl",
               "reps" : "15–20",
               "restSec" : 90,
-              "sets" : 2,
-              "wk1Kg" : 16
+              "sets" : 2
             }
           ],
           "key" : "arms",
@@ -240,8 +220,7 @@
               "name" : "Chest Press",
               "reps" : "10–12",
               "restSec" : 120,
-              "sets" : 3,
-              "wk1Kg" : 35
+              "sets" : 3
             },
             {
               "compound" : true,
@@ -249,8 +228,7 @@
               "name" : "Neutral-Grip Lat Pulldown",
               "reps" : "10–12",
               "restSec" : 120,
-              "sets" : 3,
-              "wk1Kg" : 45
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -259,8 +237,7 @@
               "note" : "per arm",
               "reps" : "12–15",
               "restSec" : 105,
-              "sets" : 2,
-              "wk1Kg" : 7.5
+              "sets" : 2
             },
             {
               "compound" : true,
@@ -269,8 +246,7 @@
               "note" : "wide bar",
               "reps" : "10–12",
               "restSec" : 120,
-              "sets" : 3,
-              "wk1Kg" : 35
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -279,8 +255,7 @@
               "note" : "per side",
               "reps" : "15–20",
               "restSec" : 90,
-              "sets" : 4,
-              "wk1Kg" : 3.75
+              "sets" : 4
             },
             {
               "compound" : false,
@@ -288,8 +263,7 @@
               "name" : "Preacher Curl",
               "reps" : "8–12",
               "restSec" : 105,
-              "sets" : 3,
-              "wk1Kg" : 15
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -298,8 +272,7 @@
               "note" : "per arm",
               "reps" : "12–15",
               "restSec" : 90,
-              "sets" : 3,
-              "wk1Kg" : 5
+              "sets" : 3
             }
           ],
           "key" : "cb_b",
@@ -317,8 +290,7 @@
               "name" : "Romanian Deadlift",
               "reps" : "8–12",
               "restSec" : 120,
-              "sets" : 4,
-              "wk1Kg" : 30
+              "sets" : 4
             },
             {
               "compound" : true,
@@ -326,8 +298,7 @@
               "name" : "Hip Thrust",
               "reps" : "8–15",
               "restSec" : 135,
-              "sets" : 3,
-              "wk1Kg" : 25
+              "sets" : 3
             },
             {
               "compound" : true,
@@ -336,8 +307,7 @@
               "note" : "horizontal sled",
               "reps" : "12–15",
               "restSec" : 135,
-              "sets" : 2,
-              "wk1Kg" : 70
+              "sets" : 2
             },
             {
               "compound" : false,
@@ -345,8 +315,7 @@
               "name" : "Hip Adduction",
               "reps" : "12–15",
               "restSec" : 90,
-              "sets" : 2,
-              "wk1Kg" : 50
+              "sets" : 2
             },
             {
               "compound" : false,
@@ -354,8 +323,7 @@
               "name" : "Seated Leg Curl",
               "reps" : "10–15",
               "restSec" : 105,
-              "sets" : 2,
-              "wk1Kg" : 45
+              "sets" : 2
             },
             {
               "compound" : false,
@@ -363,8 +331,7 @@
               "name" : "Calf Press",
               "reps" : "10–15",
               "restSec" : 105,
-              "sets" : 4,
-              "wk1Kg" : 67.5
+              "sets" : 4
             },
             {
               "compound" : false,
@@ -394,41 +361,6 @@
       "id" : "onyx5",
       "isLegacy" : false,
       "label" : "Onyx-5",
-      "phaseGoals" : {
-        "bulk" : {
-          "bodyFatCeilingPct" : 16,
-          "carbsG" : 330,
-          "fatG" : 70,
-          "fiberG" : 35,
-          "fiberMax" : 38,
-          "fiberMin" : 33,
-          "kcal" : 2600,
-          "label" : "Lean Bulk",
-          "proteinG" : 160,
-          "rateMaxKgWk" : 0.25,
-          "rateMinKgWk" : 0.20000000000000001,
-          "stepsGoal" : 8000,
-          "targetBodyFatPct" : 15,
-          "targetMuscleMassKg" : 37,
-          "targetWeightKg" : 70
-        },
-        "cut" : {
-          "carbsG" : 195,
-          "fatG" : 55,
-          "fiberG" : 30,
-          "fiberMax" : 35,
-          "fiberMin" : 28,
-          "kcal" : 1955,
-          "label" : "Cut",
-          "proteinG" : 170,
-          "rateMaxKgWk" : -0.40000000000000002,
-          "rateMinKgWk" : -0.5,
-          "stepsGoal" : 10000,
-          "targetBodyFatPct" : 13,
-          "targetMuscleMassKg" : 33,
-          "targetWeightKg" : 62
-        }
-      },
       "sort" : 0,
       "volumeTargets" : {
         "bulk" : {
@@ -481,8 +413,7 @@
               "name" : "Incline DB Press",
               "reps" : "8–12",
               "restSec" : 120,
-              "sets" : 3,
-              "wk1Kg" : 32
+              "sets" : 3
             },
             {
               "compound" : true,
@@ -490,8 +421,7 @@
               "name" : "Lat Pulldown",
               "reps" : "8–12",
               "restSec" : 135,
-              "sets" : 3,
-              "wk1Kg" : 45
+              "sets" : 3
             },
             {
               "compound" : true,
@@ -499,8 +429,7 @@
               "name" : "Chest Press",
               "reps" : "10–12",
               "restSec" : 120,
-              "sets" : 2,
-              "wk1Kg" : 34
+              "sets" : 2
             },
             {
               "compound" : true,
@@ -509,8 +438,7 @@
               "note" : "V-grip",
               "reps" : "10–12",
               "restSec" : 120,
-              "sets" : 3,
-              "wk1Kg" : 38.5
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -518,8 +446,7 @@
               "name" : "Seated Incline DB Curl",
               "reps" : "8–12",
               "restSec" : 105,
-              "sets" : 3,
-              "wk1Kg" : 14
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -527,8 +454,7 @@
               "name" : "Rope Triceps Pushdown",
               "reps" : "12–15",
               "restSec" : 90,
-              "sets" : 3,
-              "wk1Kg" : 13.5
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -536,8 +462,7 @@
               "name" : "Face Pull",
               "reps" : "12–15",
               "restSec" : 105,
-              "sets" : 2,
-              "wk1Kg" : 13.75
+              "sets" : 2
             }
           ],
           "key" : "upper_a",
@@ -554,8 +479,7 @@
               "name" : "Leg Press",
               "reps" : "8–12",
               "restSec" : 135,
-              "sets" : 3,
-              "wk1Kg" : 70
+              "sets" : 3
             },
             {
               "compound" : true,
@@ -571,8 +495,7 @@
               "name" : "Leg Extension",
               "reps" : "12–15",
               "restSec" : 120,
-              "sets" : 2,
-              "wk1Kg" : 37.5
+              "sets" : 2
             },
             {
               "compound" : false,
@@ -580,8 +503,7 @@
               "name" : "Seated Leg Curl",
               "reps" : "10–15",
               "restSec" : 105,
-              "sets" : 3,
-              "wk1Kg" : 40
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -589,8 +511,7 @@
               "name" : "Calf Press",
               "reps" : "10–15",
               "restSec" : 90,
-              "sets" : 4,
-              "wk1Kg" : 65
+              "sets" : 4
             },
             {
               "compound" : false,
@@ -598,8 +519,7 @@
               "name" : "Crunch Machine",
               "reps" : "10–12",
               "restSec" : 90,
-              "sets" : 3,
-              "wk1Kg" : 52.5
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -624,8 +544,7 @@
               "name" : "Shoulder Press",
               "reps" : "8–10",
               "restSec" : 105,
-              "sets" : 3,
-              "wk1Kg" : 28
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -634,8 +553,7 @@
               "note" : "per side",
               "reps" : "12–20",
               "restSec" : 105,
-              "sets" : 4,
-              "wk1Kg" : 5
+              "sets" : 4
             },
             {
               "compound" : false,
@@ -644,8 +562,7 @@
               "note" : "cut: rotates with Chest Press (Machine)",
               "reps" : "12–15",
               "restSec" : 120,
-              "sets" : 2,
-              "wk1Kg" : 47.5
+              "sets" : 2
             },
             {
               "compound" : true,
@@ -654,8 +571,7 @@
               "note" : "wide bar",
               "reps" : "10–12",
               "restSec" : 120,
-              "sets" : 3,
-              "wk1Kg" : 35
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -663,8 +579,7 @@
               "name" : "Hammer Curl",
               "reps" : "10–12",
               "restSec" : 105,
-              "sets" : 3,
-              "wk1Kg" : 16
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -673,8 +588,7 @@
               "note" : "per arm",
               "reps" : "12–15",
               "restSec" : 90,
-              "sets" : 2,
-              "wk1Kg" : 5
+              "sets" : 2
             },
             {
               "compound" : false,
@@ -682,8 +596,7 @@
               "name" : "Reverse EZ-Bar Curl",
               "reps" : "12–15",
               "restSec" : 90,
-              "sets" : 2,
-              "wk1Kg" : 15
+              "sets" : 2
             },
             {
               "compound" : false,
@@ -691,8 +604,7 @@
               "name" : "Seated DB Wrist Curl",
               "reps" : "15–20",
               "restSec" : 90,
-              "sets" : 2,
-              "wk1Kg" : 16
+              "sets" : 2
             }
           ],
           "key" : "upper_b",
@@ -709,8 +621,7 @@
               "name" : "Romanian Deadlift",
               "reps" : "8–12",
               "restSec" : 120,
-              "sets" : 3,
-              "wk1Kg" : 26
+              "sets" : 3
             },
             {
               "compound" : true,
@@ -718,8 +629,7 @@
               "name" : "Hip Thrust",
               "reps" : "8–15",
               "restSec" : 135,
-              "sets" : 3,
-              "wk1Kg" : 23.5
+              "sets" : 3
             },
             {
               "compound" : true,
@@ -728,8 +638,7 @@
               "note" : "horizontal sled",
               "reps" : "12–15",
               "restSec" : 135,
-              "sets" : 2,
-              "wk1Kg" : 70
+              "sets" : 2
             },
             {
               "compound" : false,
@@ -737,8 +646,7 @@
               "name" : "Hip Adduction",
               "reps" : "12–15",
               "restSec" : 90,
-              "sets" : 2,
-              "wk1Kg" : 50
+              "sets" : 2
             },
             {
               "compound" : false,
@@ -746,8 +654,7 @@
               "name" : "Calf Press",
               "reps" : "10–15",
               "restSec" : 105,
-              "sets" : 3,
-              "wk1Kg" : 65
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -776,41 +683,6 @@
       "id" : "onyx4",
       "isLegacy" : false,
       "label" : "Onyx-4",
-      "phaseGoals" : {
-        "bulk" : {
-          "bodyFatCeilingPct" : 16,
-          "carbsG" : 330,
-          "fatG" : 70,
-          "fiberG" : 35,
-          "fiberMax" : 38,
-          "fiberMin" : 33,
-          "kcal" : 2600,
-          "label" : "Lean Bulk",
-          "proteinG" : 160,
-          "rateMaxKgWk" : 0.25,
-          "rateMinKgWk" : 0.20000000000000001,
-          "stepsGoal" : 8000,
-          "targetBodyFatPct" : 15,
-          "targetMuscleMassKg" : 37,
-          "targetWeightKg" : 70
-        },
-        "cut" : {
-          "carbsG" : 195,
-          "fatG" : 55,
-          "fiberG" : 30,
-          "fiberMax" : 35,
-          "fiberMin" : 28,
-          "kcal" : 1955,
-          "label" : "Cut",
-          "proteinG" : 170,
-          "rateMaxKgWk" : -0.40000000000000002,
-          "rateMinKgWk" : -0.5,
-          "stepsGoal" : 10000,
-          "targetBodyFatPct" : 13,
-          "targetMuscleMassKg" : 33,
-          "targetWeightKg" : 62
-        }
-      },
       "sort" : 1,
       "volumeTargets" : {
         "bulk" : {
@@ -861,51 +733,44 @@
               "compound" : true,
               "name" : "Incline DB Press",
               "reps" : "10–12",
-              "sets" : 2,
-              "wk1Kg" : 35
+              "sets" : 2
             },
             {
               "compound" : true,
               "name" : "Chest Press Machine",
               "reps" : "10–12",
-              "sets" : 2,
-              "wk1Kg" : 37.5
+              "sets" : 2
             },
             {
               "compound" : false,
               "name" : "Butterfly Pec Deck",
               "reps" : "10–12",
-              "sets" : 2,
-              "wk1Kg" : 52.5
+              "sets" : 2
             },
             {
               "compound" : true,
               "name" : "Shoulder Press",
               "note" : "ramp: 25kg×12 → 30kg×9,8",
               "reps" : "8–12",
-              "sets" : 3,
-              "wk1Kg" : 30
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Lateral Raise DB",
               "reps" : "12–20",
-              "sets" : 4,
-              "wk1Kg" : 10
+              "sets" : 4
             },
             {
               "compound" : false,
               "name" : "Rope Triceps Pushdown",
               "reps" : "12–15",
-              "sets" : 3,
-              "wk1Kg" : 15
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Overhead Triceps Extension",
               "reps" : "10–15",
-              "sets" : 3,
-              "wk1Kg" : 10
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -918,8 +783,7 @@
               "compound" : false,
               "name" : "Russian Twist",
               "reps" : "15–20",
-              "sets" : 3,
-              "wk1Kg" : 10
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -940,57 +804,49 @@
               "compound" : true,
               "name" : "Lat Pulldown",
               "reps" : "10–12",
-              "sets" : 2,
-              "wk1Kg" : 49.5
+              "sets" : 2
             },
             {
               "compound" : true,
               "name" : "Seated Cable Row",
               "reps" : "10–12",
-              "sets" : 2,
-              "wk1Kg" : 42.5
+              "sets" : 2
             },
             {
               "compound" : false,
               "name" : "Face Pull",
               "reps" : "12–15",
-              "sets" : 4,
-              "wk1Kg" : 16.25
+              "sets" : 4
             },
             {
               "compound" : false,
               "name" : "Straight Arm Pulldown",
               "reps" : "10–15",
-              "sets" : 3,
-              "wk1Kg" : 17.5
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Bicep Curl DB",
               "reps" : "10–12",
-              "sets" : 3,
-              "wk1Kg" : 18
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Hammer Curl DB",
               "reps" : "10–12",
-              "sets" : 3,
-              "wk1Kg" : 18
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Preacher Curl",
               "reps" : "8–12",
-              "sets" : 3,
-              "wk1Kg" : 16.25
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Crunch Machine",
               "reps" : "12–15",
-              "sets" : 3,
-              "wk1Kg" : 57.5
+              "sets" : 3
             }
           ],
           "key" : "ppl_pull_mon",
@@ -1006,50 +862,43 @@
               "name" : "Leg Press",
               "note" : "1 warm-up @72.5kg",
               "reps" : "8–12",
-              "sets" : 2,
-              "wk1Kg" : 80
+              "sets" : 2
             },
             {
               "compound" : true,
               "name" : "RDL DB",
               "reps" : "10–15",
-              "sets" : 3,
-              "wk1Kg" : 30
+              "sets" : 3
             },
             {
               "compound" : true,
               "name" : "Hip Thrust",
               "reps" : "10–15",
-              "sets" : 3,
-              "wk1Kg" : 27.5
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Hip Adduction",
               "reps" : "12–15",
-              "sets" : 3,
-              "wk1Kg" : 55
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Leg Extension",
               "reps" : "10–15",
-              "sets" : 3,
-              "wk1Kg" : 42.5
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Seated Leg Curl",
               "reps" : "10–15",
-              "sets" : 2,
-              "wk1Kg" : 45
+              "sets" : 2
             },
             {
               "compound" : false,
               "name" : "Calf Press",
               "reps" : "10–15",
-              "sets" : 3,
-              "wk1Kg" : 72.5
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -1077,51 +926,44 @@
               "compound" : true,
               "name" : "Incline DB Press",
               "reps" : "10–12",
-              "sets" : 2,
-              "wk1Kg" : 35
+              "sets" : 2
             },
             {
               "compound" : true,
               "name" : "Chest Press Machine",
               "reps" : "10–12",
-              "sets" : 2,
-              "wk1Kg" : 37.5
+              "sets" : 2
             },
             {
               "compound" : false,
               "name" : "Butterfly Pec Deck",
               "reps" : "10–12",
-              "sets" : 2,
-              "wk1Kg" : 52.5
+              "sets" : 2
             },
             {
               "compound" : true,
               "name" : "Shoulder Press",
               "note" : "ramp: 25kg×12 → 30kg×9,8",
               "reps" : "8–12",
-              "sets" : 3,
-              "wk1Kg" : 30
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Lateral Raise DB",
               "reps" : "12–20",
-              "sets" : 4,
-              "wk1Kg" : 10
+              "sets" : 4
             },
             {
               "compound" : false,
               "name" : "Rope Triceps Pushdown",
               "reps" : "12–15",
-              "sets" : 3,
-              "wk1Kg" : 15
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Overhead Triceps Extension",
               "reps" : "10–15",
-              "sets" : 3,
-              "wk1Kg" : 10
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -1134,8 +976,7 @@
               "compound" : false,
               "name" : "Russian Twist",
               "reps" : "15–20",
-              "sets" : 3,
-              "wk1Kg" : 10
+              "sets" : 3
             },
             {
               "compound" : false,
@@ -1156,57 +997,49 @@
               "compound" : true,
               "name" : "Lat Pulldown",
               "reps" : "10–12",
-              "sets" : 2,
-              "wk1Kg" : 49.5
+              "sets" : 2
             },
             {
               "compound" : true,
               "name" : "Seated Cable Row",
               "reps" : "10–12",
-              "sets" : 2,
-              "wk1Kg" : 42.5
+              "sets" : 2
             },
             {
               "compound" : false,
               "name" : "Face Pull",
               "reps" : "12–15",
-              "sets" : 4,
-              "wk1Kg" : 16.25
+              "sets" : 4
             },
             {
               "compound" : false,
               "name" : "Straight Arm Pulldown",
               "reps" : "10–15",
-              "sets" : 3,
-              "wk1Kg" : 17.5
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Bicep Curl DB",
               "reps" : "10–12",
-              "sets" : 3,
-              "wk1Kg" : 18
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Hammer Curl DB",
               "reps" : "10–12",
-              "sets" : 3,
-              "wk1Kg" : 18
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Preacher Curl",
               "reps" : "8–12",
-              "sets" : 3,
-              "wk1Kg" : 16.25
+              "sets" : 3
             },
             {
               "compound" : false,
               "name" : "Crunch Machine",
               "reps" : "12–15",
-              "sets" : 3,
-              "wk1Kg" : 57.5
+              "sets" : 3
             }
           ],
           "key" : "ppl_pull_fri",
@@ -1218,41 +1051,6 @@
       "id" : "ppl",
       "isLegacy" : true,
       "label" : "Push/Pull/Legs",
-      "phaseGoals" : {
-        "bulk" : {
-          "bodyFatCeilingPct" : 16,
-          "carbsG" : 330,
-          "fatG" : 70,
-          "fiberG" : 35,
-          "fiberMax" : 38,
-          "fiberMin" : 33,
-          "kcal" : 2600,
-          "label" : "Lean Bulk",
-          "proteinG" : 160,
-          "rateMaxKgWk" : 0.25,
-          "rateMinKgWk" : 0.20000000000000001,
-          "stepsGoal" : 8000,
-          "targetBodyFatPct" : 15,
-          "targetMuscleMassKg" : 37,
-          "targetWeightKg" : 70
-        },
-        "cut" : {
-          "carbsG" : 180,
-          "fatG" : 55,
-          "fiberG" : 30,
-          "fiberMax" : 35,
-          "fiberMin" : 28,
-          "kcal" : 1935,
-          "label" : "PPL Cut",
-          "proteinG" : 180,
-          "rateMaxKgWk" : -0.40000000000000002,
-          "rateMinKgWk" : -0.5,
-          "stepsGoal" : 10000,
-          "targetBodyFatPct" : 13,
-          "targetMuscleMassKg" : 33,
-          "targetWeightKg" : 62
-        }
-      },
       "sort" : 2,
       "volumeTargets" : {
         "bulk" : {

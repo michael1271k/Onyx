@@ -29,8 +29,19 @@ struct LoggerModelTests {
         model.pausedTotal + (model.pausedAt.map { max(0, now.timeIntervalSince($0)) } ?? 0)
     }
 
+    /// The bout these decks open with.
+    ///
+    /// Handed in, because the opener is the athlete's own last `cardio_logs`
+    /// row now and a storeless model has no athlete behind it. It used to be
+    /// three constants in `WarmupCardio` prescribed to everybody — see that
+    /// type's header. The numbers are this suite's, and only the SHAPE of them
+    /// matters here: one card, all-cardio rows, at the top of the deck.
+    private nonisolated static let bout = WarmupCardio.Bout(
+        name: "Treadmill", durationSec: 300, distanceKm: 0.37, inclinePct: 2
+    )
+
     private func armsBulk() -> LoggerModel {
-        LoggerModel(day: PlanTemplates.day("onyx5", "arms"), phase: .bulk)
+        LoggerModel(day: PlanTemplates.day("onyx5", "arms"), phase: .bulk, warmupBout: Self.bout)
     }
 
     private func log(_ model: LoggerModel, _ name: String, sets: Int) {
@@ -84,7 +95,7 @@ struct LoggerModelTests {
         // prescription it is testing and not as a number somebody has to guess
         // the provenance of.
         #expect(model.exercises.count == 7 + 1)
-        #expect(model.exercises.first?.name == WarmupCardio.name)
+        #expect(model.exercises.first?.name == Self.bout.name)
     }
 
     @Test("trimming sets does not reorder the ones already logged")
@@ -209,11 +220,11 @@ struct LoggerModelTests {
     @Test("the current set is the first one not yet ticked")
     func currentSetWalksForward() {
         let model = armsBulk()
-        // The cursor opens on the TREADMILL, because the deck does — the five
-        // minutes at the top of every session is the first thing not yet ticked
-        // and the card the logger should be showing you. `withWarmupCardio` is
-        // where that block comes from.
-        #expect(model.currentSet?.exercise.name == WarmupCardio.name)
+        // The cursor opens on the BOUT, because the deck does — the warm-up at
+        // the top of the session is the first thing not yet ticked and the card
+        // the logger should be showing you. `withWarmupCardio` is where that
+        // block comes from.
+        #expect(model.currentSet?.exercise.name == Self.bout.name)
         #expect(model.currentSet?.ordinal == 1)
 
         let warmup = model.exercises[0]
@@ -234,7 +245,13 @@ struct LoggerModelTests {
         let model = armsBulk()
         let press = model.exercises.first { $0.name == "Shoulder Press" }!
         #expect(press.rows.count == 3)
-        #expect(press.rows.allSatisfy { $0.weightKg == 28 })
+        // ── AND THE LOAD IS NOTHING EITHER ──────────────────────────────────
+        // This used to be 28 kg: the bundled template's `wk1Kg`, which was one
+        // athlete's week-1 load for this movement shipped to every account. The
+        // templates carry no loads at all now (`PlanTemplates`), so the cold
+        // start opens on a blank weight — which is the same answer the rest of
+        // this test has always given about `previous`.
+        #expect(press.rows.allSatisfy { $0.weightKg == nil })
         // The rep FLOOR, not the ceiling: the floor is what you walk up to.
         #expect(press.rows.allSatisfy { $0.reps == 8 })
         // ── THE WHOLE OF THE OLD BUG ────────────────────────────────────────
@@ -459,12 +476,11 @@ struct LoggerModelTests {
                 ProgramExercise("C", sets: 1, wk1Kg: 20, reps: "8\u{2013}12", restSec: 90)
             ]
         )
-        return LoggerModel(day: day, phase: .bulk)
+        return LoggerModel(day: day, phase: .bulk, warmupBout: Self.bout)
     }
 
-    /// The opening bout. Every deck built without a store opens with one
-    /// (`withWarmupCardio`), and it is the only exercise in the app whose rows
-    /// are all cardio.
+    /// The opening bout. These fixtures are all handed one, and it is the only
+    /// exercise in the app whose rows are all cardio.
     private func bout(_ model: LoggerModel) -> LoggerModel.ExerciseState? {
         model.exercises.first { $0.rows.allSatisfy(\.isCardio) && !$0.rows.isEmpty }
     }

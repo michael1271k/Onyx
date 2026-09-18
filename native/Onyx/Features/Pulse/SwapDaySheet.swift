@@ -36,7 +36,8 @@ struct SwapSheetDoor: View {
         .task {
             if model == nil {
                 model = seeded ?? DayModel(
-                    database: environment.database, userId: environment.userIdString, date: date
+                    database: environment.database, userId: environment.userIdString, date: date,
+                    environment: environment
                 )
             }
             await model?.observe()

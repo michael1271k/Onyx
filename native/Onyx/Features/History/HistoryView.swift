@@ -90,7 +90,8 @@ struct HistoryView: View {
         }
         .navigationDestination(item: $jumpTo) { jump in
             DayScreen(model: DayModel(
-                database: environment.database, userId: environment.userIdString, date: jump.id
+                database: environment.database, userId: environment.userIdString, date: jump.id,
+                environment: environment
             ))
         }
         .overlay { emptyState }

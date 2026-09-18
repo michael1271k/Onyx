@@ -30,10 +30,13 @@ struct WeekSoFarGoldenTests {
 struct ScheduleReadinessGoldenTests {
     struct In: Decodable { let base: ReadinessResult?; let ctx: ScheduleReadinessContext }
 
+    /// 64 = the (base × dayLabel × logged × mode × reentry) sweep, none of
+    /// which names a plan, plus 2 hand-written cases that do — the rest line
+    /// stopped being one athlete's plan name and became the caller's.
     @Test("every (base, schedule, mode) cell matches")
     func matches() throws {
         let fixture = try GoldenFixture<In, ReadinessResult?>.load("readiness-schedule")
-        #expect(fixture.cases.count == 64)
+        #expect(fixture.cases.count == 64 + 2)
         for c in fixture.cases {
             #expect(ScheduleReadiness.apply(c.input.base, c.input.ctx) == c.expected, Comment(rawValue: c.name))
         }

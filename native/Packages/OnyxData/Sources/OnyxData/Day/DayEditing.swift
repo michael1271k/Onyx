@@ -421,6 +421,24 @@ public extension AppDatabase {
         }
     }
 
+    /// This user's most recent bout, by date then insertion, or nil when they
+    /// have never logged one.
+    ///
+    /// Date-ordered and not `created_at`-ordered: an import backfills a bout
+    /// that happened days ago with a `created_at` of NOW, and "the last cardio
+    /// I did" is a question about when it was DONE. `created_at` breaks the tie
+    /// inside a day, which is the same order `cardioRows` hands a day back in.
+    ///
+    /// The one reader is the logger's opener (`WarmupCardio.seed(from:)`).
+    func lastCardioBout(userId: String) throws -> CardioLogRow? {
+        try writer.read { db in
+            try CardioLogRow
+                .filter(Column("user_id") == userId)
+                .order(Column("date").desc, Column("created_at").desc)
+                .fetchOne(db)
+        }
+    }
+
     /// Log a cardio bout. `kcal` is written alongside `active_kcal` on purpose:
     /// historical readers and the weekly export's pre-migration fallback still
     /// read the old column for the active figure.

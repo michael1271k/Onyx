@@ -158,7 +158,12 @@ public struct TodayFeedBuilder: Sendable {
             dayLabel: snapshot.workout.isRestDay ? nil : snapshot.workout.label,
             workoutToday: snapshot.workout.logged,
             contextMode: goals?.contextMode ?? "normal",
-            reentry: ScheduleReadiness.isReentryWeek(today)
+            // Both were constants inside `ScheduleReadiness` until this wave:
+            // a hardcoded July fortnight and a hardcoded plan name. The rows
+            // answer now — a `reentry` override the athlete can set on any
+            // date, and the label of whichever plan owns today.
+            reentry: Schedule.isReentry(schedule, today),
+            programLabel: Schedule.planLabel(owning: today, in: schedule)
         ))
 
         // The snapshot is built at `.full` scope above, so the trajectory is

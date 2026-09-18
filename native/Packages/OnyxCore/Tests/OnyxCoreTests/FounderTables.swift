@@ -14,11 +14,20 @@ import Foundation
 //   · `phases-table.json`   → `phases`   (era tags rebranded, `planId` filled)
 //   · `levers-table.json`   → `rungs`, `periods`, `ladder(stored:releaseEndsOn:)`
 //   · `pr-floor.json`       → `floors`
-//   · `plan-templates.json` → `programs`, `plans`, `deck` — a copy of the app's
-//     seed (`native/Onyx/Resources/plan-templates.json`, generated from the
-//     same constants the vectors were), so the schedule, swap and lookup
-//     vectors keep running over all three decks with their subs and accents.
-//     `program-onyx5.json` holds `deck` to the shape the vectors used.
+//   · `plan-templates.json` → `programs`, `plans`, `deck` — the founder's three
+//     decks, generated from the same constants the vectors were, so the
+//     schedule, swap and lookup vectors keep running over all three decks
+//     with their subs and accents. `program-onyx5.json` holds `deck` to the
+//     shape the vectors used.
+//
+//     IT IS NO LONGER A COPY OF THE BUNDLED FILE. `wk1Kg` and `phaseGoals`
+//     were stripped out of `native/Onyx/Resources/plan-templates.json`:
+//     they were one athlete's loads and one athlete's calories, shipped to
+//     everybody in the app bundle. THIS file keeps both, because it is an
+//     INPUT: `program-onyx5.json` asserts a `wk1Kg` per exercise, and a
+//     fixture that stopped carrying them would not fail those vectors, it
+//     would quietly compare nil against nil. The two files are allowed to
+//     diverge and this paragraph is the record of why.
 // ─────────────────────────────────────────────────────────────────────────────
 
 private struct Nothing: Decodable {}

@@ -349,7 +349,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         ///
         /// ── WHY A NAME IS NOT AN IDENTITY ───────────────────────────────────
         /// It was `plan.id`, which for a synthetic card is the movement's name
-        /// (`WarmupCardio.name` is literally `"Treadmill"`). A deck that
+        /// (the opener's card is named after the bout it repeats). A deck that
         /// managed to carry two cards for one movement — `withWarmupCardio`
         /// prepending a bout the edit deck already held — therefore carried two
         /// cards with ONE id, and that is not a cosmetic duplicate:
@@ -476,9 +476,13 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// `attach(editing:)` is the only caller that needs it and `openEditor` is
     /// the only construction site that passes it, so the two cannot drift.
     private let openingForEdit: Bool
-    /// Whether this athlete's catalogue knows the warm-up's movement — see
-    /// `catalogueHasWarmupCardio`. False for every account W5 creates.
-    private let opensWithWarmupCardio: Bool
+    /// The bout this deck opens with, or nil when it opens with none.
+    ///
+    /// It is the athlete's OWN last `cardio_logs` row, cut to warm-up length
+    /// (`WarmupCardio.seed(from:)`). nil for anybody who has never logged
+    /// cardio — which is every account on its first session — and nil for a
+    /// storeless model unless the caller hands one in.
+    private let warmupBout: WarmupCardio.Bout?
     /// When the session began.
     ///
     /// `var`, because the timer sheet can correct it (`setStart`, `setElapsed`)
@@ -857,7 +861,8 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         store: AppDatabase? = nil,
         userId: String = "preview",
         startedAt: Date? = nil,
-        openingForEdit: Bool = false
+        openingForEdit: Bool = false,
+        warmupBout: WarmupCardio.Bout? = nil
     ) {
         self.day = day
         self.phase = phase
@@ -902,7 +907,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         // Read once, like the deck order above, and for the same reason: it
         // cannot change mid-session and a per-rebuild query would be a
         // catalogue read on every phase switch.
-        self.opensWithWarmupCardio = Self.catalogueHasWarmupCardio(store)
+        self.warmupBout = warmupBout ?? WarmupCardio.seed(from: Self.lastBout(store, userId: userId))
         rebuildForPhase()
     }
 
@@ -1006,8 +1011,8 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             return previous
         }
         exercises = Self.inDeckOrder(exercises, stored: storedDeckOrder, current: liveOrder.isEmpty ? nil : liveOrder)
-        if opensWithWarmupCardio && !openingForEdit {
-            exercises = Self.withWarmupCardio(exercises, existing: existing)
+        if let warmupBout, !openingForEdit {
+            exercises = Self.withWarmupCardio(exercises, existing: existing, bout: warmupBout)
         }
         // ── A REBUILT DECK IS A MOVED DECK ──────────────────────────────────
         // This replaces `exercises` wholesale, so every identity the bar was
@@ -1058,41 +1063,38 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// with the log still holding it.
     /// Does this athlete's catalogue know the movement the warm-up prescribes?
     ///
-    /// ── WHY THIS GUARD EXISTS (W5) ──────────────────────────────────────────
-    /// `WarmupCardio` is a FOUNDER HARDCODE that F8 missed and W5's new-account
-    /// gate caught: a named movement, a distance, an incline and a pace note,
-    /// prepended to every session of every account. A person who has never
-    /// owned a treadmill opened their first session to five minutes of one,
-    /// with a note about a pace rising from 4.3 to 5.0 that means nothing to
-    /// them — and because the row carries no catalogue id, the set it logs
-    /// cannot resolve on upload either.
+    /// ── WHY THIS IS A READ AND NOT A RULE (W5, REWRITTEN THIS WAVE) ────────
+    /// The opener used to be a FOUNDER HARDCODE: a named movement, a distance,
+    /// an incline and a pace note, prepended to every session of every account.
+    /// A person who had never owned a treadmill opened their first session to
+    /// five minutes of one.
     ///
-    /// The rule is the smallest one that is both correct and provably invisible
-    /// to the founder: prescribe a movement only to an athlete whose catalogue
-    /// holds it. His does — his phone-logged treadmill sets upload, and that
-    /// REQUIRES `ExerciseIndex.id(forSlug: "helix5-treadmill")` to resolve
-    /// against a catalogue row, or every one of them would have thrown
-    /// `unknownExercise` instead of landing in the ledger.
+    /// W5 put a gate in front of it — prescribe the movement only to an athlete
+    /// whose CATALOGUE holds it — which kept it off a new account and left it
+    /// just as arbitrary for the accounts it did reach. A catalogue row says
+    /// the movement exists, never that this athlete warms up on it.
     ///
-    /// ponytail: the real fix is for a warm-up to be an ordinary movement in
-    /// `routines.payload`, which needs the payload to carry `durationSec`,
-    /// `inclinePct` and `distanceKm` — a schema-shaped change, and D5 froze the
-    /// schema after W2. Until then this keeps the founder's opener working and
-    /// keeps it off everybody else's deck.
-    private static func catalogueHasWarmupCardio(_ store: AppDatabase?) -> Bool {
-        // No store is a PREVIEW, not an athlete — `LoggerPreviews` and the shot
-        // harness build one, and every real path has a database. The question
-        // "does this catalogue know the movement" has no answer without one, and
-        // a fixture whose job is to draw the deck the design intends should
-        // draw all of it.
-        guard let store else { return true }
-        guard let rows = try? store.exercises() else { return false }
-        let wanted = ExerciseSlug.id(WarmupCardio.name)
-        return rows.contains { $0.slug == wanted || ExerciseSlug.id($0.name) == wanted }
+    /// The question the opener actually asks is "what did you last do", and
+    /// `cardio_logs` is where that is written — by hand on the Day screen, or
+    /// by the HealthKit ingest. So: the last bout, cut to warm-up length. A
+    /// walker gets their walk back, a cyclist gets their ride, and somebody who
+    /// has logged nothing gets no card, because there is nothing to repeat.
+    ///
+    /// nil for a storeless model. That is a PREVIEW, not an athlete, and a
+    /// fixture that wants the card hands one in (`warmupBout:`) rather than
+    /// being given somebody's numbers by default.
+    private static func lastBout(_ store: AppDatabase?, userId: String) -> WarmupCardio.Bout? {
+        guard let store, let row = try? store.lastCardioBout(userId: userId) else { return nil }
+        return WarmupCardio.Bout(
+            name: CardioKind(row.kind).label,
+            durationSec: Int(((row.durationMin ?? 0) * 60).rounded()),
+            distanceKm: row.distanceM.map { $0 / 1000 },
+            inclinePct: row.inclinePct
+        )
     }
 
     private static func withWarmupCardio(
-        _ exercises: [ExerciseState], existing: [String: ExerciseState]
+        _ exercises: [ExerciseState], existing: [String: ExerciseState], bout: WarmupCardio.Bout
     ) -> [ExerciseState] {
         // ── TWO TESTS, BECAUSE ONE OF THEM WAS BLIND ────────────────────────
         // The row test alone let the treadmill be prepended on top of a deck
@@ -1114,20 +1116,20 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         // what the name test cannot see (a bike or a rower somebody put at the
         // top is cardio under another name). Neither is redundant; the bug was
         // having only one of them.
-        let warmupKey = ExerciseAliases.canonicalName(WarmupCardio.name)
+        let warmupKey = ExerciseAliases.canonicalName(bout.name)
         let alreadyThere = exercises.contains { card in
             card.rows.contains(where: \.isCardio)
                 || ExerciseAliases.canonicalName(card.plan.name) == warmupKey
         }
         guard !alreadyThere else { return exercises }
-        if let already = existing[WarmupCardio.name] { return [already] + exercises }
+        if let already = existing[bout.name] { return [already] + exercises }
         let plan = ProgramExercise(
-            WarmupCardio.name,
+            bout.name,
             sets: 1,
             wk1Kg: 0,
             // The window this bout is judged in, in the register the card's
             // prescription line already prints for a timed movement.
-            reps: "\(WarmupCardio.durationSec / 60) min",
+            reps: "\(bout.durationSec / 60) min",
             restSec: 0
         )
         let row = SetRow(
@@ -1135,9 +1137,9 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // A warm-up, which is what the 7 September backfill wrote and what
             // keeps it out of tonnage, `workingSets` and the PR engine.
             kind: .warmup,
-            durationSec: WarmupCardio.durationSec,
-            incline: WarmupCardio.inclinePct,
-            distanceKm: WarmupCardio.distanceKm
+            durationSec: bout.durationSec,
+            incline: bout.inclinePct,
+            distanceKm: bout.distanceKm
         )
         return [ExerciseState(plan: plan, rows: [row])] + exercises
     }

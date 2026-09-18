@@ -42,7 +42,11 @@ enum TodayPreviews {
         let snapshot = OnyxSnapshot.sample
         let readiness = ScheduleReadiness.apply(
             ReadinessResult(level: .trainHard, label: "Train Hard", color: "#3E9E7A", reason: "Sleep, battery, and recovery are all strong today."),
-            ScheduleReadinessContext(dayLabel: snapshot.workout.isRestDay ? nil : snapshot.workout.label, workoutToday: snapshot.workout.logged, contextMode: "normal", reentry: false)
+            ScheduleReadinessContext(
+                dayLabel: snapshot.workout.isRestDay ? nil : snapshot.workout.label,
+                workoutToday: snapshot.workout.logged, contextMode: "normal",
+                reentry: false, programLabel: "Onyx-5"
+            )
         )
         let feed = TodayFeed(
             snapshot: snapshot,

@@ -105,6 +105,30 @@ public enum Schedule {
     /// The override value that clears a training day. `REST_OVERRIDE`.
     public static let restOverride = "rest"
 
+    /// The override value that marks a date as RE-ENTRY — the first days back
+    /// after a break, trained at reduced load with no PRs attempted.
+    ///
+    /// ── WHY IT LIVES IN `schedule_overrides` ────────────────────────────────
+    /// It used to be a date range compiled into `ScheduleReadiness`
+    /// (`isReentryWeek`: the fortnight after ONE athlete's July break, written
+    /// as two ISO literals). A second user reached that fortnight and was told
+    /// to go light in a week that meant nothing to them.
+    ///
+    /// A re-entry day is a statement ABOUT A DATE, which is exactly what this
+    /// table already records; `restOverride` is the same kind of sentinel in
+    /// the same column, so this needs no schema change and D5's freeze holds.
+    ///
+    /// It marks the date WITHOUT moving the deck: `scheduleDayIn` and
+    /// `isTrainingDayIn` both fall through to the weekday default on it, so a
+    /// fortnight can be marked without turning its rest days into training days
+    /// or its sessions into something the plan did not author.
+    public static let reentryOverride = "reentry"
+
+    /// Is this date marked re-entry? The only reader is the coach headline.
+    public static func isReentry(_ ctx: ScheduleContext, _ dateISO: String) -> Bool {
+        ctx.overrides[dateISO] == reentryOverride
+    }
+
     /// Which plan OWNS a date.
     ///
     /// The CURRENT era opens on the latest `started_on` any plan carries, and
@@ -157,9 +181,11 @@ public enum Schedule {
     /// A per-date swap wins over the weekday default. An override naming a day
     /// this plan does not have is a stale row from a plan the user has left;
     /// it falls through to the weekday default rather than inventing a session.
+    /// `reentryOverride` falls through for a different reason: it is a note
+    /// about the date, not a swap — see its own comment.
     public static func scheduleDayIn(_ ctx: ScheduleContext, _ dateISO: String) -> ScheduleDay? {
         let (program, layout) = programForContext(ctx, dateISO)
-        if let override = ctx.overrides[dateISO] {
+        if let override = ctx.overrides[dateISO], override != reentryOverride {
             if override == restOverride { return nil }
             if let od = program.day(key: override) { return ScheduleDay(od) }
         }
@@ -172,8 +198,15 @@ public enum Schedule {
     /// key that `scheduleDayIn` would fall through on. The two can disagree
     /// about a Wednesday carrying a key from an abandoned plan; the vectors
     /// pin that, and it is the web's behaviour, not a port slip.
+    ///
+    /// `reentryOverride` is the one exception on BOTH sides: it says nothing
+    /// about whether the date is trained, so it is skipped here too. Without
+    /// that skip, marking a fortnight would turn its rest days into training
+    /// days and report a week of missed sessions.
     public static func isTrainingDayIn(_ ctx: ScheduleContext, _ dateISO: String) -> Bool {
-        if let override = ctx.overrides[dateISO] { return override != restOverride }
+        if let override = ctx.overrides[dateISO], override != reentryOverride {
+            return override != restOverride
+        }
         guard let weekday = ISODate.weekday(dateISO) else { return false }
         let (program, layout) = programForContext(ctx, dateISO)
         return ScheduleLayout.programDayIn(program, layout, weekday) != nil

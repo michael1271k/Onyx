@@ -50,7 +50,10 @@ struct PulseTabView: View {
         }
         .task {
             if resolved == nil {
-                resolved = seeded ?? DayModel(database: environment.database, userId: environment.userIdString)
+                resolved = seeded ?? DayModel(
+                    database: environment.database, userId: environment.userIdString,
+                    environment: environment
+                )
             }
             await resolved?.observe()
         }

@@ -106,6 +106,27 @@ were computed under the first rule and the stored scores on the server still
 are, so `Rounding.swift` keeps the shim: use `jsRound`, never `rounded()`, in
 domain arithmetic.
 
+## One store, one user
+
+The local GRDB file holds exactly ONE account's rows, and several reads take no
+`user_id` at all — `AppDatabase.exercises()` and `exerciseCatalogStream()` query
+tables that have no such column locally (`exercises` carries `user_id` on the
+wire and not in SQLite), and `localUserId()` deliberately answers "whoever these
+rows belong to" rather than filtering on an id the caller may not have yet. That
+is not a hole in the isolation; it is the invariant the isolation is built on.
+What makes it hold is that the store is EMPTIED at both doors, not filtered at
+every read: `signOut()` drains the outbox and calls `eraseLocalData()`, and a
+sign-in as a different user hits `prepareForUser(_:)`, which erases before the
+first sync and reports the unpushed rows the departing account lost. Both walk
+`sqlite_master` rather than a hand-maintained table list, because a list falls
+behind the schema silently and the failure mode is one table still full of
+somebody else's data in a file the widget reads with no session at all. So an
+unscoped read is safe precisely as long as those two doors stay the only way a
+user changes — add a third and every one of them becomes a leak. (Rows that DO
+carry `user_id` locally are still filtered on it; the erase is the floor, not a
+substitute. `TwoUserIsolationTests` and `AccountSeedTests` pin the record-book
+half.)
+
 ## Free-team constraints, and where they show up
 
 Everything here is built to work without a paid Apple Developer Program, and to

@@ -44,6 +44,51 @@ _Nothing yet._
 
 ---
 
+## [5.1.0] — 2026-09-18 · Nobody Else's Numbers
+
+The founder's own figures had been shipping inside the app bundle and compiled
+into the domain — his starting loads, his calorie targets, his treadmill, his
+July. Every one of them now comes from the reader's own rows, or does not come
+at all.
+
+### Changed
+- **The warm-up the logger opens with is yours.** It used to be a fixed five
+  minutes at 2 % over 0.37 km on a movement called Treadmill, prepended to the
+  first session of every account that ever opened the app. The deck now repeats
+  the athlete's OWN last cardio bout — the walk, ride or row in `cardio_logs`,
+  by its own name, cut to warm-up length (ten minutes) with its distance cut to
+  match so the pace on the card is the pace that was run. Somebody who has never
+  logged cardio gets no card, instead of somebody else's.
+- **"Scheduled rest" no longer names a plan you are not on.** The coach headline
+  on Today reads the plan that owns today out of `plans`, and has dropped the
+  "150–250 kcal" Zone-2 dose — how much a rest day is worth is a function of
+  your own targets.
+- **Re-entry is a date you mark, not a fortnight in 2026.** The "go light, no
+  PRs" headline was hardcoded to 19 July – 1 August. It now reads a `reentry`
+  override in `schedule_overrides`, so anybody can mark their own days back
+  after a break — and marking them moves no session: the week's training days
+  and rest days stay exactly as the plan authored them.
+
+### Fixed
+- **"Trouble falling asleep" now moves the numbers it is an input to.** The flag
+  feeds both the stress index and the battery's wellness drain, but ticking it
+  wrote the row and stopped — so the stored score for that night, and every day
+  in the readiness window after it, went on describing the un-flagged version.
+  It runs the same rescore cascade a sleep-window edit does.
+
+### Removed
+- **Starting loads and phase goals are out of the bundled plan templates.** The
+  three decks a new account can pick from carried a `wk1Kg` per exercise (one
+  athlete's week-1 load) and a `phaseGoals` block per plan (his calories, his
+  macros, his target weight, his rate band). The templates describe the DECK
+  now; a new account's targets have been its own arithmetic since W5, and the
+  screenshot harness carries the numbers it needs to draw a plausible screen.
+- **`PreviewCatalogue` cannot ship.** The screenshot harness's seeded account is
+  `#if DEBUG` like every other harness file, rather than a convention that held
+  until somebody forgot.
+
+---
+
 ## [5.0.1] — 2026-09-17 · The Sprint Leaves No Residue
 
 **PATCH: nothing in the app changed.** The closing wave of the Next-Gen UX

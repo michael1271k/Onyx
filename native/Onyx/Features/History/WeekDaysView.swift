@@ -94,7 +94,8 @@ struct WeekDaysView: View {
                             DayScreen(model: DayModel(
                                 database: environment.database,
                                 userId: environment.userIdString,
-                                date: day.date
+                                date: day.date,
+                                environment: environment
                             ))
                         } label: {
                             DayHistoryRow(day: day)

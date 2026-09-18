@@ -25,6 +25,16 @@ import OnyxData
 @Suite("Live state restore")
 struct LiveStateRestoreTests {
 
+    /// The bout this fixture's athlete last logged, and therefore the one their
+    /// decks open with.
+    ///
+    /// Local to the suite: `WarmupCardio` names no bout of its own any more —
+    /// the opener is read off `cardio_logs`, so a fixture that wants one has to
+    /// log one. `walkedStore` seeds exactly this row.
+    private nonisolated static let bout = WarmupCardio.Bout(
+        name: "Treadmill", durationSec: 300, distanceKm: 0.37, inclinePct: 2
+    )
+
     private nonisolated static let userId = "00000000-0000-0000-0000-00000000000a"
     private nonisolated static let sessionId = "s-arms"
     private nonisolated static let date = "2026-09-15"
@@ -145,16 +155,25 @@ struct LiveStateRestoreTests {
         )
         let row = session
         try database.seedRows { db in
-            // `catalogueHasWarmupCardio` matches on the slug, and it is what
-            // turns the prepend on at all.
-            try Exercise(id: "ex-treadmill", name: WarmupCardio.name, slug: ExerciseSlug.id(WarmupCardio.name)).insert(db)
+            // The catalogue row the performed set points at...
+            try Exercise(id: "ex-treadmill", name: Self.bout.name, slug: ExerciseSlug.id(Self.bout.name)).insert(db)
+            // ...and the LOGGED bout, which is what turns the prepend on at
+            // all now. Without it this athlete has never done cardio, the deck
+            // opens with no opener, and the duplicate this suite is named for
+            // could not be reproduced.
+            try CardioLogRow(
+                id: "cardio-1", userId: Self.userId, date: "2026-09-07", kind: "treadmill",
+                distanceM: (Self.bout.distanceKm ?? 0) * 1000,
+                durationMin: Double(Self.bout.durationSec) / 60,
+                inclinePct: Self.bout.inclinePct
+            ).insert(db)
             try row.insert(db)
             try WorkoutSet(
                 id: "tread-1", sessionId: "s-walked", exerciseId: "ex-treadmill",
                 setIndex: 1, weightKg: 0, reps: 0, setType: "warmup",
                 exerciseOrder: 0,
-                durationSec: WarmupCardio.durationSec, incline: WarmupCardio.inclinePct,
-                distanceKm: WarmupCardio.distanceKm, foldOrder: 0
+                durationSec: Self.bout.durationSec, incline: Self.bout.inclinePct,
+                distanceKm: Self.bout.distanceKm, foldOrder: 0
             ).insert(db)
         }
         return (database, session)
@@ -165,7 +184,7 @@ struct LiveStateRestoreTests {
     private func walkedDay() -> ProgramDay {
         ProgramDay(
             key: armsDay().key, label: "Delts & Arms", accent: 0x8A8A8E, weekday: 0,
-            exercises: [ProgramExercise(WarmupCardio.name, sets: 1, cutSets: 1, wk1Kg: nil, reps: "5 min", restSec: 90)]
+            exercises: [ProgramExercise(Self.bout.name, sets: 1, cutSets: 1, wk1Kg: nil, reps: "5 min", restSec: 90)]
         )
     }
 
@@ -185,7 +204,7 @@ struct LiveStateRestoreTests {
         model.attach(editing: session)
 
         let treadmills = model.exercises.filter {
-            ExerciseAliases.canonicalName($0.name) == ExerciseAliases.canonicalName(WarmupCardio.name)
+            ExerciseAliases.canonicalName($0.name) == ExerciseAliases.canonicalName(Self.bout.name)
         }
         #expect(treadmills.count == 1, "one card, not one at the top and one at the bottom")
         #expect(treadmills.first?.rows.filter(\.isDone).count == 1, "and the bout it holds is the one that was walked")
@@ -199,7 +218,7 @@ struct LiveStateRestoreTests {
         model.attach()
         let ids = model.exercises.map(\.id)
         #expect(Set(ids).count == ids.count, "a duplicate id in a ForEach is undefined and fatal in a LazyVStack")
-        #expect(!ids.contains { $0 == WarmupCardio.name }, "and it is not the movement's name any more")
+        #expect(!ids.contains { $0 == Self.bout.name }, "and it is not the movement's name any more")
     }
 
     @Test("a phase switch over a deck with a namesake card does not trap")

@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import GRDB
 import OnyxCore
@@ -6,10 +7,19 @@ import OnyxData
 /// The catalogue a preview store needs to draw a deck, a plan, a rung or a
 /// phase — as ROWS, the way the app reads them since W2.
 ///
-/// The decks come from `plan-templates.json`; the rungs, the phases and the
-/// stack are preview data in the same spirit as `PreviewHarness.sampleBouts`:
-/// enough of a plausible account to photograph every screen, not the
-/// founder's account. Nothing here reaches OnyxCore or a running app.
+/// The decks come from `plan-templates.json`; the goals, the rungs, the phases
+/// and the stack are preview data in the same spirit as
+/// `PreviewHarness.sampleBouts`: enough of a plausible account to photograph
+/// every screen, not the founder's account. Nothing here reaches OnyxCore or a
+/// running app.
+///
+/// ── `#if DEBUG`, LIKE EVERY OTHER HARNESS FILE ──────────────────────────────
+/// A plausible account is still an account, and this one names a body weight, a
+/// target, a calorie figure and a supplement stack. None of it is anybody's, and
+/// none of it belongs in a shipped binary where a wrong call site could seed it
+/// over a real store. Every caller is already `#if DEBUG` (`PreviewHarness`,
+/// `LoggerPreviewData`, the five `*Previews` files); this is the wall that keeps
+/// it that way rather than a convention that holds until somebody forgets.
 enum PreviewCatalogue {
 
     static let userId = "00000000-0000-0000-0000-000000000001"
@@ -33,27 +43,49 @@ enum PreviewCatalogue {
                     ).save(conn)
                 }
             }
-            // The phase goals and set targets the template carries, decoded
-            // straight off the file so the numbers are typed nowhere else.
+            // ── THE GOALS ARE THE HARNESS'S, NOT THE TEMPLATE'S ────────────
+            // They used to be decoded off `plan-templates.json`, which carried
+            // a `phaseGoals` block per plan. That block was one athlete's cut
+            // and one athlete's bulk — a calorie figure, a macro split and a
+            // target weight — shipped in the app bundle and seeded into every
+            // new account's plan. The templates now carry the DECK and nothing
+            // about a body, and the numbers a screenshot needs live here, with
+            // the rungs and the stack they were always drawn beside.
+            //
+            // One cut and one bulk for all three plans. A per-plan variation
+            // was a second set of numbers no shot and no test ever read.
+            let goals: [PlanPhaseGoalRow] = [
+                PlanPhaseGoalRow(
+                    userId: userId, planId: "", phase: "cut",
+                    kcal: 1955, proteinG: 170, carbsG: 195, fatG: 55, fiberMin: 28, fiberMax: 35,
+                    updatedAt: t, stepsGoal: 10_000,
+                    targetWeightKg: 62, targetBodyFatPct: 13, targetMuscleMassKg: 33,
+                    rateMinKgWk: -0.5, rateMaxKgWk: -0.4, label: "Cut", fiberG: 30
+                ),
+                PlanPhaseGoalRow(
+                    userId: userId, planId: "", phase: "bulk",
+                    kcal: 2600, proteinG: 160, carbsG: 330, fatG: 70, fiberMin: 33, fiberMax: 38,
+                    updatedAt: t, stepsGoal: 8_000,
+                    targetWeightKg: 70, targetBodyFatPct: 15, targetMuscleMassKg: 37,
+                    rateMinKgWk: 0.2, rateMaxKgWk: 0.25, label: "Lean Bulk", fiberG: 35,
+                    bodyFatCeilingPct: 16
+                ),
+            ]
+            for plan in PlanTemplates.plans {
+                for var row in goals {
+                    row.planId = plan.id
+                    try row.save(conn)
+                }
+            }
+            // The weekly set targets DO still come off the file: they are a
+            // property of the deck (what the plan asks of each muscle), not of
+            // the person running it, and the volume tile is drawn against them.
             if let url = Bundle.main.url(forResource: "plan-templates", withExtension: "json"),
                let data = try? Data(contentsOf: url),
                let file = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let plans = file["plans"] as? [[String: Any]] {
                 for plan in plans {
                     guard let id = plan["id"] as? String else { continue }
-                    for (phase, g) in (plan["phaseGoals"] as? [String: [String: Any]]) ?? [:] {
-                        func d(_ k: String) -> Double? { (g[k] as? NSNumber)?.doubleValue }
-                        try PlanPhaseGoalRow(
-                            userId: userId, planId: id, phase: phase,
-                            kcal: d("kcal").map(Int.init), proteinG: d("proteinG").map(Int.init),
-                            carbsG: d("carbsG").map(Int.init), fatG: d("fatG").map(Int.init),
-                            fiberMin: d("fiberMin").map(Int.init), fiberMax: d("fiberMax").map(Int.init),
-                            updatedAt: t, stepsGoal: d("stepsGoal").map(Int.init),
-                            targetWeightKg: d("targetWeightKg"), targetBodyFatPct: d("targetBodyFatPct"),
-                            targetMuscleMassKg: d("targetMuscleMassKg"), rateMinKgWk: d("rateMinKgWk"), rateMaxKgWk: d("rateMaxKgWk"),
-                            label: g["label"] as? String, fiberG: d("fiberG").map(Int.init), bodyFatCeilingPct: d("bodyFatCeilingPct")
-                        ).save(conn)
-                    }
                     for (phase, targets) in (plan["volumeTargets"] as? [String: [String: Any]]) ?? [:] {
                         for (muscle, sets) in targets {
                             try PlanPhaseVolumeRow(
@@ -132,3 +164,4 @@ enum PreviewCatalogue {
         }
     }
 }
+#endif

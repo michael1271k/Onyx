@@ -33,6 +33,13 @@ struct LivePrIdentityTests {
     private nonisolated static let userId = "00000000-0000-0000-0000-00000000000b"
     private nonisolated static let priorSession = "s-prior"
 
+    /// The bout this athlete last logged, and therefore the one their decks
+    /// open with. `store()` seeds it as a `cardio_logs` row; the one storeless
+    /// deck in this suite is handed it directly.
+    private nonisolated static let bout = WarmupCardio.Bout(
+        name: "Treadmill", durationSec: 300, distanceKm: 0.37, inclinePct: 2
+    )
+
     /// A catalogue that is NOT empty and does NOT hold the deck's movement.
     ///
     /// Both halves are load-bearing. `storedIdCreatingCatalogueRow` refuses to
@@ -49,10 +56,17 @@ struct LivePrIdentityTests {
             // Present so the catalogue is non-empty; unrelated to the deck's
             // movement so the mint still has to happen.
             try Exercise(id: "ex-lat-pulldown", name: "Lat Pulldown").insert(db)
-            // `LoggerModel.catalogueHasWarmupCardio` gates the opener on this
-            // row, so a store without it builds a deck with no bout on it — and
-            // the two order tests below would then be asserting nothing.
-            try Exercise(id: "ex-treadmill", name: WarmupCardio.name).insert(db)
+            // The opener is gated on a LOGGED bout now, so a store with no
+            // `cardio_logs` row builds a deck with no bout on it — and the two
+            // order tests below would then be asserting nothing. The catalogue
+            // row goes in beside it so the bout's card resolves to an id.
+            try Exercise(id: "ex-treadmill", name: Self.bout.name).insert(db)
+            try CardioLogRow(
+                id: "cardio-1", userId: Self.userId, date: "2026-08-29", kind: "treadmill",
+                distanceM: (Self.bout.distanceKm ?? 0) * 1000,
+                durationMin: Double(Self.bout.durationSec) / 60,
+                inclinePct: Self.bout.inclinePct
+            ).insert(db)
             let start = LogicalDay.date(fromISO: "2026-08-30")!.addingTimeInterval(17 * 3600)
             try WorkoutSession(
                 id: Self.priorSession, userId: Self.userId, dayKey: "cb_a", date: "2026-08-30",
@@ -208,14 +222,14 @@ struct LivePrIdentityTests {
 
         // `editorDay`'s shape: the session's own performed order, treadmill first.
         var day = PlanTemplates.day("onyx5", "cb_a")
-        let walked = ProgramExercise(WarmupCardio.name, sets: 1, wk1Kg: 0, reps: "5 min", restSec: 0)
+        let walked = ProgramExercise(Self.bout.name, sets: 1, wk1Kg: 0, reps: "5 min", restSec: 0)
         day.exercises = [walked] + day.exercises
 
         let edit = LoggerModel(
             day: day, phase: .cut, store: database, userId: Self.userId,
             startedAt: Date(), openingForEdit: true
         )
-        #expect(edit.exercises.first?.name == WarmupCardio.name,
+        #expect(edit.exercises.first?.name == Self.bout.name,
                 "an edit deck must not be re-ranked against another session's deck order")
 
         // …and the live deck still IS re-ranked by it, which is the whole point
@@ -239,14 +253,14 @@ struct LivePrIdentityTests {
             day: PlanTemplates.day("onyx5", "cb_a"), phase: .cut,
             store: database, userId: Self.userId, startedAt: Date(), openingForEdit: true
         )
-        #expect(edit.exercises.contains { $0.name == WarmupCardio.name } == false)
+        #expect(edit.exercises.contains { $0.name == Self.bout.name } == false)
 
         // The live deck still opens with it.
         let live = LoggerModel(
             day: PlanTemplates.day("onyx5", "cb_a"), phase: .cut,
             store: database, userId: Self.userId, startedAt: Date()
         )
-        #expect(live.exercises.first?.name == WarmupCardio.name)
+        #expect(live.exercises.first?.name == Self.bout.name)
     }
 
     /// The bout reads as cardio, and pays no muscle credit for doing so.
@@ -266,8 +280,8 @@ struct LivePrIdentityTests {
     /// made reliable.
     @Test("the treadmill card reads as cardio and pays no muscle credit")
     func treadmillCardIsCardioAndNotAMuscle() throws {
-        let model = LoggerModel(day: PlanTemplates.day("onyx5", "cb_a"), phase: .cut)
-        let bout = try #require(model.exercises.first { $0.name == WarmupCardio.name })
+        let model = LoggerModel(day: PlanTemplates.day("onyx5", "cb_a"), phase: .cut, warmupBout: Self.bout)
+        let bout = try #require(model.exercises.first { $0.name == Self.bout.name })
 
         let bouts = bout.rows.filter(\.isCardio)
         #expect(bouts.isEmpty == false, "a seeded bout must read as cardio")
@@ -275,7 +289,7 @@ struct LivePrIdentityTests {
 
         // `dict` does not name it, and neither does the prescription — the two
         // halves of "MuscleMap.dict must never learn a treadmill".
-        #expect(MuscleMap.movers(WarmupCardio.name) == nil)
+        #expect(MuscleMap.movers(Self.bout.name) == nil)
         #expect(bout.plan.movers.primary.isEmpty)
 
         // The accumulator itself: tick the bout and it still credits no muscle.
