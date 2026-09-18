@@ -68,3 +68,24 @@ if ! out=$(swift build \
   exit 1
 fi
 echo "✔ OnyxUI + OnyxCore build for the iOS simulator"
+
+# ── AND FOR THE WATCH (W7) ──────────────────────────────────────────────────
+# `OnyxUI/Accessory/` is the one unfenced drawing directory: it is the watch's
+# complications as well as the phone's Lock Screen, and a `WidgetFamily` case
+# that exists on one platform and not the other (`.systemSmall`,
+# `.accessoryCorner`) is the class of error only a watchOS compile catches.
+# The iOS build above says nothing about it.
+WATCH_SDK="$(xcrun --sdk watchsimulator --show-sdk-path 2>/dev/null || true)"
+if [ -n "$WATCH_SDK" ]; then
+  if ! out=$(swift build \
+    --package-path "$ROOT/native/Packages/OnyxUI" \
+    --scratch-path "$HOME/Library/Caches/onyx-swift/OnyxUI-watchos" \
+    --triple arm64-apple-watchos11.0-simulator \
+    --sdk "$WATCH_SDK" 2>&1); then
+    echo "$out" | grep -v "warning: using sysroot" | grep -E "error|warning|note" || echo "$out" | tail -20
+    exit 1
+  fi
+  echo "✔ OnyxUI + OnyxCore build for the watchOS simulator"
+else
+  echo "swift check: no WatchSimulator SDK — watchOS cross-build skipped"
+fi

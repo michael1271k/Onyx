@@ -7,6 +7,7 @@ import OnyxCore
 import OnyxData
 import OnyxUI
 import SwiftUI
+import WidgetKit
 
 /// The watch app's whole state.
 ///
@@ -519,7 +520,20 @@ final class WatchModel {
         case .context(let next):
             context = next
             WatchContextCache.save(next)
-            OnyxTheme.set(next.theme ?? .default)
+            // `save`, not `set` (W7): the complication extension is a second
+            // process on this wrist and reads the palette back out of the
+            // suite (`OnyxTheme.load`) the way the phone's widgets do. The
+            // phone sends the already-reacted spec, so what lands under
+            // `OnyxTheme.key` here is what is drawn — there is no phase key
+            // on the watch to react it twice.
+            OnyxTheme.save(next.theme ?? .default, to: WatchTiles.defaults())
+            // The complications' numbers, then the reload that makes them
+            // draw. Nil tiles (an older phone) leave the last ones in place
+            // rather than blanking a face that was right yesterday.
+            if let tiles = next.tiles {
+                tiles.save()
+                WidgetCenter.shared.reloadAllTimelines()
+            }
             resolveDay()
             rejoinLiveSession()
         case .rest(let pulse):
@@ -587,17 +601,25 @@ private extension ProgramExercise {
 /// No token lives here. Wave 10's phone-relay decision means the watch never
 /// authenticates, so the only identity it holds is a user id — which is not a
 /// credential, and is already on every row in its own store.
+///
+/// ── IN THE APP GROUP SUITE SINCE W7 ─────────────────────────────────────────
+/// `WatchTiles.defaults()` — the suite the complication extension reads —
+/// rather than `.standard`, so the one place the watch keeps what the phone
+/// last said is a place both of its processes can see. A context cached under
+/// `.standard` by an earlier build is simply not found here; the next push
+/// from the phone rewrites it, which is one reconnection, the cost the header
+/// already accepts.
 enum WatchContextCache {
     private static let key = "onyx.watch.context"
 
     static func load() -> WatchContext? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        guard let data = WatchTiles.defaults().data(forKey: key) else { return nil }
         return try? OnyxJSON.decoder.decode(WatchContext.self, from: data)
     }
 
     static func save(_ context: WatchContext) {
         guard let data = try? OnyxJSON.encoder.encode(context) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        WatchTiles.defaults().set(data, forKey: key)
     }
 }
 
@@ -643,9 +665,23 @@ extension WatchModel {
                         ),
                     ]),
                 ]
+            ),
+            // The complications' numbers, spelled out for the same reason the
+            // deck is: `OnyxSnapshot.sample` is behind OnyxUI's iOS fence.
+            // Saved to the suite below exactly as a real arrival is, so the
+            // watch simulator's complication gallery has something to draw.
+            tiles: WatchTiles(
+                date: today, battery: 72, score: 81, sleepMin: 445, sleepScore: 58,
+                waterMl: 1_750, waterGoalMl: 3_000, steps: 8_412, stepsGoal: 10_000,
+                kcal: 1_640, kcalGoal: 2_150, todayLabel: "Upper B", todayLogged: false,
+                restDay: false, stressIndex: 41.5, sorenessCount: 3,
+                week: (0..<7).map { WatchTiles.WeekDay(trained: $0 % 2 == 0, fuelHit: $0 != 3, sleepHit: $0 > 1) },
+                medianBedtime: "23:12", lastBedtime: "00:16"
             )
         )
         WatchContextCache.save(next)
+        next.tiles?.save()
+        WidgetCenter.shared.reloadAllTimelines()
         context = next
         resolveDay()
     }

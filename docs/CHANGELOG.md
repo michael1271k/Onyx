@@ -44,6 +44,46 @@ _Nothing yet._
 
 ---
 
+## [6.4.0] — 2026-09-18 · Complications
+
+The watch gets real WidgetKit. Ten of the dashboard tiles are now complications
+on the watch face — circular, rectangular, inline and corner — drawn by the
+SAME view the phone's Lock Screen draws, from the same numbers the Home Screen
+widgets read. One face, both devices.
+
+### Added
+- **Ten complications on the watch** (`OnyxWatchWidgets`, a new watchOS widget
+  extension): Battery, Workout, Fuel, Water, Steps, Sleep, Bedtime, Stress,
+  Soreness and Week Rings, each at every accessory family the watch offers.
+  A gauge where there is a goal (water against its target, steps, calories
+  left, the battery, the sleep score), a glyph and a number where there is
+  not (today's split, last night's bedtime, how many muscles are sore), and
+  three rows of seven marks for the week.
+- **The phone now sends the wrist its numbers.** `WatchTiles` (≤ 2 KB) rides
+  inside the application context beside the schedule and the theme — cut from
+  the same snapshot builder the widgets use, so the watch face and the Lock
+  Screen never disagree. Pushed on sign-in, at midnight, on a theme pick, and
+  after every local write on a 30 s trailing throttle.
+
+### Changed
+- **The Lock Screen faces are the watch's faces.** `LockView` delegates to the
+  new `OnyxUI/Accessory/` drawing; its five focuses map onto the same ten ids.
+  The rectangular Week face reads "Week · 5 trained / 5 fuelled · 6 slept" and
+  the Stress inline names its band.
+- **The watch app's cached context moved into the App Group suite**
+  (`group.app.onyx.health.watch`), where the complication extension can read
+  it. A context cached by an earlier build is refetched on the next push.
+- `npm run check:swift` now cross-builds OnyxUI for the watchOS simulator too,
+  so a system family used in an unfenced face fails on the command line.
+
+### Founder
+- Xcode → `OnyxWatch` and `OnyxWatchWidgets` → App Groups capability
+  (`group.app.onyx.health.watch`). Needs the paid program: without it the free
+  team strips the entitlement at signing (verified on the watch simulator) and
+  the complications stay "—" on the wrist — Gate 0, same as the phone.
+
+---
+
 ## [6.3.0] — 2026-09-18 · One Figure a Tile
 
 Ten tile faces redrawn so a glance answers the question the tile is named for.

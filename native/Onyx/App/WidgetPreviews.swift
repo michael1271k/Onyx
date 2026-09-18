@@ -133,10 +133,21 @@ enum WidgetPreviews {
         add("clamp-daily", .systemSmall, OnyxTile.clamped(.daily, host: .systemSmall, entry: entry))
         add("clamp-recovery", .systemSmall, OnyxTile.clamped(.recovery, host: .systemSmall, entry: entry))
         add("clamp-water", .systemLarge, OnyxTile.clamped(.water, host: .systemLarge, entry: entry))
-        for f in LockFocus.allCases {
+        // ── The accessory faces (W7) ─────────────────────────────────────
+        // Every wearable id at the three families a phone can photograph —
+        // the Lock Screen AND the watch's complications, since they are one
+        // view. `.accessoryCorner` is watchOS-only and is reviewed on the
+        // watch simulator. The Lock Screen kind's five focuses are a subset
+        // of these ten (`LockFocus.widgetId`), so the old `lock-*` cells are
+        // gone rather than doubled. The empty row is the "—" state.
+        let sampleTiles = WatchTiles(OnyxSnapshot.sample)
+        for id in WidgetId.wearable {
             for fam in [WidgetFamily.accessoryCircular, .accessoryRectangular, .accessoryInline] {
-                add("lock-\(f.rawValue)", fam, LockView(entry: entry, focus: f))
+                add("acc-\(id.rawValue)", fam, OnyxTile.accessory(id, family: fam, tiles: sampleTiles))
             }
+        }
+        for id in WidgetId.wearable {
+            add("acc-\(id.rawValue)-empty", .accessoryRectangular, OnyxTile.accessory(id, family: .accessoryRectangular, tiles: nil))
         }
         return out
     }()

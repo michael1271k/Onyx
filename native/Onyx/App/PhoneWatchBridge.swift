@@ -100,14 +100,22 @@ final class PhoneWatchBridge {
     /// changes. Cheap and idempotent: one slot, overwritten, and the watch
     /// caches whatever arrived last so a cold launch out of range still opens
     /// the right split.
-    func send(userId: String, today: String, schedule: ScheduleContext) {
+    ///
+    /// `tiles` (W7) is the complications' dozen numbers, cut from the same
+    /// snapshot the Home Screen widgets draw. It rides INSIDE the context
+    /// rather than as a second application-context kind, because the channel
+    /// is one slot: a second kind would overwrite the schedule every time a
+    /// number moved, and the watch would open on "Open Onyx on your iPhone"
+    /// between two pushes.
+    func send(userId: String, today: String, schedule: ScheduleContext, tiles: WatchTiles?) {
         link?.send(
             context: WatchContext(
                 userId: userId, today: today, schedule: resolved(schedule),
                 // The wrist wears what the phone wears. The watch has no
                 // Settings screen for this, and a second place to set a theme
                 // is a second place for the two to disagree.
-                theme: OnyxTheme.current.spec
+                theme: OnyxTheme.current.spec,
+                tiles: tiles
             )
         )
     }
