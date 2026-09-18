@@ -1,6 +1,6 @@
 # Widgets · Sleep v2 · Themes · Week · Pulse · Logger · Privacy — Sprint Plan
 
-**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0, W6 shipped 6.3.0, W7 shipped 6.4.0. **W8 next.**
+**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0, W6 shipped 6.3.0, W7 shipped 6.4.0, W8 shipped 6.5.0. **W9 next.**
 **From:** `main` @ 5.0.1 (`3de461a7`).
 **Ships as:** eleven sequential waves, 5.1.0 → 6.8.0, plus a close-out wave that retires this file to `docs/Done/`.
 **Branches:** `onyx/sprint-widgets-w<N>`, each cut from current `main` and merged `--no-ff`
@@ -1443,3 +1443,121 @@ device builds by construction.
 - W3's `docs/sql/w3-sleep-onset.sql` paste is still owed. Gate 0 for the
   phone (`group.app.onyx.health`) unchanged.
 
+### W8 Wave Record — shipped 2026-09-18 as 6.5.0
+
+**Drift from the plan, on purpose:**
+- **`weeklyNutrients` / `flaggedNutrients` did NOT move.** The brief said to
+  move them beside `WeekReport`. Both are already `public static` on
+  `WeeklyExport` in **OnyxCore**, and the markdown renderer in that same file
+  calls them (through `implausible` and `NutrientTargets`, which are internal
+  to it). Moving them to OnyxData would have broken the exported document to
+  serve one section. `WeekReport.flaggedMicros` calls `weeklyNutrients` where
+  it lives and filters it down to the rows that breach.
+- **`volumeByMuscle vs plan_phase_volume` needed no new read.**
+  `WeeklyExportInput.volumeByMuscle` already carries `target` from
+  `plan_phase_volume` (`WeeklyExportBuilder.volumeByMuscle`, `d.volumeOverrides`
+  merged over the phase defaults). The report re-expresses those rows as
+  `OnyxSnapshot.MuscleVolume` — the one muscle currency the atlas, the heat
+  strip and the Muscle tile already read — and drops any token that is not a
+  `LandmarkMuscle`.
+- **`records` carries the WHOLE list; the cap is a computed view of it.** The
+  brief said "capped at 3 + hasMore" and the screen said "3 + `DisclosureGroup`",
+  and those two cannot both be true of a stored array — a disclosure needs
+  something to disclose. `WeekReport.recordCap`, `.topRecords` and
+  `.hasMoreRecords` state the cap in one place; the section draws
+  `topRecords` and puts `records.dropFirst(recordCap)` behind the disclosure.
+- **The door type is still called `WrapDoor`.** The brief named a
+  `WeekReportDoor`. `WrapDoor` is a private struct declared four times, once per
+  door file, and renaming one of the four would leave three called something
+  else. The behaviour changed, the name did not.
+- **`train-report-large` is a new harness screen.** `train-wrap-large` anchors
+  the bottom of the page read out of the PREVIEW STORE, which holds no nutrition
+  and no sleep for the photographed week — so it photographs the two empty
+  notes and can never show the two new charts. The seeded twin needed a
+  bottom-anchored sibling or the wave's headline was unreviewable.
+
+**Root causes that were not where the plan guessed:**
+- **`WeekWindow.rangeLabel` was an APP extension** (`native/Onyx/App/WeekWindow.
+  swift`), not an OnyxCore member. `WeekReport` carries the string, so the move
+  to OnyxData could not compile until the label moved to OnyxCore beside
+  `WeekWindow` itself. It is pure — a window, a locale, no store — and the
+  alternative (a second `d MMM – d MMM` formatter in OnyxData) is how one week
+  comes to be called two things on two screens.
+- **`HeatStrip` and `MuscleLadder` were internal to OnyxUI.** The brief said
+  "+ heat strip" as though it were reachable. `HeatStrip` is now `public` with
+  an explicit `public init`; `MuscleLadder` stays internal, because only the
+  strip's own body calls it.
+- **The three empty-chart cards were MY bug, not the plan's.** The first build
+  drew `OnyxChartEmpty` inside `OnyxChartCard` for an untracked week, which
+  reserves `OnyxChart.plotHeight` — two ~400 pt cards saying "No data" where
+  the old page had printed one line. `WeekEmptyNote` replaced both; a section
+  draws its chart card only when the series is non-empty.
+- **Four PR ROWS are not four records.** `WeeklyExportBuilder` folds a
+  movement's axes into ONE `ExportPr` per session, so a seed with three axes on
+  Leg Press and one on Incline DB Press yields two records, not four. The test
+  seed needed four distinct MOVEMENTS to exercise the cap.
+
+**Constraints discovered that the next wave must respect:**
+- **`FlowRow` proposes each child its own ideal width.** A
+  `frame(maxWidth: .infinity)` inside a `FlowRow` child does nothing, so the
+  AX5 verdict capsules came out ragged, each as wide as its own longest word.
+  The stacked branch is a `VStack`, chosen on `typeSize.isAccessibilitySize` —
+  never `ViewThatFits`, which reports success at every width when both
+  candidates end in flexible frames (the W1b trap, hit again here).
+- **A `.capsule` is the wrong shape for a two-line stack.** Its radius is half
+  its height, so the stacked Sleep capsule rendered as a circle with the word
+  hanging over both ends. The AX branch swaps in
+  `RoundedRectangle(cornerRadius: OnyxCorner.row)` via `AnyShape`.
+- **Three `OnyxStatCell`s in an `HStack` are not three equal columns.** They
+  are sized from their ideal widths first, so "42,180" took twice the room of
+  "5" and the tonnage's trail — drawn across its own cell — stretched past the
+  figure and read as a stray rule. `LazyVGrid` with
+  `GridItem(.flexible())` × 3 is the layout `SessionDetailView` already uses;
+  it collapses to one column at an accessibility size for free.
+- **`Shoulders(.firstTextBaseline)` cannot align a view with no text in it.**
+  The battery `Sparkline` was pinned to the top of its card while its label sat
+  at the bottom. An `HStack(alignment: .center)` is the alignment for a label
+  beside a figure that is not text.
+- **`AppearanceCoverageTests` walks `Onyx/Features` and matches
+  `struct X: …View`, filtering names that end `TabView` / `Sheet` / `View`.**
+  Every section in `WeekSections.swift` is named `…Section` / `…Row` / `…Note`
+  on purpose, so the file needs no ground; `WeekReportView.swift` grounds with
+  `.onyxScreen(.train)`.
+- **`daily_scores.sleep_score` is the ONLY figure on this page that is not in
+  the export payload.** `AppDatabase.dailyScores(userId:from:to:)` is the new
+  range read, and the pure fold takes the values as an argument — so
+  `build(_:summary:plannedSessions:phase:sleepScores:)` stays store-free and
+  assertable.
+- **Counts:** OnyxCore **585** (unchanged), OnyxData **625** (was 611; +14
+  `WeekReportTests`), `swift:ui` 40 in 8 suites, both `xcodebuild` schemes
+  green. `OnyxTests` run by hand: **64 tests, 11 issues** — the documented
+  baseline, unchanged (`LoggerModel` untouched).
+
+**Left open on purpose:**
+- **Sessions and PRs carry no spark.** `WeeklyExportInput.ledger` is the only
+  weekly series in the payload and tonnage is the only quantity on it. A 0/1
+  series behind a session count would look exactly like the trail beside it
+  that means something.
+- **`WeeklyWrapContent` stayed in `Features/Workout/`.** The reel is still the
+  Training section's movement lists; only its `headline` (the three stats, now
+  `WeekFiguresRow`) was removed. Moving the file is a rename with no behaviour
+  in it and W9 touches neither.
+- **The Week Rings tile door builds a full `WorkoutWeek.wrap`** — a PR replay
+  per session of the week, detached, on the tap. Same cost the banner has paid
+  since W4 and `ponytail:`-noted there; if a trace shows it, cache the count on
+  `workout_sessions` at close time.
+- **The Training section is long.** Muscle capsules + heat strip, then the
+  reel's bests card, progressions and full-week disclosure, then STRONGEST.
+  `bestsCard` (the week's heaviest set and best e1RM) and `strongest` (the
+  three roles per movement) overlap; the brief named neither, so nothing was
+  cut on the way past. A future wave that wants one of them gone should delete
+  `bestsCard`, which is the pair `strongest` already contains.
+- **`WeekReport.plannedSessions` is `program.days.count`**, handed down by the
+  view — not `Schedule.sessionTargetIn(context)`, which is what the app-target
+  test uses. The two agree for ONYX-5; they would not for a plan with a rest
+  day in its `days` array.
+
+**Founder's manual steps still outstanding:**
+- W3's `docs/sql/w3-sleep-onset.sql` paste. Unchanged.
+- Xcode → `OnyxWatch` **and** `OnyxWatchWidgets` → App Groups
+  (`group.app.onyx.health.watch`). Paid program. Unchanged from W7.
