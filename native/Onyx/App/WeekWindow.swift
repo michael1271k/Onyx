@@ -44,18 +44,6 @@ extension WeekWindow {
     /// The window `count` weeks after this one — negative walks back.
     func offset(byWeeks count: Int) -> WeekWindow? { shifted(by: count, today: LogicalDay.today()) }
 
-    /// `30 Aug – 5 Sep`. One month name when the week does not straddle two.
-    var rangeLabel: String {
-        guard let from = LogicalDay.date(fromISO: start), let to = LogicalDay.date(fromISO: end) else {
-            return "\(start) – \(end)"
-        }
-        let sameMonth = String(start.prefix(7)) == String(end.prefix(7))
-        let left = sameMonth
-            ? from.formatted(.dateTime.day())
-            : from.formatted(.dateTime.day().month(.abbreviated))
-        return "\(left) – \(to.formatted(.dateTime.day().month(.abbreviated)))"
-    }
-
     /// `M` — the one-letter column head over a day cell. Locale's own narrow
     /// symbol, so a locale whose week runs Saturday-first still gets its own
     /// letters rather than an English initial.

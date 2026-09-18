@@ -209,7 +209,7 @@ struct TodayTabView: View {
         // same report the Train tab, the shelf and History push, with no chrome
         // spelled at this call site to drift away from theirs.
         .navigationDestination(item: $wrapDoor) { door in
-            WeeklyReportView(summary: door.summary, program: door.program)
+            WeekReportView(summary: door.summary, program: door.program)
         }
         // The ring's sheets read STREAMED state — the day's fatigue rows, its
         // stress readings, its cardio — and a model nobody observes draws every
@@ -247,14 +247,47 @@ struct TodayTabView: View {
     /// A week that no longer qualifies returns nil, and nil opens nothing: the
     /// banner's own gate (`TodayFeed.weeklySummaryReady`) and the wrap's gate
     /// are two different questions, and this is the one that can say no.
-    private func openWrap(_ weekStart: String) {
+    ///
+    /// ── AND WHY THE WEEK START CAN BE NIL (W8) ──────────────────────────────
+    /// The banner names its week: it fires on the Monday after one closed and
+    /// hands down `feed.lastWeekStart`. The Week Rings TILE names nothing — it
+    /// is a door onto the week happening now, and which day that week began on
+    /// is `user_goals.week_end_day`, a stored setting this view does not hold.
+    /// So nil means "this week", resolved inside the same detached read that
+    /// builds the summary rather than by a second read on the actor.
+    private func openWrap(_ weekStart: String?) {
         guard !openingWrap else { return }
         openingWrap = true
         let database = environment.database
         let userId = environment.userIdString
+        let today = environment.today
         Task {
             let door = await Task.detached(priority: .userInitiated) { () -> WrapDoor? in
-                guard let summary = WorkoutWeek.wrap(database, userId: userId, weekStart: weekStart) else {
+                let start: String
+                if let weekStart {
+                    start = weekStart
+                } else {
+                    // The same conversion `WorkoutWeek.library()` makes, from
+                    // the same column: a door cut on a different week start
+                    // from the shelf behind it opens a week off by a day at
+                    // each end.
+                    let user = userId.isEmpty ? database.localUserId() : userId
+                    let goals = try? database.userGoals(userId: user)
+                    start = Week.start(
+                        of: today, startDay: Week.startDay(fromEndDay: goals?.weekEndDay)
+                    )
+                }
+                // ── THE LIVE WEEK IS NOT A WRAP ─────────────────────────────
+                // `WeeklyWrap.isWrapped` exists to refuse a summary of a week
+                // with work LEFT in it, which is what stops the banner firing
+                // on a Tuesday. The tile is a door and not a banner: it is
+                // tapped on a Tuesday on purpose, and a report of three days is
+                // the honest answer for a week that is three days old. The
+                // banner's own call keeps the gate.
+                guard let summary = WorkoutWeek.wrap(
+                    database, userId: userId, weekStart: start,
+                    requireComplete: weekStart != nil
+                ) else {
                     return nil
                 }
                 // The programme as the schedule holds it, which is what the
@@ -296,6 +329,12 @@ struct TodayTabView: View {
     /// honest answer for a day the mirror says is logged and the local store has
     /// no row for — a state a pull can be in for a second or two.
     private func open(_ id: WidgetId, _ model: TodayModel) {
+        // ── THE WEEK RINGS TILE IS THE REPORT'S FRONT DOOR (W8, D8) ─────────
+        // Its face is seven days of trained / fuelled / slept, which is the
+        // week's own question asked in three rings — and the sheet behind it
+        // drew the same seven days again, one size larger. The report answers
+        // what the rings only count.
+        if id == .weekRings { openWrap(nil); return }
         guard id == .train, let w = model.feed?.snapshot.workout, !w.isRestDay else {
             model.sheet = .tile(id)
             return

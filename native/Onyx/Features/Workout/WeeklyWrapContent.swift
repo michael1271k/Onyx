@@ -10,7 +10,7 @@ import OnyxData
 /// it inline: the chrome — a `NavigationStack`, a `ScrollView`, two detents —
 /// stayed on the sheet and everything that draws a figure moved here. W4 took
 /// the argument to its conclusion and deleted the sheet. A week is a PLACE now,
-/// pushed by `WeeklyReportView`, and this is the block of it that reports how
+/// pushed by `WeekReportView`, and this is the block of it that reports how
 /// the training went.
 ///
 /// Three things went with the sheet, and all three were the sheet's:
@@ -21,7 +21,7 @@ import OnyxData
 ///  · `onNeedsHeight` — a page is already at its full height. Opening the
 ///    breakdown grows the scroll view, which is what a scroll view is for.
 ///  · `ringCard` — deleted with `WeeklyMuscleRing`. Where the week's work went
-///    is the Recovery and Training rails at the head of the page and the
+///    is the Training section's muscle capsules and heat strip (W8) and the
 ///    movement breakdown below; a part-to-whole donut of sixteen landmarks was
 ///    a third answer to a question the page now asks twice.
 struct WeeklyWrapContent: View {
@@ -55,7 +55,7 @@ struct WeeklyWrapContent: View {
         // the sheet out. The share control is below the 560 fold by
         // construction, so lazily is the only way it is honestly last.
         LazyVStack(alignment: .leading, spacing: OnyxSpace.l) {
-            headline
+            deloadNotice
             bestsCard
             topThree
             breakdown
@@ -64,66 +64,27 @@ struct WeeklyWrapContent: View {
 
     // MARK: - The reel
 
-    private var headline: some View {
-        VStack(alignment: .leading, spacing: OnyxSpace.m) {
-            // A deload says so at the top, before any figure is read. The same
-            // tonnage means two different things in the two kinds of week, and
-            // a reader who learns which one this was AFTER seeing the drops has
-            // already had the wrong reaction.
-            if summary.isDeload {
-                Label("Deload week — lighter by design", systemImage: "moon.zzz")
-                    .onyxType(.caption)
-                    .foregroundStyle(Color.onyx.textSecondary)
-            }
-            // ── ONE COLUMN AT AN ACCESSIBILITY SIZE (W1a) ───────────────────
-            // Three cells across a 375 pt card is 117 pt each, and at AX5 that
-            // broke "SESSIONS" into SES / SIO / NS and printed the week's
-            // tonnage as "42,…". The same collapse `WeekVitalsRow` already
-            // makes, for the reason it states: a figure shown as an ellipsis is
-            // worse than one not shown.
-            if typeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: OnyxSpace.m) { stats }
-            } else {
-                HStack(spacing: OnyxSpace.m) { stats }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(OnyxSpace.l)
-        .onyxGlass(.tile)
-    }
-
-    @ViewBuilder
-    private var stats: some View {
-        stat("SESSIONS", "\(summary.sessions)", delta: nil)
-        // "TONNAGE KG" and not a bare "TONNAGE": the delta beneath it carries
-        // its unit, and a figure whose unit is stated one line down but not on
-        // itself reads as two different quantities.
-        stat("TONNAGE KG", OnyxFormat.volume(summary.tonnageKg), delta: summary.tonnageDeltaKg)
-        stat("PRs", "\(summary.prCount)", delta: nil, tint: summary.prCount > 0 ? Color.onyx.record : nil)
-    }
-
-    /// ── THE SQUARE MOVED TO `OnyxUI` (§W2 C) ────────────────────────────────
-    /// This and `SessionDetailView.cell(_:_:_:sub:…)` were the same object —
-    /// micro label, `.display` numeral, a small line under it — drawn twice in
-    /// two files, differing in two decisions and two accidents. `OnyxStatCell`
-    /// is the one drawing; the two decisions are the parameters below.
+    /// ── THE THREE STATS LEFT THIS CARD (W8) ────────────────────────────────
+    /// SESSIONS · TONNAGE · PRs are `WeekFiguresRow` now, one card up the
+    /// report, where they sit beside the week's trail. Drawing them here as
+    /// well would be the same three figures twice on one screen, four hundred
+    /// points apart.
     ///
-    /// `glass: false` because the reel's card already wears a tile and material
-    /// over material reads as a third surface that is not there.
-    /// `reserves: false` because there is no second rendering of this card for
-    /// its height to stay the same as — §3.6's reservation is about a GRID
-    /// redrawn for a different session, which this is not.
-    private func stat(_ label: String, _ value: String, delta: Double?, tint: Color? = nil) -> some View {
-        OnyxStatCell(
-            label, value,
-            // Signed, always: "+1,240 kg" and "1,240 kg" are different claims
-            // and only one of them is a comparison.
-            sub: (delta.map { $0 == 0 ? nil : $0 } ?? nil).map {
-                .init("\($0 > 0 ? "+" : "−")\(OnyxFormat.volume(abs($0))) kg",
-                      $0 > 0 ? Color.onyx.good : Color.onyx.textSecondary)
-            },
-            reserves: false, tint: tint, glass: false
-        )
+    /// What did NOT move is the deload notice, because it is not a figure: it
+    /// is the sentence that tells a reader how to read every figure under it.
+    /// The same tonnage means two different things in the two kinds of week,
+    /// and a reader who learns which one this was AFTER seeing the drops has
+    /// already had the wrong reaction.
+    @ViewBuilder
+    private var deloadNotice: some View {
+        if summary.isDeload {
+            Label("Deload week — lighter by design", systemImage: "moon.zzz")
+                .onyxType(.caption)
+                .foregroundStyle(Color.onyx.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(OnyxSpace.l)
+                .onyxGlass(.tile)
+        }
     }
 
     /// The two best lifts of the week, side by side and labelled differently.

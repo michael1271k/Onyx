@@ -123,7 +123,7 @@ struct PastWeeksLibrary: View {
                 // the sheet could not work one out; the SUMMARY carries it now
                 // (§W3), which is what makes the other three doors into this
                 // report agree with the shelf rather than only this one.
-                WeeklyReportView(summary: door.summary, program: program)
+                WeekReportView(summary: door.summary, program: program)
                     // What the zoom was always for. `matchedTransitionSource`
                     // + `.navigationTransition(.zoom)` is a NAVIGATION
                     // transition; W2 (next-gen) got it to work out of a

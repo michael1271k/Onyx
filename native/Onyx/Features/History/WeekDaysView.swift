@@ -164,7 +164,7 @@ struct WeekDaysView: View {
         // above: the chip that opens it lives in a row, and a `.plain` List
         // tears rows down.
         .navigationDestination(item: $wrapDoor) { door in
-            WeeklyReportView(summary: door.summary, program: program)
+            WeekReportView(summary: door.summary, program: program)
         }
         .sheet(isPresented: $writingReport) {
             // Re-read on save, or the chip that just wrote a report goes on

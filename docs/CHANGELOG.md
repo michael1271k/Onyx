@@ -44,6 +44,53 @@ _Nothing yet._
 
 ---
 
+## [6.5.0] — 2026-09-18 · The week, anywhere
+
+The weekly report leaves the Train tab. It is its own screen now, reachable
+from the Dashboard's Week Rings tile as well as from History, the Past Weeks
+shelf and Train — and it reports the whole week, not just the training in it:
+sleep, battery, adherence, body composition, muscle coverage, macros,
+micronutrients, cardio and records, one chart a section.
+
+### Added
+- **The Week Rings tile is a door.** Tapping it on the Dashboard pushes the
+  report for the week happening now — a Tuesday included, where the three
+  other doors only ever opened a week that had closed.
+- **Three verdict capsules at the head of the page** — Sleep · Battery ·
+  Adherence — each the mean of what the week actually stored, coloured by
+  whether that reading is good. A week with no reading says so rather than
+  printing a zero.
+- **A Body section**: the week's last believed scan, with body fat and muscle
+  mass beside the weigh-in and the date it was taken.
+- **A Training section that shows where the work went** — the four muscles the
+  week went into, then all sixteen against the plan's own weekly set targets,
+  with a pip under every muscle past its target.
+- **Nutrition as a chart**: calories a day against the target the week was
+  actually eating to, a macro table of daily means, and the micronutrients
+  worth acting on — a floor missed, a ceiling passed, or a reading the app does
+  not believe.
+- **Recovery as a chart**: hours asleep a night against the sleep goal, the
+  week's battery as a trail, the mean stress reading and the week's worst
+  soreness.
+- **A Cardio section** — the week's bouts, minutes, distance and calories.
+
+### Changed
+- **Records stop at three**, with the rest one tap away. A good week set
+  eleven, and eleven trophy rows pushed the share control off the page.
+- **Three rails became three figures.** Sessions, tonnage and PR count now sit
+  together as one row with the tonnage's own trailing-week trail behind it;
+  "training 100 % / nutrition 67 % / recovery 74 %" invited a comparison
+  between three percentages of three different things.
+- **An untracked section is one line, not an empty chart.** A week nobody
+  logged used to draw two full-height cards saying "No data".
+
+### Fixed
+- The weekly report's arithmetic is now testable, and tested. `WeekReport`
+  moved out of the app target into `OnyxData`, where the package suite
+  `npm run check` runs asserts every figure against the payload it folds.
+
+---
+
 ## [6.4.0] — 2026-09-18 · Complications
 
 The watch gets real WidgetKit. Ten of the dashboard tiles are now complications

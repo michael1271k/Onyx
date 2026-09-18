@@ -48,6 +48,26 @@ public struct WeekWindow: Codable, Hashable, Identifiable, Sendable {
         self.weekZero = weekZero
     }
 
+    /// `30 Aug – 5 Sep`. One month name when the week does not straddle two.
+    ///
+    /// ── WHY IT LIVES HERE AND NOT IN THE APP (W8) ───────────────────────────
+    /// It was an extension in the app target, which was fine while the only
+    /// readers were two screens. `WeekReport` is a package type now and it
+    /// carries this string, so the label had to be reachable from OnyxData —
+    /// and the alternative, a second `d MMM – d MMM` formatter beside the
+    /// report, is how one week comes to be called two things on two screens.
+    /// It is pure: a window, a locale, and no store.
+    public var rangeLabel: String {
+        guard let from = LogicalDay.date(fromISO: start), let to = LogicalDay.date(fromISO: end) else {
+            return "\(start) – \(end)"
+        }
+        let sameMonth = String(start.prefix(7)) == String(end.prefix(7))
+        let left = sameMonth
+            ? from.formatted(.dateTime.day())
+            : from.formatted(.dateTime.day().month(.abbreviated))
+        return "\(left) – \(to.formatted(.dateTime.day().month(.abbreviated)))"
+    }
+
     /// The week `days` before or after this one. Nil when this window has no
     /// days to step from.
     public func shifted(by weeks: Int, today: String) -> WeekWindow? {

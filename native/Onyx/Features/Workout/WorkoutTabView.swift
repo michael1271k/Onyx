@@ -319,10 +319,10 @@ struct WorkoutTabView: View {
         //
         // A PUSH since W4, beside the session destination above it and into the
         // same stack (`RootView`'s). The report is a place now, not a reel
-        // behind a drag indicator — `WeeklyReportView`'s header has the whole
+        // behind a drag indicator — `WeekReportView`'s header has the whole
         // argument, and it is one door of four that had to move together.
         .navigationDestination(item: $wrapped) { door in
-            WeeklyReportView(
+            WeekReportView(
                 summary: door.summary,
                 program: week?.snapshot.program ?? Program(id: "", label: "", days: [])
             )
