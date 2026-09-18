@@ -103,11 +103,13 @@ enum PulsePreviews {
             let d = ISODate.addDays(date, -i) ?? date
             try db.editDailyLog(userId: userId, date: d) { $0.sleepMinutes = ordinary[i % 7] }
         }
-        // The night itself, with stages: 6 h 40 m asleep.
+        // The night itself, with stages: 6 h 40 m asleep — in bed at 23:02,
+        // eighteen minutes to fall asleep (W3: the sheet's third wheel and the
+        // latency term both photograph a real onset, not the bedtime).
         let noon = LogicalDay.date(fromISO: date)!
-        var cursor = noon.addingTimeInterval(-(12 * 60 + 40) * 60)   // 23:20 the evening before
+        var cursor = noon.addingTimeInterval(-(12 * 60 + 58) * 60)   // 23:02 the evening before
         var samples: [SleepSample] = []
-        for (stage, minutes) in [(3, 60), (4, 40), (3, 50), (5, 45), (2, 10), (3, 60), (4, 35), (3, 50), (5, 45), (2, 10), (3, 15)] {
+        for (stage, minutes) in [(2, 18), (3, 60), (4, 40), (3, 50), (5, 45), (2, 10), (3, 60), (4, 35), (3, 50), (5, 45), (2, 10), (3, 15)] {
             let end = cursor.addingTimeInterval(Double(minutes) * 60)
             samples.append(SleepSample(value: stage, start: cursor, end: end))
             cursor = end

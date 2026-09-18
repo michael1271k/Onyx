@@ -36,6 +36,9 @@ public enum Rescore {
         case sleepEdit = "sleep-edit"
         case dayEdit = "day-edit"
         case manual = "manual"
+        /// A formula changed under stored history (W3's sleep v2). The one
+        /// reason whose range is not derived from an edit date.
+        case migration = "migration"
     }
 
     /// Every date an edit on `from` can move, oldest first, clamped to today.
@@ -223,6 +226,20 @@ public actor RescoreQueue {
         // A date with no days to rewrite (a session dated tomorrow — a swap) is
         // not an error and is not work either.
         guard let first = days.first, let last = days.last else { return }
+        let work = Work(from: first, through: last, reason: reason)
+        if pending == nil { pending = work } else { pending?.absorb(work) }
+        guard !isRescoring else { return }
+        isRescoring = true
+        drainTask = Task { await self.drain() }
+    }
+
+    /// Ask for an explicit range — `Rescore.days` clamps an edit to its
+    /// 48-day reach, and a formula change reaches every stored day. Clamped
+    /// to today at the far end; empty or inverted ranges are not work.
+    public func request(from: String, through: String, reason: Rescore.Reason) {
+        let today = LogicalDayISO.string(now(), calendar: calendar)
+        let dates = Rescore.dates(from: from, through: Swift.min(through, today))
+        guard let first = dates.first, let last = dates.last else { return }
         let work = Work(from: first, through: last, reason: reason)
         if pending == nil { pending = work } else { pending?.absorb(work) }
         guard !isRescoring else { return }

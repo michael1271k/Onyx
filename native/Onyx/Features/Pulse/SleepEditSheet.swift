@@ -69,6 +69,14 @@ struct SleepEditSheet: View {
 
     @State private var start = Date()
     @State private var end = Date()
+    /// The third wheel (W3): when sleep began, bounded by the other two. The
+    /// store is told only when the user MOVED it — an untouched wheel passes
+    /// nil, and strategy A then answers from the samples, which is the better
+    /// number. A night with no stored onset seeds the wheel on the bedtime.
+    @State private var onset = Date()
+    /// Set by the onset WHEEL only — never by the clamp that drags the wheel
+    /// along when an outer one moves past it. A dragged wheel is not a claim.
+    @State private var onsetTouched = false
     /// What the last seed wrote into the wheels.
     ///
     /// `night` arrives on a stream, so a sheet opened before its first yield
@@ -76,7 +84,7 @@ struct SleepEditSheet: View {
     /// unconditionally would reset a wheel under the finger the moment a
     /// rescore landed. The wheels count as untouched while they still hold
     /// exactly what was written here, which is true until the user spins one.
-    @State private var seeded: (start: Date, end: Date)?
+    @State private var seeded: (start: Date, end: Date, onset: Date)?
     @State private var saving = false
     @State private var failure: String?
     /// Shut on arrival — see the header. Opened by a tap, or by anything this
@@ -135,8 +143,11 @@ struct SleepEditSheet: View {
 
     private var canSave: Bool {
         guard !saving, end > start, let window else { return false }
-        return start >= window.from && start < window.to
+        return start >= window.from && start < window.to && onset >= start && onset < end
     }
+
+    /// Latency as the wheels stand — the one number the third wheel adds.
+    private var latencyMin: Int { max(0, Int((onset.timeIntervalSince(start) / 60).rounded())) }
 
     var body: some View {
         DaySheet(
@@ -155,15 +166,23 @@ struct SleepEditSheet: View {
         // again: the reader is mid-correction.
         .onChange(of: failure) { _, now in if now != nil { windowOpen = true } }
         .onChange(of: canSave) { _, now in if !now && end <= start { windowOpen = true } }
+        // The bed and wake wheels bound the onset wheel, but a `DatePicker`
+        // range only limits what the wheel SHOWS — it does not move a value
+        // already outside it. Clamp so the middle wheel follows the outer two.
+        .onChange(of: start) { _, now in if onset < now { onset = now } }
+        .onChange(of: end) { _, now in if onset >= now { onset = max(start, now.addingTimeInterval(-60)) } }
     }
 
     private func seed() {
-        if let seeded, seeded.start != start || seeded.end != end { return }
+        if let seeded, seeded.start != start || seeded.end != end || seeded.onset != onset { return }
         let bed = night?.startTime ?? defaultBed
         let wake = night?.endTime ?? bed.addingTimeInterval(model.sleepGoalHours * 3600)
+        let asleep = night?.onsetTime.flatMap { $0 >= bed && $0 < wake ? $0 : nil } ?? bed
         start = bed
         end = wake
-        seeded = (bed, wake)
+        onset = asleep
+        onsetTouched = false
+        seeded = (bed, wake, asleep)
     }
 
     /// 23:00 on the previous LOCAL evening, clamped into the night's own UTC
@@ -260,9 +279,17 @@ struct SleepEditSheet: View {
         Section {
             DisclosureGroup(isExpanded: $windowOpen) {
                 if let window {
+                    // "In bed", not "Asleep at" — since W3 the row knows the
+                    // difference, and the wheel between these two is where it
+                    // is said.
                     wheel(
-                        "Asleep at", selection: $start,
+                        "In bed", selection: $start,
                         in: window.from...window.to.addingTimeInterval(-60)
+                    )
+                    wheel(
+                        "Fell asleep",
+                        selection: Binding(get: { onset }, set: { onset = $0; onsetTouched = true }),
+                        in: start...max(start, end.addingTimeInterval(-60))
                     )
                     // The wake wheel reaches past the window's own close: the
                     // guard the store enforces is on the BEDTIME, and a night
@@ -280,7 +307,7 @@ struct SleepEditSheet: View {
                 // it" rule (§3.6). An INVALID window still needs saying,
                 // because the arc's answer for one is a silent em dash.
                 if end <= start {
-                    Text("Awake has to come after asleep.")
+                    Text("Awake has to come after in bed.")
                         .onyxType(.caption)
                         .foregroundStyle(Color.onyx.danger)
                 }
@@ -317,7 +344,7 @@ struct SleepEditSheet: View {
     /// edge and a wrapped span would push it off the row.
     private var windowLabel: some View {
         HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
-            Text("Asleep and awake")
+            Text("In bed and awake")
                 .onyxType(.secondary)
                 .foregroundStyle(Color.onyx.textPrimary)
             Spacer(minLength: OnyxSpace.s)
@@ -328,16 +355,18 @@ struct SleepEditSheet: View {
                 .minimumScaleFactor(0.7)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Asleep and awake, \(windowSpan)")
+        .accessibilityLabel("In bed and awake, \(windowSpan)")
     }
 
-    /// `23:10 – 06:12`. An EN DASH with hair spaces, not a hyphen: this is a
+    /// `23:10 – 06:12`, and `23:10 – 06:12 · 25m to sleep` once the onset
+    /// wheel says so. An EN DASH with hair spaces, not a hyphen: this is a
     /// range and the hyphen is the minus sign the app already prints in front
     /// of a sleep debt two sections up.
     private var windowSpan: String {
         let from = start.formatted(date: .omitted, time: .shortened)
         let to = end.formatted(date: .omitted, time: .shortened)
-        return "\(from) – \(to)"
+        let span = "\(from) – \(to)"
+        return latencyMin > 0 ? "\(span) · \(DayFormat.minutes(latencyMin)) to sleep" : span
     }
 
     /// ── 128 PT, NOT THE WHEEL'S OWN 216 ─────────────────────────────────────
@@ -405,9 +434,10 @@ struct SleepEditSheet: View {
         saving = true
         failure = nil
         let start = start, end = end
+        let onset = onsetTouched ? onset : nil
         Task {
             do {
-                let accepted = try await environment.editSleepWindow(date: model.date, start: start, end: end)
+                let accepted = try await environment.editSleepWindow(date: model.date, start: start, end: end, onset: onset)
                 saving = false
                 if accepted {
                     dismiss()
@@ -420,6 +450,7 @@ struct SleepEditSheet: View {
                 case .emptyWindow:     "Awake has to come after asleep."
                 case .badDate:         "This day cannot hold a night."
                 case .outsideNight:    "That bedtime belongs to a different night."
+                case .onsetOutsideWindow: "Fell asleep has to sit between in bed and awake."
                 case .impossibleNight: "That is too long to be one night."
                 }
             } catch {

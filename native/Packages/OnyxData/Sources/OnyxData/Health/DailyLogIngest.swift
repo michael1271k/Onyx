@@ -482,6 +482,8 @@ private extension AppDatabase {
         row.remMin = sleep.remMin
         row.coreMin = sleep.storedCoreMin
         row.awakeMin = sleep.awakeMin
+        row.onsetTime = sleep.onset
+        row.awakenings = sleep.awakenings
         try row.save(db)
         try Self.enqueueRowUpsert(table: SleepSessionRow.databaseTableName, id: row.id, in: db)
         report.tables.insert(SleepSessionRow.databaseTableName)

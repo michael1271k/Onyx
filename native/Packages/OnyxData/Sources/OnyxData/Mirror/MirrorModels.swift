@@ -909,6 +909,8 @@ public struct SleepSessionRow: Codable, FetchableRecord, PersistableRecord, Send
     public var awakeMin: Int?
     public var sleepScore: Int?
     public var createdAt: Date
+    public var onsetTime: Date?
+    public var awakenings: Int?
 
     public enum CodingKeys: String, CodingKey {
         case id
@@ -923,6 +925,8 @@ public struct SleepSessionRow: Codable, FetchableRecord, PersistableRecord, Send
         case awakeMin = "awake_min"
         case sleepScore = "sleep_score"
         case createdAt = "created_at"
+        case onsetTime = "onset_time"
+        case awakenings
     }
 
     public init(
@@ -937,7 +941,9 @@ public struct SleepSessionRow: Codable, FetchableRecord, PersistableRecord, Send
         coreMin: Int? = nil,
         awakeMin: Int? = nil,
         sleepScore: Int? = nil,
-        createdAt: Date
+        createdAt: Date,
+        onsetTime: Date? = nil,
+        awakenings: Int? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -951,6 +957,8 @@ public struct SleepSessionRow: Codable, FetchableRecord, PersistableRecord, Send
         self.awakeMin = awakeMin
         self.sleepScore = sleepScore
         self.createdAt = createdAt
+        self.onsetTime = onsetTime
+        self.awakenings = awakenings
     }
 }
 
@@ -2063,6 +2071,8 @@ extension AppDatabase {
                 t.column("awake_min", .integer)
                 t.column("sleep_score", .integer)
                 t.column("created_at", .datetime).notNull()
+                t.column("onset_time", .datetime)
+                t.column("awakenings", .integer)
             }
             try db.create(table: "cardio_logs") { t in
                 t.primaryKey("id", .text)

@@ -158,7 +158,9 @@ public actor HealthSync {
     /// `AppEnvironment.rescore(from: dateISO, reason: .sleepEdit)` — which is
     /// deliberately not this actor's to schedule.
     @discardableResult
-    public func editSleepWindow(date dateISO: String, start: Date, end: Date, now: Date = Date()) async throws -> SleepSessionRow {
+    public func editSleepWindow(
+        date dateISO: String, start: Date, end: Date, onset: Date? = nil, now: Date = Date()
+    ) async throws -> SleepSessionRow {
         var night: SleepNight?
         var hrv: Double?
         if reader.isAvailable {
@@ -173,7 +175,9 @@ public actor HealthSync {
             }
         }
         try Task.checkCancellation()
-        return try database.editSleepWindow(userId: userId, date: dateISO, start: start, end: end, night: night, hrvMs: hrv, now: now)
+        return try database.editSleepWindow(
+            userId: userId, date: dateISO, start: start, end: end, night: night, hrvMs: hrv, onset: onset, now: now
+        )
     }
 
     /// Local midnight for a `yyyy-MM-dd`, in the device's own calendar — which

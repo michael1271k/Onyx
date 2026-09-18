@@ -85,23 +85,69 @@ public enum Score {
 
     // MARK: Sleep
 
-    /// Full credit within ±0.5h of goal, a soft quadratic penalty below, +5 for
-    /// deep ≥ 90 min and +5 for REM ≥ 90 min. No sleep data is nil; no goal is 100.
+    /// Sleep v2 (W3): five terms, each 0–100, weighted and renormalised over
+    /// the terms that have data.
+    ///
+    /// | term | weight | quality `q` (clamped 0…1) |
+    /// |---|---|---|
+    /// | duration | 40 | the v1 curve: full within 0.5 h of goal, quadratic below |
+    /// | efficiency | 20 | `(asleep ÷ in-bed − 0.75) / 0.25` |
+    /// | latency | 15 | `1 − onset / 90` |
+    /// | fragmentation | 10 | `(1 − awake / 90) × (1 − awakenings / 6)` |
+    /// | regularity | 15 | `1 − |Δ bedtime| / 120` |
+    ///
+    /// ── WHY THIS EXISTS ─────────────────────────────────────────────────────
+    /// v1 read duration alone, so a night in bed at 00:16 that fell asleep at
+    /// 03:05 and woke at 10:30 scored 100: seven and a half hours asleep, and
+    /// nothing about the three hours it took. That night is the reference case
+    /// in `sleep-score-v2.json` and lands in the fifties.
+    ///
+    /// ── MISSING IS NIL, NEVER ZERO — PER TERM ───────────────────────────────
+    /// A nil term DROPS and the rest renormalise (the composite's own rule). A
+    /// night with only a duration — every row written before W3, and every v1
+    /// fixture — is the v1 number exactly, so the goldens that carry no v2
+    /// field did not move. `awakenings` is the one input read beside another:
+    /// a count nobody took multiplies by 1, because an unknown count is not a
+    /// calm night and not a broken one.
+    ///
+    /// Context relaxes every term's PENALTY (`100 − q·100`), not just the
+    /// duration's — an emergency that excuses a short night excuses a broken
+    /// one. Stage bonuses (+5 deep ≥ 90, +5 REM ≥ 90) sit on top, then
+    /// `clamp100`. `Battery`, the Recovery term and the < 6 h composite cap all
+    /// still read `sleepHours` and are untouched.
     public static func sleep(_ i: ScoringInputs) -> Double? {
         if i.sleepHours <= 0 { return nil }
         // `!inputs.sleepGoalHours` — a zero goal short-circuits to full credit.
         if i.sleepGoalHours == 0 { return 100 }
         let pMult = penaltyMult(i.contextMode)
+        func term(_ q: Double) -> Double { clamp100(100 - (1 - clamp(q, 0, 1)) * 100 * pMult) }
+
         let diff = i.sleepHours - i.sleepGoalHours
         let tol = 0.5
-
-        let base: Double
+        let duration: Double
         if diff >= -tol {
-            base = 100
+            duration = 100
         } else {
             let deficit = -diff - tol
-            base = clamp100(100 - (deficit * deficit * 18 + deficit * 8) * pMult)
+            duration = clamp100(100 - (deficit * deficit * 18 + deficit * 8) * pMult)
         }
+
+        var parts: [(v: Double, w: Double)] = [(duration, 40)]
+        if let inBed = i.sleepInBedHours, inBed > 0 {
+            parts.append((term((i.sleepHours / inBed - 0.75) / 0.25), 20))
+        }
+        if let latency = i.sleepLatencyMin {
+            parts.append((term(1 - latency / 90), 15))
+        }
+        if let awake = i.sleepAwakeMin {
+            let count = i.sleepAwakenings ?? 0
+            parts.append((term(clamp(1 - awake / 90, 0, 1) * clamp(1 - count / 6, 0, 1)), 10))
+        }
+        if let delta = i.sleepBedtimeDeltaMin {
+            parts.append((term(1 - abs(delta) / 120), 15))
+        }
+        let wSum = parts.reduce(0) { $0 + $1.w }
+        let base = parts.reduce(0) { $0 + $1.v * ($1.w / wSum) }
 
         let deepBonus: Double = i.deepMinutes >= 90 ? 5 : 0
         let remBonus: Double = i.remMinutes >= 90 ? 5 : 0

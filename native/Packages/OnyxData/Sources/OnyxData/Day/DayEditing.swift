@@ -515,14 +515,22 @@ public extension AppDatabase {
     /// core: no samples, no stage claim. `hrvMs` lands on `daily_logs.hrv_ms`
     /// when the caller read one; nil leaves the stored figure alone.
     ///
+    /// `onset` is the third wheel (W3). Given, it wins under both strategies
+    /// and must sit in `[start, end)` — the store is the trust boundary, and
+    /// an onset before the bedtime is a negative latency the scorer would
+    /// clamp into full credit. Absent, strategy A takes the re-aggregated
+    /// onset and strategy B keeps the stored one only while the new window
+    /// still contains it.
+    ///
     /// Does NOT rescore. `AppEnvironment.rescore(from:reason:)` is the one
     /// entry point for the cascade, as it is for every other edit.
     @discardableResult
     func editSleepWindow(
         userId: String, date: String, start: Date, end: Date,
-        night: SleepNight? = nil, hrvMs: Double? = nil, now: Date = Date()
+        night: SleepNight? = nil, hrvMs: Double? = nil, onset: Date? = nil, now: Date = Date()
     ) throws -> SleepSessionRow {
         guard end > start else { throw SleepEditError.emptyWindow }
+        if let onset, onset < start || onset >= end { throw SleepEditError.onsetOutsideWindow(date) }
         guard let window = NightWindow.range(date) else { throw SleepEditError.badDate(date) }
         // The store is the trust boundary, not the picker: a bedtime outside
         // the night's own window would be written under THIS night's sentinel
@@ -567,6 +575,8 @@ public extension AppDatabase {
                 row.remMin = night.remMin
                 row.coreMin = night.storedCoreMin
                 row.awakeMin = night.awakeMin
+                row.onsetTime = onset ?? night.onset
+                row.awakenings = night.awakenings
             } else {
                 let stages = NightStages(
                     asleepMin: Double(row.durationMin), deepMin: Double(row.deepMin ?? 0), remMin: Double(row.remMin ?? 0),
@@ -582,6 +592,9 @@ public extension AppDatabase {
                 row.remMin = Int(trimmed.remMin)
                 row.coreMin = Int(trimmed.coreMin)
                 row.awakeMin = Int(trimmed.awakeMin)
+                // Proportional stages know nothing about WHEN — a stored onset
+                // survives only if the new window still holds it.
+                row.onsetTime = onset ?? row.onsetTime.flatMap { $0 >= start && $0 < end ? $0 : nil }
             }
             row.startTime = start
             row.endTime = end
@@ -1038,6 +1051,8 @@ public enum SleepEditError: Error, Equatable, Sendable {
     /// `start` was not inside `NightWindow.range(date)` — the row would belong
     /// to no night, or to the wrong one.
     case outsideNight(String)
+    /// The "fell asleep" wheel was outside `[start, end)` (W3).
+    case onsetOutsideWindow(String)
     /// `end` reached past the wake wheel's own close, or the two together
     /// described a span no night can have.
     case impossibleNight(String)
