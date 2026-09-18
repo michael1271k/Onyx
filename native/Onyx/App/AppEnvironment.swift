@@ -349,6 +349,8 @@ public final class AppEnvironment {
     /// when it is deallocated). Untyped so the app target need not import GRDB.
     private var commitObserver: AnyObject?
     private var widgetReload: Task<Void, Never>?
+    /// The pending throttled watch push, if any. See `scheduleWatchPush`.
+    private var watchPush: Task<Void, Never>?
 
     public init(database: AppDatabase, supabase: SupabaseClient) {
         self.database = database
@@ -1056,6 +1058,8 @@ public final class AppEnvironment {
     /// replaces it — which is the correct behaviour for a value where only the
     /// newest has ever been wanted.
     private func pushWatchContext(userID: UUID) {
+        watchPush?.cancel()
+        watchPush = nil
         let userId = OnyxJSON.canonicalUserID(userID)
         guard let schedule = try? database.scheduleContext(userId: userId, today: today) else { return }
         // BEFORE the send, not after: the bridge attaches
@@ -1064,7 +1068,35 @@ public final class AppEnvironment {
         // palette every time the block rolled, and only correct it on the next
         // push — which on a quiet day is the following midnight.
         publishPhase(schedule)
-        watchBridge.send(userId: userId, today: today, schedule: schedule)
+        // The complications' numbers (W7): the SAME builder the Home Screen
+        // widgets read, at `.full` because the ten wearable faces span every
+        // scope. A failed build sends the context without tiles — the watch
+        // keeps its schedule and its faces say "—" — rather than no context.
+        //
+        // ponytail: a `.full` build is ~30 store reads on the main actor,
+        // which is why the commit path below throttles to one every 30 s;
+        // move it off-main if it ever shows in a trace.
+        let tiles = (try? WidgetSnapshotBuilder(database: database, userId: userId).build(scope: .full))
+            .map(WatchTiles.init)
+        watchBridge.send(userId: userId, today: today, schedule: schedule, tiles: tiles)
+    }
+
+    /// The commit path's push (W7): a 30 s TRAILING throttle. The first
+    /// commit after a quiet spell arms it; every commit inside the window is
+    /// absorbed; the send fires once, with whatever the store holds THEN. A
+    /// session logging a set a minute reaches the wrist as one push per half
+    /// minute, carrying the newest numbers, instead of thirty snapshot builds.
+    ///
+    /// Sign-in, midnight and a theme pick still push immediately through
+    /// `pushWatchContext`, which cancels a pending throttle so the two never
+    /// race — the immediate one is newer by definition.
+    private func scheduleWatchPush(userID: UUID) {
+        guard watchPush == nil else { return }
+        watchPush = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(30))
+            guard !Task.isCancelled, let self else { return }
+            self.pushWatchContext(userID: userID)
+        }
     }
 
     /// Park the training block the whole palette reads itself through
@@ -1149,6 +1181,8 @@ public final class AppEnvironment {
             // Free when the block has not moved; see `publishPhase`.
             self.publishPhase(self.targets?.schedule)
             WidgetCenter.shared.reloadAllTimelines()
+            // And the wrist, on its own slower clock (W7).
+            if case .signedIn(let userID) = self.auth { self.scheduleWatchPush(userID: userID) }
         }
     }
 

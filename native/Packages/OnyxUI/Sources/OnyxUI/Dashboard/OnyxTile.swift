@@ -1,8 +1,9 @@
-// ── iOS ONLY ────────────────────────────────────────────────────────────────
+// ── MOSTLY iOS ONLY ─────────────────────────────────────────────────────────
 // A Home Screen tile, and `WidgetFamily.systemSmall/Medium/Large` do not
-// exist on watchOS. The watch takes the tokens out of this package and draws
-// its own two screens; a 67-cell body atlas on a 40 mm case is not a feature.
-#if os(iOS)
+// exist on watchOS. The fence starts BELOW the `WidgetId` extension (W7): the
+// title, domain, glyph and `isNative` are strings the watch's complication
+// gallery names itself with, and none of them touches a system family.
+// Everything from `WidgetSize.family` down is the phone's.
 
 import SwiftUI
 import WidgetKit
@@ -128,6 +129,8 @@ public extension WidgetId {
     }
 }
 
+#if os(iOS)
+
 public extension WidgetSize {
     /// The WidgetKit family a grid size draws at. The wide sizes are a desktop's
     /// and never reach a phone; they draw at the height tier they stand for.
@@ -140,9 +143,12 @@ public extension WidgetSize {
     }
 }
 
-public enum OnyxTile {
+// The namespace itself is declared UNFENCED in `Accessory/OnyxAccessory.swift`
+// (W7), so the watch can call `OnyxTile.accessory`; everything here is the
+// phone's half of it.
+public extension OnyxTile {
     /// The catalogue as the phone can draw it, in catalogue order.
-    public static let native: [WidgetId] = Dashboard.widgetIds.filter(\.isNative)
+    static let native: [WidgetId] = Dashboard.widgetIds.filter(\.isNative)
 
     /// The face for one widget. The caller sets `onyxTileFamily`.
     ///
@@ -152,7 +158,7 @@ public enum OnyxTile {
     /// (`DashboardGrid`, `DomainSheets`, `SmartStackView`) are inside a `body`.
     @MainActor
     @ViewBuilder
-    public static func face(_ id: WidgetId, entry: OnyxTileEntry) -> some View {
+    static func face(_ id: WidgetId, entry: OnyxTileEntry) -> some View {
         switch id {
         case .recovery: BodyView(entry: entry, focus: .wellbeing)
         case .sleep: BodyView(entry: entry, focus: .sleep)
@@ -200,7 +206,7 @@ public enum OnyxTile {
 
     /// The family the tile actually draws at inside `host`, or nil when the
     /// catalogue has nothing at or below it (`daily` at Small).
-    public static func drawableFamily(_ id: WidgetId, host: WidgetFamily) -> WidgetFamily? {
+    static func drawableFamily(_ id: WidgetId, host: WidgetFamily) -> WidgetFamily? {
         let sizes = Dashboard.widgetSizes[id] ?? []
         let cap: Int
         switch OnyxSize(host) {
@@ -215,7 +221,7 @@ public enum OnyxTile {
     /// none. The widget extension's one call for the generic kind.
     @MainActor
     @ViewBuilder
-    public static func clamped(_ id: WidgetId, host: WidgetFamily, entry: OnyxTileEntry) -> some View {
+    static func clamped(_ id: WidgetId, host: WidgetFamily, entry: OnyxTileEntry) -> some View {
         if let family = drawableFamily(id, host: host) {
             face(id, entry: entry).environment(\.onyxTileFamily, family)
         } else {

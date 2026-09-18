@@ -146,6 +146,37 @@ struct WatchPayloadTests {
         #expect(there.theme == themed.theme)
     }
 
+    /// The same story one field down (W7): `tiles` rides beside `theme`, and a
+    /// phone from before the complications existed sends neither key.
+    @Test("a context from a build that had no tiles decodes with tiles nil, and one with them round-trips")
+    func contextWithoutTilesDecodes() throws {
+        let sent = WatchContext(userId: "u-1", today: "2026-09-08", schedule: schedule)
+        var object = try #require(
+            try JSONSerialization.jsonObject(
+                with: try OnyxJSON.encoder.encode(sent)
+            ) as? [String: Any]
+        )
+        #expect(object["tiles"] == nil, "nil tiles must not be encoded at all")
+        object.removeValue(forKey: "tiles")
+        let back = try OnyxJSON.decoder.decode(
+            WatchContext.self, from: try JSONSerialization.data(withJSONObject: object)
+        )
+        #expect(back.tiles == nil)
+        #expect(back == sent)
+
+        var tiled = sent
+        tiled.tiles = WatchTiles(
+            date: "2026-09-08", battery: 72, sleepMin: 445, waterMl: 1_750, waterGoalMl: 3_000,
+            todayLabel: "Delts & Arms", todayLogged: false, restDay: false,
+            week: [WatchTiles.WeekDay(trained: true, fuelHit: false, sleepHit: true)]
+        )
+        let there = try OnyxJSON.decoder.decode(
+            WatchContext.self, from: try OnyxJSON.encoder.encode(tiled)
+        )
+        #expect(there.tiles == tiled.tiles)
+        #expect(there == tiled)
+    }
+
     /// The same story one payload down: `RestPulse` gained the set that earned
     /// the rest and the session's clock origin, and a phone that predates them
     /// sends none of the four keys.

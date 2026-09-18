@@ -50,12 +50,20 @@ public struct WatchContext: Codable, Sendable, Equatable {
     /// side stops receiving the context, which is the failure this file exists
     /// to prevent.
     public var theme: OnyxThemeSpec?
+    /// The dozen numbers the complications draw (W7). OPTIONAL AND LAST, the
+    /// same story as `theme` one field up: an old phone sends no key and a new
+    /// watch reads nil (the complication says "—"), a new phone's key is
+    /// ignored by an old watch. Never a second application-context kind — the
+    /// channel is ONE slot, and a second kind would overwrite the schedule
+    /// every time the numbers moved.
+    public var tiles: WatchTiles?
 
-    public init(userId: String, today: String, schedule: ScheduleContext, theme: OnyxThemeSpec? = nil) {
+    public init(userId: String, today: String, schedule: ScheduleContext, theme: OnyxThemeSpec? = nil, tiles: WatchTiles? = nil) {
         self.userId = userId
         self.today = today
         self.schedule = schedule
         self.theme = theme
+        self.tiles = tiles
     }
 }
 

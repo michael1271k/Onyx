@@ -47,8 +47,8 @@ packages:
 # $(CURRENT_PROJECT_VERSION) rather than restating them.
 settings:
   base:
-    MARKETING_VERSION: "6.3.0"
-    CURRENT_PROJECT_VERSION: "60300"
+    MARKETING_VERSION: "6.4.0"
+    CURRENT_PROJECT_VERSION: "60400"
 
 targets:
   Onyx:
@@ -299,10 +299,15 @@ targets:
         product: OnyxCore
       - package: OnyxData
         product: OnyxData
-      # Tokens, the type ramp, the springs and `LoggerSeams` only. Every Home
-      # Screen tile in this package is fenced `#if os(iOS)`.
+      # Tokens, the type ramp, the springs, `LoggerSeams` — and since W7 the
+      # accessory faces (`Accessory/`). Every Home Screen tile in this package
+      # is still fenced `#if os(iOS)`.
       - package: OnyxUI
         product: OnyxUI
+      # The complications. Embedded the way the phone embeds `OnyxWidgets`: a
+      # widget extension that is not a dependency of its host builds and is
+      # never on the watch face.
+      - target: OnyxWatchWidgets
 
     # ── HealthKit ────────────────────────────────────────────────────────
     # `HKWorkoutSession` is the app's RUNTIME, not a heart-rate feature:
@@ -313,6 +318,16 @@ targets:
       path: OnyxWatch/Support/OnyxWatch.entitlements
       properties:
         com.apple.developer.healthkit: true
+        # ── The watch's own App Group (W7) ───────────────────────────────────
+        # Shared with `OnyxWatchWidgets` below and nothing else: an App Group
+        # is per DEVICE, so the phone's `group.app.onyx.health` is a different
+        # container on a different chip. The watch app writes `WatchTiles`
+        # (and the cached context) into this suite; the complication reads
+        # them. Gate 0 applies here exactly as on the phone — a free team
+        # cannot sign it, and the faces stay "—" on device until the founder
+        # adds the capability in Xcode on both targets.
+        com.apple.security.application-groups:
+          - group.app.onyx.health.watch
 
     info:
       path: OnyxWatch/Support/Info.plist
@@ -354,6 +369,62 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         GENERATE_INFOPLIST_FILE: NO
 
+  # ── The watch's complications (W7) ───────────────────────────────────────
+  #
+  # Real WidgetKit on the wrist: one `StaticConfiguration` per wearable
+  # `WidgetId`, drawn by `OnyxTile.accessory` — the SAME face the phone's Lock
+  # Screen draws — from the `WatchTiles` the phone pushes inside the
+  # application context and the watch app parks in the App Group suite.
+  #
+  # ── NO GRDB, AND THAT IS THE DESIGN ──────────────────────────────────────
+  # OnyxCore and OnyxUI only. The watch's store holds sets and nothing else,
+  # so there is no snapshot to build here, and an extension that opened the
+  # watch's `onyx.sqlite` would be a second process on a WAL the app is
+  # writing during a workout. The extension reads one JSON value out of
+  # `UserDefaults` and draws it.
+  OnyxWatchWidgets:
+    type: app-extension
+    platform: watchOS
+
+    sources:
+      - path: OnyxWatchWidgets
+        excludes:
+          - "Support/Info.plist"
+          - "Support/OnyxWatchWidgets.entitlements"
+
+    dependencies:
+      - package: OnyxCore
+        product: OnyxCore
+      - package: OnyxUI
+        product: OnyxUI
+
+    entitlements:
+      path: OnyxWatchWidgets/Support/OnyxWatchWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.app.onyx.health.watch
+
+    info:
+      path: OnyxWatchWidgets/Support/Info.plist
+      properties:
+        CFBundleDisplayName: Onyx
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+
+    settings:
+      base:
+        # The host's id with `.widgets` appended — the pairing is by name, as
+        # the watch app's own is to the phone's.
+        PRODUCT_BUNDLE_IDENTIFIER: app.onyx.health.michael.native.watchkitapp.widgets
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: W9UMPV973P
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+
   # ── The app's own tests ──────────────────────────────────────────────────
   #
   # Almost everything provable lives in OnyxCore and OnyxData, which test on
@@ -390,6 +461,7 @@ schemes:
     build:
       targets:
         OnyxWatch: all
+        OnyxWatchWidgets: all
     run:
       config: Debug
 
@@ -399,6 +471,7 @@ schemes:
         Onyx: all
         OnyxWidgets: all
         OnyxWatch: all
+        OnyxWatchWidgets: all
     run:
       config: Debug
     test:
