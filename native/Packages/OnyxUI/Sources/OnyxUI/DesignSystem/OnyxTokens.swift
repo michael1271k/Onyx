@@ -242,9 +242,22 @@ extension Color {
         public static var carbs: Color { OnyxDomain.fuel.start }
         /// Lavender — Lunar's near stop.
         public static var fat: Color { OnyxDomain.recover.start }
-        /// Sapphire. The one macro-adjacent hue that is not on a domain mesh,
-        /// because water is not a macro and must not be mistaken for one.
-        public static let water = Color(hex: 0x5AA9E6)
+        /// Tide's far stop. Water is not a macro and must not be mistaken for
+        /// one, which is why it is not on Solar — but it was the last fixed
+        /// sapphire in the palette, and a fixed hue is a tile that stays blue
+        /// after the user picks Ember.
+        ///
+        /// ── WHY `body.end` AND NOT `body.accent` ────────────────────────────
+        /// `body.accent` is `body.start`, which is what every Tide section
+        /// header and gauge already draws; water would have read as "this
+        /// screen's domain colour" rather than as a reading of its own. The far
+        /// stop is the same family a step deeper — measurably distinct from
+        /// protein, carbs and fat on the one screen that draws all four — and
+        /// it rotates with the theme like everything else.
+        ///
+        /// Computed, not stored, for the reason the three macros above are: a
+        /// Swift static `let` is lazy and would capture the theme at first read.
+        public static var water: Color { OnyxDomain.body.end }
         /// Calories are the Atwater SUM of the three macros, so they take the
         /// domain the three sit on rather than a colour of their own. Use
         /// `OnyxDomain.fuel.ramp` where the fill is a gradient.
@@ -281,6 +294,40 @@ extension Color {
             case "ppl_legs_tue":                 return OnyxDomain.body.at(0.35)
             default:        return textTertiary
             }
+        }
+
+        /// A day's colour when the deck is not one of the ones named above.
+        ///
+        /// ── THE GAP THIS CLOSES ─────────────────────────────────────────────
+        /// `day(_:)` is a table of the keys the app shipped with, and every
+        /// key outside it falls to `textTertiary` — which is the RING colour
+        /// for a rest day. A routine built in the app (W5's builder mints its
+        /// own keys) therefore drew every one of its training days in the
+        /// colour that means "you are not training", on the calendar, the
+        /// session chips and the This-week panel at once.
+        ///
+        /// The rule is the same one §3.2 states for the shipped keys — a split
+        /// colour is a fixed offset along the Train mesh — with the offsets
+        /// spread over whatever days the deck actually has rather than read
+        /// from a table. `i / n` over the deck's own order, so a five-day split
+        /// steps 0, 0.2, 0.4, 0.6, 0.8 and a three-day one steps 0, ⅓, ⅔:
+        /// stable per deck, and two adjacent days are never the same colour.
+        ///
+        /// The first day lands on `train.start`, which is the Train accent
+        /// itself — the one value §3.2 keeps off a split "so a day does not
+        /// read as selected". It is the price of an even spread over an
+        /// unknown `n`, and it is paid by ONE day of a custom deck rather than
+        /// by all of them reading as rest.
+        ///
+        /// A key the deck does not contain — a retired day still on an old
+        /// session — falls back to `day(_:)`, which answers for the shipped
+        /// keys and gives the rest-day grey for anything genuinely unknown.
+        public static func day(_ dayKey: String?, in program: Program) -> Color {
+            guard let dayKey,
+                  let index = program.days.firstIndex(where: { $0.key == dayKey }),
+                  !program.days.isEmpty
+            else { return day(dayKey) }
+            return OnyxDomain.train.at(Double(index) / Double(program.days.count))
         }
 
         /// `day()` for a WORD rather than a ring.
@@ -592,23 +639,39 @@ public enum OnyxCorner {
 
 /// The four sleep stages, each its own token.
 ///
-/// ── WHY NOT FOUR ALPHAS OF ONE HUE ──────────────────────────────────────────
-/// v1 derived all four from Lunar at fixed offsets, and the Sleep sheet came out
-/// as four lavender bars a reader had to decode from a legend. The stages are
-/// not a ramp of one quantity — deep and REM are different KINDS of sleep, and
-/// awake is not sleep at all — so they get four hues that stay distinct at a
-/// widget's 9 pt legend and in the stacked arc. Deep is the indigo end of night,
-/// core keeps Lunar, REM is warm because it is the active stage, and awake is
-/// the neutral gap in the night.
+/// ── THE THREE SLEEPING STAGES ARE ONE RAMP AGAIN (W2), DELIBERATELY ─────────
+/// v1 derived all four from Lunar at fixed ALPHAS and the sheet came out as
+/// four lavender bars. v2 answered that with three hand-written hexes — an
+/// indigo, a warm pink and a grey — which fixed the legend and broke something
+/// worse: they were literals, so the Sleep sheet, the stacked arc and two
+/// widget faces stayed the same three colours under all nine themes. A palette
+/// that ignores the palette is not a palette.
+///
+/// So the three stages that ARE sleep take three SEPARATED stops of the Lunar
+/// ramp rather than three alphas of one: deep at the near stop, core at the
+/// midpoint, REM at the far one. Lunar runs L 0.72 → 0.87, so the three step
+/// apart in lightness in the order the night does — and the order is now
+/// readable without the legend, which the three unrelated hues never were.
+///
+/// ── AND WHAT IS LOST, SAID OUT LOUD ─────────────────────────────────────────
+/// REM was warm on purpose ("it is the active stage") and is not any more:
+/// there is no warm stop on Lunar, and taking one from Solar would put the
+/// nutrition domain inside a sleep chart. Lightness carries the distinction
+/// instead. If the three ever prove too close at a widget's 9 pt legend, the
+/// fix is a wider spread on this ramp — not a fourth literal.
+///
+/// Awake is not sleep at all, so it leaves the ramp entirely and takes
+/// `textSecondary`: the neutral gap in the night, and the one stage that must
+/// not read as a kind of sleep.
 public enum OnyxSleepStage: CaseIterable, Sendable {
     case deep, core, rem, awake
 
     public var color: Color {
         switch self {
-        case .deep:  Color(hex: 0x5B62C9)
-        case .core:  OnyxDomain.recover.start
-        case .rem:   Color(hex: 0xE07A9A)
-        case .awake: Color(hex: 0x6E6E78)
+        case .deep:  OnyxDomain.recover.start
+        case .core:  OnyxDomain.recover.at(0.5)
+        case .rem:   OnyxDomain.recover.end
+        case .awake: Color.onyx.textSecondary
         }
     }
 

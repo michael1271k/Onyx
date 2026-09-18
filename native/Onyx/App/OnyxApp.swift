@@ -1,4 +1,5 @@
 import SwiftUI
+import OnyxCore
 import OnyxData
 import OnyxUI
 
@@ -21,11 +22,22 @@ struct OnyxApp: App {
     @AppStorage(OnyxTheme.key, store: AppDatabase.appGroupDefaults())
     private var themeJSON = ""
 
+    /// The training block the palette reads itself through — `AppEnvironment`
+    /// writes it whenever a schedule resolves, and it changes at a midnight
+    /// nobody touched.
+    ///
+    /// A SECOND `@AppStorage` and not a field of the blob above, for the reason
+    /// `OnyxTheme.phaseKey` gives: the user owns one value and the calendar
+    /// owns the other. It joins the `.id` below because a phase roll changes
+    /// twenty-four derived colours and nothing else invalidates the tree.
+    @AppStorage(OnyxTheme.phaseKey, store: AppDatabase.appGroupDefaults())
+    private var themePhase = ""
+
     var body: some Scene {
         WindowGroup {
             // Before anything draws: the tokens are read during `body` of every
             // view below, so the theme has to be current by the time they are.
-            let _ = OnyxTheme.apply(json: themeJSON)
+            let _ = OnyxTheme.apply(json: themeJSON, phase: PhaseKind(rawValue: themePhase))
             Group {
                 #if DEBUG
                 // The screenshot loop's door. Checked before anything else so a
@@ -57,7 +69,7 @@ struct OnyxApp: App {
                 }
                 #endif
             }
-            .id(themeJSON)
+            .id(themeJSON + "·" + themePhase)
             .preferredColorScheme(.dark)
             .task {
                 guard environment == nil, startupError == nil else { return }

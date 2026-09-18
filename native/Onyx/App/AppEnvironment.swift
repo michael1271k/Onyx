@@ -4,6 +4,7 @@ import Supabase
 import WidgetKit
 import OnyxCore
 import OnyxData
+import OnyxUI
 
 /// Everything the app needs, resolved once at launch.
 ///
@@ -874,6 +875,13 @@ public final class AppEnvironment {
         isRescoring = false
         targets?.stop()
         targets = nil
+        // The next account's blocks are not this one's. Left behind, a cut
+        // would tint a signed-out launch and the first screens of whoever
+        // signs in next. `isSessionLive` is cleared first: signing out ends
+        // the session by definition, and `publishPhase` declines while one is
+        // up — which would leave the previous account's block behind.
+        isSessionLive = false
+        publishPhase(nil)
         weighInTask?.cancel()
         weighInTask = nil
         weighInPending = false
@@ -997,7 +1005,53 @@ public final class AppEnvironment {
     private func pushWatchContext(userID: UUID) {
         let userId = OnyxJSON.canonicalUserID(userID)
         guard let schedule = try? database.scheduleContext(userId: userId, today: today) else { return }
+        // BEFORE the send, not after: the bridge attaches
+        // `OnyxTheme.current.spec`, which is the pick plus the block's mood
+        // offset. Publishing afterwards would hand the watch one phase's
+        // palette every time the block rolled, and only correct it on the next
+        // push — which on a quiet day is the following midnight.
+        publishPhase(schedule)
         watchBridge.send(userId: userId, today: today, schedule: schedule)
+    }
+
+    /// Park the training block the whole palette reads itself through
+    /// (`OnyxTheme.phaseKey`), and repaint if it moved.
+    ///
+    /// ── WHY THIS IS A DEFAULTS WRITE AND NOT A PROPERTY ─────────────────────
+    /// Three processes need the answer and only one of them is this one: the
+    /// app root hangs its `.id` off the key, the widget extension reads it in
+    /// `OnyxProvider.theme()`, and the watch is sent the already-reacted spec.
+    /// A published property on this object reaches exactly none of them.
+    ///
+    /// The block comes from `plan_phases` — the DATED table — and not from
+    /// `schedule.phase`, which is the `ProgramPhase` direction (cut/bulk) the
+    /// deck follows and has never had a deload in it. A date between blocks
+    /// resolves to nil, which `reacting(to:)` treats as the identity, so an
+    /// athlete with no plan sees the palette exactly as they picked it.
+    ///
+    /// Guarded on the stored value so the common call — every debounced commit
+    /// — is one string compare. Only a real move pays for the reload.
+    ///
+    /// ── AND GUARDED ON THE LIVE SESSION, WHICH IS LAW 9 ─────────────────────
+    /// Writing this key re-ids the app root exactly as a theme pick does, and
+    /// that rebuild takes `WorkoutTabView`'s live `LoggerModel` with it — the
+    /// clock, the rest timer and the deck cursor. `AppearanceView` refuses to
+    /// write during a workout for this reason; a block that rolled over at
+    /// midnight, mid-session, would have done the same damage with nobody
+    /// touching the phone. So it waits: every local write runs the debounced
+    /// reload, the finished session IS a local write, and the block lands on
+    /// the far side of it.
+    private func publishPhase(_ schedule: ScheduleContext?) {
+        guard !isSessionLive else { return }
+        let raw = schedule.flatMap { Phases.span(for: today, in: $0.phases)?.def.kind }?.rawValue ?? ""
+        let defaults = AppDatabase.appGroupDefaults()
+        guard (defaults.string(forKey: OnyxTheme.phaseKey) ?? "") != raw else { return }
+        defaults.set(raw, forKey: OnyxTheme.phaseKey)
+        // `@AppStorage` re-ids the app root for the views; this is for THIS
+        // process's own static tokens, which a `body` invalidation does not
+        // touch, and for anything that reads `OnyxTheme.current` off the tree.
+        OnyxTheme.load(defaults)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func rollDay() {
@@ -1036,6 +1090,11 @@ public final class AppEnvironment {
         widgetReload = Task {
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
+            // A pull that lands a new `plan_phases` row is a commit and nothing
+            // else — no sign-in, no midnight — so without this the palette
+            // would not learn about a deload until one of those came round.
+            // Free when the block has not moved; see `publishPhase`.
+            self.publishPhase(self.targets?.schedule)
             WidgetCenter.shared.reloadAllTimelines()
         }
     }
