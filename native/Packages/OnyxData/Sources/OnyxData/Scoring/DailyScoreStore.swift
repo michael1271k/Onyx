@@ -33,6 +33,20 @@ public struct ScoreComponents: Sendable, Equatable {
 
 public extension AppDatabase {
 
+    /// The oldest day this user has a stored score for — where a whole-history
+    /// cascade starts. nil when nothing has been scored.
+    func earliestScoredDate(userId: String) throws -> String? {
+        try writer.read { db in
+            try String.fetchOne(db, sql: "SELECT MIN(date) FROM daily_scores WHERE user_id = ?", arguments: [userId])
+        }
+    }
+
+    /// `bedtimeOffsets` for a caller outside the builder's read — the
+    /// regularity baseline's input, newest first.
+    func bedtimeOffsets(userId: String, before date: String, limit: Int = 14) throws -> [Double] {
+        try writer.read { try Self.bedtimeOffsets($0, userId: userId, before: date, limit: limit) }
+    }
+
     /// Compute and store one day's score.
     ///
     /// ── THE FREEZE ──────────────────────────────────────────────────────────

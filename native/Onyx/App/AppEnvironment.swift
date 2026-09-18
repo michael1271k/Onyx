@@ -274,12 +274,32 @@ public final class AppEnvironment {
     /// a sheet that clears its dirty state on a request that went nowhere has
     /// lost the edit and the only record that one was owed.
     @discardableResult
-    func editSleepWindow(date: String, start: Date, end: Date) async throws -> Bool {
+    func editSleepWindow(date: String, start: Date, end: Date, onset: Date? = nil) async throws -> Bool {
         guard case .signedIn(let userID) = auth else { return false }
         let userId = OnyxJSON.canonicalUserID(userID)
         let health = HealthSync(database: database, reader: Self.healthReader, userId: userId)
-        try await health.editSleepWindow(date: date, start: start, end: end)
+        try await health.editSleepWindow(date: date, start: start, end: end, onset: onset)
         return rescore(from: date, reason: .sleepEdit)
+    }
+
+    /// Sleep v2 (W3, 6.0.0) moved every stored sleep score a bedtime can
+    /// reach — regularity reads `start_time`, which every night has — so the
+    /// first launch on this build rewrites the whole history once. The flag is
+    /// set when THAT run completes, not when it is asked for: a launch killed
+    /// mid-cascade owes the rest, and rewriting a day twice costs a read while
+    /// leaving one unrewritten costs a wrong number nobody will look at again.
+    /// A store with nothing scored (a fresh install) is done by definition.
+    private static let sleepV2RescoredKey = "onyx.rescore.sleepV2.done"
+
+    private func requestMigrationRescore(_ queue: RescoreQueue, userId: String) {
+        guard !UserDefaults.standard.bool(forKey: Self.sleepV2RescoredKey) else { return }
+        guard let first = try? database.earliestScoredDate(userId: userId) else {
+            UserDefaults.standard.set(true, forKey: Self.sleepV2RescoredKey)
+            return
+        }
+        isRescoring = true
+        let today = LogicalDay.today()
+        Task { await queue.request(from: first, through: today, reason: .migration) }
     }
 
     /// Publish the queue for a day. Passing a different `dayKey` replaces the
@@ -504,9 +524,12 @@ public final class AppEnvironment {
         // Every score it writes is keyed by `user_id`, and a queue that
         // outlived a sign-out would rewrite the previous user's days into the
         // next one's store.
-        rescoreQueue = RescoreQueue(database: database, userId: userId) { [weak self] run in
+        let queue = RescoreQueue(database: database, userId: userId) { [weak self] run in
             await MainActor.run {
                 guard let self else { return }
+                if run.reason == .migration, !run.hasMore, run.failed == 0 {
+                    UserDefaults.standard.set(true, forKey: Self.sleepV2RescoredKey)
+                }
                 self.rescoreGeneration &+= 1
                 // `hasMore` is the queue's own answer, not a second read: two
                 // passes of one logical cascade must not flicker the hint off
@@ -518,6 +541,8 @@ public final class AppEnvironment {
                 )
             }
         }
+        rescoreQueue = queue
+        requestMigrationRescore(queue, userId: userId)
         startWeighInWatch()
         let targets = TargetResolver(database: database, userId: userId)
         targets.start()

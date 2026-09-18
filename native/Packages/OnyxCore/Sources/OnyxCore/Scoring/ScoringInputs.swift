@@ -98,6 +98,23 @@ public struct ScoringInputs: Codable, Sendable, Equatable {
     public var isCurrentDay: Bool?
     public var localHour: Double?
 
+    // MARK: Sleep v2 (W3) — optional-and-last
+    // Each is a term of `Score.sleep`; `nil` drops the term and the rest
+    // renormalise. A legacy row (or fixture) that carries none of them scores
+    // on duration alone, which is exactly the v1 number.
+    /// `end_time − start_time` — the bed window. Efficiency's denominator.
+    public var sleepInBedHours: Double?
+    /// `onset_time − start_time`. Zero credit at 90 min.
+    public var sleepLatencyMin: Double?
+    /// Awake minutes AFTER falling asleep — `awake_min` less the latency.
+    public var sleepAwakeMin: Double?
+    /// Merged awake intervals ≥ 5 min after onset. Read only beside
+    /// `sleepAwakeMin`; nil beside a number multiplies by 1.
+    public var sleepAwakenings: Double?
+    /// Tonight's bedtime minus the median of the last 14 nights, in minutes.
+    /// nil under five nights of history.
+    public var sleepBedtimeDeltaMin: Double?
+
     public init(
         sleepHours: Double = 0,
         deepMinutes: Double = 0,
@@ -146,7 +163,12 @@ public struct ScoringInputs: Codable, Sendable, Equatable {
         contextMode: String? = nil,
         hoursAwake: Double? = nil,
         isCurrentDay: Bool? = nil,
-        localHour: Double? = nil
+        localHour: Double? = nil,
+        sleepInBedHours: Double? = nil,
+        sleepLatencyMin: Double? = nil,
+        sleepAwakeMin: Double? = nil,
+        sleepAwakenings: Double? = nil,
+        sleepBedtimeDeltaMin: Double? = nil
     ) {
         self.sleepHours = sleepHours
         self.deepMinutes = deepMinutes
@@ -196,6 +218,11 @@ public struct ScoringInputs: Codable, Sendable, Equatable {
         self.hoursAwake = hoursAwake
         self.isCurrentDay = isCurrentDay
         self.localHour = localHour
+        self.sleepInBedHours = sleepInBedHours
+        self.sleepLatencyMin = sleepLatencyMin
+        self.sleepAwakeMin = sleepAwakeMin
+        self.sleepAwakenings = sleepAwakenings
+        self.sleepBedtimeDeltaMin = sleepBedtimeDeltaMin
     }
 }
 

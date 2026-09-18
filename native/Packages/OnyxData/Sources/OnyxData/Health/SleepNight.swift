@@ -24,6 +24,22 @@ public struct SleepNight: Sendable, Equatable {
     public var awakeMin: Int
     public var bedStart: Date?
     public var bedEnd: Date?
+    /// When sleep BEGAN — the earliest asleep sample (W3). nil when the night
+    /// was aggregated from a duration alone. `onset − bedStart` is the latency
+    /// term of the sleep score.
+    public var onset: Date? = nil
+    /// Merged awake intervals of five minutes or more AFTER `onset`. A
+    /// one-minute stir the watch labels awake is not an awakening anyone
+    /// remembers, and the lie-awake before sleep is the latency, not a
+    /// waking. `awakeMin` still counts every awake minute in the window.
+    public var awakenings: Int = 0
+
+    /// The bed window, in minutes — efficiency's denominator. Zero when the
+    /// night has no window, which the scorer reads as "no efficiency term".
+    public var inBedMinutes: Int {
+        guard let bedStart, let bedEnd, bedEnd > bedStart else { return 0 }
+        return Int((bedEnd.timeIntervalSince(bedStart) / 60).rounded())
+    }
 
     /// What `core_min` stores: the real per-stage split when present, else
     /// everything asleep — which is what a legacy duration-only reading means.
@@ -44,20 +60,27 @@ public enum Sleep {
     /// dedupes by source priority — showed 9h15m, and the error moved in both
     /// directions depending on which sources were active.
     public static func mergedMinutes(_ intervals: [(start: Date, end: Date)]) -> Double {
-        guard !intervals.isEmpty else { return 0 }
+        merged(intervals).reduce(0) { $0 + $1.end.timeIntervalSince($1.start) } / 60
+    }
+
+    /// The union, as disjoint intervals in time order. Overlapping or adjacent
+    /// spans join; the count of what comes back is the count of separate
+    /// episodes, which is what `awakenings` is.
+    static func merged(_ intervals: [(start: Date, end: Date)]) -> [(start: Date, end: Date)] {
+        guard !intervals.isEmpty else { return [] }
         let sorted = intervals.sorted { $0.start < $1.start }
-        var total: TimeInterval = 0
+        var out: [(start: Date, end: Date)] = []
         var current = sorted[0]
         for next in sorted.dropFirst() {
             if next.start <= current.end {
                 current.end = max(current.end, next.end)   // overlapping or adjacent
             } else {
-                total += current.end.timeIntervalSince(current.start)
+                out.append(current)
                 current = next
             }
         }
-        total += current.end.timeIntervalSince(current.start)
-        return total / 60
+        out.append(current)
+        return out
     }
 
     /// Bucket a night's samples and merge each stage.
@@ -72,6 +95,7 @@ public enum Sleep {
         var awake: [(start: Date, end: Date)] = []
         var bedStart: Date?
         var bedEnd: Date?
+        var onset: Date?
 
         for sample in samples where sample.end > sample.start {
             if bedStart == nil || sample.start < bedStart! { bedStart = sample.start }
@@ -83,6 +107,11 @@ public enum Sleep {
             case 1, 3: core.append(span)   // asleepUnspecified + asleepCore
             case 2: awake.append(span)
             default: break                 // 0 inBed → the bed window only
+            }
+            // Onset is the first minute ASLEEP, whatever the stage — an in-bed
+            // or awake sample before it is exactly the latency being measured.
+            if [1, 3, 4, 5].contains(sample.value), onset == nil || sample.start < onset! {
+                onset = sample.start
             }
         }
 
@@ -102,7 +131,13 @@ public enum Sleep {
             coreMin: Int(mergedMinutes(core).rounded()),
             awakeMin: Int(mergedMinutes(awake).rounded()),
             bedStart: bedStart,
-            bedEnd: bedEnd
+            bedEnd: bedEnd,
+            onset: onset,
+            // ≥ 5 min and after onset: `clip` inherits this, so a trim that
+            // cuts an awakening to four minutes at the edge stops counting it.
+            awakenings: merged(awake)
+                .filter { $0.end.timeIntervalSince($0.start) >= 5 * 60 && $0.start >= (onset ?? .distantPast) }
+                .count
         )
     }
 }

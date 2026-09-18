@@ -162,7 +162,7 @@
         "id"
       ],
       "window": "start_time",
-      "cols": "id:uuid,user_id:uuid,hk_uuid:text?,start_time:timestamptz,end_time:timestamptz,duration_min:int4,deep_min:int4?,rem_min:int4?,core_min:int4?,awake_min:int4?,sleep_score:int4?,created_at:timestamptz"
+      "cols": "id:uuid,user_id:uuid,hk_uuid:text?,start_time:timestamptz,end_time:timestamptz,duration_min:int4,deep_min:int4?,rem_min:int4?,core_min:int4?,awake_min:int4?,sleep_score:int4?,created_at:timestamptz,onset_time:timestamptz?,awakenings:int4?"
     },
     "cardio_logs": {
       "group": "body",

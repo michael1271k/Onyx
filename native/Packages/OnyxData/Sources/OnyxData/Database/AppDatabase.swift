@@ -1306,6 +1306,27 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // ── v31 ─────────────────────────────────────────────────────────────
+        // Sleep v2 (W3, 2026-09-18): when the night began, and how often it
+        // broke. `onset_time` is the first asleep sample; `awakenings` is the
+        // count of merged awake intervals ≥ 5 min. Both NULLABLE with no
+        // default, the v30 rule — a pre-W3 night has neither and the scorer
+        // drops the terms rather than reading a zero.
+        //
+        // Guarded like v30 because `migrateMirrorV1` is generated from
+        // `supabase.json` and a fresh install already has both columns. The
+        // Postgres half is `docs/sql/w3-sleep-onset.sql`, which the founder
+        // pastes BEFORE installing this build: the outbox upsert carries the
+        // columns from the first night synced, and PostgREST rejects a column
+        // it cannot find.
+        migrator.registerMigration("v31.sleepOnset") { db in
+            let existing = Set(try db.columns(in: "sleep_sessions").map(\.name))
+            try db.alter(table: "sleep_sessions") { t in
+                if !existing.contains("onset_time") { t.add(column: "onset_time", .datetime) }
+                if !existing.contains("awakenings") { t.add(column: "awakenings", .integer) }
+            }
+        }
+
         return migrator
     }
 }

@@ -282,6 +282,28 @@ public extension AppDatabase {
             inputs.deepMinutes = Double(sleep?.deepMin ?? 0)
             inputs.remMinutes = Double(sleep?.remMin ?? 0)
             inputs.sleepGoalHours = g?.sleepGoalHours ?? 8
+            // ── SLEEP v2 (W3): the four terms the row carries, each nil when
+            // it does not. A `end_time == start_time` row (a legacy night
+            // stamped with no bed window) has no efficiency; a night with no
+            // `onset_time` has no latency; regularity needs five nights.
+            if let sleep, let window = NightWindow.range(date) {
+                let inBed = sleep.endTime.timeIntervalSince(sleep.startTime) / 3600
+                inputs.sleepInBedHours = inBed > 0 ? inBed : nil
+                let latency = sleep.onsetTime.map { max(0, $0.timeIntervalSince(sleep.startTime) / 60) }
+                inputs.sleepLatencyMin = latency
+                // `awake_min` counts every awake minute in the window, the
+                // lie-awake before onset included — the watch labels that time
+                // awake. Fragmentation is about the night AFTER sleep began, and
+                // latency already charges the wait, so it comes off here.
+                // ponytail: assumes the pre-onset time was labelled awake. A
+                // phone-only night labels it inBed, which `awake_min` never
+                // held, and the subtraction over-credits a 10-weight term.
+                // Exact needs a third column; the watch is the common case.
+                inputs.sleepAwakeMin = sleep.awakeMin.map { max(0, Double($0) - (latency ?? 0)) }
+                inputs.sleepAwakenings = sleep.awakenings.map(Double.init)
+                let usual = Self.median(try Self.bedtimeOffsets(db, userId: userId, before: date, limit: 14))
+                inputs.sleepBedtimeDeltaMin = usual.map { sleep.startTime.timeIntervalSince(window.from) / 60 - $0 }
+            }
 
             inputs.calories = nutrition?.calories ?? 0
             inputs.proteinG = nutrition?.proteinG ?? 0
@@ -431,6 +453,33 @@ extension AppDatabase {
         }
         guard !peak.isEmpty else { return nil }
         return Double(peak.values.reduce(0, +)) / Double(peak.count)
+    }
+
+    /// The usual bedtime, as minutes past the night window's opening noon,
+    /// for the `limit` nights before `date` — newest first. Noon-anchored so a
+    /// bedtime either side of midnight is one continuous number (23:30 is
+    /// 690, 00:16 is 736) and no wrap-around arithmetic exists to get wrong.
+    /// UTC noon, like the window itself: a DST change moves every offset by
+    /// sixty together, which the median absorbs within a fortnight.
+    static func bedtimeOffsets(_ db: Database, userId: String, before date: String, limit: Int) throws -> [Double] {
+        guard let window = NightWindow.range(date) else { return [] }
+        return try SleepSessionRow
+            .filter(Column("user_id") == userId && Column("start_time") < window.from)
+            .order(Column("start_time").desc)
+            .limit(limit)
+            .fetchAll(db)
+            .compactMap { row in
+                NightWindow.range(NightWindow.nightOf(row.startTime)).map { row.startTime.timeIntervalSince($0.from) / 60 }
+            }
+    }
+
+    /// The median of at least five, else nil — under five nights "usual" is a
+    /// guess, and a guess is not a baseline.
+    static func median(_ values: [Double]) -> Double? {
+        guard values.count >= 5 else { return nil }
+        let sorted = values.sorted()
+        let mid = sorted.count / 2
+        return sorted.count % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
     }
 
     static func mean(_ values: [Double]) -> Double? {

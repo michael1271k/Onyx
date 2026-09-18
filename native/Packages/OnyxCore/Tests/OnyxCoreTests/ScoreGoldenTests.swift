@@ -16,19 +16,27 @@ struct ScoreGoldenTests {
     struct SleepInput: Decodable {
         let sleepHours, deepMinutes, remMinutes, sleepGoalHours: Double
         let contextMode: String?
+        let sleepInBedHours, sleepLatencyMin, sleepAwakeMin, sleepAwakenings, sleepBedtimeDeltaMin: Double?
     }
 
-    @Test("sleep score matches, band edge for band edge")
+    /// `sleep-score-v2.json` — W3's hand-computed cases, never regenerated.
+    /// The v1 fixture (a 1024-cell sweep exported from the TypeScript) was
+    /// retired with the formula: a legacy input with no v2 field is still the
+    /// v1 number, and one case here pins that.
+    @Test("sleep score v2 matches, term for term")
     func sleepMatches() throws {
-        let fixture = try GoldenFixture<SleepInput, Double?>.load("sleep-score")
-        #expect(fixture.cases.count > 500)
+        let fixture = try GoldenFixture<SleepInput, Double?>.load("sleep-score-v2")
+        #expect(fixture.cases.count >= 12)
         for c in fixture.cases {
             let i = ScoringInputs(
                 sleepHours: c.input.sleepHours, deepMinutes: c.input.deepMinutes,
                 remMinutes: c.input.remMinutes, sleepGoalHours: c.input.sleepGoalHours,
-                contextMode: c.input.contextMode
+                contextMode: c.input.contextMode,
+                sleepInBedHours: c.input.sleepInBedHours, sleepLatencyMin: c.input.sleepLatencyMin,
+                sleepAwakeMin: c.input.sleepAwakeMin, sleepAwakenings: c.input.sleepAwakenings,
+                sleepBedtimeDeltaMin: c.input.sleepBedtimeDeltaMin
             )
-            expectClose(Score.sleep(i), c.expected, "computeSleepScore — \(c.name)")
+            expectClose(Score.sleep(i), c.expected, "computeSleepScore v2 — \(c.name)")
         }
     }
 

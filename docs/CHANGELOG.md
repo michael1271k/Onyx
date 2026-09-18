@@ -44,6 +44,41 @@ _Nothing yet._
 
 ---
 
+## [6.0.0] — 2026-09-18 · A Night Is More Than Its Length
+
+**MAJOR: every stored sleep score is rewritten.** The first launch on this build
+rescores the whole history in the background (the "rescoring" hint on Pulse and
+History while it runs). A night that took three hours to fall asleep no longer
+scores 100.
+
+**Before installing:** paste `docs/sql/w3-sleep-onset.sql` in the Supabase SQL
+editor as `postgres`. Until the two columns exist the server rejects every
+night the phone syncs.
+
+### Changed
+- **Sleep score v2 — five terms.** Duration (40, the old curve) · Efficiency
+  (20, asleep ÷ in bed, full credit at 100 %, none at 75 %) · Latency (15, none
+  at 90 min) · Fragmentation (10, awake minutes after falling asleep and
+  awakenings of five minutes or more) · Regularity (15, tonight's bedtime
+  against the median of the last fourteen, none at two hours off). A term the
+  night cannot answer drops and the rest renormalise, so a night synced before
+  this build scores on duration and regularity alone. The deep and REM bonuses
+  and the illness/travel/emergency relaxations still apply. The battery, the
+  recovery term and the short-night cap on the day score are untouched.
+  (`Score.swift`; golden fixture `sleep-score-v2.json`, hand-computed, replaces
+  `sleep-score.json`.)
+- **Sleep sheet (Pulse → Sleep)** — the window is three wheels: **In bed**,
+  **Fell asleep**, **Awake at**. The closed row now says how long you took to
+  fall asleep. An onset outside the window is refused by the store, not just
+  the wheel.
+
+### Added
+- **`sleep_sessions.onset_time` and `awakenings`** — when sleep began (the
+  first asleep sample Apple Health recorded) and how many times it broke,
+  written by every sync and by the sleep sheet, on the phone and the server.
+
+---
+
 ## [5.2.0] — 2026-09-18 · The Palette Reads The Block
 
 ### Added

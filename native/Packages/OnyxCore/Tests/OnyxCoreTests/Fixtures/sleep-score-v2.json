@@ -1,0 +1,327 @@
+{
+  "module": "scoring/score",
+  "fn": "computeSleepScore",
+  "note": "W3 Sleep v2 (6.0.0) \u2014 hand-computed in the wave's spreadsheet (docs/WIDGETS_SLEEP_THEMES_SPRINT_PLAN.md, W3 Wave Record). Five terms: duration 40 (v1 curve) \u00b7 efficiency 20 (asleep\u00f7in-bed, linear 0.75\u21921) \u00b7 latency 15 (1\u2212min/90) \u00b7 fragmentation 10 ((1\u2212awake/90)(1\u2212awakenings/6)) \u00b7 regularity 15 (1\u2212|\u0394|/120); a nil term drops and the rest renormalise; context relaxes every term's penalty; +5 deep\u226590 +5 REM\u226590; clamp 0\u2026100. sleepHours<=0 is null, goal 0 is 100. Never regenerated from Score.swift.",
+  "cases": [
+    {
+      "name": "2026-09-18 reference night \u2014 in bed 00:16, asleep 03:05, awake 10:30, usual 23:30",
+      "input": {
+        "sleepHours": 7.416666666666667,
+        "deepMinutes": 60,
+        "remMinutes": 80,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": 10.233333333333333,
+        "sleepLatencyMin": 169,
+        "sleepAwakeMin": 0,
+        "sleepAwakenings": 0,
+        "sleepBedtimeDeltaMin": 46
+      },
+      "expected": 58.93333333333334
+    },
+    {
+      "name": "reference night, emergency \u2014 every penalty \u00d70.35",
+      "input": {
+        "sleepHours": 7.416666666666667,
+        "deepMinutes": 60,
+        "remMinutes": 80,
+        "sleepGoalHours": 8,
+        "contextMode": "emergency",
+        "sleepInBedHours": 10.233333333333333,
+        "sleepLatencyMin": 169,
+        "sleepAwakeMin": 0,
+        "sleepAwakenings": 0,
+        "sleepBedtimeDeltaMin": 46
+      },
+      "expected": 85.62666666666667
+    },
+    {
+      "name": "reference night, illness \u2014 every penalty \u00d70.55",
+      "input": {
+        "sleepHours": 7.416666666666667,
+        "deepMinutes": 60,
+        "remMinutes": 80,
+        "sleepGoalHours": 8,
+        "contextMode": "illness",
+        "sleepInBedHours": 10.233333333333333,
+        "sleepLatencyMin": 169,
+        "sleepAwakeMin": 0,
+        "sleepAwakenings": 0,
+        "sleepBedtimeDeltaMin": 46
+      },
+      "expected": 77.41333333333333
+    },
+    {
+      "name": "reference night, travel \u2014 every penalty \u00d70.70",
+      "input": {
+        "sleepHours": 7.416666666666667,
+        "deepMinutes": 60,
+        "remMinutes": 80,
+        "sleepGoalHours": 8,
+        "contextMode": "travel",
+        "sleepInBedHours": 10.233333333333333,
+        "sleepLatencyMin": 169,
+        "sleepAwakeMin": 0,
+        "sleepAwakenings": 0,
+        "sleepBedtimeDeltaMin": 46
+      },
+      "expected": 71.25333333333333
+    },
+    {
+      "name": "reference night, normal \u2014 same as no context",
+      "input": {
+        "sleepHours": 7.416666666666667,
+        "deepMinutes": 60,
+        "remMinutes": 80,
+        "sleepGoalHours": 8,
+        "contextMode": "normal",
+        "sleepInBedHours": 10.233333333333333,
+        "sleepLatencyMin": 169,
+        "sleepAwakeMin": 0,
+        "sleepAwakenings": 0,
+        "sleepBedtimeDeltaMin": 46
+      },
+      "expected": 58.93333333333334
+    },
+    {
+      "name": "nil latency, nil everything \u2014 a pre-W3 row is the v1 number: 6.5 h \u2192 74, +5 +5 \u2192 84",
+      "input": {
+        "sleepHours": 6.5,
+        "deepMinutes": 90,
+        "remMinutes": 90,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": null,
+        "sleepLatencyMin": null,
+        "sleepAwakeMin": null,
+        "sleepAwakenings": null,
+        "sleepBedtimeDeltaMin": null
+      },
+      "expected": 84.0
+    },
+    {
+      "name": "five-night baseline present, \u0394 = 0 \u2014 regularity 100 beside duration 100",
+      "input": {
+        "sleepHours": 8,
+        "deepMinutes": 0,
+        "remMinutes": 0,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": null,
+        "sleepLatencyMin": null,
+        "sleepAwakeMin": null,
+        "sleepAwakenings": null,
+        "sleepBedtimeDeltaMin": 0
+      },
+      "expected": 100
+    },
+    {
+      "name": "four nights only \u2014 \u0394 nil, regularity drops, duration alone = 100",
+      "input": {
+        "sleepHours": 8,
+        "deepMinutes": 0,
+        "remMinutes": 0,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": null,
+        "sleepLatencyMin": null,
+        "sleepAwakeMin": null,
+        "sleepAwakenings": null,
+        "sleepBedtimeDeltaMin": null
+      },
+      "expected": 100
+    },
+    {
+      "name": "efficiency floor \u2014 6 h asleep in 8 h in bed is 0.75 \u2192 0; (100\u00b740 + 0\u00b720)/60",
+      "input": {
+        "sleepHours": 6,
+        "deepMinutes": 0,
+        "remMinutes": 0,
+        "sleepGoalHours": 6,
+        "contextMode": null,
+        "sleepInBedHours": 8,
+        "sleepLatencyMin": null,
+        "sleepAwakeMin": null,
+        "sleepAwakenings": null,
+        "sleepBedtimeDeltaMin": null
+      },
+      "expected": 66.66666666666666
+    },
+    {
+      "name": "efficiency midpoint \u2014 7 h in 8 h = 0.875 \u2192 50",
+      "input": {
+        "sleepHours": 7,
+        "deepMinutes": 0,
+        "remMinutes": 0,
+        "sleepGoalHours": 7,
+        "contextMode": null,
+        "sleepInBedHours": 8,
+        "sleepLatencyMin": null,
+        "sleepAwakeMin": null,
+        "sleepAwakenings": null,
+        "sleepBedtimeDeltaMin": null
+      },
+      "expected": 83.33333333333331
+    },
+    {
+      "name": "latency 45 min \u2192 50; 90 \u2192 0 would be the floor",
+      "input": {
+        "sleepHours": 8,
+        "deepMinutes": 0,
+        "remMinutes": 0,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": null,
+        "sleepLatencyMin": 45,
+        "sleepAwakeMin": null,
+        "sleepAwakenings": null,
+        "sleepBedtimeDeltaMin": null
+      },
+      "expected": 86.36363636363637
+    },
+    {
+      "name": "latency 90 min \u2014 zero credit, nothing below it",
+      "input": {
+        "sleepHours": 8,
+        "deepMinutes": 0,
+        "remMinutes": 0,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": null,
+        "sleepLatencyMin": 90,
+        "sleepAwakeMin": null,
+        "sleepAwakenings": null,
+        "sleepBedtimeDeltaMin": null
+      },
+      "expected": 72.72727272727273
+    },
+    {
+      "name": "fragmentation \u2014 45 awake and 3 awakenings is 0.5 \u00d7 0.5 \u2192 25",
+      "input": {
+        "sleepHours": 8,
+        "deepMinutes": 0,
+        "remMinutes": 0,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": null,
+        "sleepLatencyMin": null,
+        "sleepAwakeMin": 45,
+        "sleepAwakenings": 3,
+        "sleepBedtimeDeltaMin": null
+      },
+      "expected": 85.0
+    },
+    {
+      "name": "fragmentation with no count \u2014 30 awake, awakenings nil \u2192 (1 \u2212 30/90) \u00d7 1 \u2192 66.667",
+      "input": {
+        "sleepHours": 8,
+        "deepMinutes": 0,
+        "remMinutes": 0,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": null,
+        "sleepLatencyMin": null,
+        "sleepAwakeMin": 30,
+        "sleepAwakenings": null,
+        "sleepBedtimeDeltaMin": null
+      },
+      "expected": 93.33333333333334
+    },
+    {
+      "name": "regularity \u2014 an hour early is \u0394 \u221260 \u2192 50",
+      "input": {
+        "sleepHours": 8,
+        "deepMinutes": 0,
+        "remMinutes": 0,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": null,
+        "sleepLatencyMin": null,
+        "sleepAwakeMin": null,
+        "sleepAwakenings": null,
+        "sleepBedtimeDeltaMin": -60
+      },
+      "expected": 86.36363636363637
+    },
+    {
+      "name": "regularity \u2014 two hours late is the floor, three is still the floor",
+      "input": {
+        "sleepHours": 8,
+        "deepMinutes": 0,
+        "remMinutes": 0,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": null,
+        "sleepLatencyMin": null,
+        "sleepAwakeMin": null,
+        "sleepAwakenings": null,
+        "sleepBedtimeDeltaMin": 200
+      },
+      "expected": 72.72727272727273
+    },
+    {
+      "name": "all five terms, a good night \u2014 7.6 h in 8 h, 12 min to sleep, 9 awake once, \u0394 +10, REM bonus only: 90.25 + 5",
+      "input": {
+        "sleepHours": 7.6,
+        "deepMinutes": 80,
+        "remMinutes": 100,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": 8,
+        "sleepLatencyMin": 12,
+        "sleepAwakeMin": 9,
+        "sleepAwakenings": 1,
+        "sleepBedtimeDeltaMin": 10
+      },
+      "expected": 95.25
+    },
+    {
+      "name": "stage bonuses cannot push past 100",
+      "input": {
+        "sleepHours": 8,
+        "deepMinutes": 90,
+        "remMinutes": 90,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": 8,
+        "sleepLatencyMin": 0,
+        "sleepAwakeMin": 0,
+        "sleepAwakenings": 0,
+        "sleepBedtimeDeltaMin": 0
+      },
+      "expected": 100
+    },
+    {
+      "name": "goal 0 short-circuits to 100 whatever the night",
+      "input": {
+        "sleepHours": 3,
+        "deepMinutes": 0,
+        "remMinutes": 0,
+        "sleepGoalHours": 0,
+        "contextMode": null,
+        "sleepInBedHours": 9,
+        "sleepLatencyMin": 170,
+        "sleepAwakeMin": 80,
+        "sleepAwakenings": 6,
+        "sleepBedtimeDeltaMin": 180
+      },
+      "expected": 100
+    },
+    {
+      "name": "no sleep is nil, never a zero \u2014 even with v2 fields present",
+      "input": {
+        "sleepHours": 0,
+        "deepMinutes": 0,
+        "remMinutes": 0,
+        "sleepGoalHours": 8,
+        "contextMode": null,
+        "sleepInBedHours": 8,
+        "sleepLatencyMin": 10,
+        "sleepAwakeMin": 0,
+        "sleepAwakenings": 0,
+        "sleepBedtimeDeltaMin": 0
+      },
+      "expected": null
+    }
+  ]
+}
