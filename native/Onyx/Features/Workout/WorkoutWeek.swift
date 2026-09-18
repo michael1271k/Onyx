@@ -3,6 +3,7 @@ import Observation
 import GRDB
 import OnyxCore
 import OnyxData
+import OnyxUI
 
 /// Everything the Workout tab reads: the week behind you, the session in front
 /// of you, and the lifts that have earned a heavier load.

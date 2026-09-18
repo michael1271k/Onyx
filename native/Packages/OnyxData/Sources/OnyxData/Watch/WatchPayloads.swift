@@ -90,11 +90,11 @@ public struct RestPulse: Codable, Sendable, Equatable, Identifiable {
     /// The movement it follows — the watch prints "Next: …" under the clock.
     public var exercise: String?
 
-    // ── THE FOUR BELOW ARE OPTIONAL AND LAST, WHICH IS THE WHOLE ────────────
+    // ── THE FIVE BELOW ARE OPTIONAL AND LAST, WHICH IS THE WHOLE ────────────
     // ── PAYLOAD-VERSIONING STORY — THE SAME ONE `WatchContext.theme` TELLS ──
     // The synthesised `Codable` reads an optional with `decodeIfPresent` and
     // writes it with `encodeIfPresent`. So an OLD phone's pulse — none of these
-    // keys on the wire — decodes on a NEW watch with all four nil, and a NEW
+    // keys on the wire — decodes on a NEW watch with all five nil, and a NEW
     // phone's pulse decodes on an OLD watch, because a keyed container ignores
     // every key nobody asked it for. Neither side throws and neither side stops
     // seeing the rest clock, which is the failure this file exists to prevent.
@@ -109,7 +109,7 @@ public struct RestPulse: Codable, Sendable, Equatable, Identifiable {
     //
     // LAST is the cheap half, and it is about Swift and not JSON: the keys are
     // names and the encoder sorts them, so declaration order is invisible on
-    // the wire. It is the `init` that cares — four trailing parameters
+    // the wire. It is the `init` that cares — five trailing parameters
     // defaulted to nil are what let every existing caller keep spelling
     // `RestPulse(sessionId:endsAt:duration:exercise:)` untouched.
 
@@ -149,6 +149,29 @@ public struct RestPulse: Codable, Sendable, Equatable, Identifiable {
     /// timer until the phone updates, which is a missing reading rather than a
     /// wrong one.
     public var timerOrigin: Date?
+    /// The wearer's heart rate at the instant this pulse was sent, in beats per
+    /// minute — the ONE reading only the wrist can take (W10, decision 3).
+    ///
+    /// ── WHY IT TRAVELS ON THE REST PULSE AND NOT ON A CHANNEL OF ITS OWN ────
+    /// `sendMessage` is immediate-or-not-at-all and needs reachability, which
+    /// is exactly right for a number that is worthless four minutes late — and
+    /// the rest pulse is already that message. A second kind would be a second
+    /// per-second message budget for a reading nobody reads per second: the
+    /// phone's deck shows it while you are resting, which is when the pulse
+    /// exists.
+    ///
+    /// It therefore travels in BOTH directions, unlike the four fields above
+    /// it. The watch fills it on the pulses it sends itself, and answers a
+    /// phone-driven rest with one echo carrying it — see
+    /// `WatchModel.receive(_:)`. The phone takes the number and nothing else
+    /// (`PhoneWatchBridge.receive`): it does not adopt the watch's clock, and
+    /// it never sends in reply, so there is no loop.
+    ///
+    /// Nil twice over, and both mean "print no number": the sensor has not
+    /// settled yet (`WorkoutSessionController.heartRate` is nil before the
+    /// first sample), or the build on the other wrist predates this field. A
+    /// non-optional 0 would claim a stopped heart.
+    public var bpm: Int?
 
     public init(
         sessionId: String,
@@ -158,7 +181,8 @@ public struct RestPulse: Codable, Sendable, Equatable, Identifiable {
         loadKg: Double? = nil,
         reps: Int? = nil,
         rpe: Double? = nil,
-        timerOrigin: Date? = nil
+        timerOrigin: Date? = nil,
+        bpm: Int? = nil
     ) {
         self.sessionId = sessionId
         self.endsAt = endsAt
@@ -168,5 +192,6 @@ public struct RestPulse: Codable, Sendable, Equatable, Identifiable {
         self.reps = reps
         self.rpe = rpe
         self.timerOrigin = timerOrigin
+        self.bpm = bpm
     }
 }

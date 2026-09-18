@@ -124,6 +124,60 @@ enum LoggerPreviews {
             .onyxScreen(.train)
             .environment(AppEnvironment.preview)
             .preferredColorScheme(.dark)
+        case "logger-rest":
+            // ── THE TWO THINGS ON A CARD THAT ONLY EXIST BETWEEN SETS (W10) ─
+            // The rest bar draining across the header's bottom edge, and the
+            // `1 more @ 12` cue. Its own screen because the `logger` shot
+            // photographs the TOP of the deck and the movement that is resting
+            // is whichever one you just logged — three cards down, below the
+            // fold, on every fixture this harness has.
+            //
+            // TWO cards and not one, because the two things are mutually
+            // exclusive on a single header and that is the design: the rest
+            // control is ~130 pt and the instruction line is already full at
+            // 375 pt, so `prescription` drops the chips — the progression one
+            // included — for as long as the clock is running. A one-card shot
+            // can photograph the bar or the cue and never both.
+            //
+            // So the resting movement is on top and a second, idle one is
+            // under it wearing the cue. Which is also the state a real deck is
+            // in: you are resting from the movement you just logged, and the
+            // one below it is telling you what it wants next.
+            //
+            // The countdown in the middle of the control is a live
+            // `Text(timerInterval:)` and will read differently on every run.
+            // That is the state, not a defect — `logger-timer` photographs its
+            // stopwatch stopped because a STOPPED face says the same thing; a
+            // rest bar at rest says nothing at all.
+            let resting = LoggerModel.previewUpperB(logged: true)
+            let card = resting.exercises.first { $0.name == "Chest Press" }!
+            let next = resting.exercises.first { $0.name == "Seated Cable Row (Wide Grip)" }!
+            let _ = {
+                resting.startRest(for: card)
+                // `.oneMore` and not `.ready`: a `.ready` verdict has already
+                // pre-filled a row (`SeedRow.progressed`) and the card draws
+                // the `↗ 42.5 kg` chip off the ROW, which `set-row` already
+                // photographs. This is the verdict that has no row to be read
+                // off and drew nowhere until this wave.
+                resting.seedDebugProgression([
+                    ProgressionQueue.Alert(
+                        exerciseId: "pv-cable-row", name: next.name,
+                        dayKey: resting.day.key, dayLabel: resting.day.label, dayColor: nil,
+                        suggestKg: 45, currentKg: 42.5, timed: false, ceiling: 12,
+                        state: .oneMore
+                    )
+                ])
+            }()
+            ScrollView {
+                VStack(spacing: OnyxSpace.m) {
+                    ExerciseCardView(exercise: card, model: resting, position: (1, resting.exercises.count))
+                    ExerciseCardView(exercise: next, model: resting, position: (3, resting.exercises.count))
+                }
+                .padding(.horizontal, OnyxSpace.m)
+            }
+            .onyxScreen(.train)
+            .environment(AppEnvironment.preview)
+            .preferredColorScheme(.dark)
         case "logger-timer":
             // Both clocks in one sheet: the session's own reading and pause at
             // the top, the SET stopwatch under it. Presented by the harness for
@@ -246,14 +300,21 @@ enum LoggerPreviews {
             // debug flag inside the view: a screen that ships a way to open one
             // of its sheets for a screenshot is a screen with a state nobody
             // can reach and nobody maintains.
-            let model = LoggerModel.previewUpperB(logged: true)
+            //
+            // ── AND IT NEEDS THE STORE NOW (W10) ───────────────────────────
+            // The sheet's tonnage trail is `splitTonnage`, a read of the last
+            // few FINISHED sessions of this split. Over `previewUpperB`'s
+            // storeless model it answers empty, the spark draws nothing, and
+            // the shot photographs the sheet exactly as it looked before this
+            // wave while claiming to review it.
+            let finishing = LoggerModel.previewUpperBWithHistory()
             NavigationStack {
-                LiveLoggerView(model: model)
+                LiveLoggerView(model: finishing.model)
                     .sheet(isPresented: .constant(true)) {
-                        FinishSheet(model: model, onFinish: { _ in true })
+                        FinishSheet(model: finishing.model, onFinish: { _ in true })
                     }
             }
-            .environment(AppEnvironment.preview)
+            .environment(LoggerPreviews.environment(over: finishing.store))
             .preferredColorScheme(.dark)
         case "logger-stats":
             // The second face. Shot with a session mid-flight for the same

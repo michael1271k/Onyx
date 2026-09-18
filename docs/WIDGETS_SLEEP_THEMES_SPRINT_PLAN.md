@@ -1,6 +1,6 @@
 # Widgets · Sleep v2 · Themes · Week · Pulse · Logger · Privacy — Sprint Plan
 
-**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0, W6 shipped 6.3.0, W7 shipped 6.4.0, W8 shipped 6.5.0, W9 shipped 6.6.0. **W10 next.**
+**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0, W6 shipped 6.3.0, W7 shipped 6.4.0, W8 shipped 6.5.0, W9 shipped 6.6.0, W10 shipped 6.7.0. **W11 next.**
 **From:** `main` @ 5.0.1 (`3de461a7`).
 **Ships as:** eleven sequential waves, 5.1.0 → 6.8.0, plus a close-out wave that retires this file to `docs/Done/`.
 **Branches:** `onyx/sprint-widgets-w<N>`, each cut from current `main` and merged `--no-ff`
@@ -1659,6 +1659,146 @@ device builds by construction.
   "strictly squares" was not reopened.
 - **The drop has no merge/hold semantics** — no stacking on Pulse, so
   `Arrangeable.onTargeted` is the default no-op here.
+
+**Founder's manual steps still outstanding:**
+- W3's `docs/sql/w3-sleep-onset.sql` paste. Unchanged.
+- Xcode → `OnyxWatch` **and** `OnyxWatchWidgets` → App Groups
+  (`group.app.onyx.health.watch`). Paid program. Unchanged from W7.
+
+---
+
+### W10 Wave Record — shipped 2026-09-18 as 6.7.0
+
+**Drift from the plan, on purpose:**
+- **The progression cue is the `.oneMore` verdict only, and the `.ready` one
+  stays row-backed.** The plan reads "progression cue chip on the exercise card
+  from `LoggerModel.progressionAlerts:1729` (staged dead code today)". Half of
+  that chip has existed since E4: `ExerciseCardView.progression` draws
+  `↗ 42.5 kg` off `SeedRow.progressed`, and its own header says why it must not
+  read the alert — a rebuild that drops the bump drops the chip with it, which
+  an alert-backed chip would not. What genuinely drew nowhere is `.oneMore`,
+  which changes no number in the deck and therefore has no row to be read off.
+  So the alert list feeds one new state into the existing slot and the
+  `.ready` path is untouched.
+- **The PR margin is a line in the badge's gutter, not a callout beside the
+  trophy.** The first draft was the plan's words — an overlay over the table,
+  aligned leading past the badge — and the shot showed it landing on the KG
+  column's own `▲ +2` delta arrow. The row is a three-track table at its width
+  floor (`set-row-u2`), so there is nowhere in the table for a fourth reading
+  and nowhere over it that is empty. Under the badge is directly under the
+  trophy, it is the one column with slack, and it is a slot the rest reading
+  needed anyway — so the two share it: the margin has the line for two seconds
+  and the rest takes it back.
+- **The drawn margin carries no unit.** `+1.6 kg` truncated to `+1.6…` in
+  28 pt of monospaced digits, which is a margin with its own number cut off.
+  `margin` now returns a pair — `short` for the gutter, `spoken` for VoiceOver,
+  where there is no width to be short about.
+- **`RestPulse.bpm` travels in BOTH directions, which no other field on that
+  payload does.** The plan says "filled from `WorkoutSessionController.heartRate`
+  in `WatchModel`", and the watch does fill it on the pulses it sends. But the
+  watch only sends a pulse when the WATCH starts a rest, and the phone drives
+  nearly every session — so a field filled only there would draw on the rare
+  wrist-driven workout and never otherwise. `WatchModel.answerWithHeartRate`
+  sends the phone's own pulse straight back with the rate written on it, once,
+  and `PhoneWatchBridge.receive` takes the rate and nothing else. One message
+  out for one message in; the phone never replies, so there is no loop.
+- **`IntensityBar` took `OnyxFormat` to OnyxUI with it.** The plan asks for the
+  bar to move to OnyxUI `Charts/`; it prints an RPE through `OnyxFormat.rpe`,
+  which lived at the bottom of `LoggerModel.swift` and is invisible from a
+  package. The choice was the move or a second `rpe` formatter inside OnyxUI —
+  and a second formatter is how `rpe`'s own header ("the next change to how
+  ONYX prints a load silently changes how it prints an effort rating") comes
+  true across a module boundary instead of inside one file. Every call site is
+  unchanged; two app files gained `import OnyxUI`.
+- **`ExerciseReport.spark` became `trail` plus a computed `spark`.** The field's
+  header said dates were dropped because "a sparkline has no axis, so carrying
+  them would invite a label". True while the trail was only a graphic; the tap
+  makes it a door, and `E1rmTrendChart` has an x axis to fill.
+  `sessionMeanE1rm` always returned the pairs and the builder threw half of
+  them away.
+- **Two new shot screens.** `logger-rest` (the rest bar and the cue, on two
+  cards — see below) and `session-margin` (the ledger with the margins held
+  open). Both are the `session-ledger-assists` pattern: two pictures of one
+  screen, because the state under review cannot be reached by a script.
+
+**Root causes that were not where the plan guessed:**
+- **There is no overrun state to draw.** "Live rest bar (actual vs planned)"
+  reads as a bar that keeps going past the prescription. It cannot:
+  `LiveLoggerView`'s expiry task calls `model.stopRest()` at zero, so
+  `restEndsAt` is nil the instant the rest is up and the fraction comes back.
+  Actual-against-planned is therefore the bar itself — `restCountdown(_:total:)`
+  gives `ProgressionView(timerInterval:)` a fixed lower bound, and `adjustRest`
+  moves `restDuration` with the deadline, so a nudged rest redraws against its
+  NEW total. The bar is an overlay on the header's bottom edge and costs the
+  card no height at all.
+- **The cue and the rest control cannot share a header.** `prescription` drops
+  the tags and the progression chip while the clock runs and says why (the
+  control is ~130 pt on a line already full at 375). So the first `logger-rest`
+  fixture photographed the bar with no cue on it. The shot is two cards: the
+  resting one on top, an idle one under it wearing the cue — which is the state
+  a real deck is in anyway.
+- **The cue cost `Done` its word.** Five items on the instruction line squeezed
+  `Label("Done", systemImage:)` to its seal. The metadata tag now leaves when
+  the cue is present — the same trade the rest control already makes, one chip
+  smaller.
+- **At AX5 the rest countdown rendered as `…`, and had since it was written.**
+  The accessibility branch of `prescription` kept `repWindow`, which is ~200 pt
+  of a ~327 pt line at AX5, so the countdown between the two nudge buttons was
+  squeezed past its scale floor. The window now leaves while the clock runs in
+  that branch too. Found by the bar's own AX5 shot; not introduced by it.
+- **`ProgressionQueue.Alert` had no public initialiser.** Public struct, public
+  fields, internal memberwise init — so the only way to build one outside
+  OnyxCore was to decode JSON. Added.
+
+**Constraints discovered that the next wave must respect:**
+- **The gutter line under the badge is drawn only when the card reserves a
+  delta line** (`layout.comparable && cardComparable`, not at an accessibility
+  size). That is what makes it free: the badge is 28 pt inside a row already
+  taller than it, so the reading lands in slack that was there anyway. On a
+  bout or a timed hold it would ADD height, which is why neither draws it —
+  and why a PR on one of those cards shows no margin either. Anything else that
+  wants that line must take the same test.
+- **`SetRow` is the ledger's, not the logger's.** Two types of that name exist;
+  `restSec`/`restDeltaSec`/`marginHeld` are on the one in
+  `SessionDetailView.swift`. W11 splits that file into `SessionDetail/` — the
+  row and its gutter move to `SessionLedger.swift` together.
+- **Rest is a side table on `ExerciseReport`, keyed by `set_index`,** exactly as
+  `records` is. It is deliberately NOT a field on `DetailSet`: that type lives
+  in OnyxCore and is the shape the golden vectors are written in, and rest
+  reaches no score, no PR axis and no tonnage.
+- **`actual_rest_sec` is written by the APPEND path alone.** An amend rebuilds
+  the row without it, a watch-logged set carries none, and every row older than
+  the column has none — so most real cards draw no gutter at all. That is the
+  honest state, not a gap to fill.
+- **`PhoneWatchBridge.liveBpm` ages itself out at two minutes** and is computed,
+  not stored: nothing in that type ticks, and a `Timer` whose only job is to nil
+  a field would run for the whole of every workout. A reader that needs the
+  number to disappear on a schedule must drive its own redraw.
+- **Counts:** OnyxCore **593** (unchanged), OnyxData **629** (was 627; +2 —
+  the heart-rate echo's round trip and `splitTonnage`),
+  `swift:ui` 40 in 8 suites, app + watch schemes green, `check:swift` both
+  platforms. `OnyxTests` by hand: **64 tests, 11 issues** — the documented
+  baseline, unchanged, all in `HistoryWeeks`, `PreviewCatalogue`,
+  `SessionSummaryHotfix` and `WorkoutWeek`.
+
+**Left open on purpose:**
+- **The finish sheet's `IntensityBar` is below the fold in every shot.** The
+  sheet opens `.large` with a pinned Finish button, and the trail is the last
+  thing above the cut. The bar's drawing is reviewed on `session`, where it is
+  byte-identical after the move; its placement on the sheet is not.
+- **No live heart rate on the watch's own screens.** `RestPulse.bpm` is drawn
+  on the PHONE. `DeckView` already prints `model.workout.heartRate` directly
+  and has no reason to read it back off a payload it sent.
+- **The trail tap is the only door on the ledger header.** The rest of the
+  header's capsules stay inert; the sparkline earned a gesture because a chart
+  answers a question the graphic provokes, and "by how much, and when" is not
+  a question a `2/3 @ 8–12` capsule raises.
+- **The margin picks ONE axis off a fixed ladder** (weight, e1RM, reps, set
+  tonnage). A set that takes four axes at once shows the first of them and the
+  long press shows all four. A two-second glance holds one number.
+- **`LoggerModel.seedDebugProgression` is a harness door.** `#if DEBUG`, same
+  shape and same reason as `WatchModel.seedDebugRest`: the alerts are a store
+  read over a chain of two sessions, and the shot fixtures seed one.
 
 **Founder's manual steps still outstanding:**
 - W3's `docs/sql/w3-sleep-onset.sql` paste. Unchanged.

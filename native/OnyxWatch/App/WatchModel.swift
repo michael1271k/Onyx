@@ -429,7 +429,10 @@ final class WatchModel {
             sessionId: sessionId ?? "",
             endsAt: Date().addingTimeInterval(seconds),
             duration: seconds,
-            exercise: cursor?.movement.plan.name ?? movement.plan.name
+            exercise: cursor?.movement.plan.name ?? movement.plan.name,
+            // The one reading only this device can take. Nil until the sensor
+            // has settled, which is a missing number and not a zero.
+            bpm: workout.heartRate
         )
         rest = pulse
         link?.send(rest: pulse)
@@ -462,7 +465,11 @@ final class WatchModel {
             loadKg: rest.loadKg,
             reps: rest.reps,
             rpe: rest.rpe,
-            timerOrigin: rest.timerOrigin
+            timerOrigin: rest.timerOrigin,
+            // The CURRENT reading, not the one the pulse was built with: a
+            // nudge is a fresh message and a fifteen-second-old heart rate is
+            // the only stale thing that would be on it.
+            bpm: workout.heartRate ?? rest.bpm
         )
         self.rest = pulse
         link?.send(rest: pulse)
@@ -544,7 +551,34 @@ final class WatchModel {
             // the banked pauses already subtracted. Nil from an older phone
             // leaves whatever `adopt` read off the row.
             if let origin = pulse?.timerOrigin { sessionStartedAt = origin }
+            answerWithHeartRate(pulse)
         }
+    }
+
+    /// Send the phone's own rest pulse back to it with this wrist's heart rate
+    /// on it. ONE message, only when there is a reading to carry.
+    ///
+    /// ── WHY THE PHONE CANNOT GET THIS ANY OTHER WAY ─────────────────────────
+    /// The sensor is here. The phone drives most sessions, so the watch never
+    /// starts a rest of its own and never sends a pulse — which would leave
+    /// `RestPulse.bpm` a field that only ever draws on the rare wrist-driven
+    /// workout, i.e. dead on the common path. The echo is what makes the
+    /// phone's live reading real.
+    ///
+    /// ── AND WHY IT IS NOT A LOOP ────────────────────────────────────────────
+    /// `PhoneWatchBridge.receive` takes the `bpm` off an inbound pulse and
+    /// nothing else: it does not adopt the clock (it has its own) and it never
+    /// sends in reply. So this is one message out for one message in, and it
+    /// stops there. An older phone ignores the key it does not know; an older
+    /// watch never sends this at all.
+    ///
+    /// The pulse is echoed VERBATIM but for the rate — same `endsAt`, same
+    /// `duration`, same origin — so that even if a future phone were to read
+    /// more of it, what comes back is what it sent.
+    private func answerWithHeartRate(_ pulse: RestPulse?) {
+        guard var pulse, let bpm = workout.heartRate else { return }
+        pulse.bpm = bpm
+        link?.send(rest: pulse)
     }
 }
 

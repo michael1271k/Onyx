@@ -77,6 +77,15 @@ struct LoggerHero: View {
     var restCountdown: ClosedRange<Date>?
     var onSkipRest: () -> Void = {}
     var onAdjustRest: (TimeInterval) -> Void = { _ in }
+    /// The wrist's heart rate, if a watch has sent one recently (W10).
+    ///
+    /// Passed in rather than read off `environment.watchBridge` here, for the
+    /// reason every other figure on this band is passed in: the hero is drawn
+    /// by the previews and by the screenshot harness with no bridge at all, and
+    /// a band that reached for one would be a band that could only be
+    /// photographed from a running app. `PhoneWatchBridge.liveBpm` has already
+    /// aged the number out; nil means "no wrist, or nothing recent".
+    var liveBpm: Int?
 
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -258,11 +267,51 @@ struct LoggerHero: View {
                 }
             }
             Spacer(minLength: 0)
+            heartChip
         }
         .lineLimit(1)
         // The row is a HEADER, not a control strip: VoiceOver reads it as one
         // phrase and the phase chip publishes its own button separately.
         .accessibilityElement(children: .contain)
+    }
+
+    /// The wrist, live — a heart and a number, pinned to the trailing edge.
+    ///
+    /// ── WHY IT IS AFTER THE `Spacer` AND NOT IN THE ROW OF CHIPS ────────────
+    /// The muscles are what this row drops first when it runs out of width
+    /// (see `tagRow`), and they drop by being omitted at an accessibility size
+    /// — a mechanism that works because everything before the spacer is the
+    /// same KIND of thing, a tag naming what the session is. A live reading is
+    /// not a tag; it changes several times a minute, and a number that moves
+    /// inside a row of fixed labels drags every chip beside it a point left and
+    /// right as the digits change. Pinned past the spacer it moves nothing, and
+    /// it is the one item here worth keeping at AX5: the muscles restate the
+    /// split name above them, and nothing else on this screen is your pulse.
+    ///
+    /// No capsule. Three of the five chips on this row are already capsules and
+    /// a fourth would read as a fourth tag; a glyph and a numeral read as a
+    /// reading, which is what it is.
+    @ViewBuilder
+    private var heartChip: some View {
+        if let liveBpm {
+            HStack(spacing: 3) {
+                Image(systemName: "heart.fill")
+                    .imageScale(.small)
+                    .foregroundStyle(Color.onyx.danger)
+                Text("\(liveBpm)")
+                    .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
+                    .foregroundStyle(Color.onyx.textPrimary)
+                    // Reserved, or the tag beside it steps sideways every time
+                    // the rate crosses 100 — the same rule the rest control's
+                    // countdown follows.
+                    .frame(minWidth: 26, alignment: .trailing)
+            }
+            .fixedSize()
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Heart rate")
+            .accessibilityValue("\(liveBpm) beats per minute, from your watch")
+        }
     }
 
     /// The muscles this day trains, primaries only, in deck order and

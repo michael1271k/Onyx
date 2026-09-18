@@ -552,12 +552,17 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     // is one path rather than two.
     private(set) var seed: SessionSeed
 
-    /// Lifts that have earned a load bump today. Published to
-    /// `AppEnvironment.progressionAlerts` by whoever opens the logger
-    /// (decision 10 — in-app only).
+    /// Lifts that have earned a load bump today, and those one session away.
+    /// Published to `AppEnvironment.progressionAlerts` by whoever opens the
+    /// logger (decision 10 — in-app only).
     ///
-    /// STAGED: the banner, the tab card's chip and the row chip are Track U's
-    /// (waves U1 and U2). Nothing in this build reads it yet.
+    /// ── WHAT READS IT, AND WHAT DELIBERATELY DOES NOT (W10) ─────────────────
+    /// `ExerciseCardView.oneMore` reads the `.oneMore` verdicts and draws the
+    /// card's cue chip. The `.ready` verdicts are NOT read from here: they have
+    /// already pre-filled the deck's rows (`SeedRow.progressed`), and the row
+    /// is the better evidence — a rebuild that drops the bump drops the chip
+    /// with it, which an alert-backed chip would not. `.oneMore` changes no
+    /// number in the deck, so this list is the only place it exists.
     private(set) var progressionAlerts: [ProgressionQueue.Alert] = []
 
     // ── The live PR bar ─────────────────────────────────────────────────────
@@ -2128,6 +2133,68 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         )) ?? (nil, nil, nil)
     }
 
+    #if DEBUG
+    /// Harness only: put the queue's verdicts on the deck without a store.
+    ///
+    /// The alerts are a STORE read (`AppDatabase.sessionSeed`) and the shot
+    /// fixtures that carry one seed a single previous session — which is a
+    /// chain of one, and a chain of one has no verdict. Seeding them directly
+    /// is what makes the `1 more @ 12` chip photographable at all; the
+    /// alternative is a fixture that has to satisfy the whole progression
+    /// engine, plan resolution and era included, to draw one capsule.
+    ///
+    /// Same shape and same reason as `WatchModel.seedDebugRest`.
+    func seedDebugProgression(_ alerts: [ProgressionQueue.Alert]) {
+        progressionAlerts = alerts
+    }
+    #endif
+
+    /// The last few sessions of this split by tonnage, oldest first, with THIS
+    /// session's tonnage appended (W10).
+    ///
+    /// ── WHY THIS SESSION IS ON THE END AND NOT LEFT OFF ─────────────────────
+    /// The sheet's Tonnage tile prints today's figure two points above the
+    /// trail, and a trail that stopped at last week would be the one line on
+    /// the sheet not about the session being finished. `splitTonnage` excludes
+    /// it by construction (`date < today` and `ended_at != nil`), which is
+    /// exactly right for the BAR and wrong for the picture — so the bar is read
+    /// from the store and the point is appended here, from the same
+    /// `totalVolumeKg` the tile draws. The two cannot disagree.
+    ///
+    /// Empty when there is nothing to plot: `Sparkline` refuses fewer than two
+    /// points and the sheet draws nothing at all rather than a flat line, which
+    /// is the same call `WeekSections` makes.
+    func tonnageTrail() -> [Double] {
+        guard let store else { return [] }
+        let previous = (try? store.splitTonnage(
+            userId: userId, dayKey: day.key, before: editing?.date ?? LogicalDay.today()
+        )) ?? []
+        guard !previous.isEmpty, totalVolumeKg > 0 else { return [] }
+        return previous + [totalVolumeKg]
+    }
+
+    /// Every performed set's effort, in the order the session performed them —
+    /// what `IntensityBar` draws (W10).
+    ///
+    /// ── THE SAME SHAPE THE SESSION PAGE BUILDS, FROM THE DECK ───────────────
+    /// `SessionAnalysis.report` derives `Report.intensity` by walking the
+    /// ledger's rows and taking the MAX rpe across a row's sides. This is the
+    /// same walk over the deck, and the max is the same rule: a unilateral pair
+    /// is one set and the harder arm is what it cost. Ghosts never happened;
+    /// warm-ups did, and a ramp-up set rated 5 is part of the shape of how the
+    /// session got hard.
+    ///
+    /// `nil` for an unrated set and NOT a zero — the bar paints those grey, and
+    /// its own guard refuses to draw at all when fewer than two sets carry a
+    /// rating.
+    func intensityTrace() -> [Double?] {
+        exercises.flatMap { exercise in
+            exercise.rows
+                .filter { $0.isDone && $0.kind != .ghost }
+                .map(\.rpe)
+        }
+    }
+
     /// The word the finish sheet opens on, or nil when nothing was rated.
     ///
     /// ── WHY IT IS COMPUTED HERE AND NOT IN THE SHEET ────────────────────────
@@ -2977,78 +3044,5 @@ enum LiveSessionStart {
 
     static func clear(dayKey: String, date: String) {
         UserDefaults.standard.removeObject(forKey: key(dayKey: dayKey, date: date))
-    }
-}
-
-// MARK: - Formatting
-
-/// The two number formats this screen repeats, in one place.
-enum OnyxFormat {
-    /// `47`, `49.5`, `13.75` — never `49.50`, never `13.8`.
-    ///
-    /// Loads on cable stacks and micro-plates are genuinely 13.75 kg, and
-    /// rounding one to a single decimal in the UI while storing the true value
-    /// is how a load you can read stops matching the load you can search for.
-    static func kg(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.usesGroupingSeparator = false
-        formatter.maximumFractionDigits = 2
-        return formatter.string(from: value as NSNumber) ?? "\(value)"
-    }
-
-    /// `1 074` — grouped, because a five-digit tonnage is unreadable without it.
-    static func volume(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = value < 100 ? 1 : 0
-        return formatter.string(from: value as NSNumber) ?? "\(value)"
-    }
-
-    /// `13,242.5` — the same grouping, and ALWAYS one decimal.
-    ///
-    /// ── WHY THIS IS A SIBLING AND NOT A CHANGE TO `volume` ──────────────────
-    /// `volume` drops the decimal above 100 and it is right to nearly
-    /// everywhere it is called: a per-exercise pill, a chart callout, a week's
-    /// total, a delta and a Lock Screen face are all readings where the tenth
-    /// of a kilogram is noise competing for width that is genuinely scarce.
-    ///
-    /// Three surfaces are not readings — they are the CLAIM about one session's
-    /// weight, and they are checked against each other and against
-    /// `workout_sessions.total_volume_kg`: the finish sheet's Tonnage tile, the
-    /// logger's Live Stats face and the summary's Volume cell. A half kilogram
-    /// rounded away there makes the app say 13,243 for a session the database
-    /// records as 13,242.5, and a figure that does not match the one the sheet
-    /// showed thirty seconds earlier is a figure nobody trusts again.
-    ///
-    /// `minimum` as well as `maximum`, so a whole number prints `9,000.0`
-    /// rather than `9,000` — a column of tonnages that gains and loses a
-    /// decimal place between sessions is harder to read than one that never
-    /// does.
-    static func volumeExact(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 1
-        formatter.maximumFractionDigits = 1
-        return formatter.string(from: value as NSNumber) ?? "\(value)"
-    }
-
-    /// `8`, `8.5`, `10`. CR-10, and its own function.
-    ///
-    /// It used to call `kg(_:)`, which produced the right characters for the
-    /// wrong reason: an RPE is a point on a ten-point scale in half steps, and a
-    /// load is a mass with two decimals of micro-plate precision. Sharing one
-    /// formatter means the next change to how ONYX prints a load — grouping,
-    /// a third decimal — silently changes how it prints an effort rating.
-    static func rpe(_ value: Double) -> String {
-        value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
-    }
-
-    /// Weighted set counts print at most one decimal: assistance is credited in
-    /// halves, so `1.5` is a real value and `1.50` is noise.
-    static func sets(_ value: Double) -> String {
-        value == value.rounded()
-            ? String(Int(value))
-            : String(format: "%.1f", value)
     }
 }

@@ -44,6 +44,52 @@ _Nothing yet._
 
 ---
 
+## [6.7.0] — 2026-09-18 · The numbers the logger already had
+
+Everything here was already being measured, computed or sent, and none of it
+was being drawn. The rest between your sets was clocked and stored and never
+shown. The coach worked out which lifts are one session away from a heavier
+load and published the answer to nobody. A record knew what it beat for exactly
+as long as it took to file it. The watch has had your heart rate on your wrist
+the whole time and the phone has never once asked for it.
+
+### Added
+- **Rest, on the session ledger.** Each set's row carries the rest taken before
+  it under its ordinal, with an arrow when it moved by fifteen seconds or more
+  against the set before. VoiceOver says it in words on every row, at every
+  type size.
+- **A rest bar on the exercise card.** While a movement is resting, its header
+  carries a bar that drains against the rest the plan prescribed — and against
+  the new total when you nudge it by ±15 s, not the old one.
+- **The `1 more @ 12` cue.** A movement whose last two sessions have it one
+  session away from a load bump now says so on its card, beside the rep
+  window, while you are still standing in front of it. The `↗ 42.5 kg` chip
+  that means "the load goes up today" is unchanged and still wins the slot.
+- **What the trophy was worth.** A record row on the session summary shows its
+  margin — `+2.5 kg`, `+2` — beside the trophy for two seconds as the page
+  lands, then gets out of the way. The long press still opens the full sheet.
+- **The finish sheet has a shape.** One sparkline of this session's tonnage
+  against the last few of its own split, with a per-cent against their mean,
+  and the intensity gradient that was only on the summary page — the two
+  questions you actually ask between the last set and the locker.
+- **Live heart rate on the phone.** The watch puts its current reading on the
+  rest pulse and answers a phone-driven rest with one echo carrying it. The
+  logger's header shows it beside the clock; the Live Stats Effort card shows
+  it in place of an average that does not exist until the next morning's sync.
+  It ages out after two minutes rather than going stale on screen.
+- **The sparkline on a movement's ledger header is a door** — tap it and the
+  same estimated-1RM chart the exercise's own page draws opens on this
+  movement, with the dates the sparkline could not carry. From three sessions
+  up; below that the trail is what it was.
+
+### Changed
+- **`RestPulse` carries `bpm`** — optional and last, so a phone or a watch on
+  an older build neither throws nor stops seeing the rest clock.
+- **`IntensityBar` and `OnyxFormat` moved into OnyxUI** so the finish sheet and
+  the session page draw one bar and print numbers one way. No drawing changed.
+
+---
+
 ## [6.6.0] — 2026-09-18 · Pulse, six squares, your order
 
 Nothing on Pulse scrolls sideways any more. The two-page carousel that held

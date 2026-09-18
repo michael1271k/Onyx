@@ -76,6 +76,10 @@ struct FinishSheet: View {
     /// Which cell is open as a stepper. One at a time: three steppers side by
     /// side on a phone is three two-point targets.
     @State private var open: Metric?
+    /// The last few sessions of this split by tonnage, with this one on the end
+    /// (W10). `@State` for the reason the three figures above are: it is a
+    /// store read, and a read in `body` runs once per frame.
+    @State private var trail: [Double] = []
     @FocusState private var editing: Metric?
 
     private enum Metric: Hashable { case duration, bpm, calories }
@@ -96,6 +100,7 @@ struct FinishSheet: View {
                 VStack(spacing: OnyxSpace.l) {
                     dial
                     summary
+                    shape
                     if !topMovement.isEmpty { heaviest }
                     if let sessionId = model.sessionId { summaryLink(sessionId) }
                 }
@@ -130,6 +135,7 @@ struct FinishSheet: View {
             .task {
                 loadMetrics()
                 loadSuggestion()
+                trail = model.tonnageTrail()
             }
         }
         .presentationDetents([.medium, .large], selection: $detent)
@@ -269,6 +275,107 @@ struct FinishSheet: View {
             provenanceLine
         }
     }
+
+    // MARK: - The shape of it
+
+    /// The two readings that are about the session's SHAPE rather than its
+    /// totals: how this one compares with the last few of its split, and how
+    /// hard it got as it went (W10).
+    ///
+    /// ── WHY THEY BELONG HERE AND NOT ON THE SUMMARY PAGE ────────────────────
+    /// They are on the summary page too, and that is not a duplicate: the page
+    /// is where a session is STUDIED and this sheet is where it is put down.
+    /// The two questions anybody asks in the thirty seconds between the last
+    /// set and the locker are "was that a lot" and "did I fade", and neither is
+    /// answerable from a tonnage figure and a set count. `View summary` is two
+    /// taps and a navigation away, which is two taps more than the moment has.
+    ///
+    /// ── AND WHY THERE IS ONLY ONE SPARK ─────────────────────────────────────
+    /// Decision 10: essentials only. Tonnage is the one figure that survives an
+    /// exercise being swapped in or out of a split (`SplitVolumeChart`'s own
+    /// header), so it is the one trail worth six points here; the per-movement
+    /// trails live on the page, beside the sets they describe.
+    ///
+    /// Both draw nothing when they have nothing: `Sparkline` refuses under two
+    /// points, `IntensityBar` refuses under three sets or two ratings, and an
+    /// empty `VStack` of two absent children takes no height. A first session
+    /// on a new split therefore sees exactly what it saw before this wave.
+    @ViewBuilder
+    private var shape: some View {
+        if trail.count >= 2 || intensity.count >= 3 {
+            VStack(alignment: .leading, spacing: OnyxSpace.s) {
+                if trail.count >= 2 { tonnageTrail }
+                IntensityBar(values: intensity)
+            }
+        }
+    }
+
+    /// This session's tonnage against the last few of its own split.
+    ///
+    /// ── NOT ZERO-BASED, THOUGH TONNAGE HAS A ZERO ───────────────────────────
+    /// `Sparkline`'s own header names tonnage as the example of a quantity with
+    /// a meaningful zero, and that is right for a tile drawing one number's
+    /// history against nothing. It is wrong here. Six sessions of one split sit
+    /// inside a few per cent of each other, so a 0…max band puts all six in the
+    /// top fifth of the graphic and the line comes out flat — the shape stops
+    /// carrying information, which is the failure `band` is written to avoid at
+    /// the other end.
+    ///
+    /// The absolute claim is not lost: it is the per-cent beside the line,
+    /// which is a number and does not need a baseline to be read. The line's
+    /// job is the SHAPE — steady, climbing, or a deload week — and the shape
+    /// needs the range.
+    private var tonnageTrail: some View {
+        HStack(spacing: OnyxSpace.s) {
+            Text("vs last \(trail.count - 1)")
+                .onyxMicro()
+                .fixedSize()
+            Sparkline(points: trail, color: accent, zeroBased: false)
+                .frame(height: 18)
+            Text(deltaLabel)
+                .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
+                .foregroundStyle(Color.onyx.textSecondary)
+                .fixedSize()
+        }
+        .padding(.horizontal, OnyxSpace.m)
+        .frame(minHeight: 44)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onyxGlass(.row)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Tonnage against your last \(trail.count - 1) \(model.day.label) sessions")
+        .accessibilityValue(spokenDelta)
+    }
+
+    /// `+8%` against the MEAN of the sessions behind it, not against the last
+    /// one.
+    ///
+    /// One session is a sample of one and every split has a light week in it;
+    /// measured against the last session alone, the same workout reads +12 %
+    /// one week and −11 % the next while nothing about it changed. The mean of
+    /// the trail is what the trail is a picture of.
+    private var deltaLabel: String {
+        guard let pct = deltaPct else { return "" }
+        return "\(pct > 0 ? "+" : "")\(jsIntegerString(pct))%"
+    }
+
+    private var spokenDelta: String {
+        guard let pct = deltaPct else { return "no comparison" }
+        if pct == 0 { return "the same as usual" }
+        return "\(jsIntegerString(abs(pct))) per cent \(pct > 0 ? "above" : "below") usual"
+    }
+
+    private var deltaPct: Double? {
+        let previous = trail.dropLast()
+        guard !previous.isEmpty, let current = trail.last else { return nil }
+        let mean = previous.reduce(0, +) / Double(previous.count)
+        guard mean > 0 else { return nil }
+        return jsRound((current - mean) / mean * 100)
+    }
+
+    /// Every performed set's rating, in order. Computed rather than stored: it
+    /// is a walk over the deck already in memory, and it must move when a set
+    /// is rated from the sheet's own dial being dragged.
+    private var intensity: [Double?] { model.intensityTrace() }
 
     /// Where a figure came from. It matters which: a MEASURED average heart
     /// rate is the watch's record of this session, an estimated one is

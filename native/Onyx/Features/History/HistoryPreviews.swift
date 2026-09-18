@@ -88,6 +88,16 @@ enum HistoryPreviews {
                 SessionDetailView(sessionId: lastSession, startAtLedger: true, startWithAssists: true)
             }
             .environment(environment())
+        // ── THE TWO SECONDS `session-ledger` CANNOT PHOTOGRAPH (W10) ───────
+        // The record row's margin is shown on arrival and taken away again,
+        // and the shot script sleeps eight seconds before it presses the
+        // shutter. Same page, same scroll position, margins held — the pair is
+        // the review, exactly as `session-ledger-assists` is for row 2.
+        case "session-margin":
+            NavigationStack {
+                SessionDetailView(sessionId: lastSession, startAtLedger: true, holdMargins: true)
+            }
+            .environment(environment())
         case "session-atlas":
             NavigationStack { SessionDetailView(sessionId: lastSession, startAtAtlas: true) }
                 .environment(environment())
@@ -581,10 +591,10 @@ enum HistoryPreviews {
             // reorder has to survive.
             let placed = ["ex-treadmill": 0, "ex-incline": 1, "ex-pulldown": 2,
                           "ex-row": 3, "ex-raise": 4, "ex-hkr": 5]
-            func set(_ ex: String, _ i: Int, _ w: Double, _ r: Int, type: String = "normal", side: String? = nil, pair: String? = nil, rpe: Double? = nil) throws {
+            func set(_ ex: String, _ i: Int, _ w: Double, _ r: Int, type: String = "normal", side: String? = nil, pair: String? = nil, rpe: Double? = nil, rest: Int? = nil) throws {
                 try WorkoutSet(id: "\(id)-\(ex)-\(i)\(side ?? "")", sessionId: id, exerciseId: ex, setIndex: i, weightKg: w, reps: r,
                                setType: type, side: side, pairId: pair, est1rmKg: OneRepMax.estimate(weight: w, reps: Double(r)), rpe: rpe,
-                               exerciseOrder: placed[ex], foldOrder: order).insert(db)
+                               exerciseOrder: placed[ex], actualRestSec: rest, foldOrder: order).insert(db)
                 order += 1
             }
             try set("ex-incline", 0, 20, 12, type: "warmup")
@@ -600,8 +610,19 @@ enum HistoryPreviews {
             // is what the reps say happened: 11/10/10 against 10/9/12 at the
             // same load. `session-pairs` is the shot that reviews it.
             let harder = s.date == "2026-09-02"
+            // ── THE REST BETWEEN SETS, ON THE LAST SESSION ONLY (W10) ───
+            // `actual_rest_sec` is written by the APPEND path alone, so most
+            // rows in a real store carry none and the ledger draws nothing at
+            // all — which is what the six sessions behind this one photograph.
+            // The last one carries three, and they carry the three STATES:
+            // set 1 has nothing before it to have rested from (the warm-up
+            // above it is unmeasured), set 2 is +35 s and set 3 is +45 s, so
+            // both arrows and the no-arrow case are in one card.
+            let rests: [Int?] = id == lastSession ? [95, 130, 175] : []
             for (i, (w, r)) in s.incline.enumerated() {
-                try set("ex-incline", i + 1, w, r, rpe: (harder ? 7.5 : 7) + Double(i) * 0.5)
+                try set("ex-incline", i + 1, w, r,
+                        rpe: (harder ? 7.5 : 7) + Double(i) * 0.5,
+                        rest: i < rests.count ? rests[i] : nil)
             }
             // The last set of the pulldown on the session the shot loop opens
             // is taken to FAILURE, which is the only way any screenshot of this
@@ -611,7 +632,12 @@ enum HistoryPreviews {
             // that breaks silently.
             for (i, (w, r)) in s.pulldown.enumerated() {
                 let failed = id == lastSession && i == s.pulldown.count - 1
-                try set("ex-pulldown", i + 1, w, r, rpe: failed ? 10 : 7.5)
+                // Two equal rests, so the SECOND row prints its clock with no
+                // arrow — the case a fixture of only-moving rests would hide,
+                // and the one that proves the fifteen-second floor is doing
+                // something.
+                try set("ex-pulldown", i + 1, w, r, rpe: failed ? 10 : 7.5,
+                        rest: id == lastSession ? 120 : nil)
             }
             for (i, (w, r)) in s.row.enumerated() { try set("ex-row", i + 1, w, r, rpe: 8) }
             for (i, (w, r)) in s.raise.enumerated() {

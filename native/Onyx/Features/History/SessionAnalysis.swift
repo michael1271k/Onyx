@@ -134,10 +134,27 @@ enum SessionAnalysis {
         /// were. `2/3 @ ceiling` on the ledger header — the reading the
         /// double-progression rule is actually about.
         let atCeiling: Int
-        /// Session-best estimated 1RM across every session of this movement,
-        /// oldest first — the 40×16 sparkline in the header. Values only: a
-        /// sparkline has no axis, so carrying the dates would invite a label.
-        let spark: [Double]
+        /// Session-mean estimated 1RM across every session of this movement,
+        /// oldest first, DATED.
+        ///
+        /// ── THE DATES ARE BACK, AND FOR A CHART RATHER THAN A LABEL (W10) ───
+        /// This was `[Double]` and the header said so: "a sparkline has no
+        /// axis, so carrying the dates would invite a label". The sparkline
+        /// still has no axis and still takes `spark` below. What changed is
+        /// that the trail is now a DOOR — tapping it opens `E1rmTrendChart`,
+        /// the same plotted, scrubbable chart the exercise's own page draws
+        /// (`ExerciseDetailView:159`) — and a chart without dates is a chart
+        /// with nothing to put on its x axis.
+        ///
+        /// `sessionMeanE1rm` has always returned the pairs and this line always
+        /// threw half of them away; the sheet is the reader they were computed
+        /// for. Nothing about the 56×16 graphic moves.
+        let trail: [(date: String, kg: Double)]
+        /// The trail's values alone — the 56×16 sparkline in the header.
+        ///
+        /// Computed, not stored, so the graphic and the chart behind it cannot
+        /// come to be built from two different reads of the same history.
+        var spark: [Double] { trail.map(\.kg) }
         /// What each record-setting set actually BEAT, keyed by the set's own
         /// `set_index` (`DetailSet.setNumber`).
         ///
@@ -158,6 +175,23 @@ enum SessionAnalysis {
         /// two `DetailSet`s under one `DetailRow`, and the record belongs to
         /// whichever side completed it.
         let records: [Int: [LivePrRecord]]
+        /// MEASURED rest before each set, in seconds, keyed by the set's own
+        /// `set_index` — `WorkoutSet.actual_rest_sec`, as the logger clocked it.
+        ///
+        /// ── WHY IT IS A SIDE TABLE AND NOT A FIELD ON `DetailSet` ───────────
+        /// `DetailSet` lives in OnyxCore and is the shape the golden vectors
+        /// are written in (`GoldenVector.swift:20-26` — never regenerated). A
+        /// new key on it is a new key in every one of them, for a number the
+        /// domain does not compute with: rest reaches no score, no PR axis and
+        /// no tonnage. `records` one field up made the same call for the same
+        /// reason and this joins it, keyed the same way.
+        ///
+        /// Sparse and usually EMPTY. Only the append path measures a rest
+        /// (`LoggerModel.snapshot(_:in:actualRestSec:)`); an amend rebuilds the
+        /// row and does not, a set logged on the watch carries none, and every
+        /// row written before the column existed has none. Absent is "not
+        /// measured", which is what the ledger draws as nothing at all.
+        let rest: [Int: Int]
     }
 
     struct TrailSeries: Identifiable {
@@ -292,8 +326,13 @@ enum SessionAnalysis {
             let timed = TimedExercise.isTimed(canonical)
             var sets: [DetailSet] = []
             var records: [Int: [LivePrRecord]] = [:]
+            var rest: [Int: Int] = [:]
             for r in g.sets {
                 let d = pr.perSet[i]; i += 1
+                // Zero is not a measurement. `actual_rest_sec` is written from
+                // the gap the logger clocked, and a 0 on the row is the first
+                // set of a movement — nothing preceded it to rest from.
+                if let seconds = r.actualRestSec, seconds > 0 { rest[r.setIndex] = seconds }
                 var s = detailSet(r)
                 s.isPr = !d.axes.isEmpty
                 s.est1rmKg = d.est1rm
@@ -381,8 +420,9 @@ enum SessionAnalysis {
                 previousSets: prev,
                 cue: cue, stats: SessionDetail.exerciseStats(detail), window: window,
                 atCeiling: atCeiling,
-                spark: sessionMeanE1rm((priorByEx[g.exerciseId] ?? []) + g.sets).map(\.kg),
-                records: records
+                trail: sessionMeanE1rm((priorByEx[g.exerciseId] ?? []) + g.sets),
+                records: records,
+                rest: rest
             ))
         }
 

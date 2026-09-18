@@ -52,6 +52,15 @@ struct SessionDetailView: View {
     /// are the same height — the same trick `seededExpandedWeek` used for the
     /// row W1 deleted.
     var startWithAssists = false
+    /// Holds every record row's margin open instead of taking it away after
+    /// two seconds — the harness only.
+    ///
+    /// The shot script sleeps eight seconds before it asks the OS for a
+    /// picture, so the callout this wave adds is always already gone by the
+    /// time anything photographs it. Two shots of one screen, as
+    /// `startWithAssists` takes for row 2: `session-ledger` is the page at
+    /// rest, `session-margin` is the two seconds it opens on.
+    var holdMargins = false
 
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -80,6 +89,16 @@ struct SessionDetailView: View {
         let setLabel: String
         let records: [LivePrRecord]
         var id: String { (records.first?.id ?? exercise) + setLabel }
+    }
+
+    /// One tapped sparkline, frozen the same way and for the same reason (W10).
+    @State private var trailSheet: TrailTarget?
+
+    /// The movement's whole est-1RM history, as `E1rmTrendChart` takes it.
+    struct TrailTarget: Identifiable {
+        let exercise: String
+        let points: [(date: String, kg: Double)]
+        var id: String { exercise }
     }
 
     /// The split's own colour — the tint of the tonnage line, and the wash
@@ -181,6 +200,17 @@ struct SessionDetailView: View {
                 records: target.records,
                 timed: target.timed
             )
+        }
+        // ── THE SPARKLINE'S OWN SHEET (W10) ────────────────────────────────
+        // The same chart the exercise's own page draws, from the same type
+        // (`E1rmTrendChart`, second caller after `ExerciseDetailView:159`) —
+        // not a second plot of one history. The header's 56×16 trail says
+        // "this moved"; the question it provokes is "by how much, and when",
+        // and that needs an axis, which is the one thing a sparkline refuses
+        // to have. `.medium` because a line chart with a date axis is a
+        // half-screen object and the ledger under it stays visible.
+        .sheet(item: $trailSheet) { target in
+            trailSheet(target)
         }
         // ── WHY THIS IS `id:`-KEYED AND NOT A ONE-SHOT `.task` ──────────────
         // §U4.5 makes this page's own Edit button rewrite the session it is
@@ -827,6 +857,20 @@ struct SessionDetailView: View {
         let comparable = ex.rows.contains {
             Self.previousSet(ex, row: $0) != nil || Self.previousUnitVolume(ex, row: $0) != nil
         }
+        // ── THE RESTS, IN ROW ORDER, SO THE DELTA IS THE CARD'S TO COMPUTE ──
+        // The same division of labour `prevUnitKg` already states: the row
+        // draws a reading, the CARD decides what that reading is measured
+        // against. A row cannot know what the row above it rested, and passing
+        // it the whole card so it could look would be handing every row the
+        // card's own job.
+        //
+        // Keyed off the row's LEAD set (`set ?? left`), because a unilateral
+        // pair is two sets under one row and both sides are performed inside
+        // one rest — the left side's `set_index` is the one the gap was
+        // clocked before.
+        let rests: [Int?] = ex.rows.map { row in
+            (row.set ?? row.left ?? row.right).flatMap { ex.rest[Int($0.setNumber)] }
+        }
         return VStack(alignment: .leading, spacing: 0) {
             ledgerHeader(ex, family: family)
             if !layout.heads.isEmpty, !typeSize.isAccessibilitySize {
@@ -864,7 +908,18 @@ struct SessionDetailView: View {
                     layout: layout,
                     // Whether ANY row on this card has a counterpart — see
                     // `comparable` above.
-                    cardComparable: comparable
+                    cardComparable: comparable,
+                    restSec: rests[index],
+                    // Against the row ABOVE on this card, and nothing else. Not
+                    // against the plan: `plan.restSec` is a prescription this
+                    // page has no business grading a finished session by, and
+                    // not against the previous session either — rests are not
+                    // positionally comparable the way loads are, because a
+                    // movement's set count moves between weeks.
+                    restDeltaSec: index > 0
+                        ? rests[index].flatMap { current in rests[index - 1].map { current - $0 } }
+                        : nil,
+                    marginHeld: holdMargins
                 )
             }
         }
@@ -991,8 +1046,45 @@ struct SessionDetailView: View {
             secondary: all.filter { !$0.primary },
             brief: tags.brief,
             results: tags.results,
-            seededOpen: startWithAssists
+            seededOpen: startWithAssists,
+            // Nil when there is nothing a chart could say that the sparkline
+            // has not. `E1rmTrendChart` plots points and a `LineMark` between
+            // two of them is the sparkline again with an axis bolted on, so the
+            // door only exists from three sessions up — which is also where
+            // `Sparkline` itself stops being a wobble.
+            onTrail: ex.trail.count >= 3
+                ? { trailSheet = TrailTarget(exercise: ex.canonical, points: ex.trail) }
+                : nil
         )
+    }
+
+    /// The trail, plotted. Named `trailSheet(_:)` rather than built inline so
+    /// the `.sheet` above stays a line.
+    private func trailSheet(_ target: TrailTarget) -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: OnyxSpace.m) {
+                    E1rmTrendChart(
+                        series: [SessionAnalysis.TrailSeries(id: target.exercise, points: target.points)]
+                    )
+                    .frame(height: 220)
+                    Text("Each point is that session's mean estimated one-rep max for this movement — the same figure the sparkline draws, with the dates it was measured on.")
+                        .onyxType(.caption)
+                        .foregroundStyle(Color.onyx.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(OnyxSpace.l)
+            }
+            .onyxScreen(.train)
+            .navigationTitle(target.exercise)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { trailSheet = nil }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 
     /// Primary and assisting movers, deduped, capped at what a 375 pt line
@@ -1394,6 +1486,11 @@ private struct LedgerHeader: View {
     let results: [MetaTagRow.Tag]
     /// See `SessionDetailView.startWithAssists`.
     var seededOpen = false
+    /// Opens the movement's est-1RM chart. Nil where there is not enough
+    /// history for a chart to say more than the sparkline does — the header
+    /// then draws the trail as it always did, with no gesture on it, because an
+    /// affordance that does nothing is worse than no affordance.
+    var onTrail: (() -> Void)?
 
     /// Whether row 2 is showing the assists instead of the readings. Per CARD,
     /// which is why this view exists at all: the header used to be a function
@@ -1425,9 +1522,7 @@ private struct LedgerHeader: View {
                     // collapses sixteen landmarks onto four hues, so a chest
                     // day and a shoulder day drew the same blue trail beside
                     // two differently-coloured cards.
-                    Sparkline(points: spark, color: family, zeroBased: false)
-                        .frame(width: 56, height: 16)
-                        .accessibilityHidden(true)
+                    trail
                 }
             }
             resultsRow
@@ -1444,6 +1539,42 @@ private struct LedgerHeader: View {
         // colour. The band used to paint its own 28 %→4 % gradient and its own
         // 3 pt rail, which is exactly what made it read as a coloured header
         // bolted to a black list rather than as the top of one card.
+    }
+
+    /// The 56×16 est-1RM trail, and — since W10 — the way into the chart of it.
+    ///
+    /// ── WHY IT IS A `Button` AND NOT AN `onTapGesture` ──────────────────────
+    /// The sparkline is 56×16 and the target has to be 44 pt tall to be hit at
+    /// all, so the gesture needs a shape bigger than the ink. A `Button` gets
+    /// `.contentShape` and the press feedback for free, publishes itself to
+    /// VoiceOver as a button with a label rather than staying
+    /// `accessibilityHidden`, and takes the app's own `.onyxPress`. A bare tap
+    /// gesture would need all four spelled out and would still be invisible to
+    /// the rotor.
+    ///
+    /// The graphic itself does not change and neither does the row's height:
+    /// the 44 pt target is a `.frame` on the button, and the row it sits in is
+    /// already 24 pt of capsules inside a header taller than both.
+    @ViewBuilder
+    private var trail: some View {
+        if let onTrail {
+            Button(action: onTrail) {
+                sparkline
+                    .frame(height: 44)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .onyxPress()
+            .accessibilityLabel("Estimated one rep max trail")
+            .accessibilityHint("Opens the chart.")
+        } else {
+            sparkline.accessibilityHidden(true)
+        }
+    }
+
+    private var sparkline: some View {
+        Sparkline(points: spark, color: family, zeroBased: false)
+            .frame(width: 56, height: 16)
     }
 
     // MARK: - Line 0 · which movement
@@ -1616,85 +1747,16 @@ private struct LedgerHeader: View {
 
 // MARK: - The session's fingerprint
 
-/// How hard the session got, set by set — one bar, and no axis.
-///
-/// ── WHY A GRADIENT AND NOT A CHART ──────────────────────────────────────────
-/// The question it answers is shape-shaped: did this session open easy and end
-/// at the stop, or was it flat at eight the whole way through? A `Chart` with
-/// an axis would invite the reader to look up individual values, which the
-/// ledger below already prints exactly — and would cost a plot, a scale and a
-/// legend on a page that already has three charts on it.
-///
-/// One stop per set, placed at the CENTRE of its slice rather than at its
-/// edges, so adjacent efforts blend instead of banding. That is the difference
-/// between a fingerprint and a bar chart lying on its side.
-///
-/// ── AND WHY IT COSTS NOTHING TO SCROLL PAST ─────────────────────────────────
-/// `LinearGradient` with n stops is one layer and no offscreen pass. The stops
-/// are computed once per value change (the array is a `let` on the report,
-/// built off the main actor by `SessionAnalysis`), never per frame — which is
-/// the rule the rest of this wave's additions are held to.
-private struct IntensityBar: View {
-    let values: [Double?]
-
-    /// Two sets is not a shape. One rated set among twenty is not one either:
-    /// a bar that is grey for 95 % of its length says nothing about effort and
-    /// everything about rating discipline, which is not what it is for.
-    private var rated: Int { values.compactMap { $0 }.count }
-
-    private var stops: [Gradient.Stop] {
-        guard values.count > 1 else {
-            return values.first.map { [Gradient.Stop(color: colour($0), location: 0),
-                                       Gradient.Stop(color: colour($0), location: 1)] } ?? []
-        }
-        return values.enumerated().map { index, value in
-            Gradient.Stop(
-                color: colour(value),
-                location: (Double(index) + 0.5) / Double(values.count)
-            )
-        }
-    }
-
-    /// An unrated set is text-grey and not a zero — the same rule
-    /// `Color.onyx.effort` follows at the bottom of its own ladder.
-    private func colour(_ rpe: Double?) -> Color {
-        rpe.map { Color.onyx.effort($0) } ?? Color.onyx.textTertiary
-    }
-
-    var body: some View {
-        if values.count >= 3, rated >= 2 {
-            VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                HStack(spacing: OnyxSpace.xs) {
-                    Text("Intensity")
-                        .onyxMicro()
-                    Spacer(minLength: 0)
-                    Text("\(values.count) sets")
-                        .onyxType(.micro).onyxNumeral()
-                        .foregroundStyle(Color.onyx.textTertiary)
-                }
-                Capsule()
-                    .fill(LinearGradient(stops: stops, startPoint: .leading, endPoint: .trailing))
-                    .frame(height: 8)
-            }
-            .padding(OnyxSpace.s)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .onyxGlass(.row)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Intensity across \(values.count) sets")
-            .accessibilityValue(spoken)
-        }
-    }
-
-    /// VoiceOver gets the three readings a sighted reader takes off the shape:
-    /// where it started, where it peaked, where it ended.
-    private var spoken: String {
-        let rated = values.compactMap { $0 }
-        guard let first = rated.first, let last = rated.last, let peak = rated.max() else {
-            return "not rated"
-        }
-        return "opened at RPE \(OnyxFormat.rpe(first)), peaked at \(OnyxFormat.rpe(peak)), finished at \(OnyxFormat.rpe(last))"
-    }
-}
+// ── `IntensityBar` LIVES IN OnyxUI NOW (W10) ────────────────────────────────
+// `OnyxUI/Charts/IntensityBar.swift`, public. It was private to this file and
+// the finish sheet wanted the same bar: the shape of how hard a session got is
+// the one reading that answers "what was that like" in a glance, and the finish
+// sheet is where that question is actually asked — thirty seconds after the
+// last set, not on a page you navigate to. Two implementations of one gradient
+// is two answers to one question, so it moved rather than being copied.
+//
+// Nothing about the drawing changed. It took `OnyxFormat` with it, which is why
+// that enum is in OnyxUI too — see its own header.
 
 // MARK: - The progression chart
 
@@ -1866,6 +1928,15 @@ struct SetRow: View {
     /// guaranteed blanks. Defaulted true, which is the behaviour every caller
     /// that does not know had before.
     var cardComparable: Bool = true
+    /// MEASURED rest before this set, in seconds (`actual_rest_sec`), or nil
+    /// where nothing clocked it — which is most rows. See `ExerciseReport.rest`.
+    var restSec: Int?
+    /// This rest against the one before it on the same card, in seconds. Nil on
+    /// the first row of a card, and nil wherever either side was not measured:
+    /// a delta against an unknown is not a delta.
+    var restDeltaSec: Int?
+    /// Screenshot harness only — see `SessionDetailView.holdMargins`.
+    var marginHeld = false
 
     /// The badge's side in the ledger, named because two things depend on it
     /// being the same number: the row's own gutter and the column heads' empty
@@ -2020,6 +2091,9 @@ struct SetRow: View {
     /// Bumped by the long press, so the haptic goes through the app's own
     /// trigger rather than a bare `UIImpactFeedbackGenerator`.
     @State private var inspects = 0
+    /// Whether the PR margin is still showing. True until two seconds after the
+    /// row first lands — see `marginText(_:)`.
+    @State private var showingMargin = true
 
     /// ── WHY THE ROW HAS TWO SHAPES ──────────────────────────────────────────
     /// Three things compete for one line: the badge, `42kg × 10` and an effort
@@ -2532,7 +2606,117 @@ struct SetRow: View {
     /// thing on this page worth interrupting a scroll for, which is the reading
     /// the original layout was trying to buy with a second glyph.
     private var badgeGroup: some View {
-        badge
+        VStack(spacing: 1) {
+            badge
+            restGutter
+        }
+    }
+
+    /// The rest taken BEFORE this set, in the badge's own column.
+    ///
+    /// ── WHY THE GUTTER AND NOT A FOURTH TRACK ───────────────────────────────
+    /// The card's table is `KG · REPS · RPE` and all three tracks are already
+    /// at their floor on a 375 pt phone — `set-row-u2` is the wave that got the
+    /// row to stop being wider than the screen, and a fourth column would undo
+    /// it. The badge's column is 28 pt wide, is the same 28 pt the heading
+    /// leaves empty, and has nothing under the ordinal at all.
+    ///
+    /// ── AND WHY IT COSTS NO HEIGHT ON A CARD THAT COMPARES ──────────────────
+    /// A comparable card already reserves a delta line under every reading
+    /// (`SetLayout.comparable` and `deltaLine`), and the badge is 28 pt inside
+    /// a row that is therefore already taller than it. The rest lands in slack
+    /// that was there anyway. On a card that reserves NO delta — a bout, a
+    /// timed hold — the line WOULD add height, so it is not drawn: those are
+    /// also the two shapes where the number says least (a treadmill block is
+    /// one set, and there is nothing before it to have rested from).
+    ///
+    /// ── THE DELTA IS A DIRECTION, NOT A VERDICT ─────────────────────────────
+    /// An arrow and no colour. Resting longer than the set before is neither
+    /// good nor bad — it is what the session did, and this app paints `good`
+    /// only on facts it is prepared to call improvements. Under 15 seconds no
+    /// arrow at all: `restSec` is wall-clock, it moves by whatever a rack queue
+    /// and a phone unlock cost, and an arrow on every row would be noise
+    /// wearing the shape of a signal. Fifteen is the same grid `adjustRest`
+    /// nudges on.
+    @ViewBuilder
+    private var restGutter: some View {
+        if layout.comparable, cardComparable, !typeSize.isAccessibilitySize {
+            // ── TWO TENANTS, ONE LINE, AND THE MARGIN HAS THE LEASE ────────
+            // See `marginText`. The margin is shown for two seconds and the
+            // rest takes the line back; on a row with no record — which is
+            // most of them — the rest has it from the first frame.
+            if let margin, showingMargin {
+                marginText(margin.short)
+            } else if let restSec {
+                Text(restLabel(restSec))
+                    .onyxType(.micro).onyxNumeral()
+                    .foregroundStyle(Color.onyx.textTertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(width: SetRow.badgeSide, alignment: .center)
+                    // Spoken by `spoken`, which says it in words — "rested 2
+                    // minutes 15 seconds" rather than "up 2 colon 15".
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    /// What the trophy was worth, in the badge's own column, for two seconds.
+    ///
+    /// ── WHY IT SHARES THE GUTTER RATHER THAN TAKING A PLACE IN THE TABLE ────
+    /// The row is a three-track table at its width floor on a 375 pt phone
+    /// (`set-row-u2`), so a fourth reading would push one of the three out —
+    /// and a reading that appears for two seconds and then leaves would push it
+    /// out and pull it back, twenty rows of a page re-laying themselves under a
+    /// thumb. An overlay over the table was the other draft and it landed on
+    /// the KG column's own delta arrow, which is a collision rather than a
+    /// layout.
+    ///
+    /// Under the badge is directly under the TROPHY — which is what the margin
+    /// is about — it is the one column with slack, and it is a slot that
+    /// already exists. Nothing moves when the two swap, because the line is the
+    /// same height either way.
+    ///
+    /// ── AND WHY IT IS TRANSIENT AT ALL ──────────────────────────────────────
+    /// The page is the one you land on when you finish a workout, and the
+    /// question it answers on arrival is "what did I just do". A record's
+    /// MARGIN is the best two seconds of that and a poor permanent column: it
+    /// is true of a handful of rows out of twenty, it is a different unit on
+    /// each of them, and a week later it is a figure already destroyed in the
+    /// store (`ExerciseReport.records`' own header — `personal_records` is
+    /// upsert-on-conflict and keeps no history). So it is shown, and then it
+    /// gets out of the way; the long press still opens `PrRecordSheet` with
+    /// both numbers, for ever.
+    ///
+    /// Reduce Motion gets no cross-fade, only the same two-second life: what is
+    /// animated is opacity on one micro line, and removing it outright would
+    /// take the fact away rather than the movement.
+    private func marginText(_ margin: String) -> some View {
+        Text(margin)
+            .onyxType(.micro).fontWeight(.bold).onyxNumeral()
+            .foregroundStyle(Color.onyx.record)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .frame(width: SetRow.badgeSide, alignment: .center)
+            .transition(.opacity)
+            // Said by `spoken`, which is the row's one label — a line that
+            // published itself would interrupt the sentence the row is in the
+            // middle of.
+            .accessibilityHidden(true)
+            .task {
+                guard !marginHeld else { return }
+                try? await Task.sleep(for: .seconds(2))
+                withAnimation(OnyxMotion.move) { showingMargin = false }
+            }
+    }
+
+    /// `2:15`, with a bare arrow in front when it moved by a quarter-minute or
+    /// more against the set before.
+    private func restLabel(_ seconds: Int) -> String {
+        let clock = Clock.format(Double(seconds))
+        guard let delta = restDeltaSec, abs(delta) >= 15 else { return clock }
+        return "\(delta > 0 ? "↑" : "↓")\(clock)"
     }
 
     /// Never wrapped, and never scaled below legibility: it is the row.
@@ -2628,7 +2812,62 @@ struct SetRow: View {
         if layout == .pair, let delta = unitDelta, abs(delta) > 0.001 {
             parts.append("volume \(delta > 0 ? "up" : "down") \(jsIntegerString(abs(delta))) kilograms")
         }
+        // The gutter is `accessibilityHidden` and says `↑2:15`, which is not a
+        // sentence. Said here in words, and said whatever the type size is —
+        // the gutter itself is dropped at the accessibility sizes, where the
+        // row has stopped being a table, and dropping the fact with the glyph
+        // would make this the one reading a VoiceOver user cannot reach.
+        if let restSec {
+            var sentence = "rested \(Clock.format(Double(restSec)))"
+            if let delta = restDeltaSec, abs(delta) >= 15 {
+                sentence += ", \(abs(delta)) seconds \(delta > 0 ? "longer" : "shorter") than the set before"
+            }
+            parts.append(sentence)
+        }
+        // The margin the overlay shows for two seconds and then takes away. A
+        // transient graphic is no graphic at all to a reader who cannot see it,
+        // and this is the only other place the number is said.
+        if let margin { parts.append("beat it by \(margin.spoken)") }
         return parts.joined(separator: ", ")
+    }
+
+    /// What the record on this row BEAT, as one short signed figure — or nil.
+    ///
+    /// ── ONE AXIS, CHOSEN, NOT THE LIST ──────────────────────────────────────
+    /// A set can take four axes at once and `PrRecordSheet` prints all of them,
+    /// which is what the long press is for. A two-second glance holds one
+    /// number, so the ladder is fixed rather than "whichever came first": the
+    /// heaviest load is the claim a lifter reads first, the estimated 1RM is
+    /// the one that survives a rep change, reps come next, and set tonnage last
+    /// — it is the axis most likely to move for a reason that is not strength.
+    ///
+    /// Nil when the row holds a record with no numeric bar behind it, which is
+    /// a real state (`SetRow.records`' own header): the badge still turns gold
+    /// and there is simply no margin to print.
+    private var margin: (short: String, spoken: String)? {
+        let ladder: [PrAxis] = [.weight, .e1rm, .reps, .volume]
+        guard let record = ladder.lazy.compactMap({ axis in
+            records.first { $0.axis == axis }
+        }).first else { return nil }
+        let gain = record.mark.value - record.mark.previous
+        guard gain > 0.001 else { return nil }
+        let figure = record.axis == .reps ? OnyxFormat.sets(gain) : OnyxFormat.kg(gain)
+        let unit = record.axis.unit
+        // ── THE DRAWN FORM CARRIES NO UNIT, AND THE SPOKEN ONE DOES ────────
+        // The gutter is 28 pt of monospaced digits. `+1.6 kg` renders as
+        // `+1.6…` at the scale floor — a margin with its own number cut off,
+        // which is worse than no margin — and `+12.5kg` would still have to
+        // overflow onto the load column's own delta arrow. `+12.5` is five
+        // glyphs and always whole.
+        //
+        // Nothing is lost by dropping it: the KG column is the very next
+        // thing on the row, under a heading that says KG, and a reps record
+        // has no unit to print in the first place. VoiceOver gets the long
+        // form, where there is no width at all to be short about.
+        return (
+            short: "+\(figure)",
+            spoken: unit.isEmpty ? "+\(figure)" : "+\(figure) \(unit)"
+        )
     }
 
     @ViewBuilder

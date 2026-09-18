@@ -48,6 +48,43 @@ final class PhoneWatchBridge {
     /// and the set is already safe in the log.
     private(set) var lastError: String?
 
+    /// The wrist's last heart rate, and when it arrived (W10, decision 3).
+    ///
+    /// ── THE ONE THING THE PHONE TAKES OFF AN INBOUND REST PULSE ─────────────
+    /// `receive` still refuses the watch's CLOCK — this device has its own
+    /// logger, its own timer and its own Live Activity, and two clocks fighting
+    /// over one banner is worse than one clock. The heart rate is the opposite
+    /// case: there is no second source for it on this device at all, so the
+    /// pulse is the only road it has.
+    ///
+    /// The instant travels with it because a heart rate is only a reading while
+    /// it is fresh. `RestPulse` arrives over `sendMessage`, which needs
+    /// reachability — put the phone in a locker and the last number sits here
+    /// unrefreshed. `liveBpm` is what views read, and it goes back to nil after
+    /// `bpmStaleAfter`; a stale number presented as live is the failure this
+    /// pair exists to prevent.
+    private(set) var lastBpm: Int?
+    private(set) var lastBpmAt: Date?
+
+    /// How long a wrist reading stays a reading. Two minutes is longer than a
+    /// working rest and shorter than a set plus a rest, so a number that stops
+    /// arriving disappears within one set of the watch going quiet.
+    static let bpmStaleAfter: TimeInterval = 120
+
+    /// The wrist's heart rate if it is still fresh, otherwise nil.
+    ///
+    /// Computed rather than stored: nothing ticks in this type, and a timer
+    /// whose only job is to nil a field is a timer running for the whole of
+    /// every workout. The readers are views, they redraw when a set lands, and
+    /// a number that lingers a few seconds past its window on a screen nobody
+    /// is touching is not a defect worth a `Timer` for.
+    var liveBpm: Int? {
+        guard let lastBpm, let lastBpmAt,
+              Date().timeIntervalSince(lastBpmAt) < Self.bpmStaleAfter
+        else { return nil }
+        return lastBpm
+    }
+
     init(database: AppDatabase) {
         self.database = database
     }
@@ -181,11 +218,19 @@ final class PhoneWatchBridge {
                 try database.ingest(events)
             case .ownership(let claim):
                 try database.ingestOwnership(claim)
-            case .rest:
-                // The phone does not mirror the watch's rest clock. It has its
+            case .rest(let pulse):
+                // The phone does not mirror the watch's rest CLOCK. It has its
                 // own logger with its own timer and its own Live Activity, and
                 // two clocks fighting over one banner is worse than one clock.
-                break
+                //
+                // The heart rate is taken, and only it — see `lastBpm`. Nothing
+                // is sent back from here, which is what keeps the watch's echo
+                // (`WatchModel.answerWithHeartRate`) one message rather than a
+                // conversation.
+                if let bpm = pulse?.bpm, bpm > 0 {
+                    lastBpm = bpm
+                    lastBpmAt = Date()
+                }
             case .context:
                 // Phone → watch only. The watch has no plan resolution to send.
                 break
