@@ -309,21 +309,21 @@ enum HistoryPreviews {
         // every one of the four doors now puts it in.
         //
         // The page BELOW the band is read for real, off the preview store —
-        // see `WeeklyReportView.task`. `train-report` is the seeded twin, for
+        // see `WeekReportView.task`. `train-report` is the seeded twin, for
         // the blocks a preview store may answer nothing for.
         case "train-wrap":
-            NavigationStack { WeeklyReportView(summary: wrapSummary, program: wrapProgram) }
+            NavigationStack { WeekReportView(summary: wrapSummary, program: wrapProgram) }
                 .environment(environment())
         // The half below the fold. It was the `.large` detent and it is the
         // bottom of a scroll view now — a shot cannot scroll any more than it
         // could drag, and `defaultScrollAnchor` is the same trick
         // `train-customized` already uses to photograph the end of a page.
         case "train-wrap-large":
-            NavigationStack { WeeklyReportView(summary: wrapSummary, program: wrapProgram) }
+            NavigationStack { WeekReportView(summary: wrapSummary, program: wrapProgram) }
                 .defaultScrollAnchor(.bottom)
                 .environment(environment())
         case "train-wrap-deload":
-            NavigationStack { WeeklyReportView(summary: deloadSummary, program: wrapProgram) }
+            NavigationStack { WeekReportView(summary: deloadSummary, program: wrapProgram) }
                 .environment(environment())
         // ── W4: the report with its lower half GUARANTEED ───────────────────
         // `train-wrap` reads the export payload out of the preview store, which
@@ -335,10 +335,22 @@ enum HistoryPreviews {
         // frame whatever the seed does.
         case "train-report":
             NavigationStack {
-                WeeklyReportView(
+                WeekReportView(
                     summary: wrapSummary, program: wrapProgram, seeded: previewReport
                 )
             }
+            .environment(environment())
+        // The seeded report's LOWER half — the two charts, the macro table and
+        // the flagged micronutrients. `train-wrap-large` is the same anchor
+        // over the real store, which answers "nothing tracked" for this week
+        // and so photographs the empty notes rather than the instruments.
+        case "train-report-large":
+            NavigationStack {
+                WeekReportView(
+                    summary: wrapSummary, program: wrapProgram, seeded: previewReport
+                )
+            }
+            .defaultScrollAnchor(.bottom)
             .environment(environment())
         case "share-card":
             // The 9:16 composition on its own, so the thing that leaves the
@@ -761,44 +773,97 @@ private var wrapSummary: WeeklyWrap.Summary {
     )
 }
 
-/// The report's lower half as a fixture — the four blocks `WeeklyReportView`
+/// The report's lower half as a fixture — the eight sections `WeekReportView`
 /// reads out of `WeeklyExportBuilder`, handed over directly.
 ///
 /// The numbers are the same week `wrapSummary` describes and are consistent
-/// with it on purpose: 5 sessions of 5 planned is the 100 % Training rail, and
-/// the four hits of six graded days are the 67 % Nutrition one. A fixture whose
-/// rail disagreed with its own detail line would make every shot of this screen
-/// a puzzle about which half to believe.
+/// with it on purpose: 5 sessions of 5 planned, and the four hits of six graded
+/// days are the 67 % adherence capsule. A fixture whose capsule disagreed with
+/// its own strip would make every shot of this screen a puzzle about which half
+/// to believe.
+///
+/// ── AND WHY IT CARRIES A CASE OF EVERY SHAPE (W8) ───────────────────────────
+/// `train-wrap` reads a real store and photographs whatever the seed holds.
+/// This one exists so that the shapes a section can only draw ONCE — a micro
+/// over its ceiling, a scan with a body-fat reading, a week with more records
+/// than the cap — are in frame on purpose rather than by luck.
 @MainActor
 private var previewReport: WeekReport {
     let days = ["2026-08-30", "2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05"]
     let verdicts: [AdherenceVerdict] = [.hit, .hit, .miss, .hit, .exception, .hit, .miss]
+    let kcal: [Double] = [2_010, 1_980, 2_460, 1_950, 2_720, 2_005, 2_310]
+    let sleepHours: [Double] = [7.4, 7.9, 6.2, 8.1, 7.0, 6.6, 7.7]
+    let volume: [(LandmarkMuscle, Double, Int)] = [
+        (.chest, 11, 10), (.lats, 9, 10), (.upperBack, 8, 8), (.lowerBack, 4, 4),
+        (.frontDelts, 5, 6), (.sideDelts, 9, 8), (.rearDelts, 4.5, 6),
+        (.biceps, 7, 8), (.triceps, 8, 8), (.forearms, 2, 4),
+        (.quads, 12, 12), (.hamstrings, 7, 8), (.glutes, 6, 8),
+        (.adductors, 0, 0), (.calves, 2, 6), (.absCore, 3, 6),
+    ]
     return WeekReport(
         phaseKind: .cut,
         eraTag: "Onyx Cut",
         rangeLabel: "30 Aug – 5 Sep",
-        trainingPct: 100,
-        trainingDetail: "5 of 5 sessions · 42,180 kg · +1,240 kg vs last week",
-        nutritionPct: 66.7,
-        nutritionDetail: "4 of 6 graded days on target · 1 exception",
-        recoveryPct: 74,
-        recoveryDetail: "battery, mean of 7 nights",
-        adherence: zip(days, verdicts).map { date, verdict in
-            AdherenceDay(date: date, verdict: verdict, kcalPct: 98, proteinPct: 104, estimated: false)
+        sleepScoreAvg: 71,
+        batteryAvg: 74,
+        nutritionAdherencePct: 66.7,
+        sessions: 5,
+        plannedSessions: 5,
+        tonnageKg: 42_180,
+        tonnageDeltaKg: 1_240,
+        prCount: 4,
+        tonnageSpark: [38_400, 39_900, 40_100, 39_200, 40_940, 42_180],
+        bodyweightKg: 82.4,
+        bodyweightDeltaKg: -0.4,
+        bodyFatPct: 17.2,
+        muscleMassKg: 36.8,
+        scanDate: "2026-09-01",
+        volumeByMuscle: volume.map {
+            OnyxSnapshot.MuscleVolume(muscle: $0.0.rawValue, sets: $0.1, target: $0.2)
         },
-        waterMlPerDay: 2_640,
-        waterGoalMl: 3_000,
-        records: [
-            ExportPr(name: "Incline DB Press", weightKg: 42, reps: 11, axes: [.weight, .e1rm]),
-            ExportPr(name: "Seated Cable Row", weightKg: 40, reps: 12, axes: [.volume]),
-        ],
+        topMuscles: [.quads, .chest, .sideDelts, .lats],
         strongest: TopLifts.group(
             [
                 .init(exercise: "Leg Press", kg: 170, reps: 10, rpe: 9),
                 .init(exercise: "Incline DB Press", kg: 42, reps: 11, rpe: 8),
             ],
             previous: [:]
-        )
+        ),
+        adherence: zip(days, verdicts).map { date, verdict in
+            AdherenceDay(date: date, verdict: verdict, kcalPct: 98, proteinPct: 104, estimated: false)
+        },
+        kcalByDay: zip(days, kcal).map { OnyxSnapshot.Point(d: $0, v: $1) },
+        kcalTarget: 2_050,
+        macroTable: [
+            .init(label: "Calories", mean: 2_205, target: 2_050, unit: "kcal"),
+            .init(label: "Protein", mean: 176, target: 170, unit: "g"),
+            .init(label: "Carbs", mean: 191, target: 206, unit: "g"),
+            .init(label: "Fat", mean: 62, target: 55, unit: "g"),
+        ],
+        flaggedMicros: [
+            .init(label: "Sodium", value: 4_120, target: 3_000, unit: "mg",
+                  kind: .ceiling, pct: 137, doubted: false),
+            .init(label: "Magnesium", value: 268, target: 400, unit: "mg",
+                  kind: .floor, pct: 67, doubted: false),
+            .init(label: "Calcium", value: 741, target: 1_000, unit: "mg",
+                  kind: .floor, pct: 74, doubted: true),
+        ],
+        waterMlPerDay: 2_640,
+        waterGoalMl: 3_000,
+        sleepByDay: zip(days, sleepHours).map { OnyxSnapshot.Point(d: $0, v: $1) },
+        sleepGoalHours: 8,
+        batterySpark: [68, 72, 61, 79, 74, 70, 81],
+        stressMean: 2.6,
+        domsPeak: .init(muscle: "Quads", severity: 4, date: "2026-09-02"),
+        cardio: .init(bouts: 3, minutes: 96, km: 9.4, kcal: 640, kinds: ["Walk", "Run"]),
+        // FOUR, one past the cap: the disclosure is in frame, which is the one
+        // thing a three-record fixture could never photograph.
+        records: [
+            ExportPr(name: "Incline DB Press", weightKg: 42, reps: 11, axes: [.weight, .e1rm]),
+            ExportPr(name: "Leg Press", weightKg: 170, reps: 10, axes: [.volume]),
+            ExportPr(name: "Seated Cable Row", weightKg: 40, reps: 12, axes: [.volume]),
+            ExportPr(name: "Standing Calf Raise", weightKg: 90, reps: 15, axes: [.reps]),
+        ]
     )
 }
 
@@ -863,7 +928,7 @@ private struct PresentingWrap: View {
         NavigationStack {
             WeekDaysView(window: WeekWindow(containing: weekStart, startDay: 0))
                 .navigationDestination(item: $door) { door in
-                    WeeklyReportView(summary: door.summary, program: door.program)
+                    WeekReportView(summary: door.summary, program: door.program)
                 }
         }
         .task {

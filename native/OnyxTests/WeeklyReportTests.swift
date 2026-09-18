@@ -85,7 +85,7 @@ struct WeeklyReportTests {
     /// disk, so the path resolves — and the FIRST expectation is that every one
     /// of the four was read and is not empty. A missing file fails the test
     /// rather than skipping it.
-    @Test("every door pushes WeeklyReportView, and none of them presents a sheet")
+    @Test("every door pushes WeekReportView, and none of them presents a sheet")
     func fourDoorsPushAndNonePresents() throws {
         let root = URL(fileURLWithPath: #filePath)     // …/native/OnyxTests/<this>.swift
             .deletingLastPathComponent()               // …/native/OnyxTests
@@ -113,20 +113,23 @@ struct WeeklyReportTests {
                 !source.contains("sheet(item: $\(door.binding))"),
                 "\(door.path) still presents $\(door.binding) as a sheet"
             )
-            #expect(source.contains("WeeklyReportView("), "\(door.path) reaches no report")
+            #expect(source.contains("WeekReportView("), "\(door.path) reaches no report")
             // The sheet and the ring are gone from the tree, not merely unused.
             #expect(!source.contains("WeeklyWrapView("))
             #expect(!source.contains("WeeklyMuscleRing("))
         }
     }
 
-    // MARK: - GOAL 4 · the rails summarise what they claim to
+    // MARK: - GOAL 4 · the report summarises what it claims to
 
-    /// Each rail against the source it names, read out of the same payload the
-    /// page reads — not out of a second query, which is the whole point of
-    /// there being one call.
-    @Test("the three rails agree with the sources they claim to summarise")
-    func railsAgreeWithTheirSources() throws {
+    /// ── MOSTLY MOVED TO `swift:data` (W8) ───────────────────────────────────
+    /// `WeekReport` is an OnyxData type now, and `WeekReportTests` asserts
+    /// every fold against the payload field it claims to summarise — in a suite
+    /// `npm run check` actually runs, which this one is not. What is left here
+    /// is the half that needs the APP: the preview environment's store, and the
+    /// empty user id the harness signs in with.
+    @Test("the report builds off the preview store, through the empty-user fallback")
+    func theReportBuildsInTheHarness() throws {
         let environment = HistoryPreviews.environment()
         let database = environment.database
         let userId = database.localUserId()
@@ -137,62 +140,21 @@ struct WeeklyReportTests {
         )
         let context = try #require(try? database.scheduleContext(userId: userId, today: weekStart))
         let planned = Schedule.sessionTargetIn(context)
-        #expect(planned > 0, "a plan with no training days has no Training rail to check")
+        #expect(planned > 0, "a plan with no training days has no session count to report")
 
-        let input = try WeeklyExportBuilder(database: database, userId: userId)
-            .input(weekStart: weekStart, today: "2026-09-03")
+        // Cross-wave law 16: `AppEnvironment.userIdString` is "" in the harness
+        // and in every preview, and an export built for "" comes back with
+        // seven empty days.
         let report = try #require(
             WeekReport.build(
-                database: database, userId: userId, summary: summary,
+                database: database, userId: "", summary: summary,
                 plannedSessions: planned, today: "2026-09-03"
             )
         )
-
-        // ── TRAINING: sessions against the plan's own count ─────────────────
-        #expect(report.trainingPct == Double(summary.sessions) / Double(planned) * 100)
-        #expect(report.trainingDetail.contains("\(summary.sessions) of \(planned)"))
-
-        // ── NUTRITION: `MacroAdherenceSeries`, its ±10 % tolerance, and the
-        //    rung in force ON EACH DATE ──────────────────────────────────────
-        var targets: [String: AdherenceTargets] = [:]
-        for period in input.targetPeriods ?? [] {
-            for date in period.dates {
-                targets[date] = AdherenceTargets(
-                    kcal: period.goals.calorie, protein: period.goals.protein,
-                    carbs: period.goals.carbs, fat: period.goals.fat
-                )
-            }
-        }
-        let expected = MacroAdherenceSeries.build(
-            input.days.map {
-                AdherenceDayIn(
-                    date: $0.date, kcal: $0.calories, proteinG: $0.proteinG,
-                    carbsG: $0.carbsG, fatG: $0.fatG,
-                    exception: $0.nutritionException, estimated: $0.nutritionEstimated
-                )
-            },
-            targets: targets, endingOn: input.weekEnd, limit: 7
-        )
-        #expect(report.adherence == expected, "the strip is not the series it claims to be")
-        let graded = expected.filter { $0.verdict == .hit || $0.verdict == .miss }
-        let hits = expected.filter { $0.verdict == .hit }.count
-        #expect(
-            report.nutritionPct == (graded.isEmpty ? nil : Double(hits) / Double(graded.count) * 100)
-        )
-        // An exception day is neither a hit nor a miss — counting it as a miss
-        // is the one arithmetic error this rail can make.
-        #expect(!graded.contains { $0.verdict == .exception })
-
-        // ── RECOVERY: the STORED battery, not a recomputed one ──────────────
-        let battery = input.days.compactMap(\.batteryPct)
-        #expect(
-            report.recoveryPct == (battery.isEmpty ? nil : battery.reduce(0, +) / Double(battery.count))
-        )
-        #expect(report.recoveryDetail.contains(battery.isEmpty ? "no night" : "\(battery.count) night"))
-
-        // ── And the page's own two lists come off the same payload ──────────
-        #expect(report.records.map(\.name) == report.records.map(\.name).sorted(), "records are not by exercise")
-        #expect(report.records.count == input.sessions.flatMap(\.prs).count)
-        #expect(report.waterGoalMl == input.waterGoalMl)
+        #expect(report.sessions == summary.sessions)
+        #expect(report.plannedSessions == planned)
+        #expect(report.adherence.count == 7, "the fallback read an empty week")
+        #expect(report.rangeLabel.contains("–"), "the range label did not survive the move to OnyxCore")
+        #expect(report.topRecords.count <= WeekReport.recordCap)
     }
 }

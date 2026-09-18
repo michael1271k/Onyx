@@ -370,15 +370,27 @@ enum MuscleLadder {
   }
 }
 
-struct HeatStrip: View {
+/// ── PUBLIC SINCE W8 ─────────────────────────────────────────────────────────
+/// The weekly report's Training section draws the same sixteen cells against
+/// the same `plan_phase_volume` targets the Muscle tile does. A second strip in
+/// the app target would be a second answer to "how covered was this week", and
+/// the first thing to drift would be the pip rule — the one mark on the strip
+/// that is not a proportion.
+public struct HeatStrip: View {
   let muscles: [OnyxSnapshot.MuscleVolume]
   var monochrome = false
   var height: CGFloat = 26
 
-  var rows: [OnyxSnapshot.MuscleVolume] { MuscleLadder.rows(muscles) }
-  var laggard: OnyxSnapshot.MuscleVolume? { MuscleLadder.laggard(muscles) }
+  public init(muscles: [OnyxSnapshot.MuscleVolume], monochrome: Bool = false, height: CGFloat = 26) {
+    self.muscles = muscles
+    self.monochrome = monochrome
+    self.height = height
+  }
 
-  var body: some View {
+  public var rows: [OnyxSnapshot.MuscleVolume] { MuscleLadder.rows(muscles) }
+  public var laggard: OnyxSnapshot.MuscleVolume? { MuscleLadder.laggard(muscles) }
+
+  public var body: some View {
     let cells = rows
     if cells.isEmpty {
       OnyxChartEmpty("No plan to measure the week against.", compact: true)

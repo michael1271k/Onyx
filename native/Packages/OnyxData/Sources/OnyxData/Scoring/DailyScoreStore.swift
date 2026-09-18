@@ -119,4 +119,19 @@ public extension AppDatabase {
                 .fetchOne(db)
         }
     }
+
+    /// Every stored score in a window, oldest first. Inclusive on both ends.
+    ///
+    /// The one reader is `WeekReport` (W8), which needs the week's seven
+    /// `sleep_score` values and cannot get them out of the export payload —
+    /// `ExportDay` carries the sleep INPUTS and not v2's five-term output. Seven
+    /// `dailyScore(userId:date:)` calls would be seven reads for one mean.
+    func dailyScores(userId: String, from: String, to: String) throws -> [DailyScoreRow] {
+        try writer.read { db in
+            try DailyScoreRow
+                .filter(Column("user_id") == userId && Column("date") >= from && Column("date") <= to)
+                .order(Column("date"))
+                .fetchAll(db)
+        }
+    }
 }
