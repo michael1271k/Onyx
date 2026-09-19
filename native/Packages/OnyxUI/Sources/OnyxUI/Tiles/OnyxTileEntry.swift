@@ -77,30 +77,19 @@ public struct OnyxTileEntry: Sendable {
   /// Nothing to draw at all — the diagnostic face takes over.
   public var isEmpty: Bool { snapshot == nil }
 
-  /// The configured focus, or the family's default.
-  public var fuelFocus: FuelFocus {
-    if case .fuel(let f) = focus { return f }
-    return .calories
-  }
-  public var trainingFocus: TrainingFocus {
-    if case .training(let f) = focus { return f }
-    return .today
-  }
-  public var bodyFocus: BodyFocus {
-    if case .body(let f) = focus { return f }
-    return .weight
-  }
-  public var vitalsFocus: VitalsFocus {
-    if case .vitals(let f) = focus { return f }
-    return .panel
-  }
+  /// The configured focus, or the accessory's default.
+  ///
+  /// ── ONE ACCESSOR LEFT, WHERE THERE WERE SIX (W12) ──────────────────────
+  /// `fuelFocus`, `trainingFocus`, `bodyFocus`, `vitalsFocus` and
+  /// `progressFocus` existed for the six Home Screen family kinds, which were
+  /// deleted with the shells. The Lock Screen accessory is the one widget
+  /// whose face is still chosen by a focus rather than by a `WidgetId` — every
+  /// Home Screen tile now comes through `OnyxTile.face`, which names its focus
+  /// at the call site. The `OnyxFocus` CASES stay: `DomainSheets` switches on
+  /// them to draw the same faces inside the app.
   public var lockFocus: LockFocus {
     if case .lock(let f) = focus { return f }
     return .battery
-  }
-  public var progressFocus: ProgressFocus {
-    if case .progress(let f) = focus { return f }
-    return .trajectory
   }
 
   public static func placeholder(_ date: Date = Date()) -> OnyxTileEntry {
