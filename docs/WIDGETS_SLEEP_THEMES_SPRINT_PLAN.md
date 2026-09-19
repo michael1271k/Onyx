@@ -1,6 +1,6 @@
 # Widgets · Sleep v2 · Themes · Week · Pulse · Logger · Privacy — Sprint Plan
 
-**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0, W6 shipped 6.3.0, W7 shipped 6.4.0, W8 shipped 6.5.0, W9 shipped 6.6.0, W10 shipped 6.7.0. **W11 next.**
+**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0, W6 shipped 6.3.0, W7 shipped 6.4.0, W8 shipped 6.5.0, W9 shipped 6.6.0, W10 shipped 6.7.0, W11 shipped 6.8.0. **W12 (close-out) next.**
 **From:** `main` @ 5.0.1 (`3de461a7`).
 **Ships as:** eleven sequential waves, 5.1.0 → 6.8.0, plus a close-out wave that retires this file to `docs/Done/`.
 **Branches:** `onyx/sprint-widgets-w<N>`, each cut from current `main` and merged `--no-ff`
@@ -1799,6 +1799,139 @@ device builds by construction.
 - **`LoggerModel.seedDebugProgression` is a harness door.** `#if DEBUG`, same
   shape and same reason as `WatchModel.seedDebugRest`: the alerts are a store
   read over a chain of two sessions, and the shot fixtures seed one.
+
+**Founder's manual steps still outstanding:**
+- W3's `docs/sql/w3-sleep-onset.sql` paste. Unchanged.
+- Xcode → `OnyxWatch` **and** `OnyxWatchWidgets` → App Groups
+  (`group.app.onyx.health.watch`). Paid program. Unchanged from W7.
+
+### W11 Wave Record — shipped 2026-09-19 as 6.8.0
+
+**Drift from the plan, on purpose:**
+- **`PulseStressLog.swift:511` — the list rows were already 44 pt.** The plan's
+  line numbers are the file as it stood at `3de461a7`; `:265` and `:511` land
+  exactly on `StressLogSheet` and `StressLogListSheet` there. But the second
+  brief ("list rows 44 pt") describes a state the file has been in since Live
+  UX W1: every row of `StressLogListSheet` carries `.frame(minHeight: 44)`.
+  Nothing to do, and the file is 391 lines rather than 511 because W9 moved the
+  log's drawing to `StressLogSquare`.
+- **The five level capsules are `FiveWordPicker`, unchanged — rounded rows at
+  56 pt, not capsules at 44.** The brief describes the shape and the shape is
+  already this control: five equal cells, one row, `ViewThatFits` to a column
+  when the longest word stops fitting. Re-cutting it as capsules for this one
+  caller is precisely what its own header forbids — it draws the fatigue scale
+  too, D6 folds both answers into ONE term of the Stress index, and two
+  controls for that is two places for the hit target, the selected state and
+  the VoiceOver traits to drift apart. Its "56, not 44" is a measured decision
+  of the same kind.
+- **`detents: [.medium]` is `typeSize.isAccessibilitySize ? [.large] : [.medium]`.**
+  At AX5 the five words stack into a column and the seven chips wrap to one per
+  line; a sheet that opens already clipped is worse than one that opens tall
+  (the Fuel tab's day picker has taken the same branch since it was written).
+  It opens at half height everywhere the plan means by "half height".
+- **The derived slot is the line UNDER the picker, not the picker's own
+  subtitle.** The first draft was a two-line `DatePicker` label — the bucket
+  against the control that decides it, ~30 pt cheaper than a caption of its
+  own. The AX5 shot showed why not: a compact picker takes its width from the
+  right and leaves the label about four characters, so it read "Files / under /
+  …", one word per line beside the clock. Under it, the caption has the full
+  width at every size and costs ~17 pt of the ~99 pt the sheet has spare inside
+  a medium detent.
+- **`PulseStress.swift`'s index and its band word are now the SAME size, and
+  the tint is what separates them.** `.clock` → `.display` is a two-step drop
+  (34 → 20) and the word beside it was already `.display`. `.hero` at 28 was
+  available — that sheet has no hero, so Law 10 permitted it — and was not
+  taken: this is the compaction wave, and "59 Elevated" reads as one phrase
+  with the numeral in the band's colour and the word in ink.
+- **CardioLog's surviving `.display` is the FIGURE, not a glyph.** Of the three,
+  two were `Image`s in a 28 pt frame — a bout's kind symbol and its add/taken
+  circle — where 20 pt bought nothing but a row that read as two headings with
+  a movement name squeezed between them. The one kept is `ghost`'s
+  distance/time/pace triptych, which is the card's reading.
+- **`DayPickerSheet` is new, and so is the `fuel-calendar` shot.** The Fuel
+  tab's day picker was a computed property inside a `private struct`, so
+  nothing outside that file could present it and it had never been
+  photographed — which is how a `ViewThatFits` pair survived in it. Its three
+  siblings (`MacroEditSheet`, `DayTargetSheet`, `WaterSheet`) were already
+  types; this is the one that was not. Presented BY the harness, on the terms
+  `macro-edit` states: no debug door inside the tab.
+- **`FlowRow` gained a public memberwise initialiser.** A public struct's
+  synthesised `init` is internal, so `FlowRow(spacing:)` would not have
+  compiled from the app target. Nothing else about the layout changed — the
+  W5 over-wide clamp and its header travel verbatim.
+
+**Root causes that were not where the plan guessed:**
+- **The Stress log's height was PROSE, not controls.** "Three `Form` sections"
+  reads as three groups of inputs; the inputs are five cells, one picker, seven
+  chips and a field, and they total ~250 pt. What made the sheet `.large` was
+  four footers — the anchors, the derived bucket, "nothing here is scored" and
+  "never read by anything that scores a day" — about 120 pt of type for facts a
+  reader needs once. Every one of them is still on the screen: the anchors are
+  the line under the words (and become the chosen rung's own definition once
+  you have picked one), the bucket is the caption under the clock, and the two
+  promises are one line at the foot.
+- **The `ViewThatFits` in `NutritionTabView` guarded a state that cannot
+  arise.** Its comment defends against "the graphical picker's own scroll view
+  inside the sheet's" — and the sheet has no scroll view; nothing between the
+  picker and the presentation scrolls. Worse, the branch it was protecting is
+  the one it picks anyway: the month grid is ~340 pt and a medium detent leaves
+  ~380 pt under the bar, so the pair's only measurable effect was building a
+  second graphical `DatePicker` on every layout pass. One `ScrollView`,
+  unconditionally.
+- **The tag grid was the exact defect `FlowRow`'s own header describes.**
+  `LazyVGrid(.adaptive(minimum:))` gives every chip the widest chip's width, so
+  "Work" was as wide as "Family" and seven short words took three columns with
+  dead space in each. The one chip row in the app that had never adopted
+  `FlowRow` — and the wave that moves `FlowRow` into the design system is the
+  wave that found it.
+- **The file was 3,026 lines, not 2,787.** W10's rest gutter, PR margin and
+  trail tap landed in it after the plan was written. The split is 1,457 (the
+  page) + 1,469 (the ledger) + 135 (the chart).
+
+**Constraints discovered that the next wave must respect:**
+- **`LedgerHeader` and `SplitVolumeChart` are internal now, not private.** In
+  Swift `private` at file scope means file-scoped, and the page that presents
+  them is no longer in their file. These two access levels are the ONLY
+  non-mechanical change in the split; a sorted-line diff of the old file
+  against the three new ones shows nothing else but the new headers.
+- **Two types are still called `SetRow`.** `LoggerModel.SetRow` is the deck's;
+  the ledger's — with `restSec`, `restDeltaSec` and `marginHeld` — now lives in
+  `Features/History/SessionDetail/SessionLedger.swift`. It shares that file with
+  `LedgerHeader` on purpose: the header decides the card's columns
+  (`SetRow.SetLayout`) and every row under it obeys, and that agreement only
+  survives while the two are read together.
+- **`OnyxLedgerRowFloor`, the private `rowFloor()` and `Mover` went with the
+  ledger; `plainRow(edgeToEdge:)` stayed with the page.** The first three are
+  the header's; the last is called by Pulse as well and has been internal since
+  Wave 2.9.
+- **`FlowRow` is `OnyxUI/DesignSystem/FlowRow.swift`, public and unfenced** —
+  a tile or a watch face can use it. It is NOT in `Tiles/`, so Law 6's
+  `#if os(iOS)` does not apply and must not be added.
+- **A compact `DatePicker`'s label column is about four characters wide at
+  AX5.** Anything that has to be read belongs under the control, not inside its
+  label. The same applies to any caption set with `lineLimit(1)` on a sheet:
+  both of this sheet's captions wrap instead, because at AX5 a scaled single
+  line is a truncation dressed as a fit.
+- **Counts:** OnyxCore **593**, OnyxData **629**, `swift:ui` 40 in 8 suites —
+  all three unchanged from W10. App and `OnyxWatch` schemes green,
+  `check:swift` both platforms. There is no `OnyxWidgets` SCHEME: the extension
+  builds as a dependency of `Onyx`, so the runbook's widget line is covered by
+  the app's. `OnyxTests` by hand: ****64 tests, 11 issues** — the documented baseline, unchanged, all in `HistoryWeeks`, `PreviewCatalogue` (its "Live Stats fixture" suite), `SessionSummaryHotfix` and `WorkoutWeek`**.
+
+**Left open on purpose:**
+- **No shot of the stress sheet with a level selected.** `definition` swaps the
+  anchors for the chosen rung's own hint, and no fixture seeds a half-filled
+  sheet — the sheet deliberately opens blank, so the state can only be reached
+  by a tap. The anchors branch is the one photographed.
+- **`StressLogListSheet` is untouched.** Its rows were already 44 pt and
+  `.large` is right for a list of a whole day's events, which is the one place
+  the tags and notes are read.
+- **The three `SessionDetail/` files are still large.** `SetRow` alone is 1,124
+  lines. The next cut would have to separate the row from the header that
+  decides its columns, which is the one boundary this split exists to keep.
+- **The cardio sheet's two glyphs are `.body` and its frame is still 28 pt.**
+  The icon no longer fills it. Tightening the frame would move every figure on
+  the card and is a layout change, not a type one.
 
 **Founder's manual steps still outstanding:**
 - W3's `docs/sql/w3-sleep-onset.sql` paste. Unchanged.

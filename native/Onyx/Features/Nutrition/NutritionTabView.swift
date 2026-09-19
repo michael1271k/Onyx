@@ -58,7 +58,6 @@ private struct NutritionScreen: View {
     let model: NutritionModel
 
     @State private var sheet: Sheet?
-    @Environment(\.dynamicTypeSize) private var typeSize
 
     /// One presentation, four destinations. Two `.sheet` modifiers on one view
     /// is a documented way to get a second sheet that never presents.
@@ -101,7 +100,7 @@ private struct NutritionScreen: View {
             case .macros: MacroEditSheet(model: model)
             case .target: DayTargetSheet(model: model)
             case .water: WaterSheet(model: model)
-            case .calendar: calendar
+            case .calendar: DayPickerSheet(model: model)
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -117,49 +116,62 @@ private struct NutritionScreen: View {
         }
         .accessibilityLabel(label)
     }
+}
 
-    private var calendar: some View {
+/// Which day the tab is showing — the fourth of its four sheets.
+///
+/// A named type and not the computed property it was (W11), for the reason the
+/// harness states on `macro-edit`: a sheet nothing can present outside its own
+/// screen is a sheet nothing photographs, and this one had never been in a
+/// shot. Its three siblings — `MacroEditSheet`, `DayTargetSheet`, `WaterSheet`
+/// — were already types; this is the one that was not.
+struct DayPickerSheet: View {
+    let model: NutritionModel
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
         NavigationStack {
-            DatePicker(
-                "Day",
-                selection: Binding(
-                    get: { LogicalDay.date(fromISO: model.date) ?? Date() },
-                    set: { model.select(date: LogicalDay.iso($0)) }
-                ),
-                in: ...(LogicalDay.date(fromISO: model.today) ?? Date()),
-                displayedComponents: .date
-            )
-            .datePickerStyle(.graphical)
-            .tint(Color.onyx.accent(.fuel))
-            .padding(.horizontal, OnyxSpace.l)
             // A graphical picker at AX5 is taller than the sheet that holds it,
             // and a `frame(maxHeight:)` with nothing to scroll simply clipped
             // the last fortnight of the month off the bottom.
-            .frame(maxWidth: .infinity, alignment: .top)
-            .scrollableWhenLarge()
+            //
+            // ── ONE SCROLLER, NOT A `ViewThatFits` PAIR (W11) ───────────────
+            // This was `ViewThatFits(in: .vertical) { self; ScrollView { self } }`,
+            // guarding against "the picker's own scroll view inside the
+            // sheet's". The sheet has no scroll view — nothing between here and
+            // the presentation scrolls — so the state it guarded against cannot
+            // arise, and the branch it guarded is the one it picks anyway: the
+            // month grid is ~340 pt and a medium detent leaves ~380 pt under the
+            // bar, so on an accessibility size it already lost the first branch
+            // and on a shipping one it never needed the second. All the pair
+            // bought was a second graphical picker built on every layout pass.
+            ScrollView {
+                DatePicker(
+                    "Day",
+                    selection: Binding(
+                        get: { LogicalDay.date(fromISO: model.date) ?? Date() },
+                        set: { model.select(date: LogicalDay.iso($0)) }
+                    ),
+                    in: ...(LogicalDay.date(fromISO: model.today) ?? Date()),
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.graphical)
+                .tint(Color.onyx.accent(.fuel))
+                .padding(.horizontal, OnyxSpace.l)
+                .frame(maxWidth: .infinity, alignment: .top)
+            }
             .onyxScreen(.fuel)
             .navigationTitle("Choose a day")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { sheet = nil }
+                    Button("Done") { dismiss() }
                 }
             }
         }
         .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.medium, .large])
-    }
-}
-
-private extension View {
-    /// A `ScrollView` only where one is needed. Wrapping unconditionally would
-    /// give the graphical picker its own scroll view inside the sheet's, and
-    /// two nested scrollers fight over every drag.
-    @ViewBuilder
-    func scrollableWhenLarge() -> some View {
-        ViewThatFits(in: .vertical) {
-            self
-            ScrollView { self }
-        }
     }
 }
 

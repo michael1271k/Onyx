@@ -445,7 +445,7 @@ enum PreviewHarness {
              "pulse-squares", "pulse-squares-evening", "pulse-squares-empty", "stack", "stack-add", "stack-edit",
              "sleep-edit", "stress", "fatigue", "stress-log", "stress-day", "quick-log":
             PulsePreviews.view(screen)
-        case "fuel", "fuel-over", "fuel-empty", "nutrients", "macro-edit":
+        case "fuel", "fuel-over", "fuel-empty", "nutrients", "macro-edit", "fuel-calendar":
             NutritionPreviews.view(screen)
         // The minimised session. See `MiniPlayerHarness` for why it is not
         // photographed on `train`.
