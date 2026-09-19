@@ -1,10 +1,10 @@
-# Epic Sprint — Bug map, generic scaling, UI/UX overhaul, Helix sunset
+# Epic Sprint — Bug map, generic scaling, UI/UX overhaul, predecessor sunset
 
 Status: findings + founder decisions locked 2026-09-10. Waves + prompts in §Waves.
-W6 (Helix sunset) shipped 2026-09-13 as 3.0.0 — see `docs/CHANGELOG.md`; the founder checklist below is what remains by hand.
+W6 (predecessor sunset) shipped 2026-09-13 as 3.0.0 — see `docs/CHANGELOG.md`; the founder checklist below is what remains by hand.
 
 ## Founder decisions (2026-09-10)
-1. Helix web sunset = LAST wave (W6).
+1. Predecessor web sunset = LAST wave (W6).
 2. Founder plan → seeded templates. Decks become routine template rows; phases/levers/PR seeds/stack migrate once into the founder's rows; Swift constants deleted after.
 3. Psych stress: new `stress_logs` table, feeds a `self` sub-term of the Stress index. NOT a Battery input.
 4. Muscle colour: 8 families (Chest, Back, Shoulders, Biceps, Triceps, Forearms, Legs, Core), landmarks stepped light→dark inside a family. Charts group by 8, atlas paints 16.
@@ -15,7 +15,7 @@ W6 (Helix sunset) shipped 2026-09-13 as 3.0.0 — see `docs/CHANGELOG.md`; the f
 
 ## Context
 
-Onyx 1.5.0 is the native iOS app (native/), Helix is the legacy Next.js web app (src/) still deployed on Netlify. Wave 9 of `docs/NATIVE_MIGRATION_PLAN.md` (retire the web) was postponed; Wave 10 (Watch) shipped ahead of it. This sprint: close the open defects, make the app generic (not the founder's plan), overhaul six UI surfaces, automate HealthKit inputs, then delete Helix.
+Onyx 1.5.0 is the native iOS app (native/); the predecessor is the legacy Next.js web app (src/) still deployed on Netlify. Wave 9 of `docs/NATIVE_MIGRATION_PLAN.md` (retire the web) was postponed; Wave 10 (Watch) shipped ahead of it. This sprint: close the open defects, make the app generic (not the founder's plan), overhaul six UI surfaces, automate HealthKit inputs, then delete the predecessor.
 
 ## Findings (measured 2026-09-10)
 
@@ -26,7 +26,7 @@ Onyx 1.5.0 is the native iOS app (native/), Helix is the legacy Next.js web app 
 Sprint task = **regression-verify**, not re-fix (see bug agent report for residual risk).
 
 ### F2. Side delts 0/7 — root cause CONFIRMED: slug id vs UUID catalogue
-`TodayFeedBuilder.muscleFocus` (`TodayFeedBuilder.swift:267`) and the widget path (`WidgetSnapshotBuilder.swift:660`) do `guard let name = names[set.exerciseId] else { continue }`. `names` = local `exercises` table (`WidgetSnapshotBuilder.swift:472`), which only ever holds server UUIDs (`TrainingPuller.swift:390`). Phone-logged sets store `helix5-<slug>` ids (`LoggerModel.swift:1955-1966`) and are never repaired because `applyPulledSets` skips sessions with local events (`TrainingPuller.swift:320-328`). Every phone-logged set is dropped from muscle credit; side delts is visible because Upper B's lateral raise is the only side-delt source (Shoulder Press deliberately doesn't credit side delts). Fix in ONE place: merge `ExerciseSlug.nameBySlug` (`ExerciseIndex.swift:186`) into `rows.exerciseNames` at `WidgetSnapshotBuilder.swift:472`. Same chain `LoggerModel.restoreLoggedSets:1795` already uses.
+`TodayFeedBuilder.muscleFocus` (`TodayFeedBuilder.swift:267`) and the widget path (`WidgetSnapshotBuilder.swift:660`) do `guard let name = names[set.exerciseId] else { continue }`. `names` = local `exercises` table (`WidgetSnapshotBuilder.swift:472`), which only ever holds server UUIDs (`TrainingPuller.swift:390`). Phone-logged sets store the predecessor's `<brand>5-<slug>` ids (`LoggerModel.swift:1955-1966`) and are never repaired because `applyPulledSets` skips sessions with local events (`TrainingPuller.swift:320-328`). Every phone-logged set is dropped from muscle credit; side delts is visible because Upper B's lateral raise is the only side-delt source (Shoulder Press deliberately doesn't credit side delts). Fix in ONE place: merge `ExerciseSlug.nameBySlug` (`ExerciseIndex.swift:186`) into `rows.exerciseNames` at `WidgetSnapshotBuilder.swift:472`. Same chain `LoggerModel.restoreLoggedSets:1795` already uses.
 
 ### F2b. Residual defects behind the "fixed" three
 - **Sync:** plain 503 is held (safe). But `isMissingRelation` (`SyncEngine.swift:472`) treats `PGRST205/PGRST204/42P01/42703` as permanent → acknowledges + deletes the set event. `PGRST205` = "not in schema cache", which PostgREST returns transiently during cache reloads / restarts (same window as 503s). Silent permanent loss path. No test for `MirrorPushRemote` failures.
@@ -49,12 +49,12 @@ Verified on the 2026-09-10 20:03 Debug build in DerivedData:
 - Watch Ultra 2, watchOS 27.0, Developer Mode **enabled**; iPhone 15, iOS 27.0, Xcode 26.6.
 - Not verified: the watch bundle carries a 70 MB `OnyxWatch.debug.dylib` + `__preview.dylib` (`ENABLE_DEBUG_DYLIB=YES`). Companion-app installs of debug-dylib watch builds are the leading suspect.
 
-### F4. Helix sunset — inventory
+### F4. Predecessor sunset — inventory
 - Delete: `src/` (600 files), `ios/` (119), `public/`, `netlify.toml`, `netlify/functions/keep-alive.mts`, `capacitor.config.ts`, `e2e/`, 10 web build configs.
 - Native still depends on the web tree for: `scripts/sync-version.mjs` (version SSoT), `src/tests/golden-vectors.test.ts` → 214 fixtures, `scripts/gen-atlas-swift.mjs` ← `src/lib/body/atlas.ts`, `scripts/gen-report-bundle.mjs` ← `src/lib/reports/webview/*` → `native/Onyx/Resources/ReportRenderer.html`, AASA + privacy/support pages on Netlify (`SettingsTabView.swift:325` is the only executable Netlify URL).
 - No `supabase/` dir, no edge functions, no `.github`. SQL = `docs/sql/*.sql` pasted by hand.
-- `helix` strings: 343 files / 1,614 lines. Shipping native = ~40 lines / 17 files.
-- **Load-bearing, must NOT rename:** `helix5-` exercise-id prefix (`workout_sets.exercise_id`), era wire value `"helix"` (`Phases.swift:24`), `"helix.week/1"` schema tag, legacy App Group/sqlite names in `AppDatabase.swift:69-71`, `app.helix.health.michael` bundle id (dies with ios/), `helix://` scheme (dies with ios/), `helix_*` localStorage keys (web only; two read as native pref fallbacks).
+- Predecessor-name strings: 343 files / 1,614 lines. Shipping native = ~40 lines / 17 files.
+- **Load-bearing, must NOT rename:** the predecessor's exercise-id prefix (`workout_sets.exercise_id`), its era wire value (`Phases.swift:24`), its schema tag, the legacy App Group/sqlite names in `AppDatabase.swift:69-71`, its bundle id (dies with ios/), its URL scheme (dies with ios/), its localStorage keys (web only; two read as native pref fallbacks).
 
 ### F5. Supabase — 29 tables, all used by both surfaces except `set_events` (native only)
 Drop candidates: `widget_tokens`, `notion_credentials`, `notion_exports`, `body_measurements`, `_bak_20260723`, RPC `exercise_history` (web only). `reports.session_summary_md` / `weight_report_md` unread. **Keep** `delete_my_account()` — App Review requirement, native has no caller yet (blocker for sunset).
@@ -92,7 +92,7 @@ Decks `Program.swift:214` (ONYX-5, 37 movements), `Decks.swift` (ONYX-4, PPL); `
 `routine_templates` stays as-is (it stores last-performed sets, not the prescription). New `routines(user_id, program_id, day_key, label, sub, weekday, accent, sort, payload jsonb, updated_at)` PK `(user_id, program_id, day_key)`, `.delta` mirror. Payload `{version:1, exercises:[{exerciseId(uuid), name, sets, cutSets, reps, restSec, wk1Kg, note}]}`. Movers come from the catalogue row, never the payload. Mirror generator (`scripts/gen-mirror-swift.mjs`) has no child-table support; a second bespoke puller is not worth it.
 
 ### D2. Exercise catalogue = extend per-user `exercises`, no global table this sprint
-Add `slug text` (legacy `helix5-…` alias, backfilled by SQL from name), `secondary_muscles text[]`, `rest_sec`, `rep_floor`, `rep_ceiling`, `archived_at`; unique `(user_id, slug) where slug is not null`. New users get a bundled `native/Onyx/Resources/exercise-seed.json` inserted at onboarding (W5). `ponytail:` global read-all catalogue only when a second user needs catalogue updates without an app release. CSV import reads into this per-user table.
+Add `slug text` (the predecessor's legacy slug as an alias, backfilled by SQL from name), `secondary_muscles text[]`, `rest_sec`, `rep_floor`, `rep_ceiling`, `archived_at`; unique `(user_id, slug) where slug is not null`. New users get a bundled `native/Onyx/Resources/exercise-seed.json` inserted at onboarding (W5). `ponytail:` global read-all catalogue only when a second user needs catalogue updates without an app release. CSV import reads into this per-user table.
 
 ### D3. Slug ids survive as aliases via the column
 `ExerciseIndex` gains `bySlug`; `id(forSlug:)` reads it; `ExerciseSlug.nameBySlug` becomes `SELECT slug, name FROM exercises WHERE slug IS NOT NULL`, merged into `exerciseNames` (the F2 fix site) and `LoggerModel.restoreLoggedSets`. After W2 `LoggerModel.exerciseId` writes the catalogue uuid; slug path is read-only legacy.
@@ -153,7 +153,7 @@ Every wave, without exception: work on a branch `onyx/<wave>`, run patches from 
 
 ### W1 — Fable (extra high) · Truth wave: bugs, export math, DB cleanup · v1.6.0
 Tasks:
-1. Side delts: merge slug→name into `exerciseNames` at `WidgetSnapshotBuilder.swift:472` via `ExerciseSlug.nameBySlug`; test asserting a `helix5-` set credits its landmark.
+1. Side delts: merge slug→name into `exerciseNames` at `WidgetSnapshotBuilder.swift:472` via `ExerciseSlug.nameBySlug`; test asserting a predecessor-stamped set credits its landmark.
 2. Sync: `isMissingRelation` holds `PGRST205/PGRST204/42703` (transient schema-cache), only `42P01` acknowledges; jitter in `SyncBackoff`; test for `MirrorPushRemote` failure.
 3. Rest day: `isTraining = logged session exists || scheduled`; `Fatigue.dayMean` over `slotsForDay(isTraining:)`.
 4. Set quality: collapse `SetTags.isSetQuality` + app-target `SetQuality.parse` into one OnyxCore parser that accepts `+`.
@@ -172,7 +172,7 @@ Tasks: D1–D5 DDL in `docs/sql/w2-generic-model.sql` (routines, plan_phases, st
 Gate: `schema-truth-checker` confirms columns; app boots on the founder's account with identical logger deck, targets, phase label, lever, stack, PR floors (screenshot diff vs pre-wave).
 
 **Shipped 2026-09-11 as v1.7.0 (`onyx/w2-generic`). Drift from D4, on purpose:** `Levers.schedule` becomes a `lever_periods` table (one row per period, `starts_on` / `profile_key` / pinned `goals`), not `daily_targets` rows per day — a `daily_targets` row means "the user shaped this day" and fifty-eight synthetic rows would bury the one real override; `Targets.resolve` is unchanged. Rungs are `target_profiles` rows with `kind` deficit/release. Routines are 14 rows (5+4+5), `plan_phase_volume` 96 (16 muscles × 2 phases × 3 plans). `plan_phase_goals` / `target_profiles` merge with `coalesce` so the founder's edited cut (1935 / 190 C) stays. The W2 columns on older tables are nullable in the local mirror (a pull before the paste must still decode). `plan-templates.json` (generated beside the seed) is W5's new-user template. The live DB has a second account (`21c7b986…`, 2026-09-08); every seed statement is scoped to the founder.
-**Also decided in W2:** `ScheduleContext` carries `programs` / `plans` / `phases` (so the watch gets the deck in the context the phone already sends); the plan owning a date = the selected plan from the latest `started_on` any plan carries (the boundary `Era.forDate` cut on), the most recently started plan before that, the earliest-started plan before any began; `activatePlanRow` flips `plans.active` and dates a plan only on its FIRST activation. `user_goals.active_lever = "custom"` stays the sentinel for "my own numbers" (wins over the schedule for today+); changing the lever now writes a `lever_periods` row. Legacy `helix5-` ids resolve through `exercises.slug` (data), with a computed-slug and a normalised tier for a catalogue pulled before the DDL. The weekly export's programme line reads the plan row ("Onyx-5 Cut", was "Onyx Cut"). `PrSeed` is gone: a replay of a July 2026 session derives its records against the session-less floor rows, not the asserted book. `TargetProfiles.builtin` (Home/Restaurant) is gone — a new account has no day shapes until W5 seeds them. `NutritionPresets` (a second copy of the phase goals with no callers) is deleted.
+**Also decided in W2:** `ScheduleContext` carries `programs` / `plans` / `phases` (so the watch gets the deck in the context the phone already sends); the plan owning a date = the selected plan from the latest `started_on` any plan carries (the boundary `Era.forDate` cut on), the most recently started plan before that, the earliest-started plan before any began; `activatePlanRow` flips `plans.active` and dates a plan only on its FIRST activation. `user_goals.active_lever = "custom"` stays the sentinel for "my own numbers" (wins over the schedule for today+); changing the lever now writes a `lever_periods` row. Legacy predecessor-stamped ids resolve through `exercises.slug` (data), with a computed-slug and a normalised tier for a catalogue pulled before the DDL. The weekly export's programme line reads the plan row ("Onyx-5 Cut", was "Onyx Cut"). `PrSeed` is gone: a replay of a July 2026 session derives its records against the session-less floor rows, not the asserted book. `TargetProfiles.builtin` (Home/Restaurant) is gone — a new account has no day shapes until W5 seeds them. `NutritionPresets` (a second copy of the phase goals with no callers) is deleted.
 **Review fixes after the paste (code-reviewer, 2026-09-11):** a keyless `lever_periods` row is pinned when the NEXT change closes it, never when it opens (today reads the live `user_goals` row); `personal_records.floor_value` (`docs/sql/w2-pr-floor-value.sql`, pasted third) keeps a beaten floor inside the record that beat it, and `retract` restores the floor row; a computed-slug collision throws `ambiguousExercise` instead of resolving to whichever row came first. **Known ceiling for W5's plan picker:** a plan holds ONE era (`plans.started_on`), so re-activating an older plan makes it own every date from the latest boundary; a switch-and-back needs an activation log — W5 should write a `plan_phases` row per activation and own dates inside the current era by phase before falling back to `started_on`.
 **Every W4/W5 column exists live (schema-truth-checker, 2026-09-11):** routines.payload/accent/weekday/sort · plan_phases.start/kind/era_tag/first_week · lever_periods.starts_on/profile_key/goals · stress_logs.slot/level/tags/note · exercises.slug/secondary_muscles/rest_sec/rep_floor/rep_ceiling/archived_at · custom_supplements.form/dose_amount/dose_unit/sort_order/archived_at · cardio_logs.elevation_m/active_kcal/total_kcal · plans.blurb/is_legacy/sort/started_on · plan_phase_goals.label/fiber_g/body_fat_ceiling_pct · target_profiles.kind · personal_records.floor_value (pasted 2026-09-11, third file) · daily_logs.sleep_inaccurate/sleep_onset_trouble · workout_sets.elevation_m/quality. 33 public tables. Schema frozen.
 **Left for W4/W5:** W4's stress "Head" row writes `stress_logs` (slot, level, tags, note); W4's stack list reads `custom_supplements.form/dose_amount/dose_unit/sort_order`; W5's onboarding inserts `plans` + `routines` + `plan_phase_goals` + `plan_phase_volume` from `native/Onyx/Resources/plan-templates.json`, `target_profiles` day shapes and rungs of its own, and the exercise catalogue with `slug`; the routine builder writes `routines.payload` (`RoutinePayload` v1) with `exerciseId` resolved by name through `ExerciseIndex.id(forName:)`.
@@ -195,9 +195,9 @@ Gate: fresh account on a simulator reaches the logger with a chosen routine and 
 **Left for W6:** `ExerciseCatalog.exerciseCatalogStream`'s `HAVING COUNT(s.id) > 0` still hides an imported movement from the Exercises library until it has been trained (the importer says where they went instead). And `MuscleCredit.weightedSets` resolves by NAME through `MuscleMap`, while `MuscleMap.resolveMovers(_:stored:)` already takes a stored-tags fallback that **no credit call site passes** — so an imported movement with its own tags still earns zero until `TodayFeedBuilder.muscleFocus` and `WidgetSnapshotBuilder` pass them. W5 stores the tags and flags unclassified rows at import; wiring the fallback is a scoring change and wants `invariant-auditor`. `MuscleMap` also gained a bare `bench+press` entry — the table grew around a deck that never spelled it, so a flat bench credited nothing; both golden fixtures were hand-updated per D7.
 **The `OnyxTests` baseline is 5, not 7** (verified by running the suite in a clean worktree of `main`): two week-window cases, the treadmill-slug title, the progression verdict, and a Keychain entitlement that only fails on a simulator.
 
-### W6 — Fable (extra high) · Helix sunset + purge · v2.1.0
-Tasks: D8 relocation + all three `--check` green; `site/` + `netlify.toml`; `delete_my_account()` caller in Settings → About; `git rm -r src ios public e2e netlify capacitor.config.ts next.config.ts postcss.config.mjs tailwind.config.ts eslint.config.mjs playwright.config.ts vitest.config.ts components.json next-env.d.ts vitest-env.d.ts`; `package.json` shrinks (D8); delete `.claude/skills/{capacitor-*,tanstack-query,nextjs-best-practices,react-best-practices,visual-check}`; helix purge of the ~40 shipping-native lines + docs, EXCLUDING `helix5-` ids, `"helix"` era wire value, `"helix.week/1"`, `AppDatabase.swift:69-71` legacy names; rename `package.json` name to `onyx`; `README.md` rewritten for native-only; memory SUPERSEDED marks; `graphify update .`.
-Gate: `grep -ri helix native/ scripts/ docs/ --exclude-dir=.build` returns only the allow-list; `curl` AASA JSON; app builds; `swift:core`/`swift:data` green.
+### W6 — Fable (extra high) · Predecessor sunset + purge · v2.1.0
+Tasks: D8 relocation + all three `--check` green; `site/` + `netlify.toml`; `delete_my_account()` caller in Settings → About; `git rm -r src ios public e2e netlify capacitor.config.ts next.config.ts postcss.config.mjs tailwind.config.ts eslint.config.mjs playwright.config.ts vitest.config.ts components.json next-env.d.ts vitest-env.d.ts`; `package.json` shrinks (D8); delete `.claude/skills/{capacitor-*,tanstack-query,nextjs-best-practices,react-best-practices,visual-check}`; predecessor-name purge of the ~40 shipping-native lines + docs, EXCLUDING its slug ids, its era wire value, its schema tag, `AppDatabase.swift:69-71` legacy names; rename `package.json` name to `onyx`; `README.md` rewritten for native-only; memory SUPERSEDED marks; `graphify update .`.
+Gate: the predecessor-name grep over `native/ scripts/ docs/` returns only the allow-list; `curl` AASA JSON; app builds; `swift:core`/`swift:data` green.
 
 ## Copy-paste prompts
 
@@ -253,12 +253,12 @@ Tasks per plan W5. A fresh account must reach the logger with a chosen routine a
 
 ### W6 prompt
 ```
-You are Fable (extra high effort), Lead Architecture Strategist on Onyx. Read docs/EPIC_SPRINT_PLAN.md fully (F4, F5, decision 1, D7, D8, Manual checklists, W6). Execute W6 — the Helix sunset and purge. Nothing in native/ may reference src/ or ios/ when you finish.
+You are Fable (extra high effort), Lead Architecture Strategist on Onyx. Read docs/EPIC_SPRINT_PLAN.md fully (F4, F5, decision 1, D7, D8, Manual checklists, W6). Execute W6 — the predecessor sunset and purge. Nothing in native/ may reference src/ or ios/ when you finish.
 
 Skills: graphify (query for stragglers before every delete), native, schema, backfill, git-commit-helper, ship, senior-architect.
 Agents: schema-truth-checker (tables before/after; confirm delete_my_account() still callable), architect-review (the relocated scripts/ + site/ layout), swift-expert (delete_my_account caller, OnyxLinks host), code-reviewer.
 
-Order: relocate generators + all three --check green → site/ + netlify.toml → delete_my_account caller → git rm the web → package.json shrink → skills delete → helix purge EXCLUDING the load-bearing allow-list in F4 → README → memory SUPERSEDED → graphify update .. Stop and hand the founder the Netlify + Supabase checklist from the plan before deleting the Netlify build. Branch onyx/w6-sunset. Version v2.1.0. Report: the grep allow-list output, the AASA curl, and the final package.json.
+Order: relocate generators + all three --check green → site/ + netlify.toml → delete_my_account caller → git rm the web → package.json shrink → skills delete → predecessor-name purge EXCLUDING the load-bearing allow-list in F4 → README → memory SUPERSEDED → graphify update .. Stop and hand the founder the Netlify + Supabase checklist from the plan before deleting the Netlify build. Branch onyx/w6-sunset. Version v2.1.0. Report: the grep allow-list output, the AASA curl, and the final package.json.
 ```
 
 ## Verification (sprint level)
@@ -267,4 +267,4 @@ Order: relocate generators + all three --check green → site/ + netlify.toml �
 - After W3: one legend shows Chest, Biceps, Triceps, Side delts as four distinguishable hues at 375 pt.
 - After W4: stress logged → Pulse Stress tile term changes; PDF in Files.
 - After W5: new account → logger with routine, no founder data.
-- After W6: `grep -ri helix native scripts docs` = allow-list only; AASA JSON; app builds; both Swift suites green.
+- After W6: the predecessor-name grep over `native scripts docs` = allow-list only; AASA JSON; app builds; both Swift suites green.

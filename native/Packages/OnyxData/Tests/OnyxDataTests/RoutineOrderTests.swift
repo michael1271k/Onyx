@@ -97,19 +97,19 @@ struct RoutineOrderTests {
     func closeStoresTheOrder() throws {
         let db = try AppDatabase.inMemory(deviceId: "device-a")
         try db.writer.write { db in
-            try Exercise(id: "helix5-cable-curl", name: "Cable Curl").insert(db)
-            try Exercise(id: "helix5-lateral-raise", name: "Lateral Raise").insert(db)
+            try Exercise(id: "onyx-cable-curl", name: "Cable Curl").insert(db)
+            try Exercise(id: "onyx-lateral-raise", name: "Lateral Raise").insert(db)
         }
         let session = try db.openSession(userId: user, dayKey: "arms", date: "2026-09-08")
         // Logged in deck order, then dragged: the Lateral Raise ends up first,
         // which is what `moveExercise` writes onto the rows.
         try db.appendSet(
             sessionId: session.id, setId: "set-1",
-            SetSnapshot(exerciseId: "helix5-cable-curl", setIndex: 1, weightKg: 20, reps: 10, exerciseOrder: 1)
+            SetSnapshot(exerciseId: "onyx-cable-curl", setIndex: 1, weightKg: 20, reps: 10, exerciseOrder: 1)
         )
         try db.appendSet(
             sessionId: session.id, setId: "set-2",
-            SetSnapshot(exerciseId: "helix5-lateral-raise", setIndex: 1, weightKg: 8, reps: 12, exerciseOrder: 0)
+            SetSnapshot(exerciseId: "onyx-lateral-raise", setIndex: 1, weightKg: 8, reps: 12, exerciseOrder: 0)
         )
         try db.closeSession(id: session.id, sessionRpe: 8)
 
@@ -133,20 +133,20 @@ struct RoutineOrderTests {
     func ghostsAreExcluded() throws {
         let db = try AppDatabase.inMemory(deviceId: "device-a")
         try db.writer.write { db in
-            try Exercise(id: "helix5-cable-curl", name: "Cable Curl").insert(db)
-            try Exercise(id: "helix5-wrist-curl", name: "Wrist Curl").insert(db)
+            try Exercise(id: "onyx-cable-curl", name: "Cable Curl").insert(db)
+            try Exercise(id: "onyx-wrist-curl", name: "Wrist Curl").insert(db)
         }
         let session = try db.openSession(userId: user, dayKey: "arms", date: "2026-09-08")
         try db.appendSet(
             sessionId: session.id, setId: "set-1",
-            SetSnapshot(exerciseId: "helix5-cable-curl", setIndex: 1, weightKg: 20, reps: 10, exerciseOrder: 0)
+            SetSnapshot(exerciseId: "onyx-cable-curl", setIndex: 1, weightKg: 20, reps: 10, exerciseOrder: 0)
         )
         // Skipped on purpose. `payloadToTemplate` drops it on the web for the
         // same reason: a ghost records what you chose NOT to do.
         try db.appendSet(
             sessionId: session.id, setId: "set-2",
             SetSnapshot(
-                exerciseId: "helix5-wrist-curl", setIndex: 1, weightKg: 0, reps: 0,
+                exerciseId: "onyx-wrist-curl", setIndex: 1, weightKg: 0, reps: 0,
                 setType: "ghost", exerciseOrder: 1
             )
         )

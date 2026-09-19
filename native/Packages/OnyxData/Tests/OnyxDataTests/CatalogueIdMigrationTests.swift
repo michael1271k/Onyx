@@ -6,7 +6,7 @@ import Testing
 /// What `v23.catalogueIds` is for.
 ///
 /// ── THE SPLIT IT CLOSES ─────────────────────────────────────────────────────
-/// A set logged on the phone before W6 carried `helix5-<name-slug>`; the same
+/// A set logged on the phone before W6 carried `onyx-<name-slug>`; the same
 /// movement pulled from the server carried the catalogue's uuid. Every reader
 /// that keys on `exercise_id` saw two movements — the summary drew the exercise
 /// twice, the volume fold split its tonnage, and a PR was measured against half
@@ -49,9 +49,9 @@ struct CatalogueIdMigrationTests {
     func adoptsBySlugColumn() throws {
         let db = try database()
         try seed(db) { conn in
-            try Exercise(id: "uuid-hack", name: "Hack Squat", slug: "helix5-hack-squat").insert(conn)
+            try Exercise(id: "uuid-hack", name: "Hack Squat", slug: "onyx-hack-squat").insert(conn)
             try WorkoutSet(
-                id: "set-1", sessionId: "s1", exerciseId: "helix5-hack-squat",
+                id: "set-1", sessionId: "s1", exerciseId: "onyx-hack-squat",
                 setIndex: 1, weightKg: 60, reps: 8, setType: "normal"
             ).insert(conn)
         }
@@ -68,9 +68,9 @@ struct CatalogueIdMigrationTests {
             // The pair a real device holds: the row the pull created, and the
             // one an older build inserted so a slug-stamped set had a target.
             try Exercise(id: "uuid-pec-deck", name: "Pec Deck").insert(conn)
-            try Exercise(id: "helix5-pec-deck", name: "Pec Deck").insert(conn)
+            try Exercise(id: "onyx-pec-deck", name: "Pec Deck").insert(conn)
             try WorkoutSet(
-                id: "set-2", sessionId: "s1", exerciseId: "helix5-pec-deck",
+                id: "set-2", sessionId: "s1", exerciseId: "onyx-pec-deck",
                 setIndex: 1, weightKg: 40, reps: 12, setType: "normal"
             ).insert(conn)
         }
@@ -84,15 +84,15 @@ struct CatalogueIdMigrationTests {
     func remapsTheEventLog() throws {
         let db = try database()
         try seed(db) { conn in
-            try Exercise(id: "uuid-hack", name: "Hack Squat", slug: "helix5-hack-squat").insert(conn)
+            try Exercise(id: "uuid-hack", name: "Hack Squat", slug: "onyx-hack-squat").insert(conn)
         }
-        _ = try db.appendSet(sessionId: "s1", snapshot("helix5-hack-squat"))
+        _ = try db.appendSet(sessionId: "s1", snapshot("onyx-hack-squat"))
 
         try adopt(db)
         #expect(try ids(in: db) == ["uuid-hack"])
 
         // The gesture that used to undo it: any edit reprojects the session
-        // from the log, and the log used to still say `helix5-hack-squat`.
+        // from the log, and the log used to still say `onyx-hack-squat`.
         try db.reprojectAll()
         #expect(try ids(in: db) == ["uuid-hack"])
     }
@@ -103,17 +103,17 @@ struct CatalogueIdMigrationTests {
         try seed(db) { conn in
             // `Crunch Machine` and `Crunch (Machine)` slug identically and
             // differ in `is_bodyweight`. Picking one merges the ladders.
-            try Exercise(id: "uuid-a", name: "Crunch Machine", slug: "helix5-crunch-machine").insert(conn)
-            try Exercise(id: "uuid-b", name: "Crunch (Machine)", slug: "helix5-crunch-machine").insert(conn)
+            try Exercise(id: "uuid-a", name: "Crunch Machine", slug: "onyx-crunch-machine").insert(conn)
+            try Exercise(id: "uuid-b", name: "Crunch (Machine)", slug: "onyx-crunch-machine").insert(conn)
             try WorkoutSet(
-                id: "set-3", sessionId: "s1", exerciseId: "helix5-crunch-machine",
+                id: "set-3", sessionId: "s1", exerciseId: "onyx-crunch-machine",
                 setIndex: 1, weightKg: 57.5, reps: 10, setType: "normal"
             ).insert(conn)
         }
 
         try adopt(db)
 
-        #expect(try ids(in: db) == ["helix5-crunch-machine"])
+        #expect(try ids(in: db) == ["onyx-crunch-machine"])
     }
 
     @Test("a shadow row whose name two catalogue rows share is refused as well")
@@ -122,16 +122,16 @@ struct CatalogueIdMigrationTests {
         try seed(db) { conn in
             try Exercise(id: "uuid-1", name: "Leg Press").insert(conn)
             try Exercise(id: "uuid-2", name: "leg press ").insert(conn)
-            try Exercise(id: "helix5-leg-press", name: "Leg Press").insert(conn)
+            try Exercise(id: "onyx-leg-press", name: "Leg Press").insert(conn)
             try WorkoutSet(
-                id: "set-4", sessionId: "s1", exerciseId: "helix5-leg-press",
+                id: "set-4", sessionId: "s1", exerciseId: "onyx-leg-press",
                 setIndex: 1, weightKg: 120, reps: 10, setType: "normal"
             ).insert(conn)
         }
 
         try adopt(db)
 
-        #expect(try ids(in: db) == ["helix5-leg-press"])
+        #expect(try ids(in: db) == ["onyx-leg-press"])
     }
 
     @Test("a slug nothing claims keeps its id rather than losing the rep")
@@ -139,24 +139,24 @@ struct CatalogueIdMigrationTests {
         let db = try database()
         try seed(db) { conn in
             try WorkoutSet(
-                id: "set-5", sessionId: "s1", exerciseId: "helix5-movement-nothing-knows",
+                id: "set-5", sessionId: "s1", exerciseId: "onyx-movement-nothing-knows",
                 setIndex: 1, weightKg: 20, reps: 20, setType: "normal"
             ).insert(conn)
         }
 
         try adopt(db)
 
-        #expect(try ids(in: db) == ["helix5-movement-nothing-knows"])
+        #expect(try ids(in: db) == ["onyx-movement-nothing-knows"])
     }
 
     @Test("a set already carrying the catalogue id is untouched, and running twice changes nothing")
     func isIdempotent() throws {
         let db = try database()
         try seed(db) { conn in
-            try Exercise(id: "uuid-hack", name: "Hack Squat", slug: "helix5-hack-squat").insert(conn)
+            try Exercise(id: "uuid-hack", name: "Hack Squat", slug: "onyx-hack-squat").insert(conn)
         }
         _ = try db.appendSet(sessionId: "s1", snapshot("uuid-hack", 1))
-        _ = try db.appendSet(sessionId: "s1", snapshot("helix5-hack-squat", 2))
+        _ = try db.appendSet(sessionId: "s1", snapshot("onyx-hack-squat", 2))
 
         try adopt(db)
         try adopt(db)

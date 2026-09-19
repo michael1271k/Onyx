@@ -488,7 +488,7 @@ struct TrainingPullerTests {
                                startedAt: Date(timeIntervalSince1970: 1_788_000_000)).insert(conn)
         }
         try db.appendSet(sessionId: "s1", setId: "mine", SetSnapshot(
-            exerciseId: "helix5-hack-squat", setIndex: 1, weightKg: 102.5, reps: 9
+            exerciseId: "onyx-hack-squat", setIndex: 1, weightKg: 102.5, reps: 9
         ))
 
         let remote = FakeMirror()

@@ -63,7 +63,7 @@ public struct ExerciseIndex: Sendable {
     /// are what makes ambiguity detectable; a plain `[String: String]` would
     /// silently keep one and discard the rest.
     private let byNormalised: [String: [RemoteExercise]]
-    /// `exercises.slug` → id. The legacy `helix5-…` ids, answered by DATA
+    /// `exercises.slug` → id. The legacy `onyx-…` ids, answered by DATA
     /// since W2 (D3): the column is backfilled from the catalogue name with
     /// the same expression `ExerciseSlug.id` uses, and the seed corrected the
     /// founder's where a deck spelled a movement differently.
@@ -97,10 +97,25 @@ public struct ExerciseIndex: Sendable {
     /// Resolve one local exercise id to a catalogue uuid.
     ///
     /// Three shapes arrive here: a uuid the logger stamped from the routine
-    /// payload (W2 onward — passes through), a legacy `helix5-…` slug the
+    /// payload (W2 onward — passes through), a legacy `onyx-…` slug the
     /// catalogue's `slug` column claims, or a slug nothing claims — which
     /// throws, exactly as before, because creating a row is not this file's job.
     public func id(forSlug slug: String) throws -> String {
+        if ids.contains(slug) { return slug }
+        // ── A STRAGGLER UNDER THE PREDECESSOR'S STAMP IS RE-STAMPED FIRST ───
+        // `v32.onyxWire` rewrote every id the store held, but it is a
+        // MIGRATION: it runs once, and nothing re-runs it on a row that
+        // arrives afterwards. Two things still produce one — a pull that
+        // lands before the founder's server UPDATE has run, and a watch still
+        // on 6.8.1, which updates independently of the phone and stamps with
+        // whatever build is on the wrist.
+        //
+        // Re-stamping here rather than in each tier below is what keeps the
+        // four lookups agreeing: an old-stamped id resolves to exactly the
+        // row its migrated siblings resolve to. Without it the slug matches
+        // nothing, this throws `unknownExercise`, the set never syncs, and
+        // the error names a movement that does not exist.
+        let slug = ExerciseSlug.restamped(slug) ?? slug
         if ids.contains(slug) { return slug }
         if let id = bySlug[slug] { return id }
         // ── THE COLUMN'S OWN RULE, COMPUTED ─────────────────────────────────
@@ -118,7 +133,7 @@ public struct ExerciseIndex: Sendable {
         // ── THEN THE NORMALISED TIER ────────────────────────────────────────
         // A slug is the movement's name with the parenthesised text and
         // punctuation collapsed — which is what `normalisedKey` does to a
-        // catalogue name. So `helix5-romanian-deadlift` matches the one row
+        // catalogue name. So `onyx-romanian-deadlift` matches the one row
         // that normalises to "romanian deadlift", and refuses when two do:
         // picking one would split a movement's history down the middle.
         let key = Self.slugKey(slug)
@@ -139,12 +154,13 @@ public struct ExerciseIndex: Sendable {
         key.split(separator: " ").map(\.capitalized).joined(separator: " ")
     }
 
-    /// `helix5-romanian-deadlift` → `romanian deadlift`: the slug body with
+    /// `onyx-romanian-deadlift` → `romanian deadlift`: the slug body with
     /// its hyphens back as spaces, which is `normalisedKey` of the name minus
     /// anything in parentheses.
+    ///
     static func slugKey(_ slug: String) -> String {
         var body = slug
-        if body.hasPrefix("helix5-") { body = String(body.dropFirst("helix5-".count)) }
+        if body.hasPrefix(ExerciseSlug.prefix) { body = String(body.dropFirst(ExerciseSlug.prefix.count)) }
         return body.replacingOccurrences(of: "-", with: " ").trimmingCharacters(in: .whitespaces)
     }
 
@@ -200,38 +216,92 @@ public struct ExerciseIndex: Sendable {
 /// this one.
 ///
 /// The reverse map is built from `Program.onyx5` rather than by un-slugging,
-/// because un-slugging is lossy: `helix5-seated-cable-row-v-grip` cannot be
+/// because un-slugging is lossy: `onyx-seated-cable-row-v-grip` cannot be
 /// turned back into `Seated Cable Row (V-Grip)` — the parentheses and the
 /// capitals are gone — and guessing at it is how a variant gets filed under its
 /// parent.
 public enum ExerciseSlug {
 
-    /// ── WHY THE PREFIX IS STILL `helix5-` ────────────────────────────────────
-    /// It is the one string W2 deliberately did NOT rename. This slug is not a
-    /// brand, it is a KEY: it is written into local `workout_sets.exercise_id`
+    /// ── THE PREFIX WAS RENAMED, AND WHY THAT TOOK A MIGRATION ───────────────
+    /// It carried the predecessor web app's name until 7.0.0. This slug is not
+    /// a brand, it is a KEY: it is written into local `workout_sets.exercise_id`
     /// the moment a set is logged, and it stays there until the next pull
-    /// replaces the row with the server's uuid version. Renaming it would file
-    /// any set logged-but-not-yet-synced under a second identity — and a
-    /// SPLIT is the silent failure this whole file exists to prevent. The
-    /// history simply starts again from zero, PR baselines with it, and the
-    /// first return to an old load reads as a new record.
+    /// replaces the row with the server's uuid version. Renaming it on its own
+    /// would file any set logged-but-not-yet-synced under a second identity —
+    /// and a SPLIT is the silent failure this whole file exists to prevent: the
+    /// history starts again from zero, PR baselines with it, and the first
+    /// return to an old load reads as a new record.
     ///
-    /// Wave 4 turns this into a real catalogue lookup and the prefix stops
-    /// existing. Until then it stays, and a search for the old prefix
-    /// finding it here is the expected answer, not an oversight.
+    /// So it was never renamed on its own. `v32.onyxWire` rewrites every stored
+    /// id — the projection, the event log, the catalogue's alias column and the
+    /// shadow rows whose `id` IS a slug — in the release that changed this
+    /// line, and the founder ran the matching server UPDATE
+    /// (`docs/sql/w1-onyx-wire.sql`) for the rows that had already reached
+    /// Postgres. Change this string again and you owe the same four rewrites.
     ///
-    /// Must stay byte-identical to `LoggerModel.exerciseId`.
+    /// NOT `personal_records`: its `exercise_key` is a canonical display name,
+    /// never an id (`PrRecorder.nameResolver`), and renaming keys there would
+    /// invent a second history for every lift.
+    ///
+    /// Must stay byte-identical to the stamping path in `LoggerModel`
+    /// (`storedExerciseId`), which calls this function.
+    public static let prefix = "onyx-"
+
     public static func id(_ name: String) -> String {
-        "helix5-" + name.lowercased()
+        prefix + name.lowercased()
             .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    }
+
+    /// One id stamped by the predecessor, re-stamped with this app's prefix —
+    /// or `nil` for anything that is not one.
+    ///
+    /// The single answer to "is this a predecessor stamp?", used by the
+    /// `v32.onyxWire` migration that rewrote the store, and by
+    /// `ExerciseIndex.id(forSlug:)` for the stragglers that arrive after it.
+    ///
+    /// The legacy form was `<brand><digit>-<kebab-name>`, so the BODY is
+    /// everything after the first hyphen and it is never touched: the movement
+    /// keeps its identity, only the stamp in front of it changes. That is what
+    /// makes the rewrite safe to apply to four tables independently — the same
+    /// input always yields the same output, so a row missed and caught on a
+    /// later run lands on the same id as its neighbours.
+    ///
+    /// Three shapes are refused, and each refusal matters:
+    ///   · a catalogue **uuid** — the id a synced set already carries;
+    ///   · an id **already** carrying this prefix — so a second run is a no-op;
+    ///   · anything whose first segment is not `<lowercase letters><one digit>`
+    ///     — the version number is what distinguishes the predecessor's stamp
+    ///     from an ordinary hyphenated id (`ex-treadmill` is left alone, and a
+    ///     slug with no hyphen at all has no prefix to replace).
+    ///
+    /// ── THIS PREDICATE IS SHARED WITH POSTGRES AND MUST STAY SHARED ────────
+    /// `docs/sql/w1-onyx-wire.sql` decides the same question with the regex
+    /// `^[a-z]+[0-9]-`, and the two run against the SAME movement on two
+    /// machines. An earlier draft tested only "the character before the first
+    /// hyphen is a digit", which is LOOSER: `5-bench-press`, `xx55-bench-press`
+    /// and `Xx5-bench-press` would have been renamed here and left alone by
+    /// Postgres, filing one movement under two ids across the sync. The rule
+    /// below is that regex, character for character. Change one, change both,
+    /// and re-run `matchesThePostgresPredicate`.
+    public static func restamped(_ id: String) -> String? {
+        guard !id.hasPrefix(prefix),
+              UUID(uuidString: id) == nil,
+              let dash = id.firstIndex(of: "-")
+        else { return nil }
+        let stamp = id[id.startIndex..<dash]
+        guard let version = stamp.last, version.isASCII, version.isNumber,
+              stamp.count > 1,
+              stamp.dropLast().allSatisfy({ $0.isASCII && $0.isLetter && $0.isLowercase })
+        else { return nil }
+        return prefix + id[id.index(after: dash)...]
     }
 
     /// Slug → name, off the catalogue rows that claim a slug.
     ///
     /// ── THE REVERSE MAP IS DATA NOW (W2) ────────────────────────────────────
     /// It used to be built from `Program.onyx5` — the deck's 32 names plus the
-    /// treadmill — because un-slugging is lossy (`helix5-seated-cable-row-v-grip`
+    /// treadmill — because un-slugging is lossy (`onyx-seated-cable-row-v-grip`
     /// cannot be turned back into `Seated Cable Row (V-Grip)`). `exercises.slug`
     /// is that map as a column, backfilled by the W2 DDL and corrected by the
     /// seed, so it answers for every account and every movement the catalogue

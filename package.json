@@ -1,11 +1,12 @@
 {
   "name": "onyx",
-  "version": "6.8.1",
+  "version": "7.0.0",
   "private": true,
   "description": "Onyx, the native iOS/watchOS app. This package holds the code generators and the version single source of truth; the app itself is under native/.",
   "scripts": {
-    "check": "npm run version:check && npm run check:types && npm run check:atlas && npm run check:mirror && npm run check:doms && npm run swift:ui",
+    "check": "npm run version:check && npm run check:types && npm run check:atlas && npm run check:mirror && npm run check:doms && npm run check:report && npm run swift:ui && npm run check:watch",
     "check:swift": "bash scripts/check-swift.sh",
+    "check:watch": "xcodebuild build -project native/Onyx.xcodeproj -scheme OnyxWatch -destination 'platform=watchOS Simulator,name=Apple Watch Ultra 2 (49mm)' CODE_SIGNING_ALLOWED=NO -derivedDataPath \"$HOME/Library/Caches/onyx-swift/check-watch\"",
     "atlas": "node scripts/gen-atlas-swift.mjs",
     "check:atlas": "node scripts/gen-atlas-swift.mjs --check",
     "mirror": "node scripts/gen-mirror-swift.mjs",
@@ -20,7 +21,8 @@
     "version:check": "node scripts/sync-version.mjs --check",
     "native:gen": "npm run version:sync && cd native && xcodegen generate",
     "icons": "node scripts/generate-icons.mjs",
-    "check:types": "tsc --noEmit -p scripts"
+    "check:types": "tsc --noEmit -p scripts",
+    "check:report": "node scripts/check-report.mjs"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.110.0",

@@ -228,7 +228,7 @@ public extension AppDatabase {
     ///
     /// ── THE NAME IS RESOLVED HERE, AND ONLY HERE ────────────────────────────
     /// `workout_sets.exercise_id` holds a catalogue uuid for a set the web
-    /// logged and `"helix5-<slug>"` for one this phone logged, so a seed that
+    /// logged and `"onyx-<slug>"` for one this phone logged, so a seed that
     /// matched on the id would find nothing for a web-logged session and fall
     /// through to the cold start — which is exactly what the Sept 6 Upper A
     /// session would have done. `PrRecorder.nameResolver` is the same two-source

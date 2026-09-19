@@ -18,9 +18,12 @@ import GRDB
 ///   1. It read `active_program`, a pre-consolidation column, while the writer
 ///      wrote `active_plan` — and `active_program` still holds a plan id that
 ///      no longer exists.
-///   2. It wrote the `helix_active_program` key, which the reader consults only
-///      as a fallback behind `helix_active_plan`, so any device that had used
-///      the plan picker ignored the database value entirely.
+///   2. It wrote the predecessor web app's `<brand>_active_program`
+///      localStorage key, which the reader consulted only as a fallback
+///      behind `<brand>_active_plan`, so any device that had used the plan
+///      picker ignored the database value entirely. Neither key exists under
+///      this app's name and neither is read any more — this records what the
+///      bug WAS, and searching for a literal will not find one.
 ///   3. Phase was not carried at all: switching to bulk on the desktop left the
 ///      phone on cut, and phase drives the prescribed set counts — so the two
 ///      devices disagreed about the workout itself.

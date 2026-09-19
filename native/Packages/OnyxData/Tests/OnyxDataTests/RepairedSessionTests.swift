@@ -26,7 +26,7 @@ struct RepairedSessionTests {
 
     private func remoteSet(_ id: String, session: String, setNumber: Int, order: Int?) -> RemoteSetRow {
         RemoteSetRow(
-            id: id, sessionId: session, exerciseId: "helix5-leg-press", userId: user,
+            id: id, sessionId: session, exerciseId: "onyx-leg-press", userId: user,
             setNumber: setNumber, weightKg: 75, reps: 13, setType: "normal",
             side: nil, pairId: nil, est1rmKg: 107.5, rpe: 8.5, exerciseOrder: order
         )
@@ -42,7 +42,7 @@ struct RepairedSessionTests {
         try db.appendSet(
             sessionId: session.id, setId: "local-1",
             SetSnapshot(
-                exerciseId: "helix5-leg-press", setIndex: 1,
+                exerciseId: "onyx-leg-press", setIndex: 1,
                 weightKg: 75, reps: 13, exerciseOrder: nil
             )
         )

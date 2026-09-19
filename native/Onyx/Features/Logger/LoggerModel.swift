@@ -333,7 +333,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         /// any (§U4.5).
         ///
         /// ── WHY IT IS NOT ALWAYS `ExerciseSlug.id` ──────────────────────────
-        /// A set logged on this phone carries `"helix5-<slug>"`; one logged on
+        /// A set logged on this phone carries `"onyx-<slug>"`; one logged on
         /// the web carries the catalogue's uuid. Appending a forgotten set to a
         /// web-logged session with the slug would put two ids on one movement
         /// in one session, and `SessionAnalysis.grouped` keys on the id — so
@@ -2613,7 +2613,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         // case-insensitively when it decides whether the program already names
         // a movement; a case-sensitive match here would reuse the program's
         // card and then fail to find its rows — a blank card, and a fresh
-        // `helix5-` id on the first tick.
+        // `onyx-` id on the first tick.
         let restore = DeckRestore.fold(
             cards: exercises.map {
                 DeckRestore.Card(

@@ -20,11 +20,20 @@ import Foundation
 
 public enum PhaseKind: String, Codable, Sendable, CaseIterable { case cut, peak, bulk, deload }
 /// Which programme an era belongs to. The raw values are a WIRE FORMAT, shared
-/// with the golden fixtures and the `plan_phases.era` column, so the current
-/// era stays `"helix"` on the wire even though the app is now called Onyx.
+/// with the golden fixtures and the `plan_phases.era` column.
+///
+/// ── THE CURRENT ERA WAS RENAMED ON THE WIRE (Expansion W1) ──────────────────
+/// It carried the predecessor web app's name until 7.0.0, when the raw value
+/// became `"onyx"` in the same release as `v32.onyxWire`, which rewrites every
+/// stored row, and the server-side UPDATE the founder pasted alongside it. The
+/// two halves ship together on purpose: a build that reads the new spelling
+/// against un-migrated rows decodes `era` as nil and the era window loses its
+/// tag. There are exactly TWO cases, which is what lets the migration find the
+/// rows to rewrite without naming the retired brand — anything that is not
+/// `ppl` is this era.
 public enum PhaseEra: String, Codable, Sendable {
     case ppl
-    case onyx = "helix"
+    case onyx
 }
 
 public struct PhaseDef: Codable, Equatable, Sendable {

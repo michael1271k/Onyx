@@ -18,7 +18,7 @@
         }
       },
       "expected": {
-        "label": "Helix Cut",
+        "label": "Onyx Cut",
         "startISO": "2026-07-19",
         "endISO": "2026-09-06",
         "days": 50,
@@ -328,7 +328,7 @@
         }
       },
       "expected": {
-        "label": "HELIX \u00b7 Week 0",
+        "label": "ONYX \u00b7 Week 0",
         "startISO": "2026-07-12",
         "endISO": "2026-07-14",
         "days": 3,
@@ -350,7 +350,7 @@
         }
       },
       "expected": {
-        "label": "Helix Cut",
+        "label": "Onyx Cut",
         "startISO": "2026-07-19",
         "endISO": "2026-07-19",
         "days": 1,
@@ -372,7 +372,7 @@
         }
       },
       "expected": {
-        "label": "Helix Cut",
+        "label": "Onyx Cut",
         "startISO": "2026-07-19",
         "endISO": "2026-09-06",
         "days": 50,
@@ -394,7 +394,7 @@
         }
       },
       "expected": {
-        "label": "Helix Cut",
+        "label": "Onyx Cut",
         "startISO": "2026-07-19",
         "endISO": "2026-10-17",
         "days": 91,
@@ -416,7 +416,7 @@
         }
       },
       "expected": {
-        "label": "HELIX Transition",
+        "label": "ONYX Transition",
         "startISO": "2026-10-18",
         "endISO": "2026-10-18",
         "days": 1,
@@ -438,7 +438,7 @@
         }
       },
       "expected": {
-        "label": "HELIX Lean Bulk",
+        "label": "ONYX Lean Bulk",
         "startISO": "2026-11-01",
         "endISO": "2026-11-01",
         "days": 1,
@@ -460,7 +460,7 @@
         }
       },
       "expected": {
-        "label": "HELIX Lean Bulk",
+        "label": "ONYX Lean Bulk",
         "startISO": "2026-11-01",
         "endISO": "2027-01-16",
         "days": 77,

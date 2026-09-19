@@ -32,7 +32,7 @@ struct SyncTranslationTests {
     @Test("set_index becomes set_number — the whole reason this layer exists")
     func setIndexBecomesSetNumber() throws {
         let set = WorkoutSet(
-            id: "set-1", sessionId: "s1", exerciseId: "helix5-hack-squat",
+            id: "set-1", sessionId: "s1", exerciseId: "onyx-hack-squat",
             setIndex: 3, weightKg: 100, reps: 8
         )
         let row = try SyncTranslation.setRow(set, userId: "u1", exerciseId: "uuid-1")
@@ -174,12 +174,12 @@ struct SyncTranslationTests {
         // omits a nil Optional, so a batch of two sets — one with a side, one
         // without — would fail as a whole. Hence the explicit `encode(to:)`.
         let bare = try SyncTranslation.setRow(
-            WorkoutSet(id: "a", sessionId: "s1", exerciseId: "helix5-pec-deck",
+            WorkoutSet(id: "a", sessionId: "s1", exerciseId: "onyx-pec-deck",
                        setIndex: 1, weightKg: 40, reps: 12),
             userId: "u1", exerciseId: "uuid-1"
         )
         let full = try SyncTranslation.setRow(
-            WorkoutSet(id: "b", sessionId: "s1", exerciseId: "helix5-pec-deck",
+            WorkoutSet(id: "b", sessionId: "s1", exerciseId: "onyx-pec-deck",
                        setIndex: 2, weightKg: 40, reps: 12, side: "left",
                        pairId: "p1", est1rmKg: 55, rpe: 8, exerciseOrder: 3,
                        durationSec: 300, incline: 2, distanceKm: 0.37, elevationM: 7.4),
@@ -263,7 +263,7 @@ struct SyncTranslationTests {
 
         let setJSON = try JSONSerialization.jsonObject(
             with: OnyxJSON.encoder.encode(try SyncTranslation.setRow(
-                WorkoutSet(id: "a", sessionId: "s1", exerciseId: "helix5-pec-deck",
+                WorkoutSet(id: "a", sessionId: "s1", exerciseId: "onyx-pec-deck",
                            setIndex: 1, weightKg: 40, reps: 12),
                 userId: "u1", exerciseId: "uuid-1"
             ))

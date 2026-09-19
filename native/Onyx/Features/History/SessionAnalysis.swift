@@ -479,10 +479,10 @@ enum SessionAnalysis {
     ///
     /// ── WHY THE STORED NAME IS NOT ENOUGH ───────────────────────────────────
     /// `SessionHistoryStore`'s query is `COALESCE(e.name, s.exercise_id)`, and
-    /// a set logged on this phone carries `"helix5-<slug>"` in `exercise_id`
+    /// a set logged on this phone carries `"onyx-<slug>"` in `exercise_id`
     /// until the catalogue resolves it — so the fallback IS the slug, and the
     /// ledger header, the muscle map, the rep window and the PR key all took
-    /// `helix5-incline-db-press` as a movement's name. Visible as a title; a
+    /// `onyx-incline-db-press` as a movement's name. Visible as a title; a
     /// silent miss everywhere else, because `Ceilings.repWindow` and
     /// `MuscleMap` have no entry under a slug and answer nil rather than
     /// wrongly.

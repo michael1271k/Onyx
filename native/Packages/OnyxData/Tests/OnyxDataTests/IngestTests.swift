@@ -283,7 +283,7 @@ struct IngestTests {
             try UserGoalRow(
                 id: "g1", userId: user, contextMode: "normal", goalPreset: "cut",
                 createdAt: Date(), updatedAt: Date(),
-                autoLogSupplements: false, activeProgram: "helix5", dayCutoffHour: 0,
+                autoLogSupplements: false, activeProgram: "onyx5", dayCutoffHour: 0,
                 unitSystem: "metric", reduceMotion: false, timezone: "Asia/Jerusalem",
                 trackRpe: true
             ).insert(conn)

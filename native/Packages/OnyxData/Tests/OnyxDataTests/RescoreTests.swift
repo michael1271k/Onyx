@@ -27,7 +27,7 @@ struct RescoreTests {
             id: "g1", userId: user, sleepGoalHours: 8, calorieGoal: 1955,
             proteinGoalG: 190, carbsGoalG: 150, fatGoalG: 60, stepsGoal: 10_000,
             waterGoalMl: 3000, contextMode: "normal", createdAt: Date(), updatedAt: Date(),
-            autoLogSupplements: false, activeProgram: "helix5", dayCutoffHour: 0,
+            autoLogSupplements: false, activeProgram: "onyx5", dayCutoffHour: 0,
             unitSystem: "metric", reduceMotion: false, timezone: "Asia/Jerusalem", trackRpe: true
         ).insert(conn)
     }

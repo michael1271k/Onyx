@@ -44,6 +44,97 @@ _Nothing yet._
 
 ---
 
+## [7.0.0] — 2026-09-19 · The predecessor's name leaves the data
+
+The web app Onyx replaced was retired a year ago, but its name was still a
+stored **value**: the era on every plan phase, and the prefix on every exercise
+id this phone stamps. This release renames both, in the app and on the server,
+and deletes the last code that existed only to recognise the old spelling.
+
+**Run `docs/sql/w1-onyx-wire.sql` in the Supabase SQL editor BEFORE installing
+this build.** The app migrates its own copy; that file migrates the server's.
+Order matters and the file says so too: `v32.onyxWire` is a GRDB migration, so
+the migrator records it by name and never runs it again. A `set_events` row
+pulled after it has run keeps the old stamp permanently, and that movement's
+history splits in two. The file is one transaction, prints a before/after count
+per table, and re-running it is a no-op.
+
+It also drops and recreates one CHECK constraint: `plan_phases.era` was pinned
+to the old value and refused the new one outright (`23514`). That is the only
+schema change, and it puts back a constraint of the same shape naming the two
+values `PhaseEra` can actually encode.
+
+### Changed
+- **`plan_phases.era`** — the current era's wire value is now `"onyx"`.
+  Migration `v32.onyxWire` rewrites the local rows; the SQL file rewrites the
+  4 live ones. `PhaseEra` has exactly two cases, so both halves find their rows
+  by excluding `ppl` rather than by naming what they replace.
+- **Exercise id prefix** — `ExerciseSlug.id` now stamps `onyx-`. Because that
+  id is a KEY and not a brand, the same migration moves all four places one is
+  stored — the `workout_sets` projection, the `set_events` append log, the
+  `exercises.slug` alias column and the shadow rows whose `id` *is* a slug — in
+  one transaction. Moving a subset would file one movement under two identities
+  and split its history and PR baselines in silence. `personal_records` is
+  deliberately untouched: its `exercise_key` is a display name, not an id.
+- **A straggler under the old stamp still resolves.** A migration runs once, so
+  an id that arrives afterwards — from a pull that beat the server UPDATE, or
+  from a watch still on 6.8.1, which updates independently of the phone —
+  would otherwise match nothing and throw `unknownExercise`, stranding the set
+  and naming a movement that does not exist. `ExerciseIndex.id(forSlug:)` now
+  re-stamps it first, through the same predicate the migration uses.
+- **Reports parse by position, not by brand.** `fmtV2.parseHeader` takes a
+  report's title from the first non-box preamble line. The seven reports
+  already stored under the old masthead keep rendering with a title, and §5 of
+  the SQL file makes re-branding them opt-in — they are documents, not keys.
+- **Docs** name the retired app "the predecessor web app" throughout.
+
+### Added
+- **`scripts/watch-shot.sh`** — the watch half of the screenshot loop, on the
+  paired Ultra 2. It refuses an unpaired simulator and refuses by name the
+  three screens that have no launch hook yet, rather than photographing
+  `StartView` under someone else's filename.
+- **`npm run check:watch`** — builds the `OnyxWatch` target for the watchOS
+  simulator. `check:swift` never covered it. Wired into `npm run check`.
+- **`npm run check:report`** — the first runnable check the report parsers have
+  ever had. `fmtV2.ts` claimed a test file that went with the web app, so 945
+  lines feeding the in-app renderer were unguarded. Six asserts, imported
+  straight from the TypeScript via Node 24's native type stripping, so no test
+  framework was added for it.
+- **`docs/SIMULATORS.md`** — the pair, both shot scripts, the `SHOT_DERIVED`
+  rule, and the 40 mm floor a 49 mm screenshot cannot prove.
+- **`OnyxWireMigrationTests`** — the fold golden: a session's sets are compared
+  field by field before and after the rewrite, then reprojected from their own
+  event log to prove the table and the log still agree.
+
+### Fixed
+- **`npm run check` was exiting 1 with no output, and had been.**
+  `scripts/swift-ui-test.sh` defaulted to an `iPhone 17 Pro` simulator that is
+  not installed, and its UDID lookup is a pipeline under `set -e`: a
+  non-matching `grep` killed the script before its own error message could
+  print. So the gate failed silently and the 40 OnyxUI tests had not run. The
+  default is now the paired `iPhone 15`, the lookup cannot abort, and a missing
+  device prints what IS installed. Reproduced on `6.8.1` before the fix.
+- **`scripts/watch-shot.sh` could photograph the wrong screen.** A failed
+  `simctl launch` or screenshot inside a function called as `shoot … || status=1`
+  runs with `errexit` disabled, so the script printed a success line and exited
+  0 over a stale PNG. Both commands are now checked explicitly.
+
+### Removed
+- **The legacy store adoption.** `AppDatabase` no longer looks for a database
+  under the predecessor's container, folder and file names. It had never fired:
+  its App Group id was not in `Onyx.entitlements`, so `containerURL` answered
+  nil, and its Application Support half looked for a folder no shipped build
+  ever wrote. `moveStoreIfNeeded` — the Application Support → App Group half,
+  with the WAL/SHM and never-overwrite rules — stays.
+- **`OnyxCore/Sync/RealtimeKeys.swift`**, its golden and its fixture; the
+  `rebranded` test shim, which had become an identity function;
+  `scripts/add-supplement.mjs`; `.agents/skills/` (five web-era skills);
+  `.claude/settings.json.graphify-bak`; `native/graphify-out/`.
+- `docs/LIVE_UX_SPRINT_PLAN.md` and `docs/UX_WEEKLY_NUTRITION_WIDGETS_PLAN.md`
+  moved to `docs/Done/`.
+
+---
+
 ## [6.8.1] — 2026-09-19 · The sprint leaves no residue
 
 The close-out of the Widgets · Sleep v2 · Themes sprint — eleven waves,
@@ -2063,7 +2154,7 @@ in the new shape from the rows it already had.
 
 ## [3.0.0] — 2026-09-13 · The Web App Is Gone
 
-Onyx is one app now. The Helix web app — the Next.js dashboard, logger and
+Onyx is one app now. The predecessor web app — the Next.js dashboard, logger and
 PWA that Onyx grew up beside and shared a database with — is retired, along
 with the Capacitor shell that wrapped it, the old watch app inside that shell,
 the Playwright and Vitest suites that tested it, and every web build config.
@@ -2119,16 +2210,16 @@ is in the same Supabase the phone reads.
   unchanged.
 - **Native comments no longer point at `src/`.** Every "a port of
   `src/lib/…`" note now reads "a port of the web app's `lib/…`", and
-  `native/README.md` says where those files went. The remaining `helix`
-  strings are load-bearing data, not branding: the `"helix"` era wire value,
-  the `helix.week/1` schema tag, the legacy App Group and sqlite names the
-  one-time store move reads, the `helix_*` preference fallbacks, and the
+  `native/README.md` says where those files went. The remaining predecessor
+  strings are load-bearing data, not branding: the era wire value, the
+  schema tag, the legacy App Group and sqlite names the
+  one-time store move reads, the preference fallbacks, and the
   founder's plan and era labels in the golden fixtures.
 
 ### One movement, one id
 
 - **The logger writes the catalogue's id.** A set logged on the phone used to
-  carry `helix5-<name-slug>` while the same movement pulled from the server
+  carry the predecessor's `<brand>5-<name-slug>` stamp while the same movement pulled from the server
   carried the catalogue's uuid — one movement under two identities, which the
   session summary drew twice, the volume fold split, and a PR could be
   measured against half of. `storedId` now resolves the local catalogue by
@@ -2846,7 +2937,7 @@ underneath them.
   volume and 1RM (70 × 15), Hanging Knee Raise reps (18), Side Plank duration
   (66 s). `PrRecorder.baselines` gathered the bar under the session's OWN
   exercise ids, so a movement whose history sits under a second id — a
-  catalogue uuid from the web beside a `helix5-` slug from the phone, which
+  catalogue uuid from the web beside a predecessor-stamped slug from the phone, which
   `nameResolver` calls routine — was judged against an empty bar, and an empty
   bar awards nothing at all. The bar is now gathered under every id that
   resolves to the same canonical name. It can only ever raise a bar or fill an
@@ -2970,7 +3061,7 @@ empty instead of inheriting the founder's.
   plan that owns a date is the one whose block covers it, else the latest
   `started_on` before it (the compiled era boundary is gone). The watch reads
   the deck from the context the phone sends.
-- Legacy `helix5-…` set ids resolve through `exercises.slug` (data), not through
+- Legacy predecessor-stamped set ids resolve through `exercises.slug` (data), not through
   the deck; new sets carry the catalogue uuid from the routine payload.
 - PR floors are `personal_records` rows with no session; a replay never
   deletes them. A record that beats a floor carries it in `floor_value`
@@ -2995,7 +3086,7 @@ the numbers were quietly getting wrong stop being wrong.
 
 ### Fixed
 - **Muscle focus (dashboard sheet, Trends, widget tile)** — a set logged on the
-  phone now counts towards its muscles. Phone-logged sets carry `helix5-` slug
+  phone now counts towards its muscles. Phone-logged sets carry predecessor-stamped slug
   ids, not catalogue uuids, and the one map both readers share only knew the
   catalogue: "Side delts 0/7" after an Upper B was every lateral raise dropped.
 - **Sync** — a PostgREST schema-cache miss (`PGRST205`/`PGRST204`/`42703`) is
@@ -3106,12 +3197,12 @@ every set row belonging to another day.
   suppressed when the session it is measured against recorded less than 20
   seconds per set — a reserved blank line rather than an invented number.
 - **The treadmill is called Treadmill** (native, session summary), not
-  `helix5-treadmill`. `WarmupCardio` is deliberately outside `Program.onyx5`, so
+  the predecessor's treadmill slug. `WarmupCardio` is deliberately outside `Program.onyx5`, so
   the slug the deck stamps on the bout was in no name table and the page fell
   back to printing the key. The same one-line miss meant a treadmill logged on
   the phone threw `unknownExercise` on push and could not be uploaded at all —
   the one movement the deck adds for you was the one the sync refused. The
-  `helix5-` prefix itself stays: it is a key written into local rows, and
+  predecessor prefix itself stays: it is a key written into local rows, and
   renaming it would file every unsynced set under a second identity.
 - **The summary shows only the sets you just did** (native, session ledger).
   Each row carried the positionally-matched set from the last time that
@@ -3276,7 +3367,7 @@ native app stopped being a port of the web app and became the product.
 - **Readiness v9** — the battery reads six weeks of you.
 - **Phase 3 truth waves** — rescore on edit, PR engine, export v3, auth both
   ways, the logger engine, and the edit deck.
-- Helix web app: dashboard, logger, nutrition, trends, reports, PWA.
+- The predecessor web app: dashboard, logger, nutrition, trends, reports, PWA.
 
 ### Changed
 - The app is **Onyx**, all the way down — `apex51`/`axis4` became `onyx5`/`onyx4`.

@@ -96,17 +96,17 @@ struct SessionSummaryHotfixTests {
         #expect(summary(2, sets: 0).credibleDurationMin == 2)
     }
 
-    // MARK: - §3.2 · helix5-treadmill
+    // MARK: - §3.2 · onyx-treadmill
 
     @Test("a treadmill logged on this phone is titled Treadmill, not its slug")
     func treadmillIsNamed() throws {
         // `WarmupCardio` is not in `Program.onyx5` (a walk has no sets, reps or
-        // load), so the deck's `helix5-treadmill` was in no lookup: the
+        // load), so the deck's `onyx-treadmill` was in no lookup: the
         // catalogue has no row under that id and `nameBySlug` was built from the
         // program alone. `COALESCE(e.name, s.exercise_id)` therefore fell
         // through to the id and the page drew it as a movement's name.
         let slug = ExerciseSlug.id(WarmupCardio.name)
-        #expect(slug == "helix5-treadmill")
+        #expect(slug == "onyx-treadmill")
 
         let database = try AppDatabase.inMemory(deviceId: "treadmill-name")
         try database.seedRows { db in
@@ -129,7 +129,11 @@ struct SessionSummaryHotfixTests {
         let page = try #require(SessionAnalysis.page(database: database, sessionId: "s-tread"))
         let bout = try #require(page.report.exercises.first)
         #expect(bout.canonical == "Treadmill")
-        #expect(!bout.canonical.contains("helix"), "no internal key may reach a title")
+        // The prefix, not the brand word: this asserts that an internal KEY
+        // never reaches a title. Spelling the brand here would also reject a
+        // movement legitimately named after the app, and would have to be
+        // re-edited the next time the stamp changes.
+        #expect(!bout.canonical.contains(ExerciseSlug.prefix), "no internal key may reach a title")
         // And it still weighs nothing: naming it must not enrol it in tonnage.
         #expect(page.report.tonnageKg == 0)
     }

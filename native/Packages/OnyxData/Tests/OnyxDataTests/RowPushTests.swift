@@ -53,7 +53,7 @@ struct RowPushTests {
             try UserGoalRow(
                 id: "g1", userId: user, calorieGoal: calorieGoal, contextMode: "normal",
                 createdAt: Date(), updatedAt: Date(), autoLogSupplements: false,
-                activeProgram: "helix5", dayCutoffHour: 0, unitSystem: "metric",
+                activeProgram: "onyx5", dayCutoffHour: 0, unitSystem: "metric",
                 reduceMotion: false, timezone: "Asia/Jerusalem", trackRpe: true
             ).save(conn)
         }
@@ -200,7 +200,7 @@ struct RowPushTests {
         let row = UserGoalRow(
             id: "g1", userId: user, contextMode: "normal",
             createdAt: Date(), updatedAt: Date(), autoLogSupplements: false,
-            activeProgram: "helix5", dayCutoffHour: 0, unitSystem: "metric",
+            activeProgram: "onyx5", dayCutoffHour: 0, unitSystem: "metric",
             reduceMotion: false, timezone: "Asia/Jerusalem", trackRpe: true
         )
         let json = String(decoding: try OnyxJSON.encoder.encode(row), as: UTF8.self)
@@ -454,11 +454,11 @@ struct PreferencesTests {
                 goalPreset: "bulk", createdAt: Date(), updatedAt: Date(),
                 autoLogSupplements: false, activeProgram: "onyx5",
                 dayCutoffHour: 0, unitSystem: "imperial", reduceMotion: true,
-                timezone: "Asia/Jerusalem", activePlan: "helix5", trackRpe: false
+                timezone: "Asia/Jerusalem", activePlan: "onyx5", trackRpe: false
             ).insert(conn)
         }
         let prefs = try db.preferences(userId: user)
-        #expect(prefs.activePlan == "helix5", "the current column wins")
+        #expect(prefs.activePlan == "onyx5", "the current column wins")
         #expect(prefs.activePhase == "bulk", "goal_preset is a correct fallback for active_phase")
         #expect(prefs.unitSystem == "imperial")
         #expect(prefs.reduceMotion)

@@ -14,7 +14,7 @@ struct SessionEditingTests {
     /// are DERIVED by the engine rather than read out of the seed table.
     private let older = "2026-08-10"
     private let newer = "2026-08-24"
-    private let lift = "helix5-bench-press"
+    private let lift = "onyx-bench-press"
 
     private func store() throws -> AppDatabase { try AppDatabase.inMemory(deviceId: "device-a") }
 

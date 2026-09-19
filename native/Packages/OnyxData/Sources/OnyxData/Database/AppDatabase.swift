@@ -110,32 +110,6 @@ public final class AppDatabase: Sendable {
     }()
     #endif
 
-    /// What all of the above were called before the app was renamed Onyx (W2).
-    ///
-    /// The container, the folder and the file all changed name in one commit,
-    /// and a store the previous build wrote is a store with real unsynced sets
-    /// in it. `adoptLegacyStore` renames it forward rather than leaving it
-    /// stranded beside an empty new one.
-    ///
-    /// In practice the App Group half is dead code today: the entitlement has
-    /// never been signed (it needs the paid Developer Program — Gate 0), so
-    /// every store that exists is the Application Support fallback.
-    ///
-    /// ── AND IT STAYS DEAD AFTER GATE 0 UNLESS THE ENTITLEMENT SAYS SO ───────
-    /// `containerURL(forSecurityApplicationGroupIdentifier:)` returns non-nil
-    /// only for a group id listed in the BINARY's entitlements, and
-    /// `Onyx.entitlements` lists `group.app.onyx.health` alone. So provisioning
-    /// the new group does not wake this branch: it returns nil, the `if let` is
-    /// skipped, and nothing is adopted or lost — there is simply nothing there
-    /// to adopt, because no build ever wrote to the legacy group either.
-    ///
-    /// Do not read this as a safety net. If a build ever DOES ship having
-    /// written to `group.app.helix.health`, that id has to go into the
-    /// entitlements array in the same commit, or this cannot see it.
-    static let legacyAppGroupID = "group.app.helix.health"
-    static let legacyFolderName = "Helix"
-    static let legacyFileName = "helix.sqlite"
-
     public enum OpenError: Error, Equatable {
         /// `readOnly(folderURL:)` found no database — the app has not run yet.
         case missingDatabase(String)
@@ -163,37 +137,34 @@ public final class AppDatabase: Sendable {
         return container.appending(path: "Onyx", directoryHint: .isDirectory)
     }
 
-    /// Rename and relocate any store an earlier build left behind. APP ONLY.
+    /// Relocate the store into the App Group container once there is one.
+    /// APP ONLY.
     ///
     /// Call once, at launch, BEFORE opening the store — never from an
-    /// extension. A store that predates the container is moved across with its
-    /// WAL and SHM: a pool opened on the sqlite alone would replay a stale
-    /// checkpoint and the last unsynced sets would be gone.
+    /// extension. The store is moved across with its WAL and SHM: a pool
+    /// opened on the sqlite alone would replay a stale checkpoint and the last
+    /// unsynced sets would be gone.
     ///
     /// Idempotent. Every step is a "move if the source exists and the
     /// destination does not", so a second call after a successful first is a
-    /// series of no-ops.
+    /// series of no-ops. Today it is also a no-op in full: the App Group
+    /// entitlement needs the paid Developer Program (Gate 0), `containerURL`
+    /// answers nil until it is signed, and every store that exists is the
+    /// Application Support fallback.
+    ///
+    /// ── THE PREDECESSOR'S STORE IS NO LONGER ADOPTED (Expansion W1) ────────
+    /// This also renamed a store written under the previous app's container,
+    /// folder and file names. That path went with the brand in 7.0.0, and it
+    /// could go because it had never fired: its App Group id was not in
+    /// `Onyx.entitlements`, so `containerURL` answered nil for it, and its
+    /// Application Support half looked for a folder no shipped build ever
+    /// wrote. A device that somehow still holds one must install 6.8.1 once
+    /// before this release to have it adopted.
     public static func adoptLegacyStores() {
         let appSupport = URL.applicationSupportDirectory.appending(path: "Onyx", directoryHint: .isDirectory)
-        // The rename first, in whichever container the store is actually in.
-        // Application Support is the one that matters today; the App Group is
-        // reachable only once the entitlement is signed, and `containerURL`
-        // answers nil until it is, which makes that half a no-op rather than a
-        // branch to remember.
-        adoptLegacyStore(into: appSupport, from: URL.applicationSupportDirectory.appending(path: legacyFolderName, directoryHint: .isDirectory))
         guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)
         else { return }
-        let shared = container.appending(path: "Onyx", directoryHint: .isDirectory)
-        adoptLegacyStore(into: shared, from: container.appending(path: legacyFolderName, directoryHint: .isDirectory))
-        if let legacyContainer = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: legacyAppGroupID) {
-            adoptLegacyStore(into: shared, from: legacyContainer.appending(path: legacyFolderName, directoryHint: .isDirectory))
-        }
-        moveStoreIfNeeded(from: appSupport, to: shared)
-    }
-
-    /// `Helix/helix.sqlite` → `Onyx/onyx.sqlite`, once.
-    static func adoptLegacyStore(into new: URL, from old: URL) {
-        move(from: old, named: legacyFileName, to: new, named: fileName)
+        moveStoreIfNeeded(from: appSupport, to: container.appending(path: "Onyx", directoryHint: .isDirectory))
     }
 
     static func moveStoreIfNeeded(from old: URL, to new: URL) {
@@ -1037,7 +1008,7 @@ public final class AppDatabase: Sendable {
         //     under the same guard `v13.supplementArchive` uses: the regenerated
         //     `migrateMirrorV1` names them for a fresh install, and the guard is
         //     what stops this failing on a store that got them that way.
-        //   · `exercises.slug` — the legacy `helix5-…` id as an ALIAS column,
+        //   · `exercises.slug` — the legacy `onyx-…` id as an ALIAS column,
         //     so a set logged before W2 keeps resolving to its catalogue row
         //     through data rather than through `Program.onyx5` (D3). The rep
         //     window and rest columns ride along for W5's routine builder.
@@ -1327,6 +1298,41 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // ── v32 ─────────────────────────────────────────────────────────────
+        // The predecessor web app's name leaves the DATA (Expansion W1,
+        // decision 19). Two values carried it: the current era in
+        // `plan_phases.era`, and the exercise-id prefix the logger stamps.
+        //
+        // ── WHY THIS IS ONE MIGRATION AND NOT FOUR ─────────────────────────
+        // `adoptCatalogueIds` (v23) learned the lesson the hard way and its
+        // header is worth re-reading: an exercise id lives in FOUR places at
+        // once — the projection (`workout_sets`), the append bodies in
+        // `set_events`, the catalogue's alias column (`exercises.slug`) and,
+        // for a shadow row an older build inserted, the catalogue's own id.
+        // Migrating a subset is worse than migrating none: the deck reads the
+        // renamed id into `storedExerciseId`, an added set lands under it, and
+        // the fold restores the rest of the session under the old one. One
+        // movement, two identities, in one session, opened by the very
+        // migration meant to close it. So all four move together, in one
+        // transaction, or nothing does.
+        //
+        // ── WHAT IS DELIBERATELY NOT HERE ──────────────────────────────────
+        // `personal_records`. Its `exercise_key` is a canonical DISPLAY NAME,
+        // not an id — "Seated Cable Row (V-Grip)", never a slug (see
+        // `PrRecorder.nameResolver`, and the live table, introspected
+        // 2026-09-19: 81 rows, zero carrying the old brand). Renaming keys
+        // there would invent a second history for every lift.
+        //
+        // The server half is `docs/sql/w1-onyx-wire.sql`, pasted by the
+        // founder. It is NOT symmetrical with this one, because the server's
+        // `workout_sets.exercise_id` is a `uuid` with a live foreign key and
+        // structurally cannot hold a slug — the slug reaches Postgres only
+        // inside `set_events.body`, and `ExerciseIndex` resolves it to a uuid
+        // on push. Four local tables, three server ones.
+        migrator.registerMigration("v32.onyxWire") { db in
+            try Self.adoptOnyxWire(db)
+        }
+
         return migrator
     }
 }
@@ -1483,7 +1489,7 @@ extension AppDatabase {
     ///
     /// ── AND IT REFUSES RATHER THAN GUESSES ──────────────────────────────────
     /// A slug two catalogue rows answer to is left alone. `Crunch Machine` and
-    /// `Crunch (Machine)` both slug to `helix5-crunch-machine`, both exist, and
+    /// `Crunch (Machine)` both slug to `onyx-crunch-machine`, both exist, and
     /// their `is_bodyweight` differs — picking one merges a bodyweight ladder
     /// into a 57.5 kg one, permanently. It is the same question
     /// `ExerciseIndex.id(forSlug:)` answers by throwing `ambiguousExercise`,
@@ -1521,6 +1527,76 @@ extension AppDatabase {
         }
     }
 
+    /// The predecessor's brand leaves every stored value. Run once, by `v32`.
+    ///
+    /// ── THE ERA NEEDS NO OLD SPELLING TO FIND ITS ROWS ─────────────────────
+    /// `PhaseEra` has exactly two cases, `ppl` and `onyx`, so "every era that
+    /// is not `ppl`" names the rows to rewrite without this file spelling the
+    /// retired brand — which is the point of the wave. A NULL era is left as
+    /// it is: absent is not the same as this era, and `PhaseDef.era` is
+    /// Optional precisely so a row that never claimed one keeps saying so.
+    static func adoptOnyxWire(_ db: Database) throws {
+        try db.execute(sql: """
+            UPDATE plan_phases SET era = ?
+             WHERE era IS NOT NULL AND era <> ? AND era <> ?
+            """, arguments: [PhaseEra.onyx.rawValue, PhaseEra.ppl.rawValue, PhaseEra.onyx.rawValue])
+
+        // The catalogue first, so the alias column and the shadow rows agree
+        // with the projection that is about to point at them. No foreign key
+        // enforces this locally (`TrainingPuller` relies on that), so the
+        // order is for the reader, not for SQLite.
+        // ── `UPDATE OR IGNORE`, BECAUSE `exercises.id` IS A PRIMARY KEY ─────
+        // Two shadow rows whose stamps differ and whose bodies match — say a
+        // `4-` and a `5-` generation of one movement — both want the same new
+        // id, and the second UPDATE would raise a UNIQUE violation. That
+        // throw would propagate out of `migrator.migrate` and out of
+        // `AppDatabase.init`, so the app would not launch at all and there
+        // would be no recovery short of deleting the store. Only one stamp
+        // generation ever shipped, so this is unlikely — but the cost is
+        // total and the guard is one word. Skipping the loser is also the
+        // right answer on the merits: both rows named the same movement, and
+        // the survivor is the one `adoptCatalogueIds` will resolve anyway.
+        for (table, column) in [("exercises", "id"), ("exercises", "slug"),
+                                ("workout_sets", "exercise_id")] {
+            for old in try String.fetchAll(
+                db, sql: "SELECT DISTINCT \(column) FROM \(table) WHERE \(column) IS NOT NULL"
+            ) {
+                guard let new = ExerciseSlug.restamped(old) else { continue }
+                try db.execute(
+                    sql: "UPDATE OR IGNORE \(table) SET \(column) = ? WHERE \(column) = ?",
+                    arguments: [new, old]
+                )
+            }
+        }
+
+        // The log, by the same rule — and only an append can carry an id at
+        // all: an amend cannot express one. Same walk as `adoptCatalogueIds`.
+        for row in try Row.fetchAll(db, sql: "SELECT id, body FROM set_events") {
+            guard let data = row["body"] as Data?,
+                  let body = try? OnyxJSON.decoder.decode(SetEvent.Body.self, from: data),
+                  case .append(var snapshot) = body,
+                  let new = ExerciseSlug.restamped(snapshot.exerciseId)
+            else { continue }
+            snapshot.exerciseId = new
+            try db.execute(
+                sql: "UPDATE set_events SET body = ? WHERE id = ?",
+                arguments: [try OnyxJSON.encoder.encode(SetEvent.Body.append(snapshot)), row["id"] as String]
+            )
+        }
+
+        // ── AND THEN v23 AGAIN, BECAUSE v23'S PREDICATE MOVED WITH US ───────
+        // `legacyExerciseIdMap` matches the prefix by name, and that name just
+        // changed. A device that has already run v23 gets a no-op here: its
+        // slugs resolved to catalogue uuids years ago and `onyxWireId` refuses
+        // a uuid. A device coming from a build OLDER than v23 — which upgrades
+        // through the whole migrator in one go — would otherwise have its
+        // slugs renamed a moment after the only pass that maps them to the
+        // catalogue had looked for the old spelling and found nothing. Running
+        // it again after the rename is what keeps that path whole, and it is
+        // idempotent by construction, so running it on everyone else is free.
+        try adoptCatalogueIds(db)
+    }
+
     /// Legacy slug → catalogue id, for every slug exactly ONE row answers for.
     ///
     /// Two sources, both of which a real device holds. The `slug` column is the
@@ -1532,7 +1608,7 @@ extension AppDatabase {
         var map: [String: String] = [:]
         for row in try Row.fetchAll(db, sql: """
             SELECT slug, min(id) AS target FROM exercises
-             WHERE slug IS NOT NULL AND slug LIKE 'helix5-%'
+             WHERE slug IS NOT NULL AND slug LIKE 'onyx-%'
              GROUP BY slug HAVING count(*) = 1
             """) {
             map[row["slug"]] = row["target"]
@@ -1541,7 +1617,7 @@ extension AppDatabase {
             SELECT legacy.id AS slug, min(c.id) AS target
               FROM exercises legacy
               JOIN exercises c ON lower(trim(c.name)) = lower(trim(legacy.name)) AND c.id <> legacy.id
-             WHERE legacy.id LIKE 'helix5-%'
+             WHERE legacy.id LIKE 'onyx-%'
              GROUP BY legacy.id HAVING count(*) = 1
             """) {
             let slug: String = row["slug"]

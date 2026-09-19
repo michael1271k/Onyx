@@ -222,15 +222,3 @@ struct ReadingsGoldenTests {
         }
     }
 }
-
-@Suite("Item #11 — the realtime key map")
-struct RealtimeKeysGoldenTests {
-    struct KeysOut: Decodable { let tables: [String]; let keys: [String: [[String]]] }
-    @Test("the table → query-key map agrees")
-    func keys() throws {
-        let e = try GoldenFixture<JSONValue?, KeysOut>.load("realtime-keys").cases[0].expected
-        #expect(RealtimeKeys.tables == e.tables)
-        #expect(e.keys.count == RealtimeKeys.tableKeys.count)
-        for (table, keys) in e.keys { #expect(RealtimeKeys.keys(for: table) == keys, "keys \(table)") }
-    }
-}

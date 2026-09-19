@@ -200,7 +200,7 @@ public enum PrRecorder {
         //
         // This filtered on `exerciseIds` alone — the ids the session's OWN rows
         // carry. A lift logged on both clients has its history under two of
-        // them (a catalogue uuid from the web, a `helix5-` slug from a deck the
+        // them (a catalogue uuid from the web, a `onyx-` slug from a deck the
         // payload could not resolve; `nameResolver`'s header calls that
         // routine), and the bar was then built from whichever half this session
         // happened to use. Half a history is a low bar — and an id appearing
@@ -413,7 +413,7 @@ public enum PrRecorder {
     /// display name — and every id that resolves to it is the same movement as
     /// far as `personal_records` is concerned. Keying on the name is what makes
     /// a lift logged on the web under a catalogue uuid and on the phone under a
-    /// `helix5-` slug replay as one history rather than two.
+    /// `onyx-` slug replay as one history rather than two.
     ///
     /// ── WHICH MEANS THE TWO CAN DISAGREE, AND `record` IS THE NARROW ONE ────
     /// A lift logged on both clients has its history under two `exercise_id`s

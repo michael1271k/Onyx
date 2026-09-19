@@ -91,7 +91,7 @@ struct WatchPayloadTests {
         let events = [
             SetEvent(
                 sessionId: "s-1", setId: "set-1", deviceId: "watch", seq: 7,
-                body: .append(SetSnapshot(exerciseId: "helix5-hack-squat", setIndex: 1, weightKg: 102.5, reps: 8))
+                body: .append(SetSnapshot(exerciseId: "onyx-hack-squat", setIndex: 1, weightKg: 102.5, reps: 8))
             ),
             SetEvent(
                 sessionId: "s-1", setId: "set-1", deviceId: "watch", seq: 8,

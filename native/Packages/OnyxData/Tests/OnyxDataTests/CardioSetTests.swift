@@ -45,7 +45,7 @@ struct CardioSetTests {
     /// The live row, field for field.
     private var treadmill: RemoteSetRow {
         RemoteSetRow(
-            id: "srv-treadmill", sessionId: session, exerciseId: "helix5-treadmill", userId: user,
+            id: "srv-treadmill", sessionId: session, exerciseId: "onyx-treadmill", userId: user,
             setNumber: 1, weightKg: 0, reps: 0, setType: "warmup",
             side: nil, pairId: nil, est1rmKg: nil, rpe: nil, exerciseOrder: 0,
             // 12 m of ascent over 0.37 km. `incline` × `distance_km` says 7.4,
@@ -61,7 +61,7 @@ struct CardioSetTests {
     /// row that has no business carrying them.
     private var press: RemoteSetRow {
         RemoteSetRow(
-            id: "srv-press", sessionId: session, exerciseId: "helix5-incline-press", userId: user,
+            id: "srv-press", sessionId: session, exerciseId: "onyx-incline-press", userId: user,
             setNumber: 1, weightKg: 42, reps: 10, setType: "normal",
             side: nil, pairId: nil, est1rmKg: 56, rpe: 8, exerciseOrder: 1,
             durationSec: nil, incline: nil, distanceKm: nil, elevationM: nil
@@ -84,8 +84,8 @@ struct CardioSetTests {
                 id: session, userId: user, dayKey: "cb_a", date: "2026-09-07",
                 startedAt: Date(), endedAt: Date()
             ).insert(conn)
-            try Exercise(id: "helix5-treadmill", name: "Treadmill").insert(conn)
-            try Exercise(id: "helix5-incline-press", name: "Incline DB Press").insert(conn)
+            try Exercise(id: "onyx-treadmill", name: "Treadmill").insert(conn)
+            try Exercise(id: "onyx-incline-press", name: "Incline DB Press").insert(conn)
         }
 
         // 2 · THE PULL.
