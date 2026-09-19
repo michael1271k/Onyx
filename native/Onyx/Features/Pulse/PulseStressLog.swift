@@ -59,9 +59,32 @@ enum StressStamp {
 
 // MARK: - The sheet that writes one
 
-/// Five words, a time, seven optional chips and a line of your own.
+/// Five words, a time, seven optional chips and a line of your own — all of it
+/// at once, at half height.
 ///
-/// ── WHY THE TIME IS A CONTROL NOW, AND WAS NOT BEFORE ───────────────────────
+/// ── WHY IT IS NOT A `Form` ANY MORE (W11) ───────────────────────────────────
+/// It was three `Form` sections and it opened `.large`, because a grouped form
+/// spends a header, a footer and ~34 pt of inter-section inset on every one of
+/// three questions that between them take four taps. The reading is a mood, a
+/// minute and up to seven words; asking for it over a full-height scroll made
+/// the smallest entry in the app look like the biggest.
+///
+/// What actually cost the height was prose, not controls. Four footers stated
+/// the anchors, that the bucket is derived, that tags are not scored and that
+/// the note is not read — ~120 pt of type for facts a reader needs ONCE. They
+/// are all still here: the anchors are the line under the words (and become
+/// the chosen rung's own definition once you have picked one), the derived
+/// bucket is the picker's own subtitle and moves as you move the wheel, and
+/// the two "yours, not scored" promises are one line at the foot.
+///
+/// ── AND WHY THE CHIPS ARE A `FlowRow` AND NOT A GRID ────────────────────────
+/// `LazyVGrid(.adaptive(minimum:))` gives every chip the same width, so
+/// "Work" was as wide as "Family" and seven short words took three columns of
+/// dead space. `FlowRow` (OnyxUI since this wave) packs them at their own
+/// widths — four on the first line, three on the second, ~50 pt saved — and
+/// wraps rather than shrinking at an accessibility size.
+///
+/// ── WHY THE TIME IS A CONTROL AT ALL ────────────────────────────────────────
 /// The sheet this replaces stated the slot as a heading and offered no way to
 /// change it, on the reasoning that "which part of the day is this about" is a
 /// question the clock already answers. That was right while a day held three
@@ -80,23 +103,12 @@ struct StressLogSheet: View {
     let model: DayModel
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     @State private var level: Int?
     @State private var tags: Set<StressTag> = []
     @State private var note = ""
     @State private var at: Date?
-    /// Whether the note is open. Closed on every open: the field is the one
-    /// control on this sheet most days do not use, and 88 pt of `Form` for a
-    /// line nobody types is the compaction W3 is spending everywhere else.
-    @State private var noteOpen = false
-    /// The chip grid's column minimum, scaled — see `tagSection`.
-    ///
-    /// 84, not 96 (W3). 96 packed three columns on a 375 pt phone with 30 pt of
-    /// slack in each; 84 packs four, which takes the seven chips from three rows
-    /// to two and ~50 pt off the sheet. The `@ScaledMetric` is what still
-    /// reflows it to one column at the accessibility sizes, so the number below
-    /// is a packing decision at shipping type and nothing else.
-    @ScaledMetric(relativeTo: .footnote) private var chipWidth: CGFloat = 84
 
     /// Midnight to now on the day being logged.
     ///
@@ -136,115 +148,148 @@ struct StressLogSheet: View {
         DaySheet(
             "Log stress",
             domain: .recover,
-            glass: false,
-            // A form: five words, a wheel and a chip grid do not fit a medium
-            // detent even with the note folded away, and a sheet that opens
-            // already clipped is worse than one that opens tall.
-            detents: [.large],
+            // ── HALF HEIGHT, EXCEPT WHERE HALF IS A LIE (W11) ───────────────
+            // Everything above fits ~290 pt and a medium detent leaves ~380 pt
+            // under the bar on the shot device. At an accessibility size it
+            // does not and cannot: the words stack into a column of five, the
+            // chips wrap to one per line, and a sheet that opens already
+            // clipped is worse than one that opens tall. The Fuel tab's day
+            // picker takes the same branch for the same reason.
+            detents: typeSize.isAccessibilitySize ? [.large] : [.medium],
             // `dayStart` nil means the date did not parse, which cannot
             // happen from a `LogicalDay` string — but if it ever did, `bounds`
             // would fall back to TODAY while `save` still files against
             // `model.date`, which is precisely the silent misfiling the clamp
-            // below exists to prevent. So it disables Save instead.
+            // in `time` exists to prevent. So it disables Save instead.
             primary: ("Save", level != nil && dayStart != nil, save)
         ) {
-            Form {
-                wordAndTimeSection
-                tagSection
-                noteSection
+            VStack(alignment: .leading, spacing: OnyxSpace.s) {
+                FiveWordPicker(words: PsychStress.levels.map(FiveWordPicker.Word.init), selected: level) { value in
+                    level = value
+                }
+                definition
+                time
+                chips
+                TextField("Note", text: $note)
+                    .onyxType(.body)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .padding(.horizontal, OnyxSpace.m)
+                    .background(
+                        RoundedRectangle(cornerRadius: OnyxCorner.row, style: .continuous)
+                            .fill(Color.onyx.hairline.opacity(0.6))
+                    )
+                    .accessibilityLabel("Note")
+                // The two promises the deleted footers made, in one line: a tag
+                // is report-only (`StressTag`'s own header) and the note reaches
+                // nothing that scores a day.
+                Text("Tags and the note are yours. Nothing here is scored.")
+                    .onyxType(.caption)
+                    .foregroundStyle(Color.onyx.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         // ── "NOW" IS READ ONCE, NOT ON EVERY BODY PASS ──────────────────────
         // `bounds.upperBound` walks back to `Date()` through `model.clock`, and
         // this sheet's body re-evaluates on every keystroke in the note and
         // every tag tap. Left derived, the wheel visibly moves under the finger
-        // and — worse — a reading started at 17:58 under a footer saying
+        // and — worse — a reading started at 17:58 under a caption saying
         // "Files under midday" saves at 18:01 under evening, a slot the reader
         // was never shown and never chose.
         .task { if at == nil { at = bounds.upperBound } }
     }
 
-    // MARK: The five words, and the clock
+    // MARK: The line under the words
 
-    /// ── ONE SECTION, NOT TWO (W3) ───────────────────────────────────────────
-    /// The word and the time were two `Form` sections: two headers, two footers
-    /// and ~34 pt of inter-section inset between a question and the clock it is
-    /// being answered about. They are one act — you say how it was, and when —
-    /// and merging them takes ~90 pt off a sheet that opens at `.large` because
-    /// it did not fit a medium detent.
+    /// The anchors before you pick, the chosen rung's own definition after.
     ///
-    /// Both footers survive verbatim, in the order they are read. The anchors
-    /// explain the five words; the slot line explains that the bucket is derived
-    /// and never chosen, which is the one thing a reader who has only ever seen
-    /// the three slot names needs told.
-    private var wordAndTimeSection: some View {
-        Section {
-            FiveWordPicker(words: PsychStress.levels.map(FiveWordPicker.Word.init), selected: level) { value in
-                level = value
-            }
-            .listRowInsets(EdgeInsets(
-                top: OnyxSpace.s, leading: OnyxSpace.s, bottom: OnyxSpace.s, trailing: OnyxSpace.s
-            ))
-            DatePicker(
-                "Time",
-                // ── THE CLAMP IS THE BINDING'S JOB, NOT THE PICKER'S ────────
-                // `AppDatabase.logStress` takes the logical `date` and the
-                // instant `loggedAt` as two independent parameters and asserts
-                // nothing about their agreeing. A time that escaped the day
-                // would file the row under one date while its stamp said
-                // another — the reading would count toward the wrong day's mean
-                // silently, with no error and nothing on screen to show it. The
-                // range below stops the wheel; this stops everything else.
-                selection: Binding(
-                    get: { when },
-                    set: { at = min(max($0, bounds.lowerBound), bounds.upperBound) }
-                ),
-                in: bounds,
-                displayedComponents: .hourAndMinute
-            )
-            .frame(minHeight: 44)
-        } header: {
-            OnyxSectionHeader("How it was, and when", .recover)
-        } footer: {
-            VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                Text(anchors)
-                // The bucket, stated rather than chosen. A reader who has only
-                // ever seen the three slot names needs to know they still exist
-                // and that nothing here asks them to pick one.
-                Text("Files under \(slot.label.lowercased()). The part of the day is worked out from the time — you never pick it.")
-            }
+    /// One line at shipping type either way, and it is the whole of what two
+    /// of the four deleted `Form` footers said about the scale. The anchors are
+    /// what keep "Tense" meaning the same thing in March as in August
+    /// (`PsychStress.levels`); once a rung IS chosen the anchors have done
+    /// their work and the useful sentence is that rung's — which is also the
+    /// one VoiceOver already reads as the cell's hint, so the two agree by
+    /// construction.
+    private var definition: some View {
+        Text(scaleLine)
+            .onyxType(.caption)
+            .foregroundStyle(Color.onyx.textSecondary)
+            // It WRAPS rather than shrinking or truncating. Both strings are
+            // one line at shipping type on a 402 pt phone and neither can be
+            // at AX5 — the first AX5 shot read "Relaxed = nothing…", which is
+            // an anchor with its own anchor cut off. There is nothing below
+            // this line that a second line would push off a sheet that is
+            // already `.large` at those sizes.
             .fixedSize(horizontal: false, vertical: true)
-        }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityHidden(true)
     }
 
-    private var anchors: String {
+    private var scaleLine: String {
+        if let level, let picked = PsychStress.level(level) {
+            return "\(picked.label) — \(picked.hint)."
+        }
         guard let first = PsychStress.levels.first, let last = PsychStress.levels.last else { return "" }
         return "\(first.label) = \(first.hint). \(last.label) = \(last.hint)."
     }
 
+    // MARK: The clock, and the bucket it lands in
+
+    /// `.compact`, with the derived slot on the line under it.
+    ///
+    /// The bucket was a `Form` footer two sections away. It is now the caption
+    /// directly beneath the control that decides it and it moves when that
+    /// control moves, so "you never pick it" is something the screen
+    /// demonstrates rather than asserts.
+    ///
+    /// ── AND WHY IT IS NOT THE PICKER'S OWN SUBTITLE ─────────────────────────
+    /// It was, for one shot: a two-line label inside `DatePicker`. A compact
+    /// picker takes its width from the right and gives the label whatever is
+    /// left, which at an accessibility size is a column about four characters
+    /// wide — the AX5 shot read "Files / under / …" one word per line beside
+    /// the clock. Under it the caption gets the full width at every size, and
+    /// the line it costs at shipping type is ~17 pt of the ~99 pt the sheet has
+    /// spare inside a medium detent.
+    private var time: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            picker
+            Text("Files under \(slot.label.lowercased()) — you never pick it")
+                .onyxType(.caption)
+                .foregroundStyle(Color.onyx.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var picker: some View {
+        DatePicker(
+            // ── THE CLAMP IS THE BINDING'S JOB, NOT THE PICKER'S ────────────
+            // `AppDatabase.logStress` takes the logical `date` and the instant
+            // `loggedAt` as two independent parameters and asserts nothing
+            // about their agreeing. A time that escaped the day would file the
+            // row under one date while its stamp said another — the reading
+            // would count toward the wrong day's mean silently, with no error
+            // and nothing on screen to show it. The range below stops the
+            // wheel; this stops everything else.
+            selection: Binding(
+                get: { when },
+                set: { at = min(max($0, bounds.lowerBound), bounds.upperBound) }
+            ),
+            in: bounds,
+            displayedComponents: .hourAndMinute
+        ) {
+            Text("Time").onyxType(.body)
+        }
+        .datePickerStyle(.compact)
+        .frame(minHeight: 44)
+    }
+
     // MARK: The chips
 
-    private var tagSection: some View {
-        Section {
-            // An adaptive grid reflows to one column at an accessibility size
-            // with no branch of its own. `.adaptive`'s minimum is a raw point
-            // value and does not know about Dynamic Type, so at AX5 the grid
-            // still packs three ~100 pt columns and "Family", "Travel" and
-            // "Health" all truncate inside them; `@ScaledMetric` moves the
-            // minimum with the text, which is what makes the reflow happen.
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: chipWidth), spacing: OnyxSpace.s)],
-                alignment: .leading,
-                spacing: OnyxSpace.s
-            ) {
-                ForEach(StressTag.allCases, id: \.self) { tag in chip(tag) }
-            }
-            .padding(.vertical, OnyxSpace.xs)
-        } header: {
-            OnyxSectionHeader("What's on it", .recover)
-        } footer: {
-            Text("Optional. Nothing here is scored — the tags are for you, reading this back.")
+    private var chips: some View {
+        FlowRow(spacing: OnyxSpace.xs) {
+            ForEach(StressTag.allCases, id: \.self) { tag in chip(tag) }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("What's on it")
     }
 
     private func chip(_ tag: StressTag) -> some View {
@@ -258,7 +303,11 @@ struct StressLogSheet: View {
                 Text(tag.label).onyxType(.caption).fontWeight(.semibold).lineLimit(1)
             }
             .padding(.horizontal, OnyxSpace.m)
-            .frame(maxWidth: .infinity, minHeight: 44)
+            // 44 and not the 30 the cardio sheet's kind chips take: these are
+            // toggles a reader taps two or three of, not a one-of-six picker,
+            // and `FlowRow` charges nothing for the height of a line it was
+            // going to draw anyway.
+            .frame(minHeight: 44)
             .background(Capsule().fill(on ? Color.onyx.accent(.recover).opacity(0.25) : Color.onyx.hairline))
             .foregroundStyle(on ? Color.onyx.accent(.recover) : Color.onyx.textSecondary)
             .contentShape(Capsule())
@@ -266,48 +315,6 @@ struct StressLogSheet: View {
         .buttonStyle(.plain)
         .accessibilityLabel(tag.label)
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
-    }
-
-    // MARK: The note
-
-    /// ── FOLDED AWAY UNTIL IT IS WANTED (W3) ─────────────────────────────────
-    /// A four-line `TextField` and its footer is ~88 pt at the bottom of a sheet
-    /// whose primary control is five words at the top, and the note is optional
-    /// on a reading most days answer in one tap. Behind a disclosure it costs
-    /// one 44 pt row, and the row carries what was typed so closing it is not
-    /// the same as losing it.
-    ///
-    /// NOT a `.sheet` or a second screen: the note is saved by the same Save
-    /// button as everything else on this form, and a control that leaves the
-    /// form is a control that has to be brought back to it.
-    private var noteSection: some View {
-        Section {
-            DisclosureGroup(isExpanded: $noteOpen) {
-                // `TextField(axis: .vertical)`, not a `TextEditor`: the editor
-                // has no placeholder, no intrinsic height and draws its own box
-                // inside a `Form` row that is already a box.
-                TextField("Note", text: $note, axis: .vertical)
-                    .lineLimit(1...4)
-                    .frame(minHeight: 44)
-            } label: {
-                HStack(spacing: OnyxSpace.s) {
-                    Text("Note").onyxType(.body)
-                    Spacer(minLength: OnyxSpace.s)
-                    // What is in there, when it is shut. A disclosure that hides
-                    // a line you already typed and gives no sign of it is a
-                    // disclosure that loses work.
-                    if !noteOpen, !note.isEmpty {
-                        Text(note)
-                            .onyxType(.caption)
-                            .foregroundStyle(Color.onyx.textSecondary)
-                            .lineLimit(1)
-                    }
-                }
-                .frame(minHeight: 44)
-            }
-        } footer: {
-            Text("Optional. It stays on your account and is never read by anything that scores a day.")
-        }
     }
 
     private func save() {

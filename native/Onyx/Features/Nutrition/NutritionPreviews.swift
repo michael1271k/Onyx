@@ -54,7 +54,7 @@ enum NutritionPreviews {
         }
 
         switch screen {
-        case "fuel", "nutrients", "macro-edit":
+        case "fuel", "nutrients", "macro-edit", "fuel-calendar":
             _ = try? database.ingest(
                 HealthPayload(date: date, values: [
                     .calories: 1420, .protein: 128, .carbs: 140, .fats: 42, .water: 1800,
@@ -144,6 +144,11 @@ private struct Harness: View {
                 switch screen {
                 case "nutrients":
                     NavigationStack { NutrientsView(model: model) }
+                // The fourth sheet, on the same terms as `macro-edit` above:
+                // presented by the harness, not by a door inside the tab.
+                case "fuel-calendar":
+                    NavigationStack { NutritionTabView(seeded: model) }
+                        .sheet(isPresented: .constant(true)) { DayPickerSheet(model: model) }
                 case "macro-edit":
                     // Presented BY the harness rather than by a debug flag
                     // inside the tab: a screen that ships a way to open one of

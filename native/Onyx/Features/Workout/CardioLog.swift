@@ -444,7 +444,11 @@ private struct ImportCard: View {
             VStack(alignment: .leading, spacing: OnyxSpace.s) {
                 HStack(spacing: OnyxSpace.s) {
                     Image(systemName: kind.symbol)
-                        .onyxType(.display)
+                        // `.body`, not `.display` (W11). A GLYPH is not a heading: this one sits
+                        // in a 28 pt frame either way, so 20 pt bought nothing but a card that
+                        // shouted — and with the take/taken circle opposite it at the same size,
+                        // the row read as two headings with a movement name squeezed between.
+                        .onyxType(.body)
                         .foregroundStyle(accent)
                         .frame(width: 28)
                     VStack(alignment: .leading, spacing: 1) {
@@ -457,7 +461,7 @@ private struct ImportCard: View {
                     }
                     Spacer(minLength: 0)
                     Image(systemName: isTaken ? "checkmark.circle.fill" : "plus.circle.fill")
-                        .onyxType(.display)
+                        .onyxType(.body)
                         .foregroundStyle(isTaken ? Color.onyx.textSecondary : accent)
                 }
                 // Wrapping, not an `HStack`: six figures do not fit 402 pt at an

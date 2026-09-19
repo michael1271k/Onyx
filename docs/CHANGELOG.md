@@ -44,6 +44,46 @@ _Nothing yet._
 
 ---
 
+## [6.8.0] — 2026-09-19 · One screen for the stress log
+
+Four surfaces that had grown taller than what they were asking for. The Stress
+log wanted a mood, a minute and a couple of tags and took a full-height form
+over three sections to collect them; it is now one half-height screen. The
+cardio sheet and the Stress index sheet were shouting at 20 and 34 points for
+things that are not headings. The Fuel tab's day picker was building two
+calendars to decide whether it needed one.
+
+### Changed
+- **The Stress log writes in one screen.** "Log stress" opens at half height
+  with everything on it at once: the five words in a row, the time as a compact
+  control with the part of the day it files under stated under it, the seven
+  tags as chips that pack at their own widths, and a one-line note. The note is
+  no longer folded behind a disclosure and the sheet no longer opens full
+  height. At an accessibility text size it still opens tall, because there it
+  genuinely is.
+- **The Stress index sheet.** The index reads at the size of a heading rather
+  than at the size of the live workout timer, so the number and its word —
+  "59 Elevated" — sit on one line as one phrase.
+- **The cardio sheet.** The glyph on each Apple Health bout and its add button
+  are icons again rather than headings; the one figure left at heading size is
+  the last bout's distance, time and pace.
+- **The Fuel tab's day picker** is its own screen now, scrolls once, and is in
+  the screenshot loop for the first time.
+
+### Fixed
+- **The stress sheet's two captions no longer truncate at the largest text
+  size.** "Relaxed = nothing…" and "Files un…" both wrap.
+
+### Removed
+- Nothing a reader can see. `SessionDetailView.swift` — 3,026 lines, the
+  longest file in the app — became three files under `Features/History/
+  SessionDetail/`: the page, the ledger (its movement header and its set row)
+  and its chart. Not one pixel moved. `FlowRow`, the wrapping chip layout ten
+  screens reach for, moved from the exercise page into the design system where
+  a widget or a watch face can use it.
+
+---
+
 ## [6.7.0] — 2026-09-18 · The numbers the logger already had
 
 Everything here was already being measured, computed or sent, and none of it

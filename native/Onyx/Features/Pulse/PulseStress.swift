@@ -118,7 +118,12 @@ struct StressBreakdownSheet: View {
             VStack(alignment: .leading, spacing: OnyxSpace.xs) {
                 HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
                     Text(breakdown?.index.map { "\(Int($0))" } ?? "—")
-                        .onyxType(.clock).onyxNumeral()
+                        // `.display`, not `.clock` (W11). `.clock` is 34 pt and its own header
+                        // says what it is for: a RUNNING clock, read across a gym floor while
+                        // you decide whether to start the next set. A report-only index on a
+                        // sheet is read at the distance everything else on it is, and at 34 pt
+                        // it set the band word beside it two whole steps down the scale.
+                        .onyxType(.display).onyxNumeral()
                         .foregroundStyle(breakdown?.band?.tint ?? Color.onyx.textSecondary)
                     Text(breakdown?.band.map(\.word) ?? "No reading")
                         .onyxType(.display)
