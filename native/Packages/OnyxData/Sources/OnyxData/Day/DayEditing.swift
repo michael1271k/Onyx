@@ -522,8 +522,7 @@ public extension AppDatabase {
     /// onset and strategy B keeps the stored one only while the new window
     /// still contains it.
     ///
-    /// Does NOT rescore. `AppEnvironment.rescore(from:reason:)` is the one
-    /// entry point for the cascade, as it is for every other edit.
+    /// Does NOT rescore by name. The commit is the request — see `RescoreDoor`.
     @discardableResult
     func editSleepWindow(
         userId: String, date: String, start: Date, end: Date,

@@ -201,21 +201,12 @@ final class PhoneWatchBridge {
         do {
             switch inbound {
             case .events(let events):
-                // The one merge path, shared with the pull side of Supabase.
-                // `ingest` de-duplicates, advances the Lamport clock, marks the
-                // events synced and re-folds — and deliberately does NOT queue
-                // them, because echoing a remote event back is how a sync loop
-                // starts.
-                //
-                // Note what this means for durability: a set logged on the wrist
-                // is now in this phone's log, but `ingest` marks it synced, so
-                // the phone's outbox will not push it. It reaches Supabase as a
-                // `workout_sets` row through the projection the next time
-                // anything about that session is queued — and, once
-                // `wave-10-set-events.sql (git history)` is applied, as an event from
-                // the watch's own drain. Until then the watch's sets reach the
-                // server only through a session the phone also touches.
-                try database.ingest(events)
+                // ── MERGED LIKE A PULL, QUEUED LIKE OUR OWN ────────────────
+                // `ingest` marks what it takes as synced, which stranded every
+                // watch set until the phone happened to touch the same session
+                // (W2, decision 15). `ingestFromWatch` merges the same way and
+                // queues each event through the phone's own outbox.
+                try database.ingestFromWatch(events)
             case .ownership(let claim):
                 try database.ingestOwnership(claim)
             case .rest(let pulse):

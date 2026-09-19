@@ -599,4 +599,43 @@ struct LoggerModelTests {
         model.stopRest()
         #expect(model.restBoundaryExercise == nil, "rest over, back to the set in front of you")
     }
+
+    // MARK: - A workout for a day that already happened (W2, decision 12)
+
+    @Test("a retro session opens the EDIT deck: closed, dated, no clock, sets through SessionEditing")
+    func retroSessionOpensAsAnEdit() throws {
+        let database = try AppDatabase.inMemory(deviceId: "retro-test")
+        let userId = "00000000-0000-0000-0000-000000000042"
+        try database.seedRows { db in
+            try Exercise(id: ExerciseSlug.id("Chest Press"), name: "Chest Press").insert(db)
+        }
+        let session = try database.createRetroSession(userId: userId, dayKey: "cb_a", date: "2026-09-10")
+        #expect(session.date == "2026-09-10")
+        #expect(session.endedAt != nil, "born closed — the live logger must never find it")
+        #expect(session.durationMin == nil, "the duration is typed, not read off a clock")
+        #expect(try database.liveSession(dayKey: "cb_a", date: "2026-09-10", userId: userId) == nil)
+
+        let model = LoggerModel(
+            day: PlanTemplates.day("onyx5", "cb_a"), phase: .cut,
+            store: database, userId: userId, startedAt: session.startedAt ?? Date(), openingForEdit: true
+        )
+        model.attach(editing: session)
+        #expect(model.isEditing, "the retro deck IS the edit deck: no timer, no Live Activity, no pencil")
+        #expect(model.sessionId == session.id)
+        #expect(model.editing?.date == "2026-09-10")
+
+        let exercise = try #require(model.exercises.first { $0.name == "Chest Press" })
+        model.addSet(to: exercise)
+        let row = try #require(exercise.rows.last)
+        row.weightKg = 60
+        row.reps = 8
+        model.toggleDone(row, in: exercise)
+
+        let sets = try database.sets(sessionId: session.id)
+        #expect(sets.count == 1 && sets.first?.weightKg == 60)
+        // Through `SessionEditing`, not `EventStore`: the log was seeded and
+        // the set is an event the server will hear about.
+        #expect(try database.setEvents(sessionId: session.id).contains { $0.kind == .append })
+        #expect(try database.session(id: session.id, userId: userId)?.date == "2026-09-10", "the set did not open a session dated today")
+    }
 }

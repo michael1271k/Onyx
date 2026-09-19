@@ -88,6 +88,9 @@ struct DayScreen: View {
     /// `isPresented:` because a day can hold two sessions and each card has to
     /// push its own.
     @State private var openSession: DayModel.WorkoutSummary?
+    /// A workout being logged for THIS past date (W2, decision 12): the edit
+    /// deck over a session born closed. `item:` so the cover owns the model.
+    @State private var retroEditor: LoggerModel?
     /// The masthead for each session on this date, by id.
     ///
     /// A career-wide read (`SessionAnalysis.headers` walks the whole ledger to
@@ -102,6 +105,43 @@ struct DayScreen: View {
 
     var body: some View {
         ScrollViewReader { scroller in list(scroller: scroller) }
+    }
+
+    /// The programme that owned this date — its plan's `routines` rows.
+    private var retroProgram: Program? {
+        environment.targets.map { Schedule.programForContext($0.schedule, model.date).program }
+    }
+
+    /// The cover closed. A retro session that never got a set is a workout
+    /// that did not happen: `discardSession` takes the row, its queued upsert
+    /// and the server copy, and the door cascades the day back.
+    private func discardEmptyRetro() {
+        guard let id = lastRetroSessionId else { return }
+        lastRetroSessionId = nil
+        let database = environment.database
+        if (try? database.sets(sessionId: id, userId: environment.userIdString))?.isEmpty == true {
+            _ = try? database.discardSession(id: id, userId: environment.userIdString)
+        }
+    }
+    @State private var lastRetroSessionId: String?
+
+    /// Create the session on this date, born closed, and open the edit deck.
+    private func logRetro(_ day: ProgramDay) {
+        guard let session = try? environment.database.createRetroSession(
+            userId: environment.userIdString, dayKey: day.key, date: model.date
+        ) else { return }
+        let editor = LoggerModel(
+            day: day, phase: environment.targets?.schedule.phase ?? .cut,
+            store: environment.database, userId: environment.userIdString,
+            startedAt: session.startedAt ?? Date(), openingForEdit: true
+        )
+        editor.attach(editing: session)
+        guard editor.sessionId != nil else {
+            _ = try? environment.database.discardSession(id: session.id, userId: environment.userIdString)
+            return
+        }
+        lastRetroSessionId = session.id
+        retroEditor = editor
     }
 
     /// The wash itself. Nil hues — a day with no session, or a session of
@@ -206,6 +246,29 @@ struct DayScreen: View {
                 }
                 .plainRow()
             }
+            // ── LOG A WORKOUT HERE (W2, decision 12) ────────────────────────
+            // A past day only: today's workouts start from the Train tab with
+            // a clock, and a future one is a plan. The deck is one of the
+            // programme's days, chosen here because a rest day has none to
+            // assume; the session is created closed and opens in EDIT mode —
+            // no timer, no Live Activity, no watch mirror.
+            if model.date < LogicalDay.today(), let program = retroProgram, !program.days.isEmpty {
+                Menu {
+                    ForEach(program.days, id: \.key) { day in
+                        Button(day.label) { logRetro(day) }
+                    }
+                } label: {
+                    Label("Log a workout here", systemImage: "plus.circle")
+                        .onyxType(.body)
+                        .foregroundStyle(Color.onyx.textPrimary)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .accessibilityLabel("Log a workout on \(model.date)")
+                .plainRow()
+            }
+        }
+        .fullScreenCover(item: $retroEditor, onDismiss: discardEmptyRetro) { editor in
+            NavigationStack { LiveLoggerView(model: editor) }
         }
         .listStyle(.plain)
         // ── THE DAY'S OWN COLOUR, BEHIND THE TOP OF THE LIST ────────────────

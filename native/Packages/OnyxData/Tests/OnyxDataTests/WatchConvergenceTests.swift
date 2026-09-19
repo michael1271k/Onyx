@@ -294,4 +294,37 @@ struct WatchConvergenceTests {
         #expect(try setIds(phone).count == 3, "the pre-log rows were folded away")
         #expect(try setIds(watch).count == 3)
     }
+
+    // MARK: - The strand (W2, decision 15)
+
+    @Test("a set the watch hands the phone over WCSession reaches the server")
+    func watchSetsAreNotStranded() async throws {
+        let phone = try store(deviceId: "phone")
+        let watch = try store(deviceId: "watch")
+        let server = Server()
+
+        for index in 1...3 {
+            try phone.appendSet(sessionId: Self.sessionId, snapshot(index, 100))
+        }
+        try await sync(phone, server)
+        #expect(await server.sets.count == 3)
+
+        // The wrist logs set 4 and hands it over the LINK, not the network —
+        // exactly what `PhoneWatchBridge.receive(.events)` does.
+        try watch.appendSet(sessionId: Self.sessionId, snapshot(4, 105))
+        try phone.ingestFromWatch(try watch.setEvents(sessionId: Self.sessionId))
+        #expect(try setIds(phone).count == 4)
+        #expect(
+            try phone.pendingOutbox(limit: 50).contains { $0.idempotencyKey.hasPrefix("set_event:") },
+            "the wrist's event is queued on the phone without the phone touching the session"
+        )
+        // Handed over twice — WCSession redelivers — is still one event.
+        try phone.ingestFromWatch(try watch.setEvents(sessionId: Self.sessionId))
+        #expect(try setIds(phone).count == 4)
+
+        // The phone's next drain carries the projection up.
+        try await SyncEngine(database: phone, remote: server).drain()
+        #expect(await server.sets.count == 4, "the watch's set never left the phone")
+        #expect(await server.sets.values.contains { $0.weightKg == 105 })
+    }
 }

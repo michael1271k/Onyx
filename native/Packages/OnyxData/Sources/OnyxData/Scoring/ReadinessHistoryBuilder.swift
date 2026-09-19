@@ -35,21 +35,52 @@ extension AppDatabase {
         let dates = readinessHistoryDates(date)
         let start = dates.first ?? date
         let window = Column("user_id") == userId && Column("date") >= start && Column("date") <= date
+        // The union of the 49 night windows is one range; `readinessHistory`
+        // below files each night under the morning it ended on.
+        var nights: [SleepSessionRow] = []
+        if let first = NightWindow.range(start), let last = NightWindow.range(date) {
+            nights = try SleepSessionRow
+                .filter(Column("user_id") == userId && Column("start_time") >= first.from && Column("start_time") < last.to)
+                .fetchAll(db)
+        }
+        return readinessHistory(
+            dates: dates,
+            logs: try DailyLogRow.filter(window).fetchAll(db),
+            metrics: try DailyMetricRow.filter(window).fetchAll(db),
+            sessions: try WorkoutSession.filter(window).fetchAll(db),
+            cardio: try CardioLogRow.filter(window).fetchAll(db),
+            nights: nights
+        )
+    }
 
+    /// The assembly, off rows already in hand. `ScoringWindow` feeds it slices
+    /// of one preloaded range; the query form above feeds it one window. Rows
+    /// outside `dates` are ignored, so a caller may hand it more than it needs.
+    static func readinessHistory(
+        dates: [String],
+        logs: some Sequence<DailyLogRow>,
+        metrics: some Sequence<DailyMetricRow>,
+        sessions: some Sequence<WorkoutSession>,
+        cardio: some Sequence<CardioLogRow>,
+        nights: some Sequence<SleepSessionRow>
+    ) -> ReadinessHistory {
+        guard let start = dates.first, let date = dates.last else {
+            return ReadinessHistory(hrv: [], rhr: [], loads: [], awakeMin: [], asleepMin: [])
+        }
         var hrvByDate: [String: Double?] = [:]
         var rhrLog: [String: Double?] = [:]
-        for r in try DailyLogRow.filter(window).fetchAll(db) {
+        for r in logs {
             hrvByDate[r.date] = r.hrvMs
             rhrLog[r.date] = r.avgRestHeartRate.map(Double.init)
         }
         var rhrMetric: [String: Double?] = [:]
-        for r in try DailyMetricRow.filter(window).fetchAll(db) {
+        for r in metrics {
             rhrMetric[r.date] = r.restHr.map(Double.init)
         }
-        let sessions = try WorkoutSession.filter(window).fetchAll(db).map {
+        let loadSessions = sessions.map {
             LoadSession(date: $0.date, sessionRpe: $0.sessionRpe, durationMin: $0.durationMin)
         }
-        let cardio = try CardioLogRow.filter(window).fetchAll(db).map {
+        let loadCardio = cardio.map {
             LoadCardio(date: $0.date, effort: $0.effort, durationMin: $0.durationMin)
         }
 
@@ -57,18 +88,13 @@ extension AppDatabase {
         // Filed under the morning they ended on (`NightWindow.nightOf`) — the
         // date the scorer reads them under — and where a window holds two rows
         // the longest is the night, as `scoringInputs` and `sleepNightStream`
-        // already decide. The union of the 49 night windows is one range.
+        // already decide.
         var nightByDate: [String: SleepSessionRow] = [:]
-        if let first = NightWindow.range(start), let last = NightWindow.range(date) {
-            let nights = try SleepSessionRow
-                .filter(Column("user_id") == userId && Column("start_time") >= first.from && Column("start_time") < last.to)
-                .fetchAll(db)
-            for n in nights {
-                let d = NightWindow.nightOf(n.startTime)
-                guard d >= start, d <= date else { continue }
-                if let held = nightByDate[d], held.durationMin >= n.durationMin { continue }
-                nightByDate[d] = n
-            }
+        for n in nights {
+            let d = NightWindow.nightOf(n.startTime)
+            guard d >= start, d <= date else { continue }
+            if let held = nightByDate[d], held.durationMin >= n.durationMin { continue }
+            nightByDate[d] = n
         }
         let asleepMin: [Double?] = dates.map { d in
             guard let n = nightByDate[d], n.durationMin > 0 else { return nil }
@@ -89,7 +115,7 @@ extension AppDatabase {
         return ReadinessHistory(
             hrv: dates.map { hrvByDate[$0] ?? nil },
             rhr: dates.map { (rhrMetric[$0] ?? nil) ?? (rhrLog[$0] ?? nil) },
-            loads: Readiness.dailyLoads(dates: dates, sessions: sessions, cardio: cardio),
+            loads: Readiness.dailyLoads(dates: dates, sessions: loadSessions, cardio: loadCardio),
             awakeMin: awakeMin,
             asleepMin: asleepMin
         )

@@ -30,6 +30,9 @@ public final class AppDatabase: Sendable {
     public init(_ writer: any DatabaseWriter) throws {
         self.writer = writer
         try Self.migrator.migrate(writer)
+        // Rescore at the door (W2): TEMP triggers on the writer connection,
+        // outside the migrated schema. See `RescoreDoor`.
+        try writer.write { db in try RescoreDoor.install(db) }
     }
 
     /// A connection that must not migrate — the widget extension's read-only
@@ -1788,6 +1791,42 @@ extension AppDatabase {
                 startedAt: startedAt, isPendingSync: true
             )
             try session.insert(db)
+            return session
+        }
+    }
+
+    /// A session for a day that has already happened (W2, decision 12).
+    ///
+    /// ── BORN CLOSED ─────────────────────────────────────────────────────────
+    /// `openSession` makes a LIVE session: `ended_at` null, `liveSession` finds
+    /// it, the logger runs a clock and a rest timer over it, the Live Activity
+    /// follows it and the watch mirrors it. None of that is true of a workout
+    /// done last Tuesday. So the row is created with `ended_at` already set —
+    /// which is exactly the state `SessionEditing` and `attach(editing:)`
+    /// accept — and the deck that opens on it is the EDIT deck: no timer, no
+    /// activity, no pencil, every set through `SessionEditing` with its PR
+    /// replay, and the duration typed into the finish sheet rather than read
+    /// off a clock that never ran.
+    ///
+    /// `started_at` is local noon on the date, so the session sorts inside its
+    /// own day on every device and the rescore door files it under that date.
+    /// `duration_min` stays nil until the athlete types one; `ended_at` equals
+    /// `started_at` until then, and `updateMetrics` moves neither.
+    @discardableResult
+    public func createRetroSession(
+        userId: String, dayKey: String, date: String, calendar: Calendar = .current
+    ) throws -> WorkoutSession {
+        let parts = date.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3,
+              let noon = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12))
+        else { throw DatabaseError(message: "createRetroSession: not a date: \(date)") }
+        return try writer.write { db in
+            let session = WorkoutSession(
+                id: newOnyxID(), userId: userId, dayKey: dayKey, date: date,
+                startedAt: noon, endedAt: noon, isPendingSync: true
+            )
+            try session.insert(db)
+            try Self.enqueueSessionUpsert(sessionId: session.id, in: db)
             return session
         }
     }

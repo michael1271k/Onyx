@@ -1121,19 +1121,15 @@ final class DayModel {
     /// inside the readiness window after it, because a battery is a walk over
     /// the window and not a reading of one date.
     ///
-    /// The cascade is requested through `AppEnvironment.rescore(from:reason:)`,
-    /// the app's single entry point, exactly as `editSleepWindow` does for the
-    /// other kind of sleep correction. `.dayEdit` because that is what this is:
-    /// a `daily_logs` edit, not a re-windowed night.
-    ///
-    /// Only after the write LANDS. A cascade over a row that failed to save
-    /// would rewrite the same scores from the same data and report work done.
+    /// The commit is the request — see `RescoreDoor`. A write that fails to
+    /// land is a commit that never happens, so nothing is asked for it.
     func setSleepOnsetTrouble(_ on: Bool) {
         log?.sleepOnsetTrouble = on
-        let saved = write { [database, userId, date] in
+        // The commit is the request (W2): `editDailyLog` writes `daily_logs`
+        // and the rescore door reports the date.
+        _ = write { [database, userId, date] in
             try database.editDailyLog(userId: userId, date: date) { $0.sleepOnsetTrouble = on }
         }
-        if saved { environment?.rescore(from: date, reason: .dayEdit) }
     }
 
     /// "The watch got this night wrong."

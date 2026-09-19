@@ -138,6 +138,7 @@ struct SyncStatusView: View {
     var body: some View {
         Form {
             summary
+            rescores
             if let snapshot, !snapshot.tables.isEmpty { tables(snapshot) }
             actions
         }
@@ -159,6 +160,38 @@ struct SyncStatusView: View {
             }
         } message: {
             Text("Every table is read again from \(SyncStatusView.historyStart) and every row is upserted over the local copy. Nothing on this device is deleted, and nothing local is lost — the outbox is pushed first — but it is a few thousand rows over the network.")
+        }
+    }
+
+    /// The last few cascades, off the `sync_status` ledger (W2). A rescore is
+    /// a write to `daily_scores` nobody asked the server for, so it is the
+    /// one thing on this screen that explains why the scores just moved.
+    @State private var rescoreRuns: [SyncStatusRow] = []
+
+    private var rescores: some View {
+        Section {
+            if rescoreRuns.isEmpty {
+                Text("No cascade has run on this device yet.")
+                    .onyxType(.caption)
+                    .foregroundStyle(Color.onyx.textTertiary)
+            }
+            ForEach(rescoreRuns, id: \.id) { run in
+                LabeledContent {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(run.rows.formatted()).onyxNumeral().foregroundStyle(Color.onyx.textSecondary)
+                        Text(Self.age(run.syncedAt) ?? "")
+                            .onyxType(.caption).foregroundStyle(Color.onyx.textTertiary)
+                    }
+                } label: {
+                    Text(run.reason)
+                        .onyxType(.caption)
+                        .foregroundStyle(Color.onyx.textPrimary)
+                }
+            }
+        } header: {
+            OnyxSectionHeader("Rescores", .body)
+        } footer: {
+            Text("Every cascade that rewrote stored daily scores here: why, the dates it reached, and how many days it wrote. Edits within 120 days run on their own; older ones wait for Recompute history in Settings.")
         }
     }
 
@@ -393,6 +426,9 @@ struct SyncStatusView: View {
     /// immediately means the screen is useful on a train; awaiting both would
     /// make the one part that always works depend on the part under suspicion.
     private func load() async {
+        // The cascade ledger is read even for the harness's seeded snapshot:
+        // it is the one section that comes off the store rather than the sync.
+        rescoreRuns = (try? environment.database.syncLedger(userId: environment.userIdString, table: "rescore", limit: 6)) ?? []
         if let seeded {
             snapshot = seeded
             return

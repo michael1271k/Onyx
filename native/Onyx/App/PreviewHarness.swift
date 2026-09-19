@@ -18,6 +18,15 @@ import OnyxUI
 /// through a launch argument, so it cannot ship and cannot be stumbled into.
 enum PreviewHarness {
 
+    /// Two cascades in the ledger, so Sync doctor's Rescores section has rows
+    /// to draw (W2). Written into the preview store, read by the view.
+    @MainActor static func withRescoreLedger(_ env: AppEnvironment) -> AppEnvironment {
+        let userId = env.userIdString
+        try? env.database.recordSync(userId: userId, table: "rescore", rows: 49, reason: "session-edit 2026-08-01 → 2026-09-18", at: Date().addingTimeInterval(-3_600))
+        try? env.database.recordSync(userId: userId, table: "rescore", rows: 3, reason: "day-edit 2026-09-16 → 2026-09-18", at: Date().addingTimeInterval(-90))
+        return env
+    }
+
     /// `--onyx-screen you` on the launch command line.
     static var requestedScreen: String? {
         let arguments = ProcessInfo.processInfo.arguments
@@ -408,7 +417,7 @@ enum PreviewHarness {
         // the pair is the review: a tint means nothing without the state it is
         // a departure from.
         case "sync-doctor":
-            NavigationStack { SyncStatusView(seeded: .faults) }.environment(AppEnvironment.preview)
+            NavigationStack { SyncStatusView(seeded: .faults) }.environment(Self.withRescoreLedger(AppEnvironment.preview))
         case "levers":
             NavigationStack { LeversView(model: model) }
         case "plan":

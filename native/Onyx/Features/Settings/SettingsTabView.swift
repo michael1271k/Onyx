@@ -187,6 +187,37 @@ private struct SettingsForm: View {
                 Text("Adds an RPE control to every logged set. Half of the double-progression rule reads it. The warm-up calculator adds a row of ramp-up loads to each card that can resolve a working weight.")
             }
 
+            // ── THE MANUAL CASCADE (W2, decision 11) ────────────────────────
+            // Past edits within 120 days rescore themselves at the door. An
+            // older one leaves a mark, and this is the one button that
+            // rewrites the whole stored history from it.
+            Section {
+                Button {
+                    environment.recomputeHistory()
+                } label: {
+                    LabeledContent("Recompute history") {
+                        if environment.isRescoring {
+                            ProgressView()
+                        } else if environment.historyStale {
+                            Text("Needed")
+                                .onyxType(.caption)
+                                .foregroundStyle(Color.onyx.danger)
+                        }
+                    }
+                }
+                .disabled(environment.isRescoring)
+                .accessibilityLabel("Recompute history")
+                .accessibilityHint(environment.historyStale ? "An edit older than 120 days is waiting" : "Rewrites every stored daily score")
+            } header: {
+                OnyxSectionHeader("History", .body)
+            } footer: {
+                if let from = environment.historyStaleFrom {
+                    Text("Something dated \(from) changed. Edits that old are not rescored automatically; this rewrites every score from there to today.")
+                } else {
+                    Text("Edits within the last 120 days rescore themselves. This rewrites every stored day from the oldest score to today.")
+                }
+            }
+
             // ── ADMIN ONLY, AND FAILING CLOSED ──────────────────────────────
             // The Sync doctor is a diagnostic: per-table row counts, cursors,
             // the outbox backlog. It is the right screen for whoever maintains

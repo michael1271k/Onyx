@@ -44,6 +44,49 @@ _Nothing yet._
 
 ---
 
+## [7.1.0] — 2026-09-19 · Logging the past scores the past
+
+Anything logged for a day that has already happened — a glass of water, a
+night, a set, a whole workout — now produces correct daily scores, correct
+records and correct server rows, from either device, without any screen
+having to remember to ask. No server change; nothing to paste.
+
+### Added
+- **Log a workout here** (History → a past day → Pulse). A session is created
+  on that date, born closed, and opens on the edit deck: no clock, no rest
+  timer, no Live Activity, no watch mirror. Every set goes through the same
+  door as a correction, so the PR ledger replays and the day rescores.
+- **Rescore at the door.** Every committed write to a date-bearing table —
+  including a delete — reports the earliest past date it touched, and the
+  cascade runs from there when it is within 120 days. The per-screen calls in
+  the logger, the finish sheet, the sleep editor, the water drain and Pulse are
+  gone: no screen has to remember. Rows the mirror pulls, the seeds it writes
+  and the sync's own acknowledgements are exempt — the device that made the
+  edit already cascaded and pushed its scores.
+- **Settings → Recompute history.** An edit older than 120 days marks the
+  history stale instead of cascading; the row says so, and the button rewrites
+  every stored day from the earliest owed date to today.
+- **Sync doctor → Rescores.** The last six cascades: why, the dates reached,
+  how many days written.
+
+### Changed
+- **The cascade is one read, one compute, one write.** Forty-nine days used to
+  be forty-nine transactions of ~15 queries each; `ScoringWindow` reads the
+  range once, computes every day in memory with the same domain functions, and
+  writes all rows in one transaction. A sixty-day parity vector pins the
+  output to the old path's, row for row. `rescore.run` is a signpost.
+- **Watch sets reach the server.** A set logged on the wrist was marked synced
+  on the phone and never queued, so it reached Supabase only if the phone later
+  touched the same session. The phone now queues the wrist's events through
+  its own outbox.
+
+### Fixed
+- **Pinned by test:** a heavier set logged a week late removes the interim
+  record and files the right one, and the server hears the delete as well as
+  the upsert. The replay existed; the proof did not.
+- Apple Health no longer re-saves an unchanged day, night or water total on
+  every foreground.
+
 ## [7.0.0] — 2026-09-19 · The predecessor's name leaves the data
 
 The web app Onyx replaced was retired a year ago, but its name was still a

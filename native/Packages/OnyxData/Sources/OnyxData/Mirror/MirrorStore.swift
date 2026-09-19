@@ -22,7 +22,10 @@ extension AppDatabase {
     func saveMirrorRows<T: MirrorRow>(_ rows: [T]) throws {
         guard !rows.isEmpty else { return }
         try writer.write { db in
-            for row in rows { try row.save(db) }
+            // Pulled, not edited: the rescore door reads past these rows.
+            try Self.markMirrorWrite(db) {
+                for row in rows { try row.save(db) }
+            }
         }
     }
 

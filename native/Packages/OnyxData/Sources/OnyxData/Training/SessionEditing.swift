@@ -468,8 +468,12 @@ public extension AppDatabase {
     func seedEventLogs(sessionIds: Set<String>, loggedAt: [String: Date] = [:]) throws {
         guard !sessionIds.isEmpty else { return }
         try writer.write { db in
-            for sessionId in sessionIds.sorted() {
-                try Self.seedEventLog(db, sessionId: sessionId, loggedAt: loggedAt)
+            // The puller's seed restates rows the server holds: pulled, not
+            // edited, so the rescore door must not hear it (W2).
+            try Self.markMirrorWrite(db) {
+                for sessionId in sessionIds.sorted() {
+                    try Self.seedEventLog(db, sessionId: sessionId, loggedAt: loggedAt)
+                }
             }
         }
     }

@@ -237,6 +237,16 @@ struct RescoreTests {
         #expect(await runs.all.isEmpty)
     }
 
+    @Test("a manual request keeps its reason through a merge — the stale mark clears on it")
+    func manualReasonSurvivesAbsorb() {
+        var work = RescoreQueue.Work(from: "2026-09-01", through: "2026-09-04", reason: .dayEdit)
+        work.absorb(RescoreQueue.Work(from: "2026-06-01", through: "2026-09-04", reason: .manual))
+        #expect(work.reason == .manual && work.from == "2026-06-01")
+        var manual = RescoreQueue.Work(from: "2026-06-01", through: "2026-09-04", reason: .manual)
+        manual.absorb(RescoreQueue.Work(from: "2026-09-02", through: "2026-09-04", reason: .sessionEdit))
+        #expect(manual.reason == .manual, "a door request must not relabel the manual run")
+    }
+
     @Test("a request while idle starts exactly one run")
     func queuePublishesOnce() async throws {
         let db = try store()

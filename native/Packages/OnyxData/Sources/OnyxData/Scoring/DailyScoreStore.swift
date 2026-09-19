@@ -78,38 +78,47 @@ public extension AppDatabase {
         now: Date = Date(),
         components: (ScoringInputs) -> ScoreComponents?
     ) throws -> DailyScoreRow? {
-        if !isToday && !force,
-           let existing = try dailyScore(userId: userId, date: date), existing.finalized {
-            return nil
-        }
         // No underlying data at all leaves the day BLANK rather than writing a
         // fake zero. A zero is a claim that the day was bad; an absent row is
         // the truth, which is that nothing is known about it.
         guard let parts = components(inputs) else { return nil }
         let battery = Battery.computeBattery(inputs, hoursAwake: hoursAwake)
-
         return try writer.write { db in
-            var row = try DailyScoreRow
-                .filter(Column("user_id") == userId && Column("date") == date)
-                .fetchOne(db)
-                ?? DailyScoreRow(
-                    id: newOnyxID(), userId: userId, date: date,
-                    score: parts.total, computedAt: now, finalized: !isToday
-                )
-            row.score = parts.total
-            row.sleepScore = parts.sleep
-            row.nutritionScore = parts.nutrition
-            row.activityScore = parts.activity
-            row.workoutScore = parts.workout
-            row.recoveryScore = parts.recovery
-            row.batteryPct = Int(battery.currentPct.rounded())
-            row.computedAt = now
-            // Past days are sealed on this write; today stays live.
-            row.finalized = !isToday
-            try row.save(db)
-            try Self.enqueueRowUpsert(table: DailyScoreRow.databaseTableName, id: row.id, in: db)
-            return row
+            try Self.upsertDailyScore(
+                db, userId: userId, date: date,
+                existing: try DailyScoreRow.filter(Column("user_id") == userId && Column("date") == date).fetchOne(db),
+                parts: parts, batteryPct: Int(battery.currentPct.rounded()),
+                isToday: isToday, force: force, now: now
+            )
         }
+    }
+
+    /// The one writer of a `daily_scores` row — the freeze, the explicit
+    /// `computed_at`, the outbox row. `writeDailyScore` calls it for one day
+    /// in its own transaction; `rescoreWindow` calls it per day inside one.
+    @discardableResult
+    static func upsertDailyScore(
+        _ db: Database, userId: String, date: String, existing: DailyScoreRow?,
+        parts: ScoreComponents, batteryPct: Int, isToday: Bool, force: Bool, now: Date
+    ) throws -> DailyScoreRow? {
+        if !isToday && !force, let existing, existing.finalized { return nil }
+        var row = existing ?? DailyScoreRow(
+            id: newOnyxID(), userId: userId, date: date,
+            score: parts.total, computedAt: now, finalized: !isToday
+        )
+        row.score = parts.total
+        row.sleepScore = parts.sleep
+        row.nutritionScore = parts.nutrition
+        row.activityScore = parts.activity
+        row.workoutScore = parts.workout
+        row.recoveryScore = parts.recovery
+        row.batteryPct = batteryPct
+        row.computedAt = now
+        // Past days are sealed on this write; today stays live.
+        row.finalized = !isToday
+        try row.save(db)
+        try enqueueRowUpsert(table: DailyScoreRow.databaseTableName, id: row.id, in: db)
+        return row
     }
 
     func dailyScore(userId: String, date: String) throws -> DailyScoreRow? {

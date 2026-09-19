@@ -670,17 +670,6 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
 
     var isEditing: Bool { editing != nil }
 
-    /// An edit has written something that the daily scores do not know about.
-    ///
-    /// ── WHY LEAVING HAS TO RESCORE TOO ──────────────────────────────────────
-    /// Every set edit lands in its own transaction the moment it is made —
-    /// there is no draft, and the chevron is not a Cancel. What Finish uniquely
-    /// owes is the CASCADE, and a person who corrects a load and then taps the
-    /// chevron has changed `total_volume_kg` and the PR ledger while every
-    /// `daily_scores` row from that date forward still describes the old
-    /// session. Silent, and it survives until something else happens to edit a
-    /// day inside the same window.
-    private(set) var editDirty = false
 
     /// Whether `attach(editing:)` managed to stamp the revert watermark.
     ///
@@ -689,21 +678,6 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// button. See `cancelEdit`.
     private(set) var editWatermarked = false
 
-    /// Called by the view once the cascade has been asked for.
-    func clearEditDirty() { editDirty = false }
-
-    /// ── WHY THE FLAG IS RAISED PER EDIT AND NOT ONCE ────────────────────────
-    /// `LiveLoggerView` watches it and asks for the cascade the moment it goes
-    /// up, then clears it. Every edit in one sitting shares ONE anchor — the
-    /// session's own date — so `RescoreQueue` folds them into a single run and
-    /// per-edit costs nothing over per-session. What it buys is that an app
-    /// killed between an edit and the chevron has already asked: the set edit
-    /// itself landed in its own transaction, and the scores behind it are no
-    /// longer forty-eight days out of date with no repair path.
-    private func markDirty() {
-        guard isEditing else { return }
-        editDirty = true
-    }
     private let userId: String
 
     // MARK: - Derived
@@ -1936,19 +1910,10 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// date the cascade has to start from (§U4.5).
     ///
     /// ── WHY IT DOES NOT RESCORE ─────────────────────────────────────────────
-    /// The same reason `SessionEditing.Outcome` carries a date instead of
-    /// running one: the cascade is up to forty-nine day computations, it belongs
-    /// off the main actor, and the model has no `AppEnvironment` to reach the
-    /// one queue that coalesces it. The caller gets the anchor and calls
-    /// `AppEnvironment.rescore(from:reason:)`, which is the app's single entry
-    /// point for it.
-    ///
-    /// ── AND WHY ONCE, AT THE END ────────────────────────────────────────────
-    /// Every set edit already rewrote this session's own aggregates and replayed
-    /// its ledger inside its own transaction. What is left is the DAILY SCORES
-    /// downstream of it, and those depend on the session as a whole — running
-    /// them per tick would compute the same forty-nine days once per set for an
-    /// answer only the last one is right about.
+    /// Nothing does, by name, since W2: `updateMetrics` commits the session
+    /// row and the rescore door reports its date. Every set edit already
+    /// rewrote this session's aggregates and replayed its ledger inside its
+    /// own transaction, and each of those commits was reported the same way.
     @discardableResult
     func finishEdit(sessionRpe: Double? = nil) -> String? {
         guard let store, let sessionId, let editing else { return nil }
@@ -1988,9 +1953,8 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// up in that case — dismissing onto a half-done revert is the failure
     /// `cancel()` and `finish` both avoid.
     ///
-    /// `editDirty` is RAISED rather than cleared: a revert rewrote the session's
-    /// rows, its aggregates and its PR ledger, so the cascade this deck owes is
-    /// the same one a save owes. The view runs `requestRescore()` next.
+    /// The revert commits through `SessionEditing`, and the rescore door
+    /// reports the session's date on that commit (W2).
     @discardableResult
     func cancelEdit() -> Bool {
         guard let store, let sessionId, isEditing, editWatermarked else { return false }
@@ -2033,7 +1997,6 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // event did anything the deck could not predict.
             try restoreLoggedSets()
             refreshLivePrs()
-            editDirty = true
             storeError = nil
             return true
         } catch {
@@ -2892,9 +2855,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
                 // what a tap into a field and a tap away produces. Flagging the
                 // edit dirty on one of those schedules a forty-nine-day cascade
                 // for a session nobody touched.
-                if try store.addSet(sessionId: sessionId, userId: userId, snapshot(row, in: exercise), setId: row.storeId) != nil {
-                    markDirty()
-                }
+                _ = try store.addSet(sessionId: sessionId, userId: userId, snapshot(row, in: exercise), setId: row.storeId)
             } else {
                 // ── THE MEASUREMENT, TAKEN ONCE, HERE ───────────────────────
                 // Read BEFORE the stamp is updated — `restGapSec` is the gap
@@ -2928,7 +2889,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
                 // record BACK when a mistyped 100 becomes 60 — and recounts the
                 // session's stored tonnage. `EventStore.amendSet` does none of
                 // the three and claims a pencil nothing is holding.
-                if try store.amendSet(
+                _ = try store.amendSet(
                     sessionId: sessionId, userId: userId, setId: row.storeId,
                     weightKg: next.weightKg, reps: next.reps, rpe: next.rpe,
                     setType: next.setType,
@@ -2936,9 +2897,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
                     side: next.side, pairId: next.pairId,
                     est1rmKg: next.est1rmKg, setIndex: next.setIndex,
                     exerciseOrder: next.exerciseOrder
-                ) != nil {
-                    markDirty()
-                }
+                )
                 storeError = nil
                 return
             }
@@ -2965,9 +2924,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         guard let store, let sessionId else { return }
         do {
             if isEditing {
-                if try store.deleteSet(sessionId: sessionId, userId: userId, setId: row.storeId) != nil {
-                    markDirty()
-                }
+                _ = try store.deleteSet(sessionId: sessionId, userId: userId, setId: row.storeId)
             } else {
                 try store.voidSet(sessionId: sessionId, setId: row.storeId)
             }

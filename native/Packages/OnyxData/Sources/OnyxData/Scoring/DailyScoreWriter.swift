@@ -67,37 +67,6 @@ public extension AppDatabase {
     func refreshDailyScore(
         userId: String, date: String, now: Date = Date(), calendar: Calendar = .current, force: Bool = false
     ) throws -> DailyScoreRow? {
-        let todayISO = LogicalDayISO.string(now, calendar: calendar)
-        let isToday = date == todayISO
-        let plan = try writer.read { db -> DayPlan in
-            let user = Column("user_id") == userId
-            let goals = try UserGoalRow.filter(user).fetchOne(db)
-            return DayPlan.resolve(
-                goals: goals,
-                schedule: try Self.scheduleContext(db, userId: userId, goals: .some(goals)),
-                profiles: try TargetProfileRow.filter(user).order(Column("sort")).fetchAll(db),
-                periods: try LeverPeriodRow.filter(user).order(Column("starts_on")).fetchAll(db),
-                dayTarget: try DailyTargetRow.filter(user && Column("date") == date).fetchOne(db),
-                date: date, todayISO: todayISO
-            )
-        }
-        let hoursAwake = isToday ? Battery.hoursAwake(at: now, calendar: calendar) : Battery.defaults.maxAwake
-        guard let inputs = try scoringInputs(
-            userId: userId, date: date, hoursAwake: hoursAwake, isRestDay: !plan.isTraining,
-            todayISO: todayISO, isToday: isToday, supplements: plan.supplements
-        ) else { return nil }
-
-        return try writeDailyScore(
-            userId: userId, date: date, inputs: inputs, hoursAwake: hoursAwake,
-            isToday: isToday, force: force, now: now
-        ) { inputs in
-            let parts = Score.daily(inputs)
-            guard let total = parts.totalScore else { return nil }
-            func i(_ v: Double?) -> Int? { v.map { Int($0.rounded()) } }
-            return ScoreComponents(
-                total: Int(total.rounded()), sleep: i(parts.sleepScore), nutrition: i(parts.nutritionScore),
-                activity: i(parts.activityScore), workout: i(parts.workoutScore), recovery: i(parts.recoveryScore)
-            )
-        }
+        try rescoreWindow(userId: userId, dates: [date], now: now, calendar: calendar, force: force)[date]
     }
 }

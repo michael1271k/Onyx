@@ -32,6 +32,18 @@ public extension AppDatabase {
         }
     }
 
+    /// The newest ledger rows for one table name, newest first — Sync doctor
+    /// draws the rescore runs off this (`table_name = "rescore"`).
+    func syncLedger(userId: String, table: String, limit: Int) throws -> [SyncStatusRow] {
+        try writer.read { db in
+            try SyncStatusRow
+                .filter(Column("user_id") == userId && Column("table_name") == table)
+                .order(Column("synced_at").desc)
+                .limit(limit)
+                .fetchAll(db)
+        }
+    }
+
     /// Table → when it last synced successfully. Empty for a user who has
     /// never synced, which is how a first launch is recognised.
     func lastSync(userId: String) throws -> [String: Date] {

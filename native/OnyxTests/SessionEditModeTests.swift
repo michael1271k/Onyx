@@ -176,28 +176,22 @@ struct SessionEditModeTests {
         // skipped by `applyPulledSets` forever. Reading a number must not walk
         // through it.
         #expect(events == 0, "a patch that restates the row must not seed the log")
-        #expect(!model.editDirty, "and must not schedule a forty-nine-day cascade")
     }
 
-    @Test("an edit is dirty until it is finished, and finishing anchors the cascade on the session's date")
+    @Test("finishing an edit anchors on the session's date")
     func finishReportsTheCascadeAnchor() throws {
         let database = try store()
         let model = try attached(database)
         let exercise = try chestPress(model)
 
-        #expect(!model.editDirty, "opening the deck changes nothing")
-
         let row = try #require(exercise.rows.first)
         row.weightKg = 60
         model.commitEdit(row, in: exercise)
-        #expect(model.editDirty)
 
         // The date is the session's LOGICAL day, never today: `RescoreQueue`
         // walks forward from it, and anchoring on today would leave every score
         // between the workout and now describing the load that was corrected.
         #expect(model.finishEdit(sessionRpe: 8) == "2026-08-30")
-        model.clearEditDirty()
-        #expect(!model.editDirty)
 
         let session = try #require(try database.session(id: Self.sessionId))
         #expect(session.sessionRpe == 8)
