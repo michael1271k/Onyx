@@ -628,7 +628,7 @@ public struct WidgetSnapshotBuilder: Sendable {
                 sets: sets,
                 // ── THE CATALOGUE, PLUS THE SLUGS THE PHONE WRITES ──────────
                 // `exercises` holds server uuids only. A set logged on the phone
-                // is stamped `helix5-<slug>` (`LoggerModel.exerciseId`) and keeps
+                // is stamped `onyx-<slug>` (`LoggerModel.exerciseId`) and keeps
                 // that id for as long as the session has local events, which is
                 // forever for the device that logged it. Naming only the
                 // catalogue dropped every phone-logged set from muscle credit —

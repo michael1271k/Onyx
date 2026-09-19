@@ -1913,7 +1913,7 @@ the sprint still owes are W9's and W11's, unchanged.
   brief fenced that function off and hoisting its internals is a change to it, so the
   duplication stands — with both copies naming the same rule.
 - **`.claude/settings.json` still points two `PostToolUse` hooks at
-  `~/Documents/PyCharmProjects/Helix`, which does not exist.** Every `.swift` Write/Edit
+  the predecessor web app's checkout, which does not exist.** Every `.swift` Write/Edit
   reports `bash: scripts/check-swift.sh: No such file or directory` after succeeding.
   Known since `deep-clean-purge-sep15`; the write lands and the patches in this wave went
   through script files anyway, per the "Every wave" rule. One line each to repoint, and it
@@ -2068,7 +2068,7 @@ already has, and an account that has never written one reads as "everything visi
   upgrade is the one `StressInputsBuilder`'s header already names —
   `daily_scores.stress_index`.
 - **The two `.claude/settings.json` PostToolUse hooks still point at the dead
-  Helix checkout** (memory `deep-clean-purge-sep15`), so every `Edit`/`Write` on
+  predecessor checkout** (memory `deep-clean-purge-sep15`), so every `Edit`/`Write` on
   a `.swift` file reports a blocking error *after* applying the write. This wave
   routed Swift edits through `Bash` patch scripts instead, which is what the
   worktree memory asks for anyway. Repointing the hook would make every `.swift`
@@ -2244,7 +2244,7 @@ says so out loud when it cannot.
   decision rather than as a bug. **Any new Pulse harness screen must call
   `observe()`.**
 - **Two `PostToolUse` hooks in `.claude/settings.json` still pointed at the dead
-  Helix checkout** and failed on every single `.swift` edit (`bash:
+  predecessor checkout** and failed on every single `.swift` edit (`bash:
   scripts/check-swift.sh: No such file or directory`) — the condition
   `deep-clean-purge-sep15` recorded. Fixed in passing: the `.swift` hook now
   `cd`s to Onyx, where `scripts/check-swift.sh` exists and runs in 6 s; the
@@ -2480,7 +2480,7 @@ entitlement.
 - **The introspection ran, against the live database.** `schema-truth-checker`
   as an agent could not run — the Supabase MCP server is not connected in this
   session, exactly as W9's record warned — but the founder's own read-only PAT
-  (already on this machine, in Helix's MCP config) reached the Management API's
+  (already on this machine, in the predecessor's MCP config) reached the Management API's
   `database/query` endpoint, and every fact in the `.sql` file's header is from
   that live read, not from `types.ts` or `supabase.json`. **34 tables, not 32:**
   the schema fixture is missing `set_events` (applied by hand, as the brief

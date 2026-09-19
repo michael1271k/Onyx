@@ -20,7 +20,7 @@ struct DeepLinkGoldenTests {
         #expect(fixture.cases.count >= 20)
 
         for testCase in fixture.cases {
-            let path = DeepLink.safePath(Self.rescheme(testCase.input.raw))
+            let path = DeepLink.safePath(testCase.input.raw)
             #expect(path == testCase.expected.path, "\(testCase.name) — path")
 
             let destination = path.flatMap(DeepLink.destination(forPath:))
@@ -36,42 +36,36 @@ struct DeepLinkGoldenTests {
         }
     }
 
-    /// The one case `rescheme` cannot test, because it rewrites it first.
+    /// The cases the fixture cannot carry, because they are not this app's URLs.
     ///
-    /// Every fixture arrives here as `onyx://` — including the case named
-    /// "upper-case scheme", which therefore proves case-insensitive ACCEPTANCE
-    /// and not the scheme rejection the suite's doc comment claims. The retired
-    /// app's scheme may still sit in a stale Shortcut or a bookmark, so a URL
-    /// under it reaching this parser is a real thing that must be refused, and
-    /// nothing in the vector says so.
-    @Test("a foreign scheme is refused, the retired app's included")
+    /// ── AND THE ONE THAT LEFT WITH THE PREDECESSOR (Expansion W1) ──────────
+    /// This list used to open with the retired web app's own scheme, because a
+    /// URL under it could still sit in a stale Shortcut or a bookmark and had
+    /// to be refused by name. W1 removed that name from the repository, and a
+    /// rejection test cannot assert about a string it may not spell. What
+    /// replaces it is structural and stronger: `safePath` accepts exactly one
+    /// scheme and every other shape below is refused, so a retired scheme is
+    /// refused for the same reason `capacitor://` is — not by a special case.
+    @Test("a foreign scheme is refused")
     func foreignSchemesRejected() {
-        for raw in ["helix://open?path=/nutrition", "HELIX://open?path=/nutrition",
-                    "https://onyx.example/open?path=/nutrition",
-                    "javascript:alert(1)", "capacitor://open?path=/nutrition"] {
+        for raw in ["https://onyx.example/open?path=/nutrition",
+                    "javascript:alert(1)", "capacitor://open?path=/nutrition",
+                    "onyxapp://open?path=/nutrition", "on://open?path=/nutrition"] {
             #expect(DeepLink.safePath(raw) == nil, "\(raw) was not refused")
         }
         // The control: the same path under the app's own scheme still passes.
         #expect(DeepLink.safePath("onyx://open?path=/nutrition") == "/nutrition")
     }
 
-    /// Swap the SCHEME, and only the scheme, on the way in.
-    ///
-    /// The fixture was generated from the retired web app's deep-link module,
-    /// which answered to that app's own scheme. Onyx registers `onyx://`, so the
-    /// fixture's scheme is swapped on the way in and nothing else is.
-    ///
-    /// Everything the allow-list actually decides is downstream of the scheme,
-    /// so translating it here keeps all thirty cases — including the
-    /// case-insensitive upper-case one, the traversal attempts and the
-    /// `//evil.example` protocol-relative smuggling — pointed at the real
-    /// parser. A raw string with any OTHER scheme is passed through untouched,
-    /// which is what makes the negative cases still negative.
-    private static func rescheme(_ raw: String?) -> String? {
-        guard let raw, let colon = raw.firstIndex(of: ":"),
-              raw[raw.startIndex..<colon].lowercased() == "helix" else { return raw }
-        return "onyx" + raw[colon...]
-    }
+    // ── `rescheme` IS GONE (Expansion W1) ───────────────────────────────────
+    // The fixture was generated from the retired web app's deep-link module
+    // and answered to that app's scheme, so every case was translated on the
+    // way in. W1 rewrote the fixture itself to `onyx://`, which left that
+    // helper doing exactly one thing: downcasing the scheme of the case named
+    // "upper-case scheme" — the ONLY uppercase input in the suite, and the
+    // only thing that exercises `safePath`'s `scheme?.lowercased()`. It was
+    // silently disarming the case it was supposedly preserving. Every input
+    // now reaches the parser as written.
 
     private static func decode(_ dest: Dest) -> DeepLink.Destination {
         switch dest.kind {

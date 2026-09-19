@@ -17,15 +17,15 @@ struct PrRecorderTests {
     private let user = "u1"
     private func store() throws -> AppDatabase { try AppDatabase.inMemory(deviceId: "device-a") }
 
-    /// `helix5-hack-squat` is the slug the logger mints, so every case here is
+    /// `onyx-hack-squat` is the slug the logger mints, so every case here is
     /// also the not-yet-synced path — the one where the catalogue row claims
     /// the id through its `slug` column (W2), never through a compiled deck.
     private func log(
         _ db: AppDatabase, id: String, date: String, weights: [Double], reps: Int = 8,
-        exercise: String = "helix5-hack-squat", dayKey: String = "legs_a"
+        exercise: String = "onyx-hack-squat", dayKey: String = "legs_a"
     ) throws {
         try db.writer.write { conn in
-            try Exercise(id: "ex-hack", name: "Hack Squat", slug: "helix5-hack-squat").save(conn)
+            try Exercise(id: "ex-hack", name: "Hack Squat", slug: "onyx-hack-squat").save(conn)
             try WorkoutSession(id: id, userId: user, dayKey: dayKey, date: date, startedAt: Date()).insert(conn)
             for (i, w) in weights.enumerated() {
                 try WorkoutSet(
@@ -54,7 +54,7 @@ struct PrRecorderTests {
         let rows = try records(db)
         #expect(!rows.isEmpty)
         // The key is what `useSessionDetail` looks a record up by, and it looks
-        // it up by `exercises.name`. A raw `helix5-hack-squat` here renders a
+        // it up by `exercises.name`. A raw `onyx-hack-squat` here renders a
         // trophy with no chips and nothing ever notices.
         #expect(Set(rows.map(\.exerciseKey)) == ["Hack Squat"])
         #expect(rows.allSatisfy { $0.sessionId == "s1" && $0.achievedOn == "2026-09-04" })
@@ -194,7 +194,7 @@ struct PrRecorderTests {
         // either rule, so it is the SECOND that separates them: against the
         // session's own first set 90 is a new best, against the movement's
         // actual history it is 10 kg short.
-        try log(db, id: "s2", date: "2026-09-11", weights: [80, 90], exercise: "helix5-hack-squat")
+        try log(db, id: "s2", date: "2026-09-11", weights: [80, 90], exercise: "onyx-hack-squat")
         _ = try db.closeSession(id: "s2")
 
         #expect(try records(db).first { $0.axis == "weight" } == nil,
@@ -203,7 +203,7 @@ struct PrRecorderTests {
 
         // And the other direction: a set that DOES beat the aliased history is
         // filed, which is what makes this a widened bar rather than a mute one.
-        try log(db, id: "s3", date: "2026-09-12", weights: [120], exercise: "helix5-hack-squat")
+        try log(db, id: "s3", date: "2026-09-12", weights: [120], exercise: "onyx-hack-squat")
         _ = try db.closeSession(id: "s3")
         let beaten = try #require(try records(db).first { $0.axis == "weight" })
         #expect(beaten.value == 120 && beaten.sessionId == "s3")
@@ -228,9 +228,9 @@ struct PrRecorderTests {
             // alone reads 200 and takes a volume record for a set that, as one
             // physical set, was the weakest of the three.
             try WorkoutSession(id: "p2", userId: user, dayKey: "legs_a", date: "2026-09-11", startedAt: Date()).insert(conn)
-            try WorkoutSet(id: "p2-0", sessionId: "p2", exerciseId: "helix5-hack-squat",
+            try WorkoutSet(id: "p2-0", sessionId: "p2", exerciseId: "onyx-hack-squat",
                            setIndex: 1, weightKg: 20, reps: 10, side: "left", pairId: "pair-1").insert(conn)
-            try WorkoutSet(id: "p2-1", sessionId: "p2", exerciseId: "helix5-hack-squat",
+            try WorkoutSet(id: "p2-1", sessionId: "p2", exerciseId: "onyx-hack-squat",
                            setIndex: 2, weightKg: 16, reps: 10, side: "right", pairId: "pair-1").insert(conn)
         }
         _ = try db.closeSession(id: "p2")
@@ -272,7 +272,7 @@ struct PrRecorderTests {
     func liveBarHonoursTheLedger() throws {
         let db = try store()
         try db.writer.write { conn in
-            try Exercise(id: "ex-curl", name: "Seated Leg Curl", slug: "helix5-seated-leg-curl").save(conn)
+            try Exercise(id: "ex-curl", name: "Seated Leg Curl", slug: "onyx-seated-leg-curl").save(conn)
             try WorkoutSession(
                 id: "s-old", userId: user, dayKey: "legs_a", date: "2026-08-01",
                 startedAt: Date(), endedAt: Date()
@@ -280,7 +280,7 @@ struct PrRecorderTests {
             // What this device CAN see: 50 x 11, 550 kg of tonnage. This is the
             // "was 550" the phantom was measured against.
             try WorkoutSet(
-                id: "old-1", sessionId: "s-old", exerciseId: "helix5-seated-leg-curl",
+                id: "old-1", sessionId: "s-old", exerciseId: "onyx-seated-leg-curl",
                 setIndex: 1, weightKg: 50, reps: 11
             ).insert(conn)
             // The heavier set that holds the REAL best, filed under a catalogue
@@ -301,12 +301,12 @@ struct PrRecorderTests {
         }
 
         let bar = try db.livePrBaselines(
-            exerciseIds: ["helix5-seated-leg-curl"], excluding: nil, dayKey: "legs_a",
+            exerciseIds: ["onyx-seated-leg-curl"], excluding: nil, dayKey: "legs_a",
             program: Program(id: "", label: "", days: [])
         )
         // 700, not the 550 the visible half of the history stops at — so a
         // 47.5 x 13 = 617.5 candidate is not a record.
-        #expect(bar.bestSetVolume.first { $0.key == "helix5-seated-leg-curl" }?.value == 700,
+        #expect(bar.bestSetVolume.first { $0.key == "onyx-seated-leg-curl" }?.value == 700,
                 "617.5 must not read as a record against a ledger that already holds 700")
     }
 

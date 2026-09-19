@@ -11560,12 +11560,16 @@ p.lead { margin: 10px 0; }
 		const version = (/\bFMT\s*(v?\d+)\b/i.exec(md)?.[1] ?? "v2").toLowerCase();
 		const banner = preamble.map((l) => l.replace(/[║╔╗╚╝═]/g, "").trim()).find((l) => /·/.test(l) && /FMT\s*v?\d/i.test(l));
 		const fields = banner ? banner.split("·").map((f) => f.trim()).filter(Boolean) : [];
+		const weekLabel = fields.find((f) => /^W\d+$/i.test(f)) ?? null;
+		const rangeLabel = fields.find((f) => /\d{4}-\d{2}-\d{2}/.test(f)) ?? null;
+		const phase = fields.find((f) => /^[A-Z][A-Z\s/&-]+$/.test(f) && !/FMT|SENTINEL/i.test(f)) ?? null;
+		const boxAt = preamble.findIndex((l) => l.trim() !== "" && BOX.test(l));
 		return {
-			weekLabel: fields.find((f) => /^W\d+$/i.test(f)) ?? null,
-			rangeLabel: fields.find((f) => /\d{4}-\d{2}-\d{2}/.test(f)) ?? null,
-			phase: fields.find((f) => /^[A-Z][A-Z\s/&-]+$/.test(f) && !/FMT|SENTINEL/i.test(f)) ?? null,
+			weekLabel,
+			rangeLabel,
+			phase,
 			version,
-			title: preamble.find((l) => /HELIX|ONYX/i.test(l) && !BOX.test(l))?.trim() ?? null
+			title: (boxAt === -1 ? preamble : preamble.slice(0, boxAt)).find((l) => l.trim() !== "")?.trim() ?? null
 		};
 	}
 	/**

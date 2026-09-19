@@ -55,7 +55,7 @@ public struct Exercise: Codable, FetchableRecord, PersistableRecord, Identifiabl
     public var equipment: String?
     public var isUnilateral: Bool?
     public var isBodyweight: Bool?
-    /// The legacy `helix5-…` id this row answers for (`exercises.slug`, W2).
+    /// The legacy `onyx-…` id this row answers for (`exercises.slug`, W2).
     /// A set logged before W2 carries it in `workout_sets.exercise_id`.
     public var slug: String?
 

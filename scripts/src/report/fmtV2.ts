@@ -15,7 +15,7 @@
  *
  * The layout it reads, from a real report:
  *
- *   ⬢ HELIX OS · WEEKLY TELEMETRY & PERFORMANCE AUDIT
+ *   ⬢ ONYX OS · WEEKLY TELEMETRY & PERFORMANCE AUDIT
  *   ╔══════════════════════════════════════════════╗
  *   ║ W01 · 2026-07-19 → 07-25 · CUT / RE-ENTRY · SENTINEL-7 · FMT v2 ║
  *   ▓ PART 1 — WEIGHT & METABOLIC VERIFICATION
@@ -27,8 +27,8 @@
  * Note the pipe tables carry NO markdown separator row, which is why remark-gfm
  * renders them as one long paragraph and why they are parsed here instead.
  *
- * Pure: no React, no network, no clock. Every branch is exercised by
- * `src/tests/fmt-v2.test.ts` against the real header.
+ * Pure: no React, no network, no clock. The header rules are exercised by
+ * `scripts/check-report.mjs` (`npm run check:report`), which imports THIS file
  */
 
 export interface FmtV2Header {
@@ -467,8 +467,31 @@ function parseHeader(preamble: string[], md: string): FmtV2Header {
   const rangeLabel = fields.find((f) => /\d{4}-\d{2}-\d{2}/.test(f)) ?? null
   const phase = fields.find((f) => /^[A-Z][A-Z\s/&-]+$/.test(f) && !/FMT|SENTINEL/i.test(f)) ?? null
 
-  // Both brands, on purpose: reports pasted before the rename open with HELIX.
-  const title = preamble.find((l) => /HELIX|ONYX/i.test(l) && !BOX.test(l))?.trim() ?? null
+  // ── THE TITLE IS A POSITION, NOT A BRAND (Expansion W1) ───────────────────
+  // This matched the brand name, and carried the predecessor's too, because
+  // the seven reports already stored open with that app's banner. W1 removed
+  // that name from the repository, so the test became structural instead: the
+  // title is the first line of the preamble that is not box-drawing and not
+  // the banner itself. That matches both eras of report without naming either,
+  // and it is strictly more permissive — a report whose masthead says neither
+  // word now gets a title where it used to get null.
+  //
+  // ── "ABOVE THE BOX", NOT "NOT A BOX LINE" ────────────────────────────────
+  // `preamble` is everything before the first `▓ PART`, so it holds the
+  // masthead, the box rules, AND the banner line between them. `BOX` matches
+  // only lines made ENTIRELY of frame characters, so the banner —
+  // `║ W01 · … · FMT v2 ║` — is not a box line and a plain `find` picks it up
+  // the moment a report has no masthead. Ten of the seventeen stored reports
+  // are exactly that shape, and they would have been titled with the framed
+  // banner, pipes included. The masthead is defined by POSITION: it is above
+  // the box, so only the lines above the first box rule can be one.
+  // `BOX` includes `\s`, so a BLANK line matches it — meaning a report that
+  // opens with an empty line would otherwise cut the search at line 0 and find
+  // no title at all. A rule is a line that is box-drawing AND has something on
+  // it; a blank line is just a blank line.
+  const boxAt = preamble.findIndex((l) => l.trim() !== '' && BOX.test(l))
+  const aboveBox = boxAt === -1 ? preamble : preamble.slice(0, boxAt)
+  const title = aboveBox.find((l) => l.trim() !== '')?.trim() ?? null
 
   return { weekLabel, rangeLabel, phase, version, title }
 }

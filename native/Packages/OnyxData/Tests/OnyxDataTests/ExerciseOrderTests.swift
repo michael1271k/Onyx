@@ -21,7 +21,7 @@ struct ExerciseOrderTests {
 
     private func snapshot(_ order: Int?, setIndex: Int = 1) -> SetSnapshot {
         SetSnapshot(
-            exerciseId: "helix5-bench-press", setIndex: setIndex,
+            exerciseId: "onyx-bench-press", setIndex: setIndex,
             weightKg: 60, reps: 8, exerciseOrder: order
         )
     }

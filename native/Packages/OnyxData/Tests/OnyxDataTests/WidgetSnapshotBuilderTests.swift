@@ -22,8 +22,8 @@ struct WidgetSnapshotBuilderTests {
             try UserGoalRow(
                 id: "g1", userId: user, sleepGoalHours: 7.5, calorieGoal: 2000, proteinGoalG: 180,
                 stepsGoal: 10_000, waterGoalMl: 3000, contextMode: "normal", createdAt: t, updatedAt: t,
-                autoLogSupplements: false, activeProgram: "helix5", dayCutoffHour: 4, unitSystem: "metric",
-                reduceMotion: false, timezone: "UTC", targetWeightKg: 80, activePlan: "helix5",
+                autoLogSupplements: false, activeProgram: "onyx5", dayCutoffHour: 4, unitSystem: "metric",
+                reduceMotion: false, timezone: "UTC", targetWeightKg: 80, activePlan: "onyx5",
                 activePhase: "cut", trackRpe: true,
                 // `custom` resolves to itself and applies no preset, so the
                 // stored calorie goal survives whatever lever the calendar holds.
@@ -77,7 +77,7 @@ struct WidgetSnapshotBuilderTests {
     }
 
     // ── A PHONE-LOGGED SET IS A SLUG, NOT A UUID ────────────────────────────
-    // `LoggerModel.exerciseId` stamps `helix5-<slug>` on every set logged on
+    // `LoggerModel.exerciseId` stamps `onyx-<slug>` on every set logged on
     // the phone, and `applyPulledSets` never repairs a session that has local
     // events — so the slug is the id that set keeps. `exerciseNames` used to be
     // the catalogue alone, which only ever holds server uuids, and every
@@ -486,32 +486,13 @@ struct WidgetSnapshotBuilderTests {
         #expect(try String(contentsOf: new.appendingPathComponent("onyx.sqlite"), encoding: .utf8) == "x")
     }
 
-    /// W2 renamed the container, the folder AND the file in one commit. A
-    /// device that ran the previous build has `Helix/helix.sqlite` with real
-    /// unsynced sets in it, and an app that just opened a fresh
-    /// `Onyx/onyx.sqlite` beside it would look like a factory reset.
-    @Test("a store written under the old name is adopted under the new one")
-    func adoptsLegacyStore() throws {
-        let base = FileManager.default.temporaryDirectory.appending(path: "onyx-legacy-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: base) }
-        let old = base.appending(path: "Helix"), new = base.appending(path: "Onyx")
-        try FileManager.default.createDirectory(at: old, withIntermediateDirectories: true)
-        for suffix in ["", "-wal", "-shm"] {
-            try Data("history".utf8).write(to: old.appendingPathComponent("helix.sqlite" + suffix))
-        }
-
-        AppDatabase.adoptLegacyStore(into: new, from: old)
-
-        for suffix in ["", "-wal", "-shm"] {
-            #expect(try String(contentsOf: new.appendingPathComponent("onyx.sqlite" + suffix), encoding: .utf8) == "history")
-            #expect(!FileManager.default.fileExists(atPath: old.appendingPathComponent("helix.sqlite" + suffix).path))
-        }
-
-        // A second launch must not resurrect a stale copy over the live store.
-        try Data("stale".utf8).write(to: old.appendingPathComponent("helix.sqlite"))
-        AppDatabase.adoptLegacyStore(into: new, from: old)
-        #expect(try String(contentsOf: new.appendingPathComponent("onyx.sqlite"), encoding: .utf8) == "history")
-    }
+    // The companion test — "a store written under the predecessor's name is
+    // adopted under the new one" — was deleted in 7.0.0 with the code it
+    // covered. See `AppDatabase.adoptLegacyStores`: that path could not
+    // survive a purge of the name it hunted for, and it had never fired.
+    // `moveStoreIfNeeded` above is the surviving half and still carries the
+    // WAL/SHM rule and the never-overwrite rule, which were the parts with
+    // teeth.
 
     // ══ W6 ═══════════════════════════════════════════════════════════════════
 

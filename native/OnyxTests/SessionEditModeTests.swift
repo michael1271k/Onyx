@@ -26,7 +26,7 @@ struct SessionEditModeTests {
     private nonisolated static let sessionId = "s-edit"
 
     /// One finished Upper A, logged the way the WEB logs: `exercise_id` is a
-    /// catalogue uuid, not `helix5-<slug>`. This is the case `restoreLoggedSets`
+    /// catalogue uuid, not `onyx-<slug>`. This is the case `restoreLoggedSets`
     /// used to find nothing for.
     private func store() throws -> AppDatabase {
         let database = try AppDatabase.inMemory(deviceId: "edit-test")
@@ -90,7 +90,7 @@ struct SessionEditModeTests {
         #expect(done.count == 3, "the three logged sets must come back ticked")
         #expect(done.map { $0.reps ?? 0 } == [10, 9, 8])
         // Matched by canonical NAME: the rows carry `ex-chest-press` and the
-        // deck's own key for this movement is `helix5-chest-press-machine`.
+        // deck's own key for this movement is `onyx-chest-press-machine`.
         #expect(exercise.storedExerciseId == "ex-chest-press")
         #expect(exercise.rows[0].id == "set-1", "the deck must own the STORED set ids, or an amend addresses nothing")
     }

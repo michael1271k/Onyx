@@ -1142,7 +1142,7 @@ final class WorkoutWeek {
             let sets = try WorkoutSet.filter(sessionIds.contains(Column("session_id"))).fetchAll(db)
             let exercises = try Exercise.fetchAll(db)
             // The catalogue AND the slug map. A phone-logged set carries a
-            // `helix5-<slug>` id the catalogue does not name, and naming only
+            // `onyx-<slug>` id the catalogue does not name, and naming only
             // the catalogue is what once made an Upper B session report
             // "Side delts 0/7" — see `WidgetSnapshotBuilder.exerciseNames`.
             let names = Dictionary(

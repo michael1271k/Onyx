@@ -1,12 +1,12 @@
 {
   "module": "native/deepLink",
   "fn": "safePath / destination",
-  "note": "The allow-list for helix://open?path=… URLs: helix scheme only, path must start with / and not //, query and fragment stripped before matching the clean path OR its first-segment root, the FULL path returned. `destination` is the native tab mapping (today · train · fuel · body(date) · you · reports); null path → null destination.",
+  "note": "The allow-list for onyx://open?path=… URLs: onyx scheme only, path must start with / and not //, query and fragment stripped before matching the clean path OR its first-segment root, the FULL path returned. `destination` is the native tab mapping (today · train · fuel · body(date) · you · reports); null path → null destination.",
   "cases": [
     {
       "name": "home",
       "input": {
-        "raw": "helix://open?path=/"
+        "raw": "onyx://open?path=/"
       },
       "expected": {
         "path": "/",
@@ -19,7 +19,7 @@
     {
       "name": "nutrition",
       "input": {
-        "raw": "helix://open?path=/nutrition"
+        "raw": "onyx://open?path=/nutrition"
       },
       "expected": {
         "path": "/nutrition",
@@ -32,7 +32,7 @@
     {
       "name": "nutrition micros — below an allowed root",
       "input": {
-        "raw": "helix://open?path=/nutrition/micros"
+        "raw": "onyx://open?path=/nutrition/micros"
       },
       "expected": {
         "path": "/nutrition/micros",
@@ -45,7 +45,7 @@
     {
       "name": "nutrition nutrients",
       "input": {
-        "raw": "helix://open?path=/nutrition/nutrients"
+        "raw": "onyx://open?path=/nutrition/nutrients"
       },
       "expected": {
         "path": "/nutrition/nutrients",
@@ -58,7 +58,7 @@
     {
       "name": "workout exercises",
       "input": {
-        "raw": "helix://open?path=/workout/exercises"
+        "raw": "onyx://open?path=/workout/exercises"
       },
       "expected": {
         "path": "/workout/exercises",
@@ -71,7 +71,7 @@
     {
       "name": "session",
       "input": {
-        "raw": "helix://open?path=/session"
+        "raw": "onyx://open?path=/session"
       },
       "expected": {
         "path": "/session",
@@ -84,7 +84,7 @@
     {
       "name": "pathfinder",
       "input": {
-        "raw": "helix://open?path=/pathfinder"
+        "raw": "onyx://open?path=/pathfinder"
       },
       "expected": {
         "path": "/pathfinder",
@@ -97,7 +97,7 @@
     {
       "name": "reports",
       "input": {
-        "raw": "helix://open?path=/reports"
+        "raw": "onyx://open?path=/reports"
       },
       "expected": {
         "path": "/reports",
@@ -110,7 +110,7 @@
     {
       "name": "settings",
       "input": {
-        "raw": "helix://open?path=/settings"
+        "raw": "onyx://open?path=/settings"
       },
       "expected": {
         "path": "/settings",
@@ -123,7 +123,7 @@
     {
       "name": "a day",
       "input": {
-        "raw": "helix://open?path=/day/2026-08-14"
+        "raw": "onyx://open?path=/day/2026-08-14"
       },
       "expected": {
         "path": "/day/2026-08-14",
@@ -136,7 +136,7 @@
     {
       "name": "a day with an unencoded query",
       "input": {
-        "raw": "helix://open?path=/day/2026-09-03?section=sleep"
+        "raw": "onyx://open?path=/day/2026-09-03?section=sleep"
       },
       "expected": {
         "path": "/day/2026-09-03?section=sleep",
@@ -149,7 +149,7 @@
     {
       "name": "a day with an encoded query",
       "input": {
-        "raw": "helix://open?path=%2Fday%2F2026-08-14%3Ftab%3Dsleep"
+        "raw": "onyx://open?path=%2Fday%2F2026-08-14%3Ftab%3Dsleep"
       },
       "expected": {
         "path": "/day/2026-08-14?tab=sleep",
@@ -162,7 +162,7 @@
     {
       "name": "a fragment is stripped before the check",
       "input": {
-        "raw": "helix://open?path=/nutrition%23macros"
+        "raw": "onyx://open?path=/nutrition%23macros"
       },
       "expected": {
         "path": "/nutrition#macros",
@@ -175,7 +175,7 @@
     {
       "name": "upper-case scheme",
       "input": {
-        "raw": "HELIX://open?path=/nutrition"
+        "raw": "ONYX://open?path=/nutrition"
       },
       "expected": {
         "path": "/nutrition",
@@ -188,7 +188,7 @@
     {
       "name": "a trailing slash",
       "input": {
-        "raw": "helix://open?path=/nutrition/"
+        "raw": "onyx://open?path=/nutrition/"
       },
       "expected": {
         "path": "/nutrition/",
@@ -201,7 +201,7 @@
     {
       "name": "dot-dot below an allowed root passes the allow-list (the TS does too)",
       "input": {
-        "raw": "helix://open?path=/nutrition/../admin"
+        "raw": "onyx://open?path=/nutrition/../admin"
       },
       "expected": {
         "path": "/nutrition/../admin",
@@ -244,7 +244,7 @@
     {
       "name": "protocol-relative",
       "input": {
-        "raw": "helix://open?path=//evil.example"
+        "raw": "onyx://open?path=//evil.example"
       },
       "expected": {
         "path": null,
@@ -254,7 +254,7 @@
     {
       "name": "protocol-relative below an allowed root",
       "input": {
-        "raw": "helix://open?path=//evil.example/nutrition"
+        "raw": "onyx://open?path=//evil.example/nutrition"
       },
       "expected": {
         "path": null,
@@ -264,7 +264,7 @@
     {
       "name": "absolute URL as the path",
       "input": {
-        "raw": "helix://open?path=https://evil.example/nutrition"
+        "raw": "onyx://open?path=https://evil.example/nutrition"
       },
       "expected": {
         "path": null,
@@ -274,7 +274,7 @@
     {
       "name": "a route the app does not have",
       "input": {
-        "raw": "helix://open?path=/admin"
+        "raw": "onyx://open?path=/admin"
       },
       "expected": {
         "path": null,
@@ -284,7 +284,7 @@
     {
       "name": "the old snapshot route",
       "input": {
-        "raw": "helix://open?path=/api/widget/snapshot"
+        "raw": "onyx://open?path=/api/widget/snapshot"
       },
       "expected": {
         "path": null,
@@ -294,7 +294,7 @@
     {
       "name": "case-sensitive",
       "input": {
-        "raw": "helix://open?path=/Nutrition"
+        "raw": "onyx://open?path=/Nutrition"
       },
       "expected": {
         "path": null,
@@ -304,7 +304,7 @@
     {
       "name": "relative path",
       "input": {
-        "raw": "helix://open?path=nutrition"
+        "raw": "onyx://open?path=nutrition"
       },
       "expected": {
         "path": null,
@@ -314,7 +314,7 @@
     {
       "name": "no path",
       "input": {
-        "raw": "helix://open"
+        "raw": "onyx://open"
       },
       "expected": {
         "path": null,
@@ -344,7 +344,7 @@
     {
       "name": "malformed",
       "input": {
-        "raw": "helix://%%%"
+        "raw": "onyx://%%%"
       },
       "expected": {
         "path": null,

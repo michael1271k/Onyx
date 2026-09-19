@@ -22,7 +22,7 @@ struct ScoringHolesTests {
 
     private func session(_ conn: Database, id: String, date: String, dayKey: String = "legs_a", weight: Double, reps: Int = 10) throws {
         try WorkoutSession(id: id, userId: user, dayKey: dayKey, date: date, startedAt: Date()).insert(conn)
-        try WorkoutSet(id: "\(id)-1", sessionId: id, exerciseId: "helix5-hack-squat", setIndex: 1, weightKg: weight, reps: reps).insert(conn)
+        try WorkoutSet(id: "\(id)-1", sessionId: id, exerciseId: "onyx-hack-squat", setIndex: 1, weightKg: weight, reps: reps).insert(conn)
     }
 
     private func goals(_ conn: Database, contextMode: String = "normal", contextSince: String? = nil) throws {
@@ -30,7 +30,7 @@ struct ScoringHolesTests {
             id: "g1", userId: user, sleepGoalHours: 8, calorieGoal: 1955,
             proteinGoalG: 190, carbsGoalG: 150, fatGoalG: 60, stepsGoal: 10_000,
             waterGoalMl: 3000, contextMode: contextMode, createdAt: Date(), updatedAt: Date(),
-            autoLogSupplements: false, activeProgram: "helix5", dayCutoffHour: 0,
+            autoLogSupplements: false, activeProgram: "onyx5", dayCutoffHour: 0,
             unitSystem: "metric", reduceMotion: false, timezone: "Asia/Jerusalem", trackRpe: true,
             contextSince: contextSince
         ).insert(conn)

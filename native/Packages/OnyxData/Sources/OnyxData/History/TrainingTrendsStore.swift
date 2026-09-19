@@ -41,7 +41,7 @@ public extension AppDatabase {
             guard !sessions.isEmpty else { return [] }
             // ── THE CATALOGUE, PLUS THE SLUGS THE PHONE WRITES ──────────────
             // `exercises` holds server uuids only. A set logged on the phone is
-            // stamped `helix5-<slug>` and keeps that id for as long as the
+            // stamped `onyx-<slug>` and keeps that id for as long as the
             // session has local events. Naming only the catalogue dropped every
             // phone-logged set from muscle credit — "Side delts 0/7" after an
             // Upper B was exactly this (F2), fixed in W1 at the widget's reader

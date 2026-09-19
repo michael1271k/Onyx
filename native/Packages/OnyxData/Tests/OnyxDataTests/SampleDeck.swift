@@ -84,10 +84,10 @@ extension SampleDeck {
             ("ppl", "2026-05-10", "cut", "Cut", nil, 6, true, "ppl", "PPL Cut"),
             ("ppl", "2026-06-21", "peak", "Peak Week (Maintenance)", "Peak", 1, false, "ppl", "PPL Peak"),
             ("ppl", "2026-06-28", "deload", "Thailand Vacation", "Thailand", 2, false, "ppl", "Thailand Vacation (Deload)"),
-            ("onyx5", "2026-07-12", "peak", "Week 0 · Transition", "W0", 1, false, "helix", "Onyx · Week 0"),
-            ("onyx5", "2026-07-19", "cut", "Cut", nil, 13, true, "helix", "Onyx Cut"),
-            ("onyx5", "2026-10-18", "deload", "Transition", "Trans", 2, true, "helix", "Onyx Transition"),
-            ("onyx5", "2026-11-01", "bulk", "Lean Bulk", nil, 11, true, "helix", "Onyx Lean Bulk"),
+            ("onyx5", "2026-07-12", "peak", "Week 0 · Transition", "W0", 1, false, "onyx", "Onyx · Week 0"),
+            ("onyx5", "2026-07-19", "cut", "Cut", nil, 13, true, "onyx", "Onyx Cut"),
+            ("onyx5", "2026-10-18", "deload", "Transition", "Trans", 2, true, "onyx", "Onyx Transition"),
+            ("onyx5", "2026-11-01", "bulk", "Lean Bulk", nil, 11, true, "onyx", "Onyx Lean Bulk"),
         ]
         for (plan, start, kind, name, short, weeks, numbered, era, tag) in phases {
             try PlanPhaseRow(userId: userId, planId: plan, start: start, kind: kind, name: name, short: short,

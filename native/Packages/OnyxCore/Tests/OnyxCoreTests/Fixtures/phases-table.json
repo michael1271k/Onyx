@@ -49,8 +49,8 @@
           "start": "2026-07-12",
           "weeks": 1,
           "short": "W0",
-          "era": "helix",
-          "eraTag": "HELIX · Week 0"
+          "era": "onyx",
+          "eraTag": "ONYX · Week 0"
         },
         {
           "kind": "cut",
@@ -58,8 +58,8 @@
           "start": "2026-07-19",
           "weeks": 13,
           "numbered": true,
-          "era": "helix",
-          "eraTag": "Helix Cut"
+          "era": "onyx",
+          "eraTag": "Onyx Cut"
         },
         {
           "kind": "deload",
@@ -68,8 +68,8 @@
           "weeks": 2,
           "numbered": true,
           "short": "Trans",
-          "era": "helix",
-          "eraTag": "HELIX Transition"
+          "era": "onyx",
+          "eraTag": "ONYX Transition"
         },
         {
           "kind": "bulk",
@@ -77,8 +77,8 @@
           "start": "2026-11-01",
           "weeks": 11,
           "numbered": true,
-          "era": "helix",
-          "eraTag": "HELIX Lean Bulk"
+          "era": "onyx",
+          "eraTag": "ONYX Lean Bulk"
         }
       ]
     }

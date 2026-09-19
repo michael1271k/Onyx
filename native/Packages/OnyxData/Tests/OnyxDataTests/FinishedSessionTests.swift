@@ -49,7 +49,7 @@ struct FinishedSessionTests {
         let session = try db.openSession(userId: user, dayKey: "arms", date: date)
         try db.appendSet(
             sessionId: session.id, setId: "set-1",
-            SetSnapshot(exerciseId: "helix5-cable-curl", setIndex: 1, weightKg: 20, reps: 10)
+            SetSnapshot(exerciseId: "onyx-cable-curl", setIndex: 1, weightKg: 20, reps: 10)
         )
         // The finish. This writes the four columns AND queues `session:<id>`.
         try db.closeSession(id: session.id, sessionRpe: 8)
@@ -97,7 +97,7 @@ struct FinishedSessionTests {
         let session = try db.openSession(userId: user, dayKey: "arms", date: date)
         try db.appendSet(
             sessionId: session.id, setId: "set-1",
-            SetSnapshot(exerciseId: "helix5-cable-curl", setIndex: 1, weightKg: 20, reps: 10)
+            SetSnapshot(exerciseId: "onyx-cable-curl", setIndex: 1, weightKg: 20, reps: 10)
         )
         try db.closeSession(id: session.id, sessionRpe: 8)
         // The watch's own workout reached the server first. This device has no
@@ -118,7 +118,7 @@ struct FinishedSessionTests {
         let session = try db.openSession(userId: user, dayKey: "arms", date: date)
         try db.appendSet(
             sessionId: session.id, setId: "set-1",
-            SetSnapshot(exerciseId: "helix5-cable-curl", setIndex: 1, weightKg: 20, reps: 10)
+            SetSnapshot(exerciseId: "onyx-cable-curl", setIndex: 1, weightKg: 20, reps: 10)
         )
 
         // Two taps on `+` from an empty cell. The column stays NULL, which is
@@ -143,7 +143,7 @@ struct FinishedSessionTests {
         let session = try db.openSession(userId: user, dayKey: "arms", date: date)
         try db.appendSet(
             sessionId: session.id, setId: "set-1",
-            SetSnapshot(exerciseId: "helix5-cable-curl", setIndex: 1, weightKg: 20, reps: 10)
+            SetSnapshot(exerciseId: "onyx-cable-curl", setIndex: 1, weightKg: 20, reps: 10)
         )
         try db.setSessionMetrics(id: session.id, avgBpm: 129, caloriesBurned: 470, measured: false)
         let row = try #require(try db.session(id: session.id))

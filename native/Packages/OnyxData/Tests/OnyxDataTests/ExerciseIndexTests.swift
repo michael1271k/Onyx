@@ -71,11 +71,11 @@ struct ExerciseIndexTests {
         // The reverse map is DATA since W2: `exercises.slug` names the legacy
         // id a row answers for, and both the name and the push resolve
         // through it.
-        #expect(ExerciseSlug.id(WarmupCardio.name) == "helix5-treadmill")
-        let rows = [Exercise(id: "uuid-treadmill", name: "Treadmill", slug: "helix5-treadmill")]
-        #expect(ExerciseSlug.nameBySlug(rows)["helix5-treadmill"] == "Treadmill")
-        let catalogue = [RemoteExercise(id: "uuid-treadmill", name: "Treadmill", slug: "helix5-treadmill")]
-        #expect(try ExerciseIndex(catalogue).id(forSlug: "helix5-treadmill") == "uuid-treadmill")
+        #expect(ExerciseSlug.id(WarmupCardio.name) == "onyx-treadmill")
+        let rows = [Exercise(id: "uuid-treadmill", name: "Treadmill", slug: "onyx-treadmill")]
+        #expect(ExerciseSlug.nameBySlug(rows)["onyx-treadmill"] == "Treadmill")
+        let catalogue = [RemoteExercise(id: "uuid-treadmill", name: "Treadmill", slug: "onyx-treadmill")]
+        #expect(try ExerciseIndex(catalogue).id(forSlug: "onyx-treadmill") == "uuid-treadmill")
         // A set that already carries the uuid passes straight through (D3).
         #expect(try ExerciseIndex(catalogue).id(forSlug: "uuid-treadmill") == "uuid-treadmill")
     }
@@ -86,12 +86,12 @@ struct ExerciseIndexTests {
         // `LoggerModel.exerciseId` in the app target, which this package cannot
         // import. These pinned strings are what makes a drift in EITHER copy
         // fail a test instead of quietly failing to resolve at drain time.
-        #expect(ExerciseSlug.id("Incline DB Press") == "helix5-incline-db-press")
-        #expect(ExerciseSlug.id("Seated Cable Row (V-Grip)") == "helix5-seated-cable-row-v-grip")
-        #expect(ExerciseSlug.id("Seated Cable Row (Wide Grip)") == "helix5-seated-cable-row-wide-grip")
-        #expect(ExerciseSlug.id("Straight-Arm Pulldown") == "helix5-straight-arm-pulldown")
-        #expect(ExerciseSlug.id("Romanian Deadlift (Dumbbell)") == "helix5-romanian-deadlift-dumbbell")
-        #expect(ExerciseSlug.id("Reverse EZ-Bar Curl") == "helix5-reverse-ez-bar-curl")
+        #expect(ExerciseSlug.id("Incline DB Press") == "onyx-incline-db-press")
+        #expect(ExerciseSlug.id("Seated Cable Row (V-Grip)") == "onyx-seated-cable-row-v-grip")
+        #expect(ExerciseSlug.id("Seated Cable Row (Wide Grip)") == "onyx-seated-cable-row-wide-grip")
+        #expect(ExerciseSlug.id("Straight-Arm Pulldown") == "onyx-straight-arm-pulldown")
+        #expect(ExerciseSlug.id("Romanian Deadlift (Dumbbell)") == "onyx-romanian-deadlift-dumbbell")
+        #expect(ExerciseSlug.id("Reverse EZ-Bar Curl") == "onyx-reverse-ez-bar-curl")
     }
 
     @Test("every slug maps back to the name the program spells, off the column")
@@ -122,8 +122,8 @@ struct ExerciseIndexTests {
         // Three separate rows, three separate ladders. The V-grip is programmed
         // on Upper A and the wide bar on Upper B; sharing one row is what made
         // 2026-08-06's 42.5 × 11 lose both axes to a Sunday set.
-        let vGrip = try index().id(forSlug: "helix5-seated-cable-row-v-grip")
-        let wide = try index().id(forSlug: "helix5-seated-cable-row-wide-grip")
+        let vGrip = try index().id(forSlug: "onyx-seated-cable-row-v-grip")
+        let wide = try index().id(forSlug: "onyx-seated-cable-row-wide-grip")
         #expect(vGrip != wide)
         #expect(vGrip == Self.liveCatalogue.first { $0.name == "Seated Cable Row (V-Grip)" }?.id)
         #expect(wide == Self.liveCatalogue.first { $0.name == "Seated Cable Row (Wide Grip)" }?.id)
@@ -144,7 +144,7 @@ struct ExerciseIndexTests {
         // can quietly remove. That removal is exactly what happened, and it
         // took the ambiguity test below with it.
         let catalogue = [RemoteExercise(id: "uuid-db", name: "Romanian Deadlift (DB)")]
-        #expect(try ExerciseIndex(catalogue).id(forSlug: "helix5-romanian-deadlift") == "uuid-db")
+        #expect(try ExerciseIndex(catalogue).id(forSlug: "onyx-romanian-deadlift") == "uuid-db")
     }
 
     @Test("an ambiguous normalised match throws instead of picking one")
@@ -167,19 +167,19 @@ struct ExerciseIndexTests {
             name: "Romanian Deadlift",
             candidates: ["Romanian Deadlift (Barbell)", "Romanian Deadlift (DB)"]
         )) {
-            _ = try ExerciseIndex(catalogue).id(forSlug: "helix5-romanian-deadlift")
+            _ = try ExerciseIndex(catalogue).id(forSlug: "onyx-romanian-deadlift")
         }
 
         // With only one of them present it resolves, which is the live case.
         #expect(try ExerciseIndex([catalogue[0]])
-                .id(forSlug: "helix5-romanian-deadlift") == "uuid-db")
+                .id(forSlug: "onyx-romanian-deadlift") == "uuid-db")
     }
 
     @Test("a slug the program does not know throws and names itself")
     func unknownSlugThrows() {
         // The error names the movement a person can read, off the slug.
-        #expect(throws: SyncError.unknownExercise(slug: "helix5-zercher-squat", name: "Zercher Squat")) {
-            _ = try index().id(forSlug: "helix5-zercher-squat")
+        #expect(throws: SyncError.unknownExercise(slug: "onyx-zercher-squat", name: "Zercher Squat")) {
+            _ = try index().id(forSlug: "onyx-zercher-squat")
         }
     }
 
@@ -191,8 +191,8 @@ struct ExerciseIndexTests {
         // means drift — and a 61st row would split a history silently.
         let thin = ExerciseIndex([RemoteExercise(id: "uuid-0", name: "Hack Squat")])
         #expect(throws: SyncError.self) {
-            _ = try thin.id(forSlug: "helix5-pec-deck")
+            _ = try thin.id(forSlug: "onyx-pec-deck")
         }
-        #expect(try thin.id(forSlug: "helix5-hack-squat") == "uuid-0")
+        #expect(try thin.id(forSlug: "onyx-hack-squat") == "uuid-0")
     }
 }

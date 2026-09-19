@@ -10,12 +10,27 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEVICE="${UI_TEST_DEVICE:-iPhone 17 Pro}"
+# ── THE DEFAULT HAS TO BE A DEVICE THAT EXISTS (Expansion W1) ──────────────
+# This said `iPhone 17 Pro`, which is not installed here — and because of the
+# bug fixed immediately below, that made `npm run check` exit 1 with NO OUTPUT
+# AT ALL. The gate was dead and looked quiet, which is the failure mode this
+# script's own header calls "the worst kind". `iPhone 15` is the simulator the
+# sprint pairs and documents (`docs/SIMULATORS.md`).
+DEVICE="${UI_TEST_DEVICE:-iPhone 15}"
 
 # The same selection as scripts/native-shot.sh — never a hardcoded UDID.
-UDID="$(xcrun simctl list devices available | grep -m1 "$DEVICE (" | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')"
+#
+# `|| true`: under `set -e` a non-matching `grep` fails the pipeline, fails the
+# command substitution, fails the assignment, and kills the script RIGHT HERE —
+# so the message below never printed and the caller got a bare exit 1. `grep -o`
+# for the UDID rather than `sed` on the whole line, so a line that carries no
+# UDID yields empty and the guard actually guards instead of passing a device
+# name through as an id.
+UDID="$(xcrun simctl list devices available | grep -m1 "$DEVICE (" | grep -oE '[0-9A-F-]{36}' || true)"
 if [ -z "$UDID" ]; then
   echo "No available simulator named '$DEVICE'." >&2
+  echo "Installed: $(xcrun simctl list devices available | grep -oE 'iPhone [^(]*' | sort -u | tr '\n' ' ')" >&2
+  echo "Override with UI_TEST_DEVICE=… — see docs/SIMULATORS.md." >&2
   exit 1
 fi
 

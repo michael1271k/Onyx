@@ -4,11 +4,6 @@ import Testing
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The six chart windows — replayed from `npm run golden` (W11).
-//
-// The phase labels go through `rebranded` for the reason `NutritionGoldenTests`
-// states: the fixtures come from the web app's `lib/phases.ts`, which keeps the web's own
-// era tags on purpose (decision 2). Every other character is compared as-is.
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Suite("Era windows — the six pills and what they resolve to")
 struct EraWindowGoldenTests {
@@ -34,7 +29,7 @@ struct EraWindowGoldenTests {
             input.periods = FounderTables.periods
             input.planStartISO = FounderTables.planStartISO
             let actual = c.input.mode.resolve(input)
-            #expect(actual.label == rebranded(c.expected.label), "label — \(c.name)")
+            #expect(actual.label == c.expected.label, "label — \(c.name)")
             #expect(actual.startISO == c.expected.startISO, "start — \(c.name)")
             #expect(actual.endISO == c.expected.endISO, "end — \(c.name)")
             #expect(actual.days == c.expected.days, "days — \(c.name)")

@@ -11,7 +11,7 @@ import Foundation
 // function vectors instead. They are inputs, not expectations, and none of
 // them is deletable:
 //
-//   · `phases-table.json`   → `phases`   (era tags rebranded, `planId` filled)
+//   · `phases-table.json`   → `phases`   (`planId` filled)
 //   · `levers-table.json`   → `rungs`, `periods`, `ladder(stored:releaseEndsOn:)`
 //   · `pr-floor.json`       → `floors`
 //   · `plan-templates.json` → `programs`, `plans`, `deck` — the founder's three
@@ -42,7 +42,6 @@ enum FounderTables {
         let rows = try! GoldenFixture<Nothing, [PhaseDef]>.load("phases-table").cases[0].expected
         return rows.map { row in
             var d = row
-            d.eraTag = d.eraTag.map(rebranded)
             d.planId = d.era == .ppl ? "ppl" : "onyx5"
             return d
         }

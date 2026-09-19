@@ -104,31 +104,31 @@ struct ScoringInputsTests {
             ).insert(conn)
             // One bilateral working set…
             try WorkoutSet(
-                id: "a", sessionId: "sess", exerciseId: "helix5-hack-squat",
+                id: "a", sessionId: "sess", exerciseId: "onyx-hack-squat",
                 setIndex: 1, weightKg: 100, reps: 8
             ).insert(conn)
             // …one unilateral PAIR, which is ONE set…
             try WorkoutSet(
-                id: "l", sessionId: "sess", exerciseId: "helix5-split-squat",
+                id: "l", sessionId: "sess", exerciseId: "onyx-split-squat",
                 setIndex: 2, weightKg: 40, reps: 10, side: "left", pairId: "p1"
             ).insert(conn)
             try WorkoutSet(
-                id: "r", sessionId: "sess", exerciseId: "helix5-split-squat",
+                id: "r", sessionId: "sess", exerciseId: "onyx-split-squat",
                 setIndex: 2, weightKg: 42, reps: 10, side: "right", pairId: "p1"
             ).insert(conn)
             // …one warm-up, which is not work…
             try WorkoutSet(
-                id: "w", sessionId: "sess", exerciseId: "helix5-hack-squat",
+                id: "w", sessionId: "sess", exerciseId: "onyx-hack-squat",
                 setIndex: 0, weightKg: 60, reps: 10, setType: "warmup"
             ).insert(conn)
             // …one failure set, which is…
             try WorkoutSet(
-                id: "f", sessionId: "sess", exerciseId: "helix5-leg-curl",
+                id: "f", sessionId: "sess", exerciseId: "onyx-leg-curl",
                 setIndex: 3, weightKg: 55, reps: 6, setType: "failure"
             ).insert(conn)
             // …and one ghost, deliberately not performed.
             try WorkoutSet(
-                id: "g", sessionId: "sess", exerciseId: "helix5-calf-raise",
+                id: "g", sessionId: "sess", exerciseId: "onyx-calf-raise",
                 setIndex: 4, weightKg: 0, reps: 0, setType: "ghost"
             ).insert(conn)
         }
@@ -206,7 +206,7 @@ struct ScoringInputsTests {
                 id: "g1", userId: user, sleepGoalHours: 8, calorieGoal: 1955,
                 proteinGoalG: 190, carbsGoalG: 150, fatGoalG: 60, stepsGoal: 10_000,
                 waterGoalMl: 3000, contextMode: "normal", createdAt: Date(), updatedAt: Date(),
-                autoLogSupplements: false, activeProgram: "helix5", dayCutoffHour: 0,
+                autoLogSupplements: false, activeProgram: "onyx5", dayCutoffHour: 0,
                 unitSystem: "metric", reduceMotion: false, timezone: "Asia/Jerusalem", trackRpe: true
             ).insert(conn)
         }

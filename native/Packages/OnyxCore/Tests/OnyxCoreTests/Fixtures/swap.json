@@ -612,7 +612,7 @@
       }
     },
     {
-      "name": "planRestDay · helix4 Mon upper_a → Wed",
+      "name": "planRestDay · onyx4 Mon upper_a → Wed",
       "input": {
         "fn": "planRestDay",
         "date": "2026-08-10",
@@ -649,7 +649,7 @@
       }
     },
     {
-      "name": "planRestDay · helix4 Fri lower_b → Sat",
+      "name": "planRestDay · onyx4 Fri lower_b → Sat",
       "input": {
         "fn": "planRestDay",
         "date": "2026-08-14",
@@ -1925,7 +1925,7 @@
       }
     },
     {
-      "name": "planPermanentMove · ppl selected in the Helix era: push_sun → Wed pins Sun and Wed",
+      "name": "planPermanentMove · ppl selected in the Onyx era: push_sun → Wed pins Sun and Wed",
       "input": {
         "fn": "planPermanentMove",
         "program": "ppl",

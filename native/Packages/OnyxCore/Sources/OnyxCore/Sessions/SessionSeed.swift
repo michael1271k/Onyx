@@ -19,7 +19,7 @@ import Foundation
 //   3. PROGRAM — `wk1Kg` at the rep floor. The cold start.
 //
 // AND WHY HISTORY IS MATCHED BY NAME, NEVER BY `exercise_id`: web-logged sets
-// carry the catalogue's uuid; this phone writes `"helix5-<slug>"`
+// carry the catalogue's uuid; this phone writes `"onyx-<slug>"`
 // (`ExerciseSlug.id`). The Sept 6 Upper A session was logged on the web, so any
 // seed that indexes history by id finds zero rows for it and falls through to
 // the cold start — which looks exactly like "this movement is new" and is not.
@@ -222,7 +222,7 @@ public struct SessionSeed: Codable, Sendable, Equatable {
 /// row. No bout, no opener; a bout, and the deck proposes THAT one back.
 public enum WarmupCardio {
 
-    /// The LEGACY catalogue row's name — the slug `helix5-treadmill` resolves
+    /// The LEGACY catalogue row's name — the slug `onyx-treadmill` resolves
     /// off it, and the founder's uploaded treadmill sets are filed under it.
     ///
     /// It is NOT the opener's name any more. That comes from the bout being

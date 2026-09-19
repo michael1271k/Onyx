@@ -276,7 +276,7 @@ struct SleepTrimTests {
                 id: "g1", userId: user, sleepGoalHours: 8, calorieGoal: 1955,
                 proteinGoalG: 190, carbsGoalG: 150, fatGoalG: 60, stepsGoal: 10_000,
                 waterGoalMl: 3000, contextMode: "normal", createdAt: now, updatedAt: now,
-                autoLogSupplements: false, activeProgram: "helix5", dayCutoffHour: 0,
+                autoLogSupplements: false, activeProgram: "onyx5", dayCutoffHour: 0,
                 unitSystem: "metric", reduceMotion: false, timezone: "UTC", trackRpe: true
             ).insert(conn)
             try SleepSessionRow(

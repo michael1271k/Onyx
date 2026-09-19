@@ -110,7 +110,7 @@ struct WatchConvergenceTests {
         let db = try AppDatabase.inMemory(deviceId: deviceId)
         try db.writer.write { conn in
             // TWO rows for one movement, and both are needed. A set logged on a
-            // device carries `helix5-back-squat` (`ExerciseSlug.id`); the same
+            // device carries `onyx-back-squat` (`ExerciseSlug.id`); the same
             // set pulled back down carries the CATALOGUE's uuid, because that is
             // what `SyncTranslation` sent. `workout_sets.exercise_id` has a
             // foreign key, so the local table has to hold both spellings or the

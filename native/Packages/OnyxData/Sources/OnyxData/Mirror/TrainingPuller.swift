@@ -132,7 +132,7 @@ public actor TrainingPuller {
         // ponytail: one full session re-pull per orphan discovery. A set that
         // can never be re-pulled — a phone-logged session's own event fold —
         // would keep an orphan alive and force a full pull every refresh.
-        // Those sets carry `helix5-` slugs rather than catalogue uuids, so
+        // Those sets carry `onyx-` slugs rather than catalogue uuids, so
         // today they cannot reference one; if that ever changes, this wants a
         // "tried at" stamp beside the cursor rather than a bare `isEmpty`.
         let cursor = orphans.isEmpty
