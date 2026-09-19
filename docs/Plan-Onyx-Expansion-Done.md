@@ -536,3 +536,59 @@ refuses them by name rather than photographing `StartView` under their filename
 **The shell `grep` in this environment is a ugrep wrapper that honours
 `.gitignore`.** It under-reported the inventory by 66 hits. Use `/usr/bin/grep`
 for any gate that must see ignored files.
+
+---
+
+## Wave 2 Summary — 7.1.0
+
+**Worked.** The cascade is `ScoringWindow`: one read of `[from − 48 d, through]`,
+every day computed in memory with the same domain functions, one write
+transaction. **49 days: 0.6 s per-day → 0.1 s window (0.56–0.64 s vs
+0.13–0.16 s, idle machine), 49 commits → 1**; `os_signpost` `rescore.run`.
+Parity was proved live (old vs new, 60 days, identical) and is pinned as a
+59-row vector captured from the OLD path over `DenseSeed`. Rescore at the
+door: TEMP triggers on thirteen dated tables plus `set_events` (date via the
+parent session) feed `temp.rescore_touched`; a `TransactionObserver` reads
+past a watermark at commit; `Rescore.doorDecision` cascades ≤120 d, marks
+history stale beyond, ignores today. Six per-caller `rescore(from:)` calls are
+gone. Settings → "Recompute history"; Sync doctor → "Rescores" ledger.
+`ingestFromWatch` commits the wrist's events through the phone's outbox.
+`createRetroSession` + "Log a workout here" on a past Pulse day opens the
+existing edit deck (born closed: no clock, no Live Activity, no pencil).
+
+**The plan was wrong about four things.** (1) `PreviewCatalogue` seeds no
+per-day rows and lives in the app target; the parity seed is `DenseSeed` in
+OnyxDataTests. (2) A `session.upsert` outbox item carries the session ROW only;
+"re-queue the session upsert on ingest" would have pushed no sets, and a forced
+row could write `ended_at: null` over a finish the phone had not heard — the
+events are queued instead. (3) `PrRecorder.replay` already existed and already
+runs inside `SessionEditing.edit`'s transaction; with one `personal_records`
+row per axis and no history, "incremental from the edit date" cannot be
+cheaper than the full per-exercise replay, so the door does not replay PRs —
+SessionEditing does, atomically, and two tests now pin it. (4) No server
+column was needed; no SQL.
+
+**Failed, and was caught.** `invariant-auditor`: the ghost guard read a water
+SUM where the old path read row presence (a 0 ml row is a logged day); nights
+were iterated by bedtime where every old query met them by rowid — fixed, seed
+widened, vector regenerated from the old path in a `main` worktree.
+`database-architect`: the old account's door heard `prepareForUser`'s mass
+delete; `workout_sets` triggers were pure cost. `code-reviewer`: sync acks and
+the puller's `seedEventLogs` fired the door (every push of a past session
+cascaded again); the `rescore` ledger row flipped `needsBackfill`; Health
+re-saved yesterday byte-identical every foreground; a merged `.manual` run lost
+its reason; a retro session dismissed with no set was left behind. All fixed.
+The first strand test failed honestly and exposed premise (2).
+
+**Left open.** (1) Fault isolation is all-or-nothing per pass (decision 17):
+one broken day fails the whole range — documented in `RescoreQueue.runOnce`,
+not tested. (2) `stress_logs`, `body_composition` and the undated tables are
+outside the door; a goal edit that should re-grade past days is a manual
+recompute. (3) HealthKit imports count as local edits: a fresh install's
+months-deep import sets the stale mark once. (4) Sync doctor is admin-gated.
+(5) The simulator was signed out and no session file exists, so the live
+flows (macros three days back → ledger; week-old set → PR bar) were pinned by
+tests, not photographed; the new surfaces were shot through `PreviewHarness`
+with the `axe` CLI (`xcodebuildmcp` exposed no tap tools; `snapshot_ui` timed
+out). `native-shot.sh` had W1's silent-exit bug (uninstalled default device);
+fixed. The harness's `day-past` session card is a fixture, not a store row.
