@@ -101,14 +101,15 @@ public enum Rescore {
 public extension AppDatabase {
 
     /// Rewrite every stored score an edit on `from` can move — synchronously,
-    /// on the caller's thread, one transaction per day.
+    /// on the caller's thread: one read, one compute, one write (W2).
     ///
-    /// ── ONE TRANSACTION PER DAY, NOT ONE FOR THE RUN ────────────────────────
-    /// Forty-nine days is up to forty-nine reads of a forty-nine-day history
-    /// each, and holding one write transaction across all of it would block
-    /// every other writer — the logger's next set included — for the whole run.
-    /// Per-day is also what makes `RescoreQueue`'s "finish the current day, then
-    /// give way" possible: there is a consistent point to stop at.
+    /// ── ONE TRANSACTION FOR THE RUN, NOT ONE PER DAY ────────────────────────
+    /// It was per day, and the header here argued for it: forty-nine reads of
+    /// a forty-nine-day history each, and a write held across all of it would
+    /// block the logger. `ScoringWindow` reads the range ONCE and computes in
+    /// memory, so the write transaction holds forty-nine upserts and nothing
+    /// else — milliseconds, and one commit for the widgets and the watch
+    /// bridge to react to instead of forty-nine.
     ///
     /// The outbox collapses per row id, so a date rescored twice is still one
     /// upload — see `enqueueRowUpsert`.
@@ -121,18 +122,12 @@ public extension AppDatabase {
         calendar: Calendar = .current
     ) throws -> Rescore.Run {
         let days = Rescore.days(from: from, today: LogicalDayISO.string(now, calendar: calendar))
-        var written = 0
-        for day in days {
-            let row = try refreshDailyScore(
-                userId: userId, date: day, now: now, calendar: calendar, force: true
-            )
-            if row != nil { written += 1 }
-        }
+        let written = try rescoreWindow(userId: userId, dates: days, now: now, calendar: calendar, force: true)
         // No `failed`: this form PROPAGATES a throw rather than counting it.
         // A caller that asked for the cascade synchronously is in a position
         // to handle the failure; the queue is not, which is why it counts.
         return Rescore.Run(
-            from: from, through: days.last ?? from, written: written, reason: reason
+            from: from, through: days.last ?? from, written: written.count, reason: reason
         )
     }
 }
@@ -145,11 +140,9 @@ public extension AppDatabase {
 /// tasks would run a hundred and forty-seven day-computations against one GRDB
 /// writer while the athlete is still typing.
 ///
-/// PENDING is the EARLIEST date anyone has asked for since the running loop
-/// last took work. The loop checks it between days and gives way, folding the
-/// day it has not yet reached back in, so yielding costs a restart and never a
-/// dropped day. A later request never shortens a run that has already passed
-/// its date.
+/// PENDING is the union of every request since the running pass took work. A
+/// pass is one window read and one write (W2), so a request that lands during
+/// it simply waits and runs next; nothing is dropped and nothing is shortened.
 ///
 /// ── AND WHY THE GENERATION IS PUBLISHED ONLY ON COMPLETION ──────────────────
 /// `AppEnvironment.rescoreGeneration` is what four screens key their reload on.
@@ -191,10 +184,15 @@ public actor RescoreQueue {
         var through: String
         var reason: Rescore.Reason
 
-        /// Union with another request. Neither end may shrink.
+        /// Union with another request. Neither end may shrink — and a manual
+        /// or migration request keeps its reason, because the app clears the
+        /// stale mark and the sleep-v2 flag on THAT reason's completion. A
+        /// door request that happened to be pending when Recompute was tapped
+        /// must not relabel the run it merged into.
         mutating func absorb(_ other: Work) {
             from = Swift.min(from, other.from)
             through = Swift.max(through, other.through)
+            if other.reason == .manual || other.reason == .migration { reason = other.reason }
         }
     }
     /// True from the moment a drain starts until it has nothing left — the thin
@@ -287,46 +285,36 @@ public actor RescoreQueue {
         return pending
     }
 
-    /// One pass over the range, a day at a time.
+    /// One pass over the range: one window read, one write.
     ///
-    /// `Task.yield()` between days is what lets `request` interleave: this actor
-    /// is not the main one, but it IS one, and forty-nine uninterrupted GRDB
-    /// day-computations would make a caller await the whole cascade to enqueue
-    /// the edit that should have shortened it.
-    ///
-    /// Returns nil when the pass gave way — an interrupted pass is not a
-    /// completed cascade, and the generation waits for the run that finishes.
+    /// A request that lands while this runs waits for it — the actor is busy
+    /// in a synchronous store call — and is folded into the NEXT pass by
+    /// `drain`. Nothing is dropped and nothing is shortened; the old "give way
+    /// between days" is gone because there are no longer days to give way
+    /// between, and a 49-day pass is the cost of one day's read used to be.
     private func runOnce(_ work: Work) async -> Rescore.Run? {
-        let instant = now()
         let days = Rescore.dates(from: work.from, through: work.through)
         var written = 0
         var failed = 0
-        for (i, day) in days.enumerated() {
-            if stopped { return nil }
-            // A throw here is a broken store, not a bad day, and it must not
-            // take the rest of the cascade down with it — the remaining days
-            // are still wrong and still worth rewriting. It IS counted, so a
-            // cascade that failed outright cannot report success.
-            do {
-                if try database.refreshDailyScore(
-                    userId: userId, date: day, now: instant, calendar: calendar, force: true
-                ) != nil {
-                    written += 1
-                }
-            } catch {
-                failed += 1
-            }
-            await Task.yield()
-            guard pending != nil, i + 1 < days.count else { continue }
-            // Give way. Whatever this pass did not reach goes back on the queue
-            // beside the earlier request, so nothing is lost by yielding.
-            var rest = Work(from: days[i + 1], through: work.through, reason: work.reason)
-            if let queued = pending { rest.absorb(queued) }
-            pending = rest
-            // An interrupted pass is not a completed cascade, and the
-            // generation waits for the run that finishes the range.
-            return nil
+        // A throw here is a broken store, not a bad day. It IS counted, so a
+        // cascade that failed outright cannot report success.
+        //
+        // ── ALL OR NOTHING, ON PURPOSE ──────────────────────────────────────
+        // The per-day loop this replaced committed each day on its own, so one
+        // broken day cost one day. One transaction (decision 17) means a throw
+        // anywhere costs the whole pass — every day is counted failed, the
+        // generation does not move, and the range stays queued in the ledger
+        // as failed rather than half-written. A cascade that lands half its
+        // days is a set of scores that disagree with each other, which is the
+        // one state the cascade exists to prevent.
+        do {
+            written = try database.rescoreWindow(
+                userId: userId, dates: days, now: now(), calendar: calendar, force: true
+            ).count
+        } catch {
+            failed = days.count
         }
+        if stopped { return nil }
         return Rescore.Run(
             from: work.from, through: days.last ?? work.from,
             written: written, failed: failed, reason: work.reason

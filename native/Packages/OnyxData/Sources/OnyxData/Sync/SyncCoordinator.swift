@@ -280,8 +280,10 @@ public actor SyncCoordinator: MirrorRefreshing {
     /// died halfway, which writes nothing to it.
     public func needsBackfill() throws -> Bool {
         // Not the `outbox` line: every run writes one, including the run that
-        // died before a single table landed.
-        try database.lastSync(userId: userId).keys.allSatisfy { $0 == "outbox" }
+        // died before a single table landed. Nor `rescore` (W2): the cascade
+        // ledger lives in the same table and a door touch can land before the
+        // first pull ever does.
+        try database.lastSync(userId: userId).keys.allSatisfy { $0 == "outbox" || $0 == "rescore" }
     }
 
     private func runQueued() async throws {

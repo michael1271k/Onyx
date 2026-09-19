@@ -274,22 +274,14 @@ struct LiveLoggerView: View {
         // that knows the screen is going away. Giving the model a method for it
         // would be giving the model a fact it has no other use for.
         .onDisappear {
-            requestRescore()
             if let sessionId = model.sessionId, model.isEditing {
                 try? environment?.database.clearEditMark(sessionId: sessionId)
             }
         }
-        // ── ASKED PER EDIT, NOT ONLY ON THE WAY OUT ─────────────────────────
-        // `.onDisappear` does not fire when iOS terminates the app, so an edit
-        // made and then jetsammed left `daily_scores` describing a session that
-        // no longer existed, for up to forty-eight days, with nothing to retry
-        // it. Every edit in one sitting shares ONE anchor — the session's own
-        // date — so `RescoreQueue` folds them into a single run and asking per
-        // edit costs nothing over asking once. The `.onDisappear` above is now
-        // a backstop rather than the mechanism.
-        .onChange(of: model.editDirty) { _, dirty in
-            if dirty { requestRescore() }
-        }
+        // ── NO CASCADE CALL HERE (W2) ───────────────────────────────────────
+        // Every set edit commits through `SessionEditing`, and the rescore
+        // door reports the session's date on that commit. The view no longer
+        // has to remember, and a jetsammed app owes nothing.
         .onAppear {
             // Edit mode is attached by the caller, which is the only place that
             // holds the session row. `attach`'s own guard (`sessionId == nil`)
@@ -788,14 +780,10 @@ struct LiveLoggerView: View {
 
     /// Put the sitting back, and only then leave.
     ///
-    /// ── IT OWES THE CASCADE EXACTLY AS SAVE DOES ────────────────────────────
     /// A revert rewrites `total_volume_kg`, the PR ledger and every set row of
     /// the session — the same three things an edit rewrites, in the opposite
-    /// direction. `daily_scores` from this date forward now describes a session
-    /// that no longer exists either way, so `requestRescore()` runs here for
-    /// the reason it runs in `finishEdit`, off the same anchor and through the
-    /// same coalescing queue. `cancelEdit` raises `editDirty` so it has
-    /// something to ask about; `.onDisappear` is still the backstop.
+    /// direction — in one `SessionEditing` transaction, and the rescore door
+    /// reports that commit (W2). Nothing to ask for here.
     ///
     /// The store failing keeps the screen up — `cancelEdit` puts the reason in
     /// `storeError` and the banner is already rendering it — which is the rule
@@ -803,43 +791,20 @@ struct LiveLoggerView: View {
     /// a half-done revert to a screen that no longer exists.
     private func cancelEdit() {
         guard model.cancelEdit() else { return }
-        requestRescore()
         model.stopRest()
         dismiss()
     }
 
-    /// Close an edit: the effort word, then the cascade (§U4.5).
-    ///
-    /// ── WHY THE RESCORE IS HERE AND NOT IN THE MODEL ────────────────────────
-    /// `AppEnvironment.rescore` is the app's ONE scheduler for it — it
-    /// coalesces overlapping requests by a union of their horizons and publishes
-    /// `rescoreGeneration` once, when every day the edit touched agrees. A model
-    /// calling `AppDatabase.rescore` directly would be a second scheduler, and
-    /// two of them is how forty-nine days get computed twice and a screen
-    /// reloads onto the half-written answer.
+    /// Close an edit: the effort word (§U4.5). The cascade is the door's (W2).
     ///
     /// The set edits themselves already landed, one transaction each, as they
-    /// were made — this is the only thing Finish still owes. So it does not
-    /// refuse when there is nothing to write: leaving a session with no sets
-    /// left in it is a correction, and it still has to rescore.
+    /// were made. So it does not refuse when there is nothing to write:
+    /// leaving a session with no sets left in it is a correction.
     private func finishEdit(sessionRpe: Double?) -> Bool {
         guard model.finishEdit(sessionRpe: sessionRpe) != nil else { return false }
-        requestRescore()
         model.stopRest()
         dismiss()
         return true
-    }
-
-    /// Ask for the cascade, and forget the edit only once somebody took it.
-    ///
-    /// `AppEnvironment.rescore` refuses while signed out (there is no queue),
-    /// and `environment` is optional for the previews. Clearing the flag on a
-    /// request that went nowhere would lose the cascade AND the only record
-    /// that one was owed — the backstop on the way out could then never ask.
-    private func requestRescore() {
-        guard model.isEditing, model.editDirty, let date = model.editing?.date else { return }
-        guard environment?.rescore(from: date, reason: .sessionEdit) == true else { return }
-        model.clearEditDirty()
     }
 
     /// Put the phone's rest clock on the wrist — including when it STOPS.

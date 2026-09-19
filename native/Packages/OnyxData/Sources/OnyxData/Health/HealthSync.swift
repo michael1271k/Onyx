@@ -154,9 +154,8 @@ public actor HealthSync {
     /// (`SleepTrim`, proportional). Overnight HRV is re-read over the NEW
     /// window and written to `daily_logs.hrv_ms`; no samples there leaves the
     /// stored figure alone. The row is written under the sleep sentinel, so
-    /// `sync` cannot re-widen it. The caller runs the rescore cascade —
-    /// `AppEnvironment.rescore(from: dateISO, reason: .sleepEdit)` — which is
-    /// deliberately not this actor's to schedule.
+    /// `sync` cannot re-widen it. The commit is the request — see
+    /// `RescoreDoor`.
     @discardableResult
     public func editSleepWindow(
         date dateISO: String, start: Date, end: Date, onset: Date? = nil, now: Date = Date()

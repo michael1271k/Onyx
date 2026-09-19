@@ -88,7 +88,7 @@ public actor TrainingPuller {
         // so a session the watch logged and the phone finishes is timed by its
         // sets, not by this pull.
         try database.seedEventLogs(sessionIds: Set(rows.map(\.sessionId)), loggedAt: loggedAt)
-        try database.ingest(rows.map(\.event))
+        try database.ingest(rows.map(\.event), mirror: true)
         return rows.count
     }
 
@@ -229,7 +229,7 @@ extension AppDatabase {
     @discardableResult
     func applyPulledSessions(_ rows: [RemoteSessionRow]) throws -> Date? {
         guard !rows.isEmpty else { return nil }
-        return try writer.write { db in
+        return try writer.write { db in try Self.markMirrorWrite(db) {
             var newest: Date?
             // ── WHICH SESSIONS THIS DEVICE HAS NOT FINISHED TELLING THE
             // SERVER ABOUT ──────────────────────────────────────────────────
@@ -312,14 +312,14 @@ extension AppDatabase {
                 if let at = row.updatedAt, newest == nil || at > newest! { newest = at }
             }
             return newest
-        }
+        } }
     }
 
     /// Server sets → the local projection, for sessions this device never logged.
     @discardableResult
     func applyPulledSets(_ rows: [RemoteSetRow], userId: String) throws -> Int {
         guard !rows.isEmpty else { return 0 }
-        return try writer.write { db in
+        return try writer.write { db in try Self.markMirrorWrite(db) {
             var written = 0
             var bySession: [String: [RemoteSetRow]] = [:]
             for row in rows { bySession[row.sessionId, default: []].append(row) }
@@ -387,7 +387,7 @@ extension AppDatabase {
                 }
             }
             return written
-        }
+        } }
     }
 
     /// Server catalogue → the local `exercises` table.

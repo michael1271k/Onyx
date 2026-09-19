@@ -27,7 +27,7 @@
 set -euo pipefail
 
 SCREEN="${1:-all}"
-DEVICE="${2:-iPhone 17 Pro}"
+DEVICE="${2:-iPhone 15}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # `SHOT_OUT` sends the PNGs somewhere else — App Store shots go to a
 # per-size folder rather than over the working set.
@@ -56,7 +56,9 @@ DERIVED="${SHOT_DERIVED:-$HOME/Library/Caches/onyx-swift/shot-derived}"
 mkdir -p "$OUT"
 
 # ── The device ─────────────────────────────────────────────────────────────
-UDID="$(xcrun simctl list devices available | grep -m1 "$DEVICE (" | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')"
+# `|| true`: under `set -e` a non-matching grep kills the script BEFORE the
+# error below can print — the silent exit 1 W1 fixed in `swift-ui-test.sh`.
+UDID="$(xcrun simctl list devices available | grep -m1 "$DEVICE (" | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/' || true)"
 if [ -z "$UDID" ]; then
   echo "No available simulator named '$DEVICE'." >&2
   exit 1
@@ -117,7 +119,7 @@ shoot() {
 }
 
 # A space-separated list shoots several screens off ONE build, which is what
-# the store loop wants: `native-shot.sh "today train fuel" "iPhone 17 Pro Max"`.
+# the store loop wants: `native-shot.sh "today train fuel" "iPhone 15 Max"`.
 read -ra SCREENS <<< "$SCREEN"
 if [ "$SCREEN" = "all" ]; then
   # Keep in step with `PreviewHarness.Screen` — the harness is the authority and

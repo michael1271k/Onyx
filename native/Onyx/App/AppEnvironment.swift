@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Observation
 import Supabase
 import WidgetKit
@@ -239,47 +240,75 @@ public final class AppEnvironment {
 
     /// The cascade, off the main actor and coalesced. Nil while signed out.
     private var rescoreQueue: RescoreQueue?
+    /// Rescore at the door (W2, decision 11): every committed past-dated write
+    /// asks for the cascade through `admit`. Cancelled on sign-out.
+    private var doorObserver: AnyDatabaseCancellable?
+
+    /// A past write landed beyond `Rescore.doorWindowDays` and was NOT
+    /// cascaded — the stored scores from that date forward may be wrong until
+    /// "Recompute history" runs. The earliest such date, persisted so a
+    /// relaunch still owes it; nil when nothing is owed.
+    private(set) var historyStaleFrom: String? = UserDefaults.standard.string(forKey: AppEnvironment.staleFromKey)
+    private static let staleFromKey = "onyx.rescore.staleFrom"
+    var historyStale: Bool { historyStaleFrom != nil }
+
+    /// The door's verdict on one commit, on the main actor.
+    private func admit(_ touch: RescoreDoor.Touch) {
+        switch Rescore.doorDecision(date: touch.date, today: LogicalDay.today()) {
+        case .cascade:
+            rescore(from: touch.date, reason: touch.reason)
+        case .historyStale:
+            if historyStaleFrom.map({ touch.date < $0 }) ?? true {
+                historyStaleFrom = touch.date
+                UserDefaults.standard.set(touch.date, forKey: Self.staleFromKey)
+            }
+        case .ignore:
+            break
+        }
+    }
+
+    /// The manual full cascade behind Settings → "Recompute history": from the
+    /// earliest date anything is owed for — the stale mark or the oldest
+    /// stored score, whichever is earlier — through today. The mark clears
+    /// when THAT run completes with nothing failed, not when it is asked for.
+    func recomputeHistory() {
+        guard let rescoreQueue, case .signedIn(let userID) = auth else { return }
+        let userId = OnyxJSON.canonicalUserID(userID)
+        let today = LogicalDay.today()
+        let scored = (try? database.earliestScoredDate(userId: userId)) ?? nil
+        let from = [historyStaleFrom, scored].compactMap { $0 }.min() ?? today
+        isRescoring = true
+        Task { await rescoreQueue.request(from: from, through: today, reason: .manual) }
+    }
 
     /// Rewrite every stored score an edit on `date` can move.
     ///
-    /// The ONE entry point. Every editing surface calls this rather than
-    /// touching `AppDatabase.rescore` directly, so there is exactly one place
-    /// that decides how a cascade is scheduled and one place that publishes the
-    /// generation when it lands.
-    /// Returns whether the request was ACCEPTED — false while signed out,
-    /// when there is no queue to take it.
-    ///
-    /// The caller that has state to clear (the session editor's dirty flag)
-    /// needs to know: clearing it on a request that went nowhere loses the
-    /// cascade AND the only record that one was owed, and the chevron can then
-    /// never ask again.
-    @discardableResult
-    func rescore(from date: String, reason: Rescore.Reason) -> Bool {
-        guard let rescoreQueue else { return false }
+    /// The ONE scheduler, and since W2 its one caller is the door (`admit`):
+    /// no editing surface asks any more, the commit does.
+    private func rescore(from date: String, reason: Rescore.Reason) {
+        guard let rescoreQueue else { return }
         isRescoring = true
         Task { await rescoreQueue.request(from: date, reason: reason) }
-        return true
     }
 
     /// Re-window a night, then rewrite every score it can move (E2).
     ///
     /// The ONE place a sleep edit runs from: `HealthSync.editSleepWindow` reads
     /// the samples and the overnight HRV inside the new window and writes the
-    /// row under the sleep sentinel; the cascade is scheduled here, through
-    /// `rescore(from:reason:)`, like every other edit. A fresh `HealthSync` is
-    /// cheap — an actor holding three references — and the coordinator's own
-    /// is private to it on purpose.
+    /// row under the sleep sentinel; the commit is what the rescore door
+    /// reports (W2). A fresh `HealthSync` is cheap — an actor holding three
+    /// references — and the coordinator's own is private to it on purpose.
     /// Returns whether the edit was ACCEPTED — false while signed out, when
-    /// there is no user to write under — for the same reason `rescore` does:
-    /// a sheet that clears its dirty state on a request that went nowhere has
-    /// lost the edit and the only record that one was owed.
+    /// there is no user to write under.
     @discardableResult
     func editSleepWindow(date: String, start: Date, end: Date, onset: Date? = nil) async throws -> Bool {
         guard case .signedIn(let userID) = auth else { return false }
         let userId = OnyxJSON.canonicalUserID(userID)
         let health = HealthSync(database: database, reader: Self.healthReader, userId: userId)
         try await health.editSleepWindow(date: date, start: start, end: end, onset: onset)
-        return rescore(from: date, reason: .sleepEdit)
+        // The cascade is the door's: `editSleepWindow` writes `sleep_sessions`
+        // and the commit reports the night (W2).
+        return true
     }
 
     /// Sleep v2 (W3, 6.0.0) moved every stored sleep score a bedtime can
@@ -502,7 +531,8 @@ public final class AppEnvironment {
             NSLog("onyx-water: pending %.0f ml not drained: %@", ml, String(describing: error))
             return
         }
-        rescore(from: date, reason: .dayEdit)
+        // No cascade call: `addWaterGlass` commits a `water_intake` row and
+        // the rescore door reports it (W2). Today's is ignored there anyway.
     }
 
     /// One sync, awaited — the shape `.refreshable` needs.
@@ -560,6 +590,18 @@ public final class AppEnvironment {
                 if run.reason == .migration, !run.hasMore, run.failed == 0 {
                     UserDefaults.standard.set(true, forKey: Self.sleepV2RescoredKey)
                 }
+                if run.reason == .manual, !run.hasMore, run.failed == 0 {
+                    self.historyStaleFrom = nil
+                    UserDefaults.standard.removeObject(forKey: Self.staleFromKey)
+                }
+                // The ledger Sync doctor draws: one row per completed run,
+                // under a pseudo-table so the per-table section ignores it.
+                try? self.database.recordSync(
+                    userId: userId, table: "rescore", rows: run.written,
+                    reason: "\(run.reason.rawValue) \(run.from) → \(run.through)"
+                        + (run.failed > 0 ? " (\(run.failed) failed)" : ""),
+                    at: Date()
+                )
                 self.rescoreGeneration &+= 1
                 // `hasMore` is the queue's own answer, not a second read: two
                 // passes of one logical cascade must not flicker the hint off
@@ -573,6 +615,13 @@ public final class AppEnvironment {
         }
         rescoreQueue = queue
         requestMigrationRescore(queue, userId: userId)
+        // Rescore at the door (W2). The observer reports on the writer queue;
+        // the decision is made here, on the main actor, like every other
+        // request. Installed AFTER the queue exists so nothing is admitted
+        // into a void.
+        doorObserver = database.observePastWrites { [weak self] touch in
+            Task { @MainActor in self?.admit(touch) }
+        }
         startWeighInWatch()
         let targets = TargetResolver(database: database, userId: userId)
         targets.start()
@@ -849,8 +898,15 @@ public final class AppEnvironment {
     /// itself failed — the one case a sign-in must not proceed.
     private func prepareStore(for userID: UUID) -> Bool {
         let userId = OnyxJSON.canonicalUserID(userID)
+        // The previous account's door must not hear this erase: every deleted
+        // row would report its date, and the stale mark below is one key, not
+        // one per account. Same order as `signOut`.
+        doorObserver?.cancel()
+        doorObserver = nil
         do {
             guard let discarded = try database.prepareForUser(userId) else { return true }
+            historyStaleFrom = nil
+            UserDefaults.standard.removeObject(forKey: Self.staleFromKey)
             NSLog("onyx-session: the store belonged to another account; erased, %d unsynced", discarded)
             if discarded > 0 {
                 startupError = "Signed in to a different account. \(discarded) change\(discarded == 1 ? "" : "s")"
@@ -923,11 +979,16 @@ public final class AppEnvironment {
         observers = nil
         #endif
         backfill = nil
+        doorObserver?.cancel()
+        doorObserver = nil
         if let rescoreQueue {
             self.rescoreQueue = nil
             await rescoreQueue.stop()
         }
         isRescoring = false
+        // What was owed was owed by THIS account.
+        historyStaleFrom = nil
+        UserDefaults.standard.removeObject(forKey: Self.staleFromKey)
         targets?.stop()
         targets = nil
         // The next account's blocks are not this one's. Left behind, a cut

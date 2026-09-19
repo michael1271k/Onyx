@@ -331,4 +331,72 @@ struct PrRecorderTests {
         #expect(try records(db).map(\.value) == before.map(\.value))
     }
 
+
+    // MARK: - A set logged late (W2, decision 13)
+
+    /// The interim record is filed at close, then a heavier set arrives for a
+    /// date BEFORE it. Only a replay from the ledger can take the interim back:
+    /// `record` upserts and would leave 105 standing beside a 110 it never saw.
+    @Test("a heavier set logged a week late removes the interim PR and files the right one")
+    func lateSetCorrectsTheLedger() throws {
+        let db = try store()
+        let noon = Date(timeIntervalSince1970: 1_789_128_000) // 2026-09-11 12:00 UTC
+        func closed(_ id: String, _ date: String, _ kg: Double) throws {
+            try log(db, id: id, date: date, weights: [kg - 10, kg])
+            try db.closeSession(id: id, endedAt: noon)
+        }
+        try closed("s-old", "2026-08-28", 100)
+        try closed("s-interim", "2026-09-04", 105)
+        let interim = try #require(try records(db).first { $0.axis == "weight" })
+        #expect(interim.value == 105 && interim.achievedOn == "2026-09-04")
+
+        // A week later, the athlete remembers a 110 on 2026-08-31 — a retro
+        // session, born closed, edited through `SessionEditing`.
+        let retro = try db.createRetroSession(userId: user, dayKey: "legs_a", date: "2026-08-31")
+        try db.writer.write { conn in try conn.execute(sql: "DELETE FROM outbox") }
+        let outcome = try db.addSet(
+            sessionId: retro.id, userId: user,
+            SetSnapshot(exerciseId: "onyx-hack-squat", setIndex: 1, weightKg: 110, reps: 8)
+        )
+        #expect(outcome?.replayed == ["Hack Squat"])
+
+        let corrected = try #require(try records(db).first { $0.axis == "weight" })
+        #expect(corrected.value == 110)
+        #expect(corrected.achievedOn == "2026-08-31")
+        #expect(corrected.sessionId == retro.id, "the interim row is gone; the retro set holds the axis")
+        #expect(try records(db).filter { $0.sessionId == "s-interim" }.isEmpty)
+
+        // The server hears both halves: the axes the retro set did not win
+        // back are queued as deletes, the ones it did as upserts, and no axis
+        // carries both — `enqueueRowUpsert` drops the pending delete it
+        // supersedes.
+        let items = try db.pendingOutbox(limit: 100)
+        let upserts = items.filter { $0.kind == SyncKind.rowUpsert }
+        let deletes = items.filter { $0.kind == SyncKind.rowDelete }
+        #expect(!upserts.isEmpty, "the corrected record is queued")
+        #expect(
+            Set(upserts.map(\.idempotencyKey)).isDisjoint(with: deletes.map(\.idempotencyKey)),
+            "an axis is either re-filed or retracted, never both"
+        )
+    }
+
+    @Test("lowering the only qualifying set retracts the record — a delete reaches the outbox")
+    func loweringRetractsWithADelete() throws {
+        let db = try store()
+        let noon = Date(timeIntervalSince1970: 1_789_128_000)
+        // One set is a data point, not a record; the 120 a week later is one.
+        try log(db, id: "s1", date: "2026-08-28", weights: [100])
+        try db.closeSession(id: "s1", endedAt: noon)
+        try log(db, id: "s2", date: "2026-09-04", weights: [120])
+        try db.closeSession(id: "s2", endedAt: noon)
+        #expect(try records(db).first { $0.axis == "weight" }?.value == 120)
+        try db.writer.write { conn in try conn.execute(sql: "DELETE FROM outbox") }
+
+        // The 120 was a typo for 60: nothing beats the 100 any more, so there
+        // is no record at all — and the server has to be TOLD, with a delete.
+        _ = try db.amendSet(sessionId: "s2", userId: user, setId: "s2-0", weightKg: 60)
+        #expect(try records(db).isEmpty)
+        let deletes = try db.pendingOutbox(limit: 100).filter { $0.kind == SyncKind.rowDelete }
+        #expect(deletes.contains { $0.idempotencyKey.contains("personal_records") }, "\(deletes.map(\.idempotencyKey))")
+    }
 }

@@ -800,16 +800,10 @@ struct FinishSheet: View {
         if duration != nil { durationEdited = !prefilled.contains(.duration) }
         if bpm != nil { bpmMeasured = !prefilled.contains(.bpm) }
         if kcal != nil { caloriesMeasured = !prefilled.contains(.calories) }
-        // ── THE CASCADE ─────────────────────────────────────────────────────
-        // A duration is an ACWR input: `duration_min × session_rpe` is what
-        // feeds load, monotony and strain, and readiness reads a 49-day window
-        // ENDING on the day it scores. So correcting it here moves
-        // `battery_pct` on this day and on every day up to forty-eight after
-        // it. Heart rate and calories feed nothing in the scorer, which is why
-        // only a duration change asks for the rewrite.
-        if duration != nil {
-            environment.rescore(from: session.date, reason: .sessionEdit)
-        }
+        // ── THE CASCADE IS THE DOOR'S (W2) ──────────────────────────────────
+        // A duration is an ACWR input and moves forty-nine days of battery;
+        // `updateMetrics` commits the session row, and the rescore door
+        // reports its date on that commit. Nothing to ask for here.
     }
 
     private var finishButton: some View {
@@ -819,15 +813,12 @@ struct FinishSheet: View {
             // typed heart rate part of the session being closed rather than of
             // the next sync.
             closeCell()
-            let date = model.sessionRow?.date
+            // Closing writes `duration_min` and `session_rpe` — the two load
+            // inputs — and `closeSession`'s commit is what the rescore door
+            // reports (W2). A session finished after midnight is dated
+            // yesterday and cascades; one finished today is scored live and
+            // stored by the next sync.
             guard onFinish(word?.cr10) else { return }
-            // Closing writes `duration_min` and `session_rpe`, which are the
-            // two load inputs — so the same forty-nine days move. The finish
-            // path had no cascade at all before E1: `scoreRecentDays` covers
-            // today and yesterday, and a session finished after midnight, or
-            // one whose rating changed a strain that had already been sealed,
-            // simply never reached the days it moved.
-            if let date { environment.rescore(from: date, reason: .sessionEdit) }
         } label: {
             Text("Finish session")
                 .onyxType(.body).fontWeight(.semibold)

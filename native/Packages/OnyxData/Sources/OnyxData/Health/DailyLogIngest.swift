@@ -129,13 +129,16 @@ extension AppDatabase {
     ) throws {
         var row = try existingDailyLog(db, userId: userId, date: payload.date, now: now)
         var touched = false
+        // `touched` only when the value MOVED: a re-read that restates the row
+        // must not save it, or the rescore door hears an edit on every
+        // foreground (W2).
         func set<T: Equatable>(_ path: WritableKeyPath<DailyLogRow, T?>, _ value: T?) {
-            guard let value else { return }
+            guard let value, row[keyPath: path] != value else { return }
             row[keyPath: path] = value
             touched = true
         }
         func setInt(_ path: WritableKeyPath<DailyLogRow, Int?>, _ value: Double?) {
-            guard let value else { return }
+            guard let value, row[keyPath: path] != Int(value.rounded()) else { return }
             row[keyPath: path] = Int(value.rounded())
             touched = true
         }
@@ -250,16 +253,21 @@ private extension AppDatabase {
         let restHr = payload[.avgRestHeartRate] ?? payload[.avgHeartRate]
         guard payload[.steps] != nil || payload[.activeEnergy] != nil || restHr != nil else { return }
 
-        var row = try DailyMetricRow
+        let existing = try DailyMetricRow
             .filter(Column("user_id") == userId && Column("date") == payload.date)
             .fetchOne(db)
-            ?? DailyMetricRow(
-                id: newOnyxID(), userId: userId, date: payload.date,
-                createdAt: now, updatedAt: Self.localWriteTimestamp
-            )
+        var row = existing ?? DailyMetricRow(
+            id: newOnyxID(), userId: userId, date: payload.date,
+            createdAt: now, updatedAt: Self.localWriteTimestamp
+        )
         if let steps = payload[.steps] { row.steps = Int(steps.rounded()) }
         if let cal = payload[.activeEnergy] { row.activeCal = Int(cal.rounded()) }
         if let hr = restHr { row.restHr = Int(hr.rounded()) }
+        // ── NOTHING CHANGED, NOTHING WRITTEN (W2) ───────────────────────────
+        // Every foreground re-reads yesterday, and a byte-identical `save`
+        // still fires the rescore door's trigger — a cascade and a generation
+        // bump on every launch for a day that did not move.
+        if let existing, existing == row { return }
         try row.save(db)
         try Self.enqueueRowUpsert(table: DailyMetricRow.databaseTableName, id: row.id, in: db)
         report.tables.insert(DailyMetricRow.databaseTableName)
@@ -421,18 +429,20 @@ private extension AppDatabase {
         // has. The manual guard upstream already means we cannot reach a manual
         // row — but a write that CAN reach it is one race away from destroying
         // the correction it exists to protect, and the filter costs nothing.
-        var row = try WaterIntakeRow
+        let existingWater = try WaterIntakeRow
             .filter(
                 Column("user_id") == userId && Column("date") == payload.date
                     && Column("hk_uuid") == nil
             )
             .fetchOne(db)
-            ?? WaterIntakeRow(
-                id: newOnyxID(), userId: userId,
-                loggedAt: NightWindow.midnight(payload.date) ?? now,
-                date: payload.date, amountMl: ml, createdAt: now
-            )
+        var row = existingWater ?? WaterIntakeRow(
+            id: newOnyxID(), userId: userId,
+            loggedAt: NightWindow.midnight(payload.date) ?? now,
+            date: payload.date, amountMl: ml, createdAt: now
+        )
         row.amountMl = ml
+        // Unchanged is unwritten (W2): see `writeDailyMetrics`.
+        if let existingWater, existingWater == row { return }
         try row.save(db)
         try Self.enqueueRowUpsert(table: WaterIntakeRow.databaseTableName, id: row.id, in: db)
         report.tables.insert(WaterIntakeRow.databaseTableName)
@@ -464,7 +474,8 @@ private extension AppDatabase {
             report.declined.append("sleep — manual window present")
             return
         }
-        var row = inWindow.first
+        let existingNight = inWindow.first
+        var row = existingNight
             ?? SleepSessionRow(
                 id: newOnyxID(), userId: userId,
                 startTime: sleep.bedStart ?? NightWindow.fallbackBedTime(payload.date) ?? window.from,
@@ -484,6 +495,9 @@ private extension AppDatabase {
         row.awakeMin = sleep.awakeMin
         row.onsetTime = sleep.onset
         row.awakenings = sleep.awakenings
+        // Unchanged is unwritten (W2): yesterday's night is re-read on every
+        // foreground, and a byte-identical save would cascade each launch.
+        if let existingNight, existingNight == row { return }
         try row.save(db)
         try Self.enqueueRowUpsert(table: SleepSessionRow.databaseTableName, id: row.id, in: db)
         report.tables.insert(SleepSessionRow.databaseTableName)

@@ -325,28 +325,80 @@ extension AppDatabase {
     ///    next event stamps strictly above anything it is replying to.
     /// 3. Remote events are **not** queued for upload. They came from elsewhere;
     ///    echoing them back is how a sync loop starts.
-    public func ingest(_ events: [SetEvent]) throws {
+    /// - Parameter mirror: the events came down from the server (the puller).
+    ///   Raises the rescore door's mirror mark for the transaction, so the
+    ///   reprojection is read as a pull and not as an edit. The watch bridge
+    ///   goes through `ingestFromWatch` instead: a set logged on the wrist IS
+    ///   this device family's edit, and a past-dated one owes the cascade.
+    public func ingest(_ events: [SetEvent], mirror: Bool = false) throws {
         guard !events.isEmpty else { return }
         try writer.write { db in
-            var touched: Set<String> = []
-            for event in events.map(\.normalisedIdentity) {
-                try Self.observeClock(db, event.seq)
-                let known = try SetEvent
-                    .filter(SetEvent.Columns.id == event.id)
-                    .fetchCount(db) > 0
-                if known { continue }
-                // Already synced by definition: it reached us from the network.
-                try event.insert(db)
-                try db.execute(
-                    sql: "UPDATE set_events SET is_synced = 1 WHERE id = ?",
-                    arguments: [event.id]
-                )
-                touched.insert(event.sessionId)
-            }
-            for sessionId in touched {
-                try Self.reproject(sessionId: sessionId, in: db)
+            if mirror {
+                try Self.markMirrorWrite(db) { _ = try Self.ingest(db, events) }
+            } else {
+                _ = try Self.ingest(db, events)
             }
         }
+    }
+
+    /// Accept events from the paired watch — merged like `ingest`, QUEUED like
+    /// this phone's own (W2, decision 15).
+    ///
+    /// ── THE STRAND ──────────────────────────────────────────────────────────
+    /// `ingest` marks what it takes as synced, because an event that arrived
+    /// over the network must not be echoed back. A watch event did NOT arrive
+    /// over the network: the watch holds no Supabase session, and this phone
+    /// is its only road (`PhoneWatchBridge`'s header). Marked synced and never
+    /// queued, a set logged on the wrist reached the server only when this
+    /// phone next happened to touch the same session — which, for a workout
+    /// finished on the watch, was never.
+    ///
+    /// ── AND WHY NOT A SESSION UPSERT ────────────────────────────────────────
+    /// The plan said "re-queue the session upsert". A `session.upsert` item
+    /// carries the session ROW and nothing else — `SyncEngine.push` sends a
+    /// set only for a queued SET EVENT naming it — and a forced session row
+    /// from the phone could write `ended_at: null` over a finish the phone
+    /// has not heard about yet, the exact overwrite `push`'s own comment
+    /// forbids. So the wrist's events go through `commit`, the same door this
+    /// device's ticks go through: inserted unsynced, one outbox row each,
+    /// and the projection rebuilt — all in one transaction. The event ensures
+    /// its parent session exists on the server (`ON CONFLICT DO NOTHING`) and
+    /// carries the set; `ingest`'s de-duplication by event id keeps a re-sent
+    /// transfer harmless.
+    public func ingestFromWatch(_ events: [SetEvent]) throws {
+        guard !events.isEmpty else { return }
+        try writer.write { db in
+            for event in events.map(\.normalisedIdentity) {
+                try Self.observeClock(db, event.seq)
+                let known = try SetEvent.filter(SetEvent.Columns.id == event.id).fetchCount(db) > 0
+                if known { continue }
+                try Self.commit(event, in: db)
+            }
+        }
+    }
+
+    /// The merge, inside the caller's transaction. Returns the sessions it
+    /// re-folded.
+    private static func ingest(_ db: Database, _ events: [SetEvent]) throws -> Set<String> {
+        var touched: Set<String> = []
+        for event in events.map(\.normalisedIdentity) {
+            try observeClock(db, event.seq)
+            let known = try SetEvent
+                .filter(SetEvent.Columns.id == event.id)
+                .fetchCount(db) > 0
+            if known { continue }
+            // Already synced by definition: it reached us from the network.
+            try event.insert(db)
+            try db.execute(
+                sql: "UPDATE set_events SET is_synced = 1 WHERE id = ?",
+                arguments: [event.id]
+            )
+            touched.insert(event.sessionId)
+        }
+        for sessionId in touched {
+            try reproject(sessionId: sessionId, in: db)
+        }
+        return touched
     }
 
     /// A session's log, in fold order.
