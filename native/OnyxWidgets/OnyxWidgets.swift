@@ -15,10 +15,13 @@ import OnyxUI
 /// App Group database — no network, no snapshot route, no token.
 ///
 /// ⚠️ `kind:` strings are load-bearing: a kind that disappears takes every
-/// placed instance of it off the Home Screen. Which is why the six family
-/// kinds below are still here: they are SHELLS now — same bodies, described
-/// as "Moved to the Onyx tile" — for one release, so a widget placed on 6.1.0
-/// survives the upgrade. They are deleted the release after (W12's gate).
+/// placed instance of it off the Home Screen. Six family kinds — Fuel,
+/// Training, Body, Progress, Daily and Vitals — stood here as SHELLS for the
+/// whole of 6.2.0–6.8.0 so a widget placed on 6.1.0 survived the move to the
+/// generic kind. W12 deleted them on the founder's confirmation that the
+/// release carrying W5 had been on device for a cycle. The FACES they drew are
+/// untouched: they are `OnyxUI/Tiles/` views and `OnyxTileWidget` draws the
+/// same ones through `OnyxTile.face`.
 @main
 struct OnyxWidgets: WidgetBundle {
     /// The theme, on a cold extension launch.
@@ -47,19 +50,13 @@ struct OnyxWidgets: WidgetBundle {
     }
 
     var body: some Widget {
-        // Gallery order: the tile, the running session, the accessory sizes,
-        // then the six shells at the bottom where a new install never needs
-        // them. Ten entries is a `WidgetBundleBuilder`'s ceiling; the controls
-        // are a bundle of their own for that reason alone.
+        // Gallery order: the tile, the running session, the accessory sizes.
+        // Four entries where there were ten — a `WidgetBundleBuilder` tops out
+        // at ten, which is why the controls are still a bundle of their own,
+        // and the headroom is now the reason they could stop being one.
         OnyxTileWidget()
         OnyxWorkoutActivityWidget()
         OnyxLockWidget()
-        OnyxFuelWidget()
-        OnyxTrainingWidget()
-        OnyxBodyWidget()
-        OnyxProgressWidget()
-        OnyxDailyWidget()
-        OnyxVitalsWidget()
         OnyxControls().body
     }
 }
@@ -135,78 +132,7 @@ private struct AddWaterButton: View {
     }
 }
 
-// MARK: - Home Screen families — SHELLS since W5, deleted next release
-
-struct OnyxFuelWidget: Widget {
-    var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: "OnyxFuelFamily", intent: FuelConfiguration.self, provider: OnyxIntentProvider<FuelConfiguration>()) { entry in
-            FuelView(entry: entry.tile, focus: entry.tile.fuelFocus)
-        }
-        .configurationDisplayName("Fuel")
-        .description("Moved to the Onyx tile.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
-    }
-}
-
-struct OnyxTrainingWidget: Widget {
-    var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: "OnyxTrainingFamily", intent: TrainingConfiguration.self, provider: OnyxIntentProvider<TrainingConfiguration>()) { entry in
-            TrainingView(entry: entry.tile, focus: entry.tile.trainingFocus)
-        }
-        .configurationDisplayName("Training")
-        .description("Moved to the Onyx tile.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
-    }
-}
-
-struct OnyxBodyWidget: Widget {
-    var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: "OnyxBodyFamily", intent: BodyConfiguration.self, provider: OnyxIntentProvider<BodyConfiguration>()) { entry in
-            BodyView(entry: entry.tile, focus: entry.tile.bodyFocus)
-        }
-        .configurationDisplayName("Body")
-        .description("Moved to the Onyx tile.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
-    }
-}
-
-/// The fifth family, and the only one whose faces are all SERIES.
-///
-/// Small and Medium only: every one of these is a shape over time, and the
-/// large that would exist is the medium with more axis — the "stretched medium"
-/// `layout.ts` warns about, four times as tall.
-struct OnyxProgressWidget: Widget {
-    var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: "OnyxProgressFamily", intent: ProgressConfiguration.self, provider: OnyxIntentProvider<ProgressConfiguration>()) { entry in
-            ProgressTileView(entry: entry.tile, focus: entry.tile.progressFocus)
-        }
-        .configurationDisplayName("Progress")
-        .description("Moved to the Onyx tile.")
-        .supportedFamilies([.systemSmall, .systemMedium])
-    }
-}
-
-struct OnyxDailyWidget: Widget {
-    var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: "OnyxDailyFamily", intent: DailyConfiguration.self, provider: OnyxIntentProvider<DailyConfiguration>()) { entry in
-            DailyView(entry: entry.tile)
-        }
-        .configurationDisplayName("Daily")
-        .description("Moved to the Onyx tile.")
-        .supportedFamilies([.systemLarge])
-    }
-}
-
-struct OnyxVitalsWidget: Widget {
-    var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: "OnyxVitalsFamily", intent: VitalsConfiguration.self, provider: OnyxIntentProvider<VitalsConfiguration>()) { entry in
-            VitalsView(entry: entry.tile, focus: entry.tile.vitalsFocus)
-        }
-        .configurationDisplayName("Vitals")
-        .description("Moved to the Onyx tile.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
-    }
-}
+// MARK: - The Lock Screen accessory
 
 struct OnyxLockWidget: Widget {
     var body: some WidgetConfiguration {

@@ -1,7 +1,7 @@
 {
   "module": "scoring/score",
   "fn": "computeSleepScore",
-  "note": "W3 Sleep v2 (6.0.0) \u2014 hand-computed in the wave's spreadsheet (docs/WIDGETS_SLEEP_THEMES_SPRINT_PLAN.md, W3 Wave Record). Five terms: duration 40 (v1 curve) \u00b7 efficiency 20 (asleep\u00f7in-bed, linear 0.75\u21921) \u00b7 latency 15 (1\u2212min/90) \u00b7 fragmentation 10 ((1\u2212awake/90)(1\u2212awakenings/6)) \u00b7 regularity 15 (1\u2212|\u0394|/120); a nil term drops and the rest renormalise; context relaxes every term's penalty; +5 deep\u226590 +5 REM\u226590; clamp 0\u2026100. sleepHours<=0 is null, goal 0 is 100. Never regenerated from Score.swift.",
+  "note": "W3 Sleep v2 (6.0.0) \u2014 hand-computed in the wave's spreadsheet (docs/Done/WIDGETS_SLEEP_THEMES_SPRINT.md, W3 Wave Record). Five terms: duration 40 (v1 curve) \u00b7 efficiency 20 (asleep\u00f7in-bed, linear 0.75\u21921) \u00b7 latency 15 (1\u2212min/90) \u00b7 fragmentation 10 ((1\u2212awake/90)(1\u2212awakenings/6)) \u00b7 regularity 15 (1\u2212|\u0394|/120); a nil term drops and the rest renormalise; context relaxes every term's penalty; +5 deep\u226590 +5 REM\u226590; clamp 0\u2026100. sleepHours<=0 is null, goal 0 is 100. Never regenerated from Score.swift.",
   "cases": [
     {
       "name": "2026-09-18 reference night \u2014 in bed 00:16, asleep 03:05, awake 10:30, usual 23:30",

@@ -1,6 +1,39 @@
 # Widgets · Sleep v2 · Themes · Week · Pulse · Logger · Privacy — Sprint Plan
 
-**Status:** approved 2026-09-18 · step 0 done (this file). W1 shipped 5.1.0, W2 shipped 5.2.0, W3 shipped 6.0.0, W4 shipped 6.1.0, W5 shipped 6.2.0, W6 shipped 6.3.0, W7 shipped 6.4.0, W8 shipped 6.5.0, W9 shipped 6.6.0, W10 shipped 6.7.0, W11 shipped 6.8.0. **W12 (close-out) next.**
+**Status: CLOSED 2026-09-19 at 6.8.1.** All eleven build waves shipped, plus
+this close-out. Retired here from `docs/` by W12; nothing in the repo links to
+it as live work. Kept for the Wave Records below — they are the only written
+account of what each wave actually found, and several of them correct the
+briefs above.
+
+| Wave | Shipped | Name |
+|---|---|---|
+| W1 | 5.1.0 | Privacy seams |
+| W2 | 5.2.0 | Theme grid |
+| W3 | **6.0.0** | Sleep v2 (MAJOR) |
+| W4 | 6.1.0 | New WidgetIds + snapshot |
+| W5 | 6.2.0 | Generic kind + Controls |
+| W6 | 6.3.0 | Ten tile redesigns + interactive water |
+| W7 | 6.4.0 | Accessory faces, watch snapshot, `OnyxWatchWidgets` |
+| W8 | 6.5.0 | Weekly report relocation |
+| W9 | 6.6.0 | Pulse 2×3, reorderable |
+| W10 | 6.7.0 | Logger micro-interactions |
+| W11 | 6.8.0 | Compaction + `SessionDetailView` split |
+| W12 | 6.8.1 | Close-out (this) |
+
+**What W12 did with the two gated items.** The founder confirmed both on
+2026-09-19: `docs/sql/w3-sleep-onset.sql` had been pasted, so it was deleted
+and `docs/sql/` is empty again; the release carrying W5 had been on device for
+a cycle, so the shell widget kinds were deleted. There were **six** shells, not
+the seven D1 named — `OnyxLockWidget` is the live Lock Screen accessory and
+never was one.
+
+**Nothing is owed to the next sprint from this one.** The founder's two
+standing manual steps are unchanged and are NOT this sprint's: the watch App
+Groups capability (`group.app.onyx.health.watch`, paid program) and the phone
+App Group, which is Gate 0 for every widget on device.
+
+**Original status line:** approved 2026-09-18 · step 0 done (this file).
 **From:** `main` @ 5.0.1 (`3de461a7`).
 **Ships as:** eleven sequential waves, 5.1.0 → 6.8.0, plus a close-out wave that retires this file to `docs/Done/`.
 **Branches:** `onyx/sprint-widgets-w<N>`, each cut from current `main` and merged `--no-ff`
@@ -1937,3 +1970,82 @@ device builds by construction.
 - W3's `docs/sql/w3-sleep-onset.sql` paste. Unchanged.
 - Xcode → `OnyxWatch` **and** `OnyxWatchWidgets` → App Groups
   (`group.app.onyx.health.watch`). Paid program. Unchanged from W7.
+
+### W12 Wave Record — shipped 2026-09-19 as 6.8.1 (close-out)
+
+**Drift from the plan, on purpose:**
+- **There were SIX shells, not the seven D1 named.** `OnyxLockWidget` is the
+  live Lock Screen accessory — it gained the `.bedtime` focus in W5 and has a
+  shape (`.accessoryCircular/Rectangular/Inline`) the generic Home Screen kind
+  cannot take. W5's own record already said "the six shells"; D1's "seven" was
+  never corrected. Deleted: `OnyxFuelWidget`, `OnyxTrainingWidget`,
+  `OnyxBodyWidget`, `OnyxProgressWidget`, `OnyxDailyWidget`,
+  `OnyxVitalsWidget`, their six `*Configuration` intents, and the five
+  `*FocusOption` pickers (Daily never had one).
+- **Five `OnyxTileEntry` accessors went with them.** `fuelFocus`,
+  `trainingFocus`, `bodyFocus`, `vitalsFocus` and `progressFocus` had exactly
+  one caller each — the deleted kind — and were public OnyxUI API after it.
+  `lockFocus` stays: the accessory is now the only widget whose face is chosen
+  by a focus rather than by a `WidgetId`. The `OnyxFocus` CASES all stay,
+  because `DomainSheets` switches on them to draw the same faces in-app.
+- **A golden fixture's `note` was hand-edited.** `sleep-score-v2.json` cited
+  the plan by its old path. A note is not a case and no input or expected
+  value was touched, but a note pointing at a moved file is a lie, so it was
+  repointed at `docs/Done/`. This is not a regeneration and the rule stands.
+- **No shots.** Nothing the app draws changed: the six deleted kinds were
+  gallery entries, and the faces they showed are `OnyxUI/Tiles/` views that
+  `OnyxTileWidget` already draws through `OnyxTile.face`. A screenshot of an
+  unchanged screen reviews nothing.
+- **The changelog names the un-placement in the user's own terms.** Deleting a
+  `kind:` is Law 5, and the honest sentence — "if a widget is still placed
+  under one of the six, it disappears on this upgrade" — belongs in a release
+  note, not only in a code comment.
+
+**Root causes that were not where the plan guessed:**
+- **Three stale prose references outlived the code.** `OnyxDaily.swift` still
+  told a reader that `OnyxDailyWidget` and `DailyConfiguration` "are declared
+  by the extension" and that nothing "disturbs the four families already
+  installed"; `.claude/skills/native/SKILL.md` still described the extension as
+  "Five Home Screen families". A grep for the deleted TYPE names found the
+  first two; the runbook needed a separate sweep, because it names the
+  concept and not the symbol.
+- **`npm run check` is green on a cold cache in about four minutes**, and the
+  cold run is what proves the three generated files (`OnyxAtlas`,
+  `DomsMuscles`/`DomsMap`, `MirrorModels`) are actually in sync rather than
+  matching a stale artefact.
+
+**Constraints discovered that the next wave must respect:**
+- **One Home Screen kind, permanently: `OnyxTile`.** With the six gone the
+  bundle holds four entries — the tile, the Live Activity, the accessory and
+  the controls' sub-bundle — against `WidgetBundleBuilder`'s ceiling of ten.
+  The controls are still a separate bundle only because they had to be; there
+  is now headroom to fold them in if a reason appears.
+- **Adding a Home Screen face means adding a `WidgetId`, never a kind.** Law 2
+  is the whole procedure now, and Law 5 is why there is no second route.
+- **`docs/sql/` is empty and the sprint owes nothing.** The founder's two
+  standing manual steps — the phone App Group (Gate 0) and the watch App
+  Groups capability — are not this sprint's and are unchanged.
+- **Counts, from a cold cache:** `npm run check` green (atlas, doms, mirror,
+  `version:check` at 6.8.1, `swift:ui` 40 in 8 suites), `check:swift` both
+  platforms, OnyxCore **593**, OnyxData **629**, `Onyx` and `OnyxWatch`
+  schemes green, `OnyxTests` by hand **64 tests / 11 issues** — the documented
+  baseline, unchanged, in `HistoryWeeks`, `PreviewCatalogue`,
+  `SessionSummaryHotfix` and `WorkoutWeek`.
+
+**Left open on purpose:**
+- **`OnyxTests` still runs in nothing.** Eleven waves left the baseline exactly
+  where they found it, which is the most that can be said for it. Wiring it
+  into `npm run check` means fixing eleven failures first, and that is a wave,
+  not a close-out step.
+- **The extension still has no tests.** `TileOption` ↔ `WidgetId` parity is a
+  force-unwrap at first render, as it has been since W5.
+- **55 GB of derived data was purged**, including every per-wave `SHOT_DERIVED`
+  cache. The screenshots themselves have been untracked since 3.8.0 and were
+  not touched; they regenerate on demand.
+
+**Founder's manual steps still outstanding:**
+- Xcode → `OnyxWatch` **and** `OnyxWatchWidgets` → App Groups
+  (`group.app.onyx.health.watch`). Paid program.
+- The phone's App Group for `OnyxWidgets` (Gate 0). Until then Home Screen and
+  watch widgets are stale or empty on device by construction, which is not
+  code and cannot be fixed from this machine.

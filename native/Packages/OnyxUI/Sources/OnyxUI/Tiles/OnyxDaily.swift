@@ -20,8 +20,9 @@ import OnyxCore
 // movement and training at once, and there is no existing picker it fits into.
 //
 // ⚠️ ADDING a kind is safe. It is REMOVING one that wipes every placed instance
-// off the Home Screen (see the warning in OnyxWidgets.swift). Nothing here
-// disturbs the four families already installed.
+// off the Home Screen (see the warning in OnyxWidgets.swift) — which is why
+// the six family kinds spent a full release as shells before W12 deleted them,
+// and why there is exactly one Home Screen kind now.
 //
 // ── LARGE ONLY, DELIBERATELY ─────────────────────────────────────────────────
 // Four registers in a 2×2 is four quadrants. At Medium each would be about 70pt
@@ -30,9 +31,10 @@ import OnyxCore
 // widget that already exists for it. A composite that cannot hold its parts
 // legibly is not a composite, it is a cluttered Small.
 
-// `DailyConfiguration` (the no-picker intent, scope `.full`) and
-// `OnyxDailyWidget` (kind "OnyxDailyFamily", `.systemLarge` only) are declared
-// by the extension — this file is the view.
+// This face reached the Home Screen through its own kind ("OnyxDailyFamily",
+// `.systemLarge` only) until W12 deleted the six family shells. It is drawn by
+// `OnyxTileWidget` now, like every other tile, through `OnyxTile.face` —
+// `WidgetId.daily`, which is why that id is last in the catalogue.
 
 public struct DailyView: View {
   let entry: OnyxTileEntry

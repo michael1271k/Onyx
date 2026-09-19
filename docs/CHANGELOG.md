@@ -44,6 +44,36 @@ _Nothing yet._
 
 ---
 
+## [6.8.1] — 2026-09-19 · The sprint leaves no residue
+
+The close-out of the Widgets · Sleep v2 · Themes sprint — eleven waves,
+5.0.1 → 6.8.0, now 6.8.1. Nothing new to use; two things the sprint promised
+to finish, finished.
+
+### Removed
+- **The six shell widget kinds are gone.** Fuel, Training, Body, Progress,
+  Daily and Vitals each had their own Home Screen gallery entry and their own
+  focus picker. 6.2.0 replaced all six with one "Onyx" entry whose picker is
+  the tile itself, and kept the six as shells for a release so nothing already
+  placed went blank. That release has been and gone. **If a widget is still
+  placed under one of the six, it disappears on this upgrade — add it again
+  from the single "Onyx" entry, which draws the same faces.** The faces
+  themselves are untouched; they are the dashboard's own tiles and always were.
+  The Lock Screen accessory, the Control Center controls and the running
+  workout's Live Activity are unaffected.
+- `docs/sql/w3-sleep-onset.sql`, applied on the live database, deleted with the
+  founder's confirmation. `docs/sql/` is empty again, as it was before the
+  sprint.
+- Five dead focus accessors on `OnyxTileEntry` that existed only for the six
+  deleted kinds.
+
+### Changed
+- The sprint plan is retired to `docs/Done/WIDGETS_SLEEP_THEMES_SPRINT.md` with
+  its twelve Wave Records intact — the written account of what each wave
+  actually found, including where it contradicts its own brief.
+
+---
+
 ## [6.8.0] — 2026-09-19 · One screen for the stress log
 
 Four surfaces that had grown taller than what they were asking for. The Stress
