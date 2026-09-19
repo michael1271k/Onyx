@@ -486,3 +486,53 @@ Anthropic. Depends on W7's envelope and parser.
 
 - Each wave: four npm gates + `check:watch` + OnyxTests baseline + xcodebuildmcp screenshots on the paired iPhone 15 / Apple Watch Ultra 2 49 mm + founder approval stop + version bump + changelog + wave summary.
 - W1 gate: predecessor-name grep = 0. W2 gate: cascade parity vector + PR replay vector. W5 gate: provenance goldens. W6 gate: before/after table for 8 seams + no `database.` in any `body`. W7 gate: envelope round-trip + parser goldens + MCP smoke test. W8 gate: clean tree, only `main`, pushed.
+
+---
+
+## Wave 1 Summary — 7.0.0
+
+**Worked.** Zero bytes of the predecessor name in the working tree, by the
+gate's own command. `v32.onyxWire` moves all four local places an exercise id
+lives in one transaction; `docs/sql/w1-onyx-wire.sql` moved the server's three
+and the founder ran it (constraint recreated as `CHECK (era IS NULL OR era IN
+('ppl','onyx'))`). Neither half spells the retired brand: the era excludes
+`ppl`, the slug is matched by shape, and the Swift predicate and Postgres regex
+are pinned to each other by a test. Tooling: `scripts/watch-shot.sh`,
+`check:watch`, `check:report`, `docs/SIMULATORS.md`, recorded session defaults.
+
+**The plan was wrong about four things, and the live database said so.**
+`workout_sets.exercise_id` is `uuid` server-side (0 rows, structurally
+impossible); `personal_records.exercise_key` is a display NAME, never a slug;
+`set_events`' column is `body`, not `payload`; and `exercises.slug` — 46 of 46
+rows, which the plan never named — had to migrate or every set logged on 7.0.0
+would throw `unknownExercise` on push. `Preferences`' `<brand>_*` fallbacks and
+`LoggerModel`'s "stamping sites" were comments, not code.
+
+**Failed, and was caught.** The first predicate was looser in Swift than in
+SQL (`5-x`, `xx55-x`, `Xx5-x` would have renamed on one machine only). The
+first SQL claimed either order was safe — false, a migration runs once. The
+rename left `ExerciseIndex` throwing on a straggler under the old stamp, which
+a watch on the previous build still produces. `exercises.id` is a PRIMARY KEY
+and a stamp collision threw out of `AppDatabase.init`, so the app would not
+launch. All fixed; `invariant-auditor` and `code-reviewer` found them, not me.
+
+**`npm run check` had been exiting 1 with no output, on `main` too.**
+`swift-ui-test.sh` defaults to a simulator that is not installed, and its UDID
+lookup is a pipeline under `set -e` — a non-matching `grep` kills the script
+before its own error prints. The 40 OnyxUI tests had not been running. Fixed
+here because it is this wave's gate. **Never trust a piped `tail` for a gate;
+read the exit code.**
+
+**Left open.** (1) `ExerciseIndex.bySlug` uses `uniquingKeysWith: { first, _ in
+first }` where its sibling detects ambiguity and throws — pre-existing, but it
+reads the column v32 writes. (2) No golden runs the real `makeMigrator()`
+sequence from pre-v23 data; the v23→v32 chain is proved by trace, not fixture.
+(3) `v25`/`v27` read `workout_sets` by exercise identity and now run before ids
+are resolved on a pre-v23 device — traced, no dependency found, no fixture.
+(4) Watch `deck`/`finish`/`dashboard` have no launch hook; `watch-shot.sh`
+refuses them by name rather than photographing `StartView` under their filename
+(W3/W4 add the seeds).
+
+**The shell `grep` in this environment is a ugrep wrapper that honours
+`.gitignore`.** It under-reported the inventory by 66 hits. Use `/usr/bin/grep`
+for any gate that must see ignored files.
