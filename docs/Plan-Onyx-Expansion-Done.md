@@ -641,3 +641,83 @@ asserted by `OnyxWatchLayoutTests`, never seen: the pair is a 49 mm Ultra 2.
 (4) Double-tap arbitration between the tick and the pager is unverified, and the
 fix is NOT to restore the modifier above. (5) The quality panel is three
 screenfuls at 40 mm; it scrolls, and nothing shortens it without dropping a tag.
+
+---
+
+## Wave 4 Summary — 7.3.0
+
+**Worked.** The wrist has three pages — Today, Train, Fuel — turned with the
+Crown, and every row is the SAME `OnyxTile.accessory` face the complications
+and the phone's Lock Screen draw, so a reading cannot say one thing in a
+corner of a clock and another on a page. `WatchTiles` grew four
+optional-and-last fields (week sets and tonnage, protein and its target) for
+under 80 bytes of wire. The Fuel page's "+1 glass" posts over a new
+`WatchLink.water` kind into the same `PendingWater` mailbox Control Centre
+uses, written by the same `addWaterGlass` — one row whichever device was
+tapped. `LiveWorkoutSnapshot` is written on every commit and rest beat and
+drawn by a new `WorkoutLiveWidget`, ranked by watchOS 11's
+`TimelineProvider.relevance()` with `RelevantContext.fitness(.workoutActive)`.
+`ContentState.bpm` puts the wrist's rate on the rest band and the Dynamic
+Island. `dashboard` — the last name `watch-shot.sh` refused, since W1 — now
+has a hook, with `train`, `fuel` and `widget`.
+
+**The plan was wrong about three things.** (1) **The bundle had headroom.**
+`@WidgetBundleBuilder` caps at ten ELEMENTS, not ten widgets, and a nested
+bundle is one element — so the "which slot does the live widget take"
+question the plan reserved for the founder has no answer: none. All ten
+complications kept. (2) **The session timer's long-press is already
+discard** (W3, decision 3), so the in-session dashboard is on `DeckView`'s
+toolbar — the same glyph in the same corner `StartView` uses. Founder
+confirmed. (3) **`AppIntentConfiguration` is not required for relevance**;
+the provider-side hook needs no App Intent and no metadata extractor.
+Separately, there is no "inline duplicate" complication to replace — every
+one of the ten declares all four families.
+
+**Failed, and was caught.** My first layout test **estimated** a 28 pt
+navigation bar and a 42 pt row, passed, and asserted that a page fits on
+which the water button was photographed hanging half off the display. The
+accessibility tree says 64 and 48.5. Corrected, and the suite now states
+both halves: three faces fit 49 mm with 33.5 pt spare and overflow 40 mm by
+20.5 (78.5 with the button), reached by the Crown — the founder accepted the
+scroll rather than cut a face. `code-reviewer` found two blockers:
+`publishLiveSnapshot` fired only on the four rest beats, so the card was
+confidently wrong after any deck edit or void, and its `cursor` guard
+**cleared the card on the last rest of every session**. Both fixed at
+`seedCursor`, the funnel all seven mutators already end in, with a
+`sameReading` de-dupe so one commit does not spend two reload budgets. It
+also found that the phone's `liveBpm` expiry could never fire — a computed
+property over stored fields, and time passing is not a mutation — so the
+Lock Screen could draw a rate from a watch that had come off the wrist; the
+expiry is a real task now, and both devices age a reading over one constant.
+`ui-ux-designer` found the rest countdown and the heart rate rendered in the
+same hue at the same size on a family that goes monochrome: the red is on
+the glyph alone now and the countdown is the card's hero.
+
+**Two second implementations were deleted, not added to.** The Dynamic
+Island's compact slot was written out in `OnyxWidgets` and copied into
+`WidgetPreviews` — the only thing that photographs it — and the copy had
+already drifted, so my first shot reviewed the harness. It is one
+`Shared/WorkoutCompactTrailing` now. `PendingWater` moved from `Shared/`
+(in neither watch target) to OnyxCore, which also deleted the third spelling
+of `250`.
+
+**Left open.** (1) The Smart Stack itself is unphotographed: relevance is the
+system's judgement about an `HKWorkoutSession` a simulator has no heart to
+drive, and `simctl` cannot force a stack to surface a card. The faces are
+shot at their real sizes from the real suite through `LiveWidgetPreview`;
+the RANKING is proved by the API and by nothing else. (2) 40 mm is still
+asserted and never seen — the pair is a 49 mm Ultra 2, and the new page
+budget is measured there and applied as a conservative bound. (3) A newer
+watch paired with an older phone loses a tapped glass: the `water` kind hits
+`default: return` and the wrist's optimistic 250 reverts at the next push.
+(4) The Train page's third row breaks the left text rail — the week marks
+are 43 pt wider than a glyph — cosmetic, and a shared face, so it belongs to
+a polish wave. (5) The watch's Water complication does not get the
+optimistic glass and disagrees with the Fuel page by 250 ml until the phone
+confirms; deliberate, a complication must not assert a number no store has
+agreed to.
+
+**The first screenshot of every shot run could come back solid black.** Both
+loops waited 8 s after installing a fresh binary, which is enough for a warm
+launch and not the first one — and a black PNG reviews as "the screen is
+broken" under a correct filename. Both scripts take a throwaway launch now.
