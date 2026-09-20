@@ -40,21 +40,61 @@ mkdir -p "$OUT"
 # not a wish list.
 #
 # ── AND WHY AN UNKNOWN NAME IS A HARD ERROR ────────────────────────────────
-# `deck`, `dashboard` and `finish` are presented by SwiftUI navigation from
-# inside a running session; nothing in the model can be seeded to put them up,
-# so a launch asking for one lands on StartView. A script that quietly wrote
+# A screen with no hook lands on StartView, and a script that quietly wrote
 # that PNG as `dashboard.png` would hand a reviewer a plausible photograph of
 # the wrong screen — the exact failure `native-shot.sh` records having shipped
-# once. So they are refused by name, with the hook that would make them work.
-# W3 (deck, finish) and W4 (dashboard) add those hooks and this list with them.
+# once. So an un-hooked name is refused BY NAME, with the hook that would make
+# it work.
+#
+# W3 added the five it owns. Each is reached along the path a finger would
+# take — `WatchModel.debugScreen` is read by whichever view owns the screen,
+# the sets go in through `commitSet`, and the deck is a real push onto the
+# real `NavigationStack`. `dashboard` is still W4's.
 screen_env() {
   case "$1" in
-    start) echo "" ;;
-    set)   echo "ONYX_WATCH_AUTOSTART=1" ;;
-    rest)  echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=rest" ;;
-    deck|dashboard|finish)
+    start)   echo "" ;;
+    set)     echo "ONYX_WATCH_AUTOSTART=1" ;;
+    rest)    echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=rest" ;;
+    quality|qualitytags) echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=quality" ;;
+    deck|deckswipe) echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=deck" ;;
+    pause)   echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=pause" ;;
+    cancel)  echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=cancel" ;;
+    finish)  echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=finish" ;;
+    dashboard)
       echo "NOT_REACHABLE" ;;
     *) echo "UNKNOWN" ;;
+  esac
+}
+
+# ── The gestures a screen needs after launch ───────────────────────────────
+# Some screens are a SCROLL away rather than a state away, and a scroll is the
+# one thing no launch environment can seed. The quality panel is page two of
+# `SetView`'s scroll view; the app had a DEBUG `scrollPosition` write for it
+# and it never landed (a scroll position written before layout is kept and
+# never performed), so the loop does what a finger does instead.
+#
+# `axe` is the UI-automation CLI the founder enabled before W1
+# (`docs/SIMULATORS.md`). Absent, the screen is REFUSED rather than
+# photographed unscrolled — a page-one PNG called `quality.png` is exactly the
+# "plausible photograph of the wrong screen" this script exists to prevent.
+#
+# The y range is the scroll viewport at 49 mm: the content starts under the bar
+# at ~64 pt and the pinned tick begins at ~158. A drag that starts on the
+# button does not scroll, which cost one round.
+AXE="${AXE:-/opt/homebrew/bin/axe}"
+
+screen_gesture() {
+  case "$1" in
+    # Calibrated against the accessibility tree, not by eye: one drag puts the
+    # panel's header at the top of the viewport, two put the quality grid
+    # there. A FAST flick comes back — whatever `scrollTargetBehavior` makes of
+    # a thrown gesture on this SDK, the measured answer is that it returns to
+    # where it started, and only a slow drag moves and stays.
+    quality)     echo "swipe 100 150 100 85 1.5 1" ;;
+    qualitytags) echo "swipe 100 150 100 85 1.5 3" ;;
+    # Sideways, on the first deck row, to reveal the leading actions.
+    deckswipe)   echo "swipe 30 95 150 95 1.2 1" ;;
+    *) echo "" ;;
   esac
 }
 
@@ -105,11 +145,11 @@ shoot() {
 
   case "$env" in
     UNKNOWN)
-      echo "  unknown screen '$screen' — known: start set rest" >&2; return 1 ;;
+      echo "  unknown screen '$screen' — known: start set quality qualitytags rest deck deckswipe pause cancel finish" >&2; return 1 ;;
     NOT_REACHABLE)
       echo "  '$screen' has no launch hook yet: it is presented by navigation" >&2
-      echo "  inside a live session. Add a seed to WatchModel and a branch to" >&2
-      echo "  OnyxWatchApp's ONYX_WATCH_SCREEN block first (W3/W4)." >&2
+      echo "  inside a live session. Add a case to WatchModel.DebugScreen and a" >&2
+      echo "  branch to OnyxWatchApp's ONYX_WATCH_SCREEN block first (W4)." >&2
       return 1 ;;
   esac
 
@@ -146,6 +186,35 @@ shoot() {
   # runs in `.task` after it. Eight seconds is what the phone loop settled on
   # after a fresh device produced solid-black PNGs at 3.5 s.
   sleep 8
+
+  local gesture; gesture="$(screen_gesture "$screen")"
+  if [ -n "$gesture" ]; then
+    if [ ! -x "$AXE" ]; then
+      echo "  '$screen' needs a swipe and axe is not at $AXE" >&2
+      echo "  brew install cameroncooke/axe/axe — see docs/SIMULATORS.md" >&2
+      return 1
+    fi
+    # shellcheck disable=SC2086
+    set -- $gesture
+    local times="${7:-1}"
+    # ── SLOW AND SHORT, REPEATED ────────────────────────────────────────────
+    # A fast flick comes back: whatever `scrollTargetBehavior` decides about a
+    # thrown gesture on this SDK, the measured answer is that it snaps to
+    # where it started. A slow drag of rather more than half a page moves and
+    # stays. Repeating it is how a longer page is reached, and it is also what
+    # a finger does.
+    local i=1
+    while [ "$i" -le "$times" ]; do
+      if ! "$AXE" swipe --start-x "$2" --start-y "$3" --end-x "$4" --end-y "$5" \
+          --duration "$6" --udid "$UDID" >/dev/null 2>&1; then
+        echo "  swipe failed" >&2
+        return 1
+      fi
+      sleep 1
+      i=$((i + 1))
+    done
+    sleep 1
+  fi
   if ! xcrun simctl io "$UDID" screenshot --type=png "$OUT/$screen.png" >/dev/null; then
     echo "  screenshot failed" >&2
     return 1
@@ -154,7 +223,7 @@ shoot() {
 }
 
 read -ra SCREENS <<< "$SCREEN"
-[ "$SCREEN" = "all" ] && SCREENS=(start set rest)
+[ "$SCREEN" = "all" ] && SCREENS=(start set quality qualitytags rest deck deckswipe pause cancel finish)
 
 status=0
 for s in ${SCREENS[@]+"${SCREENS[@]}"}; do

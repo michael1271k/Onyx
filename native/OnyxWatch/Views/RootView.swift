@@ -3,6 +3,16 @@ import OnyxData
 import OnyxUI
 import SwiftUI
 
+/// The two screens this app can push.
+///
+/// Value-based rather than closure-based links, since W3: a `NavigationPath`
+/// can only present what it can NAME, and the shot loop needs to put the deck
+/// on screen without a finger. Two cases, so it is an enum and not a protocol.
+enum WatchRoute: Hashable {
+    case deck
+    case dashboard
+}
+
 /// What the app opens on.
 ///
 /// ── IT IS THE SET, NOT A DASHBOARD ──────────────────────────────────────────
@@ -20,8 +30,16 @@ struct RootView: View {
 
     @Environment(WatchModel.self) private var model
 
+    /// The stack's path, so the shot loop can put the deck on screen.
+    ///
+    /// Empty in every shipping state — nothing but `ONYX_WATCH_SCREEN=deck`
+    /// ever writes it, and the deck is still reached by its toolbar link. A
+    /// path is the only way to present a pushed screen without a tap, and the
+    /// alternative was photographing `DeckView` outside the stack it lives in.
+    @State private var path: [WatchRoute] = []
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if model.storeError != nil {
                     StoreErrorView()
@@ -31,7 +49,24 @@ struct RootView: View {
                     StartView()
                 }
             }
+            .navigationDestination(for: WatchRoute.self) { route in
+                switch route {
+                case .deck: DeckView()
+                case .dashboard: DashboardView()
+                }
+            }
         }
+        #if DEBUG
+        // ── `onChange`, NOT `onAppear` ──────────────────────────────────────
+        // `onAppear` fires when this view appears, and the seeding runs in the
+        // `.task` attached one level up — which starts AFTER. So `onAppear`
+        // read a nil `debugScreen` every time and the deck shot came back as
+        // the set screen: a real screen, under the wrong filename, which is
+        // the one failure `watch-shot.sh` exists to refuse.
+        .onChange(of: model.debugScreen, initial: true) { _, screen in
+            if screen == .deck, path.isEmpty { path = [.deck] }
+        }
+        #endif
         // ── REST IS A STATE, NOT A PAGE ─────────────────────────────────────
         // A cover rather than a tab, because rest is not somewhere you can
         // usefully navigate TO — it is a thing that is happening to you, and it
@@ -78,17 +113,30 @@ struct WatchSessionTimer: View {
     @Environment(WatchModel.self) private var model
 
     var body: some View {
-        if let startedAt = model.sessionStartedAt {
+        if model.sessionStartedAt != nil || model.remoteOrigin != nil {
             TimelineView(.periodic(from: .now, by: 60)) { context in
-                Text(
-                    Duration.seconds(max(0, context.date.timeIntervalSince(startedAt)))
-                        .formatted(.time(pattern: .hourMinute))
-                )
+                let clock = model.clock(at: context.date)
+                HStack(spacing: 2) {
+                    // ── THE GLYPH, NOT A SECOND COLOUR (W3) ─────────────────
+                    // A paused clock that only DIMS is a clock you read as a
+                    // clock. `WatchInk` has two ink levels on purpose, so the
+                    // state is a mark: the pause bars, 8 pt, ahead of the
+                    // digits, which is where the eye already is.
+                    if clock?.isPaused == true {
+                        Image(systemName: "pause.fill")
+                            .font(.system(size: 8))
+                            .accessibilityHidden(true)
+                    }
+                    Text(
+                        Duration.seconds(max(0, context.date.timeIntervalSince(clock?.origin ?? context.date)))
+                            .formatted(.time(pattern: .hourMinute))
+                    )
+                    // Required, and not for the usual reason: a proportional
+                    // string in a toolbar re-measures the bar on every tick,
+                    // which re-lays the title beside it, forever.
+                    .monospacedDigit()
+                }
                 .font(WatchType.label)
-                // Required, and not for the usual reason: a proportional string
-                // in a toolbar re-measures the bar on every tick, which re-lays
-                // the title beside it, forever.
-                .monospacedDigit()
                 // 36 and not 44: `h:mm` is four characters and monospaced, so
                 // the box only grows at ten hours. The 44 it started at was
                 // enough of the 40 mm bar to truncate `SetView`'s title.
@@ -96,6 +144,7 @@ struct WatchSessionTimer: View {
                 .foregroundStyle(WatchInk.day(model.day?.key))
                 .dimmedWhenLuminanceReduced()
                 .accessibilityLabel("Total workout time")
+                .accessibilityValue(clock?.isPaused == true ? "paused" : "")
             }
         }
     }
@@ -170,8 +219,11 @@ struct StartView: View {
         // toolbar, and the screen keeps one button.
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink { DashboardView() } label: { Image(systemName: "chart.bar.fill") }
-                    .tint(WatchInk.secondary)
+                // A dark disc with a light glyph — see `SetView`'s deck link
+                // for why `tint` alone made these near-white.
+                NavigationLink(value: WatchRoute.dashboard) { Image(systemName: "chart.bar.fill") }
+                    .tint(WatchInk.fill)
+                    .foregroundStyle(WatchInk.secondary)
             }
         }
     }
@@ -235,6 +287,15 @@ struct FinishView: View {
                     Text("\(bpm) bpm average")
                         .font(WatchType.label)
                         .foregroundStyle(WatchInk.secondary)
+                }
+                // The other place a refused write is reported — see
+                // `DeckView`. A finish that did not take leaves the button on
+                // screen, and this says why.
+                if let problem = model.writeError {
+                    Text(problem)
+                        .font(WatchType.label)
+                        .foregroundStyle(WatchInk.danger)
+                        .lineLimit(3)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -73,28 +73,19 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             }
         }
 
-        var label: String {
-            switch self {
-            case .normal:  "Normal"
-            case .warmup:  "Warm-up"
-            case .failure: "Failure"
-            case .dropset: "Drop"
-            case .ghost:   "Ghost"
-            }
-        }
+        /// ── THE WORDS LIVE IN `SetTags` SINCE W3 ───────────────────────────
+        /// They were two `switch`es here, byte for byte the vocabulary the
+        /// watch's Set Quality panel now has to draw as well — and the watch
+        /// cannot see the app target. Two hand-maintained copies of one
+        /// vocabulary both look right, so there is one, in OnyxCore, and this
+        /// is the typed view over it. The same move `Effort` made when the
+        /// finish sheet started needing the suggestion.
+        var label: String { SetTags.word(for: self == .normal ? nil : rawValue) }
 
         /// What choosing it MEANS, in four words. The sheet keeps one of these
         /// on screen at all times: five hints stacked under five chips would put
         /// the height straight back, and a tooltip is not reachable by thumb.
-        var hint: String {
-            switch self {
-            case .normal:  "Counts as work"
-            case .warmup:  "Before the work"
-            case .failure: "Taken to failure"
-            case .dropset: "No record from it"
-            case .ghost:   "Logged, counts for nothing"
-            }
-        }
+        var hint: String { SetTags.hint(for: self == .normal ? nil : rawValue) }
     }
 
     @MainActor
@@ -1354,13 +1345,20 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// deck is a `LazyVStack`, there is no `onMove` here, and the off-by-one
     /// between the two conventions is the kind that only shows up when you drag
     /// downwards.
+    ///
+    /// ── THE ARITHMETIC MOVED TO `DeckOrder` IN W3 ───────────────────────────
+    /// The wrist's "Do next" writes the same `exercise_order` onto the same
+    /// rows, and the two clients agreeing about WHICH rows moved is what keeps
+    /// a session grouped the way it was performed on whichever device reads it
+    /// back. Shared rather than reimplemented, with a golden vector under it
+    /// (`deck-order-move.json`) and a test that this call site's old inline
+    /// version and the extracted one answer identically on every deck size.
     func moveExercise(from: Int, to: Int) {
-        guard exercises.indices.contains(from) else { return }
-        let target = min(max(to, 0), exercises.count - 1)
-        guard from != target else { return }
-        exercises.insert(exercises.remove(at: from), at: target)
+        let move = DeckOrder.move(count: exercises.count, from: from, to: to)
+        guard let restamp = move.restamp else { return }
+        exercises = move.applied(to: exercises)
         guard store != nil, sessionId != nil else { return }
-        for exercise in exercises[min(from, target)...max(from, target)] {
+        for exercise in exercises[restamp] {
             for row in exercise.rows where row.isDone { amendInStore(row, in: exercise) }
         }
     }

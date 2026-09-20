@@ -223,6 +223,43 @@ struct SetTagsGoldenTests {
             #expect(SetTags.composition(c.input.counts) == c.expected, "setComposition — \(c.name)")
         }
     }
+
+    // MARK: - The third length (W3)
+
+    /// `word` and `hint` moved here out of the phone's `LoggerModel.SetKind`
+    /// so the watch's Set Quality panel could read them. Both clients now
+    /// depend on this table being complete and on `tagKeys` naming exactly the
+    /// kinds `tags` holds — a fifth kind added to one and not the other is a
+    /// chip row that draws four items and a badge that draws five.
+    @Test("tagKeys names exactly the kinds, and every one has a word and a hint")
+    func kindWords() {
+        #expect(Set(SetTags.tagKeys) == Set(SetTags.tags.keys))
+        #expect(SetTags.tagKeys == ["warmup", "failure", "dropset", "ghost"])
+
+        var words: Set<String> = []
+        for key in SetTags.tagKeys {
+            let word = SetTags.word(for: key)
+            let hint = SetTags.hint(for: key)
+            #expect(!word.isEmpty && !hint.isEmpty, "\(key) has no word or no hint")
+            // A chip row of four identical words is four chips that say
+            // nothing — and the badge letters are already distinct.
+            #expect(words.insert(word).inserted, "\(key) repeats the word \(word)")
+            #expect(word != SetTags.word(for: nil), "\(key) reads as the unmarked set")
+        }
+    }
+
+    /// `nil` and `"normal"` are the SAME state — the absence of a claim —
+    /// which is why neither client draws a chip for it.
+    @Test("the unmarked set answers the same to nil and to normal")
+    func normalIsAbsence() {
+        #expect(SetTags.word(for: nil) == SetTags.word(for: "normal"))
+        #expect(SetTags.hint(for: nil) == SetTags.hint(for: "normal"))
+        #expect(SetTags.word(for: nil) == "Normal")
+        // An unknown value reads as unmarked rather than crashing or printing
+        // a raw key: a kind written by a newer client must not make an older
+        // one unable to draw the set at all.
+        #expect(SetTags.word(for: "supersetish") == "Normal")
+    }
 }
 
 @Suite("Rest targets — the pure half")

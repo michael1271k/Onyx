@@ -70,16 +70,56 @@ struct OnyxWatchApp: App {
                         // to a weekday layout the seed does not carry. A shot
                         // that depends on what a simulator happens to be
                         // holding is a shot that reviews the wrong screen.
+                        // ── EVERY SHOT STARTS FROM ZERO ─────────────────
+                        // `start()` has already run `rejoinLiveSession`, and
+                        // on a simulator that has been shot before there IS
+                        // one: the previous run's session, with its own sets
+                        // and its own cursor. The first run of this loop
+                        // photographed "Set 2/3" on a screen that had just
+                        // been launched, and a shot that depends on what a
+                        // simulator happens to be holding is a shot that
+                        // reviews the wrong screen — the same lesson the
+                        // `seedDebugContext` comment below records about a
+                        // stale context.
+                        //
+                        // Discarded through the shipping path, so what the
+                        // loop exercises is `cancelSession` and not a special
+                        // reset nobody ships.
+                        model.cancelSession()
                         model.seedDebugContext()
                         model.beginSession()
                     }
-                    // `ONYX_WATCH_SCREEN=rest` puts the rest cover up, the way
-                    // `--onyx-screen` picks a face on the phone. `RestView` is
-                    // reachable no other way on a simulator: it is presented by
-                    // a pulse from the phone, or by committing a set, and a
-                    // watch simulator can do neither.
-                    if ProcessInfo.processInfo.environment["ONYX_WATCH_SCREEN"] == "rest" {
-                        model.seedDebugRest()
+                    // `ONYX_WATCH_SCREEN=<name>` puts a screen up, the way
+                    // `--onyx-screen` picks a face on the phone. Every one of
+                    // these is reachable no other way on a simulator: the rest
+                    // cover is presented by a pulse from the phone or by
+                    // committing a set, and the four W3 screens are reached by
+                    // navigation, a swipe or a long press — and a watch
+                    // simulator can do none of them.
+                    //
+                    // ── EACH ONE SEEDS THE STATE AND THEN LETS THE APP DRAW ──
+                    // `debugScreen` is read by whichever view owns the screen,
+                    // so the shot goes down the path a finger would take. The
+                    // sets go in through `commitSet`, which is the ordinary
+                    // write — a photograph of a second code path is a
+                    // photograph of something that does not ship.
+                    if let name = ProcessInfo.processInfo.environment["ONYX_WATCH_SCREEN"],
+                       let screen = WatchModel.DebugScreen(rawValue: name) {
+                        model.debugScreen = screen
+                        switch screen {
+                        case .rest:
+                            model.seedDebugRest()
+                        case .deck, .quality, .pause, .cancel:
+                            // Two sets: enough for the deck to show a movement
+                            // done and one in progress, and enough for the
+                            // quality panel to have a set to describe.
+                            model.seedDebugSets(2)
+                            if screen == .pause { model.togglePause() }
+                        case .finish:
+                            // Every planned set, which is what empties the
+                            // cursor and turns the tick into a finish button.
+                            model.seedDebugSets(99)
+                        }
                     }
                     #endif
                 }
