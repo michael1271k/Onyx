@@ -200,6 +200,20 @@ struct WeeklyExportBuilderTests {
         #expect(got.doms == want.doms)
         #expect(got.fatigue == want.fatigue)
         #expect(got.stress == want.stress)
+        /* ── THE MASSES THE ROWS DID NOT STORE ───────────────────────────
+           Hand-computed, like every other figure in this payload, because the
+           builder now completes a scan from its own percentages rather than
+           printing a dash beside the two halves of the answer.
+
+           23rd: weight 65 and body fat 17 % give fat 11.05 kg and fat-free
+           53.95 kg. Nothing else — a water or bone MASS needs a water or bone
+           PERCENT and the row carries neither, and protein's fallback needs
+           both. `muscleMassKg` is stored at 50.1 and a stored mass always wins.
+
+           25th: fat-free 64 × 0.832 = 53.25, lean 64 × 40 % = 25.60, protein
+           64 × 18 % = 11.52. Fat, water and bone are all stored and all kept —
+           note fat stays 10.9 and NOT the 10.75 the percentage would give,
+           which is the whole point of the stored value winning. */
         #expect(got.bodyComp == want.bodyComp)
         #expect(got.cardio == want.cardio)
         #expect(got.supplementProtocol == want.supplementProtocol)
@@ -393,9 +407,11 @@ struct WeeklyExportBuilderTests {
       ],
       "bodyComp": [
         {"date": "2026-08-23", "weightKg": 65, "bmi": 21.5, "bodyFatPct": 17, "bmr": 1500, "muscleMassKg": 50.1,
-         "skeletalMuscleMassKg": 26.8, "estimatedWaistToHipRatio": 0.85},
+         "skeletalMuscleMassKg": 26.8, "estimatedWaistToHipRatio": 0.85,
+         "fatMassKg": 11.05, "fatFreeMassKg": 53.95},
         {"date": "2026-08-25", "weightKg": 64, "bmi": 21.4, "bodyFatPct": 16.8, "musclePercent": 40, "waterPercent": 58.6,
-         "boneMineral": 4.1, "fatMassKg": 10.9, "proteinPercent": 18, "boneMineralKg": 2.7, "waterMassKg": 38, "skeletalMuscleMassKg": 26.9}
+         "boneMineral": 4.1, "fatMassKg": 10.9, "proteinPercent": 18, "boneMineralKg": 2.7, "waterMassKg": 38, "skeletalMuscleMassKg": 26.9,
+         "fatFreeMassKg": 53.25, "muscleMassKg": 25.6, "proteinMassKg": 11.52}
       ],
       "cardio": [
         {"date": "2026-08-26", "kind": "walk", "distanceM": 5000, "durationMin": 50, "kcal": 250,

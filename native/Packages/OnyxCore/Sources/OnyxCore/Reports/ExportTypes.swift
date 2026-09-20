@@ -344,6 +344,13 @@ public struct ExportBodyComp: Codable, Equatable, Sendable {
     public var proteinPercent: Double?
     public var skeletalMuscleMassKg: Double?
     public var estimatedWaistToHipRatio: Double?
+    /// THE ONE TAPE MEASUREMENT — `daily_logs.waist_cm`, entered in the InBody
+    /// sheet beside the weight it was taken with (`v30.waistCm`, W3).
+    ///
+    /// It is NOT the waist-to-hip ratio and nothing derives one from the other:
+    /// there is no hip measurement. `Body/Composition.swift` states the rule —
+    /// the waist is stored and shown, and the arithmetic never reads it.
+    public var waistCm: Double?
     /// Why the scan is not believed, in words — `bone 0.14 kg from the 14-day
     /// median`. The row is still PRINTED; it is excluded from every mean and
     /// from the trailing-four window. Nil is a valid scan.

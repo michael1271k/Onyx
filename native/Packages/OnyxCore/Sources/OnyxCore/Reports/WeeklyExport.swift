@@ -197,7 +197,9 @@ public enum WeeklyExport {
             if s.isWarmup { bits.append("warm-up") }
             else if s.failure && Effort.rpeLabel(s.rpe).lowercased() != "failure" { bits.append("to failure") }
             if s.dropset == true { bits.append("drop set") }
-            if let q = s.quality, let quality = SetTags.quality[q] { bits.append("Set Quality: \(quality.label)") }
+            // The `+`-joined grammar, like every other reader of this column.
+            let qualities = SetTags.parseQuality(s.quality).compactMap { SetTags.quality[$0]?.label }
+            if !qualities.isEmpty { bits.append("Set Quality: \(qualities.joined(separator: ", "))") }
             return bits.isEmpty ? "" : " (\(bits.joined(separator: ", ")))"
         }
 
@@ -699,9 +701,29 @@ public enum WeeklyExport {
     /// not. Both logger steppers write an explicit `0` when tapped down from
     /// empty, and a branch keyed on `!= nil` then produced an empty value — a
     /// line that was an ordinal and nothing else.
+    ///
+    /// ── A DURATION ALONE IS NOT A CARDIO AXIS ───────────────────────────────
+    /// This used to read "any of the three, non-zero", and `duration_sec` is a
+    /// column the deck's own duration stepper writes on ANY set — a loaded one
+    /// included. So a squat the athlete happened to time came down this branch,
+    /// rendered as a bout, and `120 × 5` was DELETED from the document in
+    /// favour of `2:00`. The load and the reps are the set; the duration is a
+    /// note on it, and `compactSide` prints it as one.
+    ///
+    /// Distance and incline have no such second meaning — nothing but a
+    /// machine writes them — so either one alone still makes a bout. A
+    /// duration makes one only when there is no lift underneath it, which is
+    /// exactly the treadmill warm-up's `weight 0, reps 0`.
     static func isCardio(_ s: ExportSet) -> Bool {
-        let axes = [s.durationSec, s.distanceKm, s.inclinePct]
-        return axes.contains { $0.map { $0.isFinite && $0 != 0 } ?? false }
+        func measured(_ v: Double?) -> Bool { v.map { $0.isFinite && $0 != 0 } ?? false }
+        if measured(s.distanceKm) || measured(s.inclinePct) { return true }
+        return measured(s.durationSec) && s.weightKg == 0 && s.reps == 0
+    }
+
+    /// Seconds as `m:ss` — a bout's duration and a set's alike.
+    static func mmss(_ seconds: Double) -> String {
+        let total = Int(jsRound(seconds))
+        return "\(total / 60):\(pad2(String(total % 60)))"
     }
 
     static func compactSide(_ s: ExportSet, _ timed: Bool) -> String {
@@ -709,8 +731,7 @@ public enum WeeklyExport {
         if isCardio(s) {
             var bits: [String] = []
             if let d = s.durationSec, d.isFinite, d > 0 {
-                let total = Int(jsRound(d))
-                bits.append("\(total / 60):\(pad2(String(total % 60)))")
+                bits.append(mmss(d))
                 if let km = s.distanceKm, km.isFinite, km > 0 {
                     bits.append("\(grp(n(km / (d / 3600), 1))) km/h")
                 }
@@ -731,10 +752,27 @@ public enum WeeklyExport {
         }
         if let r = s.rpe, r.isFinite { value += " @\(js(r))" }
         if s.failure && s.rpe != 10 { value += "F" }
+        /* THE MEASURED DURATION OF A LIFTED SET, as a bare `m:ss` after the
+           value. It is not a `·` field — a side may not contain the document's
+           one separator (`compactSet` joins the two halves of a pair with it)
+           — and it is not printed on a cardio set, whose duration is already
+           the first thing on the line. The legend names the token. */
+        if !isCardio(s), let d = s.durationSec, d.isFinite, d > 0 { value += " \(mmss(d))" }
         var flags: [String] = []
         if s.dropset == true { flags.append("drop") }
         if s.isGhost { flags.append("ghost") }
-        if let q = s.quality, let named = SetTags.quality[q] { flags.append(named.label.lowercased()) }
+        /* ── THE QUALITY COLUMN HAS A GRAMMAR, NOT A VALUE ───────────────────
+           `SetTags.quality[q]` was a bare dictionary lookup, and the stored
+           column is `+`-joined (`SetTags.qualitySeparator`): a set that was
+           BOTH cut short and taken with momentum stores `momentum+cut_short`,
+           which matches no key, returns nil, and printed nothing at all — the
+           honest description of a set was the one spelling the document could
+           not read. `parseQuality` is the one parser and drops a key a newer
+           client wrote rather than losing the set. */
+        for key in SetTags.parseQuality(s.quality) {
+            guard let named = SetTags.quality[key] else { continue }
+            flags.append(named.label.lowercased())
+        }
         return flags.isEmpty ? value : "\(value) \(flags.joined(separator: " "))"
     }
 
@@ -744,12 +782,15 @@ public enum WeeklyExport {
     /// not what the athlete did, and a document that prints only the scored
     /// side hides the asymmetry the audit is reading for.
     static func compactSet(_ row: SetRow, _ ordinal: String, _ timed: Bool) -> String {
-        if let s = row.single { return "\(ordinal) \(compactSide(s, timed))" }
+        // TWO spaces after the ordinal: it is a column of its own, and `S1` and
+        // `S10` sitting a single space from their loads made a ten-set movement
+        // unreadable as a list. `warm-ups` strips exactly this prefix.
+        if let s = row.single { return "\(ordinal)  \(compactSide(s, timed))" }
         let halves = [
             row.left.map { "L \(compactSide($0, timed))" },
             row.right.map { "R \(compactSide($0, timed))" },
         ].compactMap { $0 }
-        return "\(ordinal) \(halves.joined(separator: sep))"
+        return "\(ordinal)  \(halves.joined(separator: sep))"
     }
 
     /// Every side of one display row.
@@ -964,11 +1005,24 @@ public enum WeeklyExport {
         ]))
         let allPrs = sessions.flatMap(\.prs)
         L.append("PRs " + (allPrs.isEmpty ? none : allPrs.map { p in
+            let lift: String
             // A timed movement's record is a DURATION. `BW × 60` for a 60-second
             // side plank reads as sixty repetitions of it.
-            if TimedExercise.isTimed(p.name) { return "\(p.name) \(grp(exact(p.reps))) s" }
-            if SetFormat.isUnloaded(p.weightKg) { return "\(p.name) BW × \(grp(exact(p.reps)))" }
-            return "\(p.name) \(grp(exact(p.weightKg))) × \(grp(exact(p.reps)))"
+            if TimedExercise.isTimed(p.name) { lift = "\(p.name) \(grp(exact(p.reps))) s" }
+            else if SetFormat.isUnloaded(p.weightKg) { lift = "\(p.name) BW × \(grp(exact(p.reps)))" }
+            else { lift = "\(p.name) \(grp(exact(p.weightKg))) × \(grp(exact(p.reps)))" }
+            /* WHICH RECORD IT WAS. `axes` and `e1rmKg` have ridden on every
+               `ExportPr` since the engine was ported and printed nowhere, so a
+               rep PR, a load PR and an estimated-1RM PR all read as the same
+               line — and a week that set three PRs on one movement looked like
+               a week that set one. The axis is what the engine actually
+               decided; the e1RM is the figure two of the axes are compared on. */
+            let axes = p.axes.map(\.rawValue).joined(separator: "+")
+            return line([
+                lift,
+                axes.isEmpty ? nil : "PR \(axes)",
+                valExact(p.e1rmKg).map { "e1RM \($0) kg" },
+            ])
         }.joined(separator: sep)))
 
         L.append("cardio " + line([
@@ -1009,22 +1063,39 @@ public enum WeeklyExport {
             L.append("no scan this week")
         } else {
             L.append("")
+            /* ── THE COLUMNS THE APP'S OWN SCREEN SPELLS ─────────────────────
+               `BF%`, `SMM kg`, `FFM kg` were abbreviations of a vocabulary the
+               athlete never sees: the InBody sheet says Body fat, Skeletal
+               muscle, Bone mineral, W:H ratio (`Pulse/PulseScale.swift`), and a
+               document read beside that screen has to agree with it word for
+               word or the reader is translating on every row.
+
+               TWO GROUPS, ONE TABLE. What the scale REPORTED comes first — the
+               percentages, the waist, the indices — then the masses DERIVED
+               from them. The old table interleaved the two, so `fat kg` sat
+               beside `BF%` and nothing said which of the pair was measured. */
             L.append(contentsOf: markdownTable(
-                header: ["date", "weight", "BF%", "fat kg", "lean kg", "SMM kg", "FFM kg",
-                         "water kg", "water %", "protein kg", "bone kg", "visceral", "BMR", "valid"],
+                header: ["date", "Weight (kg)", "Waist (cm)", "Body fat (%)", "Muscle (%)",
+                         "Skeletal muscle (kg)", "Visceral fat", "Water (%)", "Protein (%)",
+                         "Bone mineral (%)", "BMI", "BMR (kcal)", "W:H ratio",
+                         "fat (kg)", "lean (kg)", "fat-free (kg)", "water (kg)", "protein (kg)", "bone (kg)",
+                         "valid"],
                 body: bodyComp.map { b in
                     [
                         b.date,
-                        val(b.weightKg, 2) ?? dash, val(b.bodyFatPct, 1) ?? dash, val(b.fatMassKg, 2) ?? dash,
-                        val(b.muscleMassKg, 2) ?? dash, val(b.skeletalMuscleMassKg, 2) ?? dash,
-                        val(b.fatFreeMassKg, 2) ?? dash,
-                        val(b.waterMassKg, 2) ?? dash, val(b.waterPercent, 1) ?? dash,
+                        val(b.weightKg, 2) ?? dash, val(b.waistCm, 1) ?? dash,
+                        val(b.bodyFatPct, 1) ?? dash, val(b.musclePercent, 1) ?? dash,
+                        val(b.skeletalMuscleMassKg, 2) ?? dash, val(b.visceralFat, 1) ?? dash,
+                        val(b.waterPercent, 1) ?? dash, val(b.proteinPercent, 1) ?? dash,
+                        val(b.boneMineral, 2) ?? dash, val(b.bmi, 1) ?? dash, val(b.bmr) ?? dash,
+                        val(b.estimatedWaistToHipRatio, 2) ?? dash,
+                        val(b.fatMassKg, 2) ?? dash, val(b.muscleMassKg, 2) ?? dash,
+                        val(b.fatFreeMassKg, 2) ?? dash, val(b.waterMassKg, 2) ?? dash,
                         val(b.proteinMassKg, 2) ?? dash, val(b.boneMineralKg, 2) ?? dash,
-                        val(b.visceralFat, 1) ?? dash, val(b.bmr) ?? dash,
                         b.anomaly == nil ? "OK" : "ANOMALOUS",
                     ]
                 },
-                align: [.left] + Array(repeating: Align.right, count: 12) + [.left]))
+                align: [.left] + Array(repeating: Align.right, count: 18) + [.left]))
             L.append("")
 
             for b in bodyComp where b.anomaly != nil {
@@ -1059,19 +1130,31 @@ public enum WeeklyExport {
                 ]))
             }
             if !valid.isEmpty {
+                /* THE SAME VOCABULARY AS THE TABLE ABOVE, and every token
+                   unambiguous. This row used to carry `water 38.85 kg · water
+                   60.2 %` — one word for two different readings, a mass and a
+                   proportion, sitting two fields apart. The reported figures
+                   are named as the InBody sheet names them; the derived masses
+                   all say `mass`, so no token means two things. */
                 L.append("clean_scan_means " + line([
-                    val(meanOf(valid.map(\.weightKg)), 2).map { "weight \($0)" },
-                    val(meanOf(valid.map(\.bodyFatPct)), 1).map { "BF \($0) %" },
-                    val(meanOf(valid.map(\.fatMassKg)), 2).map { "fat \($0) kg" },
-                    val(meanOf(valid.map(\.muscleMassKg)), 2).map { "lean \($0) kg" },
-                    val(meanOf(valid.map(\.skeletalMuscleMassKg)), 2).map { "SMM \($0) kg" },
-                    val(meanOf(valid.map(\.fatFreeMassKg)), 2).map { "FFM \($0) kg" },
-                    val(meanOf(valid.map(\.waterMassKg)), 2).map { "water \($0) kg" },
+                    val(meanOf(valid.map(\.weightKg)), 2).map { "weight \($0) kg" },
+                    val(meanOf(valid.map(\.waistCm)), 1).map { "waist \($0) cm" },
+                    val(meanOf(valid.map(\.bodyFatPct)), 1).map { "body fat \($0) %" },
+                    val(meanOf(valid.map(\.musclePercent)), 1).map { "muscle \($0) %" },
+                    val(meanOf(valid.map(\.skeletalMuscleMassKg)), 2).map { "skeletal muscle \($0) kg" },
+                    val(meanOf(valid.map(\.visceralFat)), 1).map { "visceral fat \($0)" },
                     val(meanOf(valid.map(\.waterPercent)), 1).map { "water \($0) %" },
-                    val(meanOf(valid.map(\.proteinMassKg)), 2).map { "protein \($0) kg" },
-                    val(meanOf(valid.map(\.boneMineralKg)), 2).map { "bone \($0) kg" },
-                    val(meanOf(valid.map(\.visceralFat)), 1).map { "visceral \($0)" },
-                    val(meanOf(valid.map(\.bmr))).map { "BMR \($0)" },
+                    val(meanOf(valid.map(\.proteinPercent)), 1).map { "protein \($0) %" },
+                    val(meanOf(valid.map(\.boneMineral)), 2).map { "bone mineral \($0) %" },
+                    val(meanOf(valid.map(\.bmi)), 1).map { "BMI \($0)" },
+                    val(meanOf(valid.map(\.bmr))).map { "BMR \($0) kcal" },
+                    val(meanOf(valid.map(\.estimatedWaistToHipRatio)), 2).map { "W:H ratio \($0)" },
+                    val(meanOf(valid.map(\.fatMassKg)), 2).map { "fat mass \($0) kg" },
+                    val(meanOf(valid.map(\.muscleMassKg)), 2).map { "lean mass \($0) kg" },
+                    val(meanOf(valid.map(\.fatFreeMassKg)), 2).map { "fat-free mass \($0) kg" },
+                    val(meanOf(valid.map(\.waterMassKg)), 2).map { "water mass \($0) kg" },
+                    val(meanOf(valid.map(\.proteinMassKg)), 2).map { "protein mass \($0) kg" },
+                    val(meanOf(valid.map(\.boneMineralKg)), 2).map { "bone mass \($0) kg" },
                     "n \(valid.count)",
                 ]))
             }
@@ -1092,6 +1175,36 @@ public enum WeeklyExport {
         L.append("")
         L.append("## 4 · DAILY ROWS")
         for day in days {
+            /* ── A POWDER IS FOOD ────────────────────────────────────────────
+               `nutrition_entries` holds what was eaten and `nutrientsStack`
+               holds what the stack delivered, and this row used to print the
+               first and drop the second: Thursday's fibre read 19 g on a day
+               five grams of psyllium husk put another 3.9 g in, and the same
+               truncation hid every supplement calorie and carbohydrate.
+
+               The app has never disagreed — `NutritionModel.eaten` folds
+               `stack.macros` into the ring for exactly this reason, and the
+               edit sheet deliberately seeds from FOOD ALONE so a save cannot
+               make the scoop permanent. §2 already summed both
+               (`weeklyNutrients`), so the document was contradicting its own
+               weekly mean seven rows further up.
+
+               The contribution is named on the row as well as folded into it.
+               A total a reader cannot split is one they have to trust, and a
+               scoop is the one input here that has no photograph behind it. */
+            func stacked(_ key: String, _ food: Double?) -> Double? {
+                let k = day.nutrientsStack?[key]
+                guard food != nil || k != nil else { return nil }
+                return (food ?? 0) + ((k?.isFinite == true && k! > 0) ? k! : 0)
+            }
+            let stackKcal = day.nutrientsStack?["kcal"]
+            let stackNote = line([
+                val(stackKcal).flatMap { $0 == "0" ? nil : "\($0) kcal" },
+                val(day.nutrientsStack?["protein"], 1).flatMap { $0 == "0.0" ? nil : "\($0) P" },
+                val(day.nutrientsStack?["carbs"], 1).flatMap { $0 == "0.0" ? nil : "\($0) C" },
+                val(day.nutrientsStack?["fat"], 1).flatMap { $0 == "0.0" ? nil : "\($0) F" },
+                val(day.nutrientsStack?["fiber"], 1).flatMap { $0 == "0.0" ? nil : "fiber \($0)" },
+            ])
             let today = sessions.filter { $0.date == day.date }
             let kind = day.nutritionException?.isEmpty == false ? "EVENT"
                 : isGymDay(day) ? "TRAIN" : "REST"
@@ -1108,10 +1221,12 @@ public enum WeeklyExport {
             L.append(line([
                 day.date,
                 today.isEmpty ? kind : "\(kind) \(today.map(\.label).joined(separator: " + "))",
-                val(day.calories).map { "\($0) kcal" },
+                val(stacked("kcal", day.calories)).map { "\($0) kcal" },
                 some([day.proteinG, day.carbsG, day.fatG])
-                    ? "\(val(day.proteinG) ?? dash)/\(val(day.carbsG) ?? dash)/\(val(day.fatG) ?? dash)" : nil,
-                val(day.nutrientsFood?["fiber"]).map { "fiber \($0)" },
+                    ? "\(val(stacked("protein", day.proteinG)) ?? dash)"
+                        + "/\(val(stacked("carbs", day.carbsG)) ?? dash)"
+                        + "/\(val(stacked("fat", day.fatG)) ?? dash)" : nil,
+                val(stacked("fiber", day.nutrientsFood?["fiber"])).map { "fiber \($0)" },
                 val(day.waterMl.map { $0 / 1000 }, 2).map { "water \($0) L" },
                 val(day.steps).map { "\($0) steps" },
                 hm(sleepMinutes(day)).map { "sleep \($0)" },
@@ -1126,8 +1241,46 @@ public enum WeeklyExport {
                 domsCells.isEmpty ? nil : "DOMS \(domsCells.joined(separator: ", "))",
                 stressCells.isEmpty ? nil : "stress \(stressCells.joined(separator: ", "))",
                 skipped.isEmpty ? nil : "skipped \(skipped.joined(separator: ", "))",
+                stackNote.isEmpty ? nil : "of which stack \(stackNote)",
                 flags.isEmpty ? nil : "flags \(flags.joined(separator: ", "))",
             ]))
+
+            /* ── THE BOUT BELONGS TO THE DAY, NOT TO THE SESSION ──────────────
+               It used to print under §5, inside whichever gym session happened
+               to share the date — so a walk was presented as part of a push
+               workout it had nothing to do with, and a bout on a rest day fell
+               through to a `cardio_no_session` footnote in a section about
+               sessions. Cardio is a thing a DAY contains. Every day says so,
+               including the ones that contain none: a silent row cannot be
+               told apart from a row nobody filled in. */
+            let todaysCardio = cardio.filter { $0.date == day.date }
+            L.append("  cardio " + (todaysCardio.isEmpty ? none : cardioLines(todaysCardio, dated: false)))
+
+            /* Everything the watch recorded that no other row carries. One
+               line, every field omitted when absent, so a day the wearer left
+               the watch on charge costs nothing. */
+            let vitals = line([
+                hm(day.remMin).map { "REM \($0)" },
+                hm(day.awakeMin).map { "awake \($0)" },
+                clockOrNil(day.bedTime).map { "bed \($0)" },
+                clockOrNil(day.wakeTime).map { "wake \($0)" },
+                day.sleepOnsetTrouble == true ? "trouble falling asleep" : nil,
+                val(day.respiratoryRate, 1).map { "resp \($0) /min" },
+                val(day.bloodOxygenPct, 1).map { "SpO2 \($0) %" },
+                // The sign IS the finding on a wrist temperature: it is a
+                // DELTA from the wearer's own baseline, and `0.2` without one
+                // reads as an absolute.
+                signed(day.wristTempDeltaC, 1).map { "wrist temp \($0) °C" },
+                val(day.vo2max, 1).map { "VO2max \($0)" },
+                val(day.avgHr).map { "day HR \($0)" },
+                hm(day.daylightMin).map { "daylight \($0)" },
+                val(day.standHours).map { "stand \($0) h" },
+                hm(day.exerciseMin).map { "exercise \($0)" },
+                val(day.distanceM.map { $0 / 1000 }, 2).map { "walked \($0) km" },
+                val(day.activeKcal).map { "active \($0) kcal" },
+                val(day.bmrKcal).map { "BMR \($0) kcal" },
+            ])
+            if !vitals.isEmpty { L.append("  vitals " + vitals) }
         }
 
         // ── 5 · SESSIONS ──────────────────────────────────────────────────────
@@ -1140,6 +1293,10 @@ public enum WeeklyExport {
                 for row in workingRows(ex) { working += 1; if isFailure(row) { failed += 1 } }
             }
             L.append("")
+            /* TWO LINES, NOT ONE. The heading is WHICH SESSION — the name, the
+               day, the clock — and the line under it is WHAT IT COST. They used
+               to be a single eight-field run that wrapped in every reader, and
+               the two halves answer different questions. */
             L.append("### " + line([
                 s.label,
                 s.date,
@@ -1154,9 +1311,18 @@ public enum WeeklyExport {
                 }(),
                 val(s.durationMin).map { "\($0) min" },
                 s.sessionRpe.map { "sRPE \(js($0))" },
+            ]))
+            L.append(line([
                 "working_sets \(working)",
                 "failure_sets \(failed)",
                 valExact(s.volumeKg).map { "tonnage \($0) kg" },
+                /* The heart and the energy the session cost. Both carried since
+                   v3 and printed nowhere, and both carry their own "this was
+                   ESTIMATED" flag — which is the whole reason they are safe to
+                   print: a figure the app inferred is labelled as inferred, so
+                   the audit can weigh it or drop it. */
+                val(s.avgBpm).map { "avg HR \($0)\(s.avgBpmEstimated == true ? " est" : "")" },
+                val(s.caloriesBurned).map { "\($0) kcal\(s.caloriesEstimated == true ? " est" : "")" },
                 s.prs.isEmpty ? nil : "PRs \(s.prs.map(\.name).joined(separator: ", "))",
             ]))
             /* BOTH fallbacks are named. `index` is `workout_sets.exercise_order`,
@@ -1173,25 +1339,72 @@ public enum WeeklyExport {
 
             for ex in s.exercises {
                 let timed = TimedExercise.isTimed(ex.name)
-                L.append(line([
-                    "**\(ex.name)**",
-                    (ex.repWindow?.isEmpty == false) ? "target \(ex.repWindow!)" : nil,
-                    ex.prescription.map { p in
-                        "prescribed \(grp(exact(p.sets))) × \(p.reps)"
-                            + (p.loadKg.map { " @ \(grp(exact($0))) kg" } ?? "")
-                    },
-                    ex.sets.isEmpty ? "no sets logged" : nil,
-                ]))
-                var num = 0
-                for row in toSetRows(ex.sets) {
+                // Warm-ups are listed once per session, below, and consume no
+                // ordinal: `S1` is the first WORKING set.
+                let printable = toSetRows(ex.sets).filter { row in
                     let ss = sides(row)
-                    if ss.isEmpty { continue }
-                    // Warm-ups are listed once per session, below, and consume
-                    // no ordinal: `S1` is the first WORKING set.
-                    if ss.contains(where: { $0.isWarmup }) { continue }
+                    return !ss.isEmpty && !ss.contains { $0.isWarmup }
+                }
+                /* ── AN EXERCISE WITH NOTHING UNDER IT PRINTS NO HEADING ──────
+                   `**Treadmill**` was appearing bare, immediately above the
+                   first real movement of the session, and reading as that
+                   movement's label. Nothing was wrong with the treadmill: its
+                   sets are all warm-ups, every one of them was skipped by the
+                   loop below, and the heading was emitted before anything knew
+                   that. The bout is already printed twice over — under
+                   `warm-ups` here and under the DAY's own cardio row — so the
+                   heading was never carrying a fact of its own.
+
+                   `no sets logged` is the one empty heading worth keeping: an
+                   exercise that was opened and never performed is a finding. */
+                guard !printable.isEmpty || ex.sets.isEmpty else { continue }
+                /* ── `target` AND `prescribed` ARE ONE FIELD ──────────────────
+                   Both come from the SAME plan row. `Ceilings.repWindow` parses
+                   `ProgramExercise.reps` and prints it back as `floor–ceiling`;
+                   `prescription.reps` is that same string untouched. Printing
+                   `target 12–15 · prescribed 3 × 12–15 @ 15 kg` stated the rep
+                   window twice and invited the reader to look for a difference
+                   that was not there.
+
+                   They diverge in exactly one case, and it is worth a word:
+                   `repWindow` FALLS BACK to scanning every other day of the
+                   program when today's day does not name the movement, taking
+                   the widest ceiling — a substitution, or an accessory added on
+                   the day. `prescription` is nil there, because the plan did
+                   not ask for this movement today. So: the prescription when
+                   there is one, the bare window when there is not, and never
+                   both saying the same thing. */
+                let window = (ex.repWindow?.isEmpty == false) ? ex.repWindow! : nil
+                let prescribed = ex.prescription.map { p in
+                    "prescribed \(grp(exact(p.sets))) × \(p.reps)"
+                        + (p.loadKg.map { " @ \(grp(exact($0))) kg" } ?? "")
+                }
+                let restatesWindow = ex.prescription.map { window == nil || window == $0.reps } ?? false
+                let indirect = ex.secondaryMuscles ?? []
+                let meta = line([
+                    prescribed,
+                    (prescribed == nil || !restatesWindow) ? window.map { "target \($0)" } : nil,
+                    // MEASURED against planned. `restActualSec` is the mean gap
+                    // the logger timed between commits and it has been carried
+                    // on every exercise since U-wave with no reader at all —
+                    // which made the one intensity variable the document could
+                    // not see the one the athlete changes most often.
+                    val(ex.restTargetSec).map { "rest \($0) s" },
+                    val(ex.restActualSec).map { "actual rest \($0) s" },
+                    (ex.primaryMuscles?.isEmpty == false) ? "trains \(ex.primaryMuscles!.joined(separator: ", "))" : nil,
+                    indirect.isEmpty ? nil : "indirect \(indirect.joined(separator: ", "))",
+                    ex.sets.isEmpty ? "no sets logged" : nil,
+                ])
+                L.append("")
+                L.append("**\(ex.name)**" + (meta.isEmpty ? "" : " — " + meta))
+                var num = 0
+                for row in printable {
                     let ordinal: String
-                    if ss.contains(where: { $0.isGhost }) { ordinal = "G" } else { num += 1; ordinal = "S\(num)" }
-                    L.append(compactSet(row, ordinal, timed))
+                    if sides(row).contains(where: { $0.isGhost }) { ordinal = "G" } else { num += 1; ordinal = "S\(num)" }
+                    // INDENTED. The sets are the movement's rows, not siblings
+                    // of its heading, and two spaces is the cheapest thing that
+                    // says so in a format with no other nesting.
+                    L.append("  " + compactSet(row, ordinal, timed))
                 }
                 // What this movement did against the last time it was performed.
                 // Absent on a movement being logged for the first time, which is
@@ -1206,14 +1419,14 @@ public enum WeeklyExport {
                         ? "BW × \(grp(exact(best.reps)))"
                         : "\(grp(exact(best.weightKg))) × \(grp(exact(best.reps)))"
                     if let prev = ex.previous {
-                        L.append(line([
+                        L.append("  " + line([
                             "best \(lift)",
                             "vs \(prev.date) \(grp(exact(prev.weightKg))) × \(grp(exact(prev.reps)))",
                             "load \(signed(best.weightKg - prev.weightKg, 2) ?? noData) kg",
                             "reps \(signed(best.reps - prev.reps, 0) ?? noData)",
                         ]))
                     } else {
-                        L.append("best \(lift) · first time logged")
+                        L.append("  best \(lift) · first time logged")
                     }
                 }
             }
@@ -1222,31 +1435,41 @@ public enum WeeklyExport {
                 toSetRows(ex.sets)
                     .filter { row in sides(row).contains { $0.isWarmup } }
                     .map { row in
-                        let body = compactSet(row, "·", TimedExercise.isTimed(ex.name)).dropFirst(2)
+                        // `"·  "` — THREE characters. The ordinal grew a second
+                        // space when the set list became a column, and stripping
+                        // two left every warm-up starting with a stray space.
+                        let body = compactSet(row, "·", TimedExercise.isTimed(ex.name)).dropFirst(3)
                         return "\(ex.name) \(body)"
                     }
             }
-            if !warmups.isEmpty { L.append("warm-ups " + warmups.joined(separator: sep)) }
-
-            let cardioToday = cardio.filter { $0.date == s.date }
-            if !cardioToday.isEmpty { L.append("cardio " + cardioLines(cardioToday, dated: false)) }
-        }
-        /* A bout on a day with no session still happened, and is already counted
-           in the week's cardio total. Without this it would have nowhere to sit:
-           §5 is the only section that carries a bout's own detail. */
-        let sessionDays = Set(sessions.map(\.date))
-        let looseCardio = cardio.filter { !sessionDays.contains($0.date) }
-        if !looseCardio.isEmpty {
-            L.append("")
-            L.append("cardio_no_session " + cardioLines(looseCardio, dated: true))
+            if !warmups.isEmpty {
+                L.append("")
+                L.append("warm-ups " + warmups.joined(separator: sep))
+            }
+            /* NO CARDIO HERE. A bout is not part of a gym session — it merely
+               shared a date with one — and printing it inside this block filed
+               every walk under whichever workout happened to be that day.
+               §4 carries every bout, on its own day, whether or not a session
+               sits beside it, which also retires the `cardio_no_session`
+               footnote this section used to need for a bout on a rest day. */
         }
 
         // ── 6 · SETS BY MUSCLE ────────────────────────────────────────────────
         L.append("")
         L.append("## 6 · SETS BY MUSCLE")
+        /* TONNAGE BESIDE THE SET COUNT. `tonnageByMuscle` has been built by
+           both builders since v3 and read by nothing: the section counted a
+           muscle's sets against its target and never said what those sets
+           weighed, so six sets of a 60 kg row and six of a 20 kg fly were the
+           same row. `directKg` is the load credited to the muscle as a PRIMARY
+           mover, which is the half of the tonnage a progression argument can
+           actually be made from. Absent for a muscle the week's tonnage map
+           does not name — nothing is invented to fill the column. */
+        let tonnage = Dictionary(
+            (input.tonnageByMuscle ?? []).map { ($0.muscle, $0) }, uniquingKeysWith: { a, _ in a })
         if input.volumeByMuscle.isEmpty { L.append(none) } else { L.append("") }
         L.append(contentsOf: input.volumeByMuscle.isEmpty ? [] : markdownTable(
-            header: ["muscle", "direct", "indirect", "total", "target", "status"],
+            header: ["muscle", "direct", "indirect", "total", "target", "status", "tonnage kg", "direct kg"],
             body: input.volumeByMuscle.map { v in
                 /* ── THE GRADE IS ASYMMETRIC, AND `VolumeZone` OWNS IT ────────
                    A muscle is UNDER only if even its TOTAL — direct plus
@@ -1268,6 +1491,7 @@ public enum WeeklyExport {
                 case .optimal: status = "ON"
                 case .na: status = "no target"
                 }
+                let t = tonnage[v.muscle]
                 return [
                     v.muscle,
                     val(v.directSets, 1) ?? dash,
@@ -1275,9 +1499,11 @@ public enum WeeklyExport {
                     val(v.sets, 1) ?? dash,
                     v.target > 0 ? (val(v.target, 1) ?? dash) : "none",
                     status,
+                    valExact(t?.volumeKg) ?? dash,
+                    valExact(t?.directKg) ?? dash,
                 ]
             },
-            align: [.left, .right, .right, .right, .right, .left]))
+            align: [.left, .right, .right, .right, .right, .left, .right, .right]))
 
         // ── 7 · ANOMALIES ─────────────────────────────────────────────────────
         for d in days {
@@ -1323,6 +1549,41 @@ public enum WeeklyExport {
         L.append("## 7 · ANOMALIES")
         if anomalies.isEmpty { L.append("none") } else { L.append(contentsOf: anomalies) }
 
+        // ── 8 · LEGEND ────────────────────────────────────────────────────────
+        /* ── WHY v5 NOW HAS A LEGEND, HAVING DELETED v4's ──────────────────────
+           v4's legend explained the DOCUMENT — what a section was for, what an
+           absence meant, four standing notes restating the schema. That was
+           prose the audit can write for itself, and it went.
+
+           This one explains the SCALES, which the audit cannot derive: nothing
+           in the rows says whether DOMS 4 is nearly healed or nearly crippling,
+           whether fatigue runs 1–5 or 0–10, or which way either points. A
+           number on an unnamed scale is not data — it is a number the reader
+           has to guess the units of, and a guess is worse than the twelve lines
+           it costs to say. Fixed text, no figures: nothing here can disagree
+           with a row above it, because nothing here is computed. */
+        L.append("")
+        L.append("## 8 · LEGEND")
+        L.append(contentsOf: [
+            "scales     DOMS 0–5, 0 none and 5 unusable · fatigue 1–5, 1 fresh and 5 spent"
+                + " · stress 1–5, 1 calm and 5 acute · RPE 1–10",
+            "set line   S1 the first WORKING set · G a ghost set · L/R the two sides of one set"
+                + " · @8.5 the RPE · F failed the next rep, suppressed at 10 where it is implied",
+            "set line   a bare m:ss after the value is the set's MEASURED duration"
+                + " · drop/cold/momentum/short ROM/form broke/assisted/cut short are logged qualities",
+            "warm-ups   listed once per session and given no ordinal — S1 is the first working set",
+            "cardio     per DAY, never inside a session · from HH:MM an imported start,"
+                + " typed HH:MM the moment a manual row was written · speed is distance ÷ duration",
+            "body       the reported columns are the scale's own; the kg columns are weight × those"
+                + " percentages · ANOMALOUS rows print but are excluded from every mean",
+            "body       T4WM is the trailing-four weigh-in mean; its sample centre is which part"
+                + " of the week those four scans came from",
+            "muscle     direct is primary-mover sets, indirect is half-credited assistance"
+                + " · only direct work can earn OVER; only the total can fall UNDER",
+            "absence    a field with nothing behind it is OMITTED, never zeroed"
+                + " · — is a recorded blank in a table · none is an empty list",
+        ])
+
         return L.joined(separator: "\n")
     }
 
@@ -1333,13 +1594,19 @@ public enum WeeklyExport {
             line([
                 dated ? c.date : nil,
                 cardioLabel(c.kind),
-                // A hand-typed row's `created_at` is the instant it was typed,
-                // not a start. Printing 21:00 for an 08:00 walk invents one.
-                c.source == "health" ? clockOrNil(c.startedAt) : nil,
+                /* A hand-typed row's `created_at` is the instant it was TYPED,
+                   not a start. Printing 21:00 for an 08:00 walk invents one, so
+                   the two are spelled differently rather than one being hidden:
+                   an imported row states when the bout began, a typed row
+                   states when the athlete wrote it down, and the reader can
+                   tell which claim it is holding. */
+                clockOrNil(c.startedAt).map { c.source == "health" ? "from \($0)" : "typed \($0)" },
                 val(c.durationMin, 1).map { "\($0) min" },
                 val(c.distanceM.map { $0 / 1000 }, 2).map { "\($0) km" },
                 val(c.kcal).map { "\($0) kcal" },
+                val(c.totalKcal).map { "\($0) total kcal" },
                 val(c.avgHr).map { "avg HR \($0)" },
+                val(c.elevationM).map { "ascent \($0) m" },
             ])
         }.joined(separator: " | ")
     }
