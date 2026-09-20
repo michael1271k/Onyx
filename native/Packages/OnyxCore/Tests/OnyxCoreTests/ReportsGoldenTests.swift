@@ -89,6 +89,11 @@ struct WeeklyExportGoldenTests {
         let sections = [
             "## 1 · WEEK", "## 2 · WEEK AGGREGATES", "## 3 · BODY COMPOSITION",
             "## 4 · DAILY ROWS", "## 5 · SESSIONS", "## 6 · SETS BY MUSCLE", "## 7 · ANOMALIES",
+            // EIGHT since the report overhaul. §8 is fixed text — the scales
+            // the rows are on, which nothing in the rows can state — and it is
+            // the one section that cannot contradict a figure, because it
+            // holds none.
+            "## 8 · LEGEND",
         ]
         // `Score` and `Battery` are this app's OPINION of a week. The audit
         // reading this document is here to form its own, and a number it cannot
@@ -106,10 +111,14 @@ struct WeeklyExportGoldenTests {
             let ns = md as NSString
             #expect(banned.firstMatch(in: md, range: NSRange(location: 0, length: ns.length)) == nil,
                     "a Score or a Battery reached the document — \(c.name)")
-            // The budget is 400 for a normal week; a fixture is smaller still,
-            // and the number is here so a wave that doubles the document has to
-            // change the rule on purpose.
-            #expect(lines.count < 400, "\(lines.count) lines — \(c.name)")
+            /* The budget was 400 and is 600, changed on purpose. The overhaul
+               spends the difference on four things and no others: the set list
+               became a column (one line per movement's heading, a blank line
+               between movements), every day gained its own cardio row and a
+               vitals row, and §8 is nine fixed lines. Nothing here is a figure
+               that grows with the week except the per-day rows, which are
+               seven. A fixture is smaller still. */
+            #expect(lines.count < 600, "\(lines.count) lines — \(c.name)")
             // The one field of §1 that is required.
             #expect(md.contains("\(c.input.weekStart) → \(c.input.weekEnd)"), "date_range — \(c.name)")
             // And the §2 rows the schema marks required, which print even with

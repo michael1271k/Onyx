@@ -76,24 +76,7 @@ public struct WeeklyExportBuilder: Sendable {
            started, how long it lasted, how far it went. Two genuinely distinct
            walks that agree on all three are the same walk. The row kept is the
            first, so an id that other tables may reference survives. */
-        var seenBouts = Set<String>()
-        var dedupedCardio: [CardioLogRow] = []
-        for c in rows.cardio {
-            /* A row with NO start is never deduped. `cardio_logs.created_at` is
-               nullable with no default, and a key built from three absences is
-               the same key for every such row — a Monday cycle and a Friday
-               swim would collapse into one, and the document would report the
-               collapse as a duplicate removed. */
-            guard let started = c.createdAt else { dedupedCardio.append(c); continue }
-            // Date and kind ride in the key too: a bout is identified by what
-            // it was and when, not by three numbers that can coincide.
-            let key: String = [
-                c.date, c.kind, String(started.timeIntervalSince1970),
-                c.durationMin.map { String($0) } ?? "",
-                c.distanceM.map { String($0) } ?? "",
-            ].joined(separator: "|")
-            if seenBouts.insert(key).inserted { dedupedCardio.append(c) }
-        }
+        let dedupedCardio = Self.dedupeCardio(rows.cardio)
 
         var anomalies: [String] = []
         let removed = rows.cardio.count - dedupedCardio.count
@@ -267,6 +250,61 @@ public struct WeeklyExportBuilder: Sendable {
             "leverBaselineKcal": WeeklyExport.leverBaselineKcal,
             "anomalies": anomalies,
         ])
+    }
+
+    // MARK: - One physical bout is one row
+
+    /// `cardio_logs` deduped to the bouts that PHYSICALLY happened.
+    ///
+    /// ── WHY `created_at` IS NOT IN THE KEY ──────────────────────────────────
+    /// It used to be, and that is what let the duplicates through. On a row
+    /// Health filed today `created_at` IS the bout's start (`CardioIngest`
+    /// says so in its own words), but the ledger is full of rows for which it
+    /// is not: a row pulled back from the web era, one written before that
+    /// rule existed, one whose stamp did not survive a round trip. Every one of
+    /// those carries THE INSTANT OF THE IMPORT, so twenty-three re-imports of
+    /// one walk produced twenty-three distinct keys, nothing deduped, and a
+    /// week that reported 228 bouts and 40,559 kcal for a handful of walks.
+    ///
+    /// ── WHAT IDENTIFIES A BOUT INSTEAD ──────────────────────────────────────
+    /// `hk_uuid` where Health gave one: that is the bout's identity at the
+    /// source and two rows carrying it are the same workout, whatever else
+    /// drifted. Failing that, what the bout physically WAS — the day, the kind,
+    /// how long it lasted, how far it went and what it cost. Two genuinely
+    /// distinct walks that agree on all five are the same walk for a document
+    /// that has no other way to tell them apart, and that trade is deliberate:
+    /// double-counting a real bout is a number the reader cannot correct for,
+    /// and merging two identical ones is a bout it can still see the total of.
+    ///
+    /// A row with NO uuid and NO measurement at all is never deduped: a key
+    /// built from absences is the same key for every such row, and a Monday
+    /// cycle and a Friday swim would collapse into one.
+    ///
+    /// The row KEPT is the first, so an id other tables may reference survives.
+    static func dedupeCardio(_ rows: [CardioLogRow]) -> [CardioLogRow] {
+        var seen = Set<String>()
+        var out: [CardioLogRow] = []
+        for c in rows {
+            let key: String?
+            if let uuid = c.hkUuid?.trimmingCharacters(in: .whitespacesAndNewlines), !uuid.isEmpty {
+                // Lowercased for the same reason the ingest lowercases it: a
+                // uuid that changes case stops matching itself across a round
+                // trip, and the duplicate returns wearing a different hat.
+                key = "hk|" + uuid.lowercased()
+            } else if c.durationMin != nil || c.distanceM != nil || c.activeKcal != nil || c.kcal != nil {
+                key = [
+                    "phys", c.date, c.kind,
+                    c.durationMin.map { String($0) } ?? "",
+                    c.distanceM.map { String($0) } ?? "",
+                    (c.activeKcal ?? c.kcal).map { String($0) } ?? "",
+                ].joined(separator: "|")
+            } else {
+                key = nil
+            }
+            guard let key else { out.append(c); continue }
+            if seen.insert(key).inserted { out.append(c) }
+        }
+        return out
     }
 
     // MARK: - The fetch
@@ -954,8 +992,14 @@ public struct WeeklyExportBuilder: Sendable {
                     "side": j(Self.lr(r.lr)),
                     "failure": r.setType == "failure", "warmup": r.setType == "warmup",
                     "ghost": r.setType == "ghost", "dropset": r.setType == "dropset",
-                    // `quality` is not mirrored — "the question was never asked".
-                    "quality": NSNull(), "pairId": j(r.pairId),
+                    // `workout_sets.quality` — the `+`-joined grammar, passed
+                    // through whole. This said "not mirrored" and wrote a null
+                    // for every set: Postgres has carried the column all along,
+                    // `v14.setQuality` added it locally, and the SELECT simply
+                    // never asked for it. So every "Cold", "Momentum" and
+                    // "Short ROM" the athlete logged died between the logger
+                    // and the document. The renderer parses; nothing here does.
+                    "quality": j(r.quality), "pairId": j(r.pairId),
                     // A treadmill warm-up's whole measurement. Speed is not a
                     // column anywhere; the renderer derives it from the pair.
                     "durationSec": j(r.durationSec.map(Double.init)),
@@ -1180,15 +1224,27 @@ public struct WeeklyExportBuilder: Sendable {
     /// shortest window whose median one bad scan cannot move.
     func toBodyComp(_ d: Rows, weekStart: String) -> [[String: Any]] {
         var merged: [String: [String: Double]] = [:]
-        // `merged.set(date, {…})` — a later ledger row for a date REPLACES.
+        /* ── A LATER ROW WINS PER FIELD, NOT PER DATE ─────────────────────────
+           This was `merged[r.date] = [...]` — a plain assignment, so a SECOND
+           `body_composition` row on a date REPLACED the first outright. The
+           rows are ordered by `measured_at`, so an afternoon re-weigh that
+           recorded a weight and nothing else deleted that morning's visceral
+           fat, bone mass and every other compartment from the document, and
+           the table printed a row of dashes for a scan the app can still show.
+
+           Merged per FIELD now, and `compactMapValues` has already dropped the
+           nils — so a later row can only ADD a reading or correct one it
+           actually states, never blank one it is silent about. Same rule the
+           `daily_logs` pass below has always used. */
         for r in d.bodyHistory {
-            merged[r.date] = [
+            let fields: [String: Double?] = [
                 "weightKg": r.weightKg, "bmi": r.bmi, "bodyFatPct": r.bodyFatPct, "musclePercent": r.musclePct,
                 "waterPercent": r.waterPct, "boneMineral": r.boneMineralPct, "visceralFat": r.visceralFat, "bmr": r.bmr,
                 "muscleMassKg": r.muscleMassKg, "fatFreeMassKg": r.fatFreeMassKg, "fatMassKg": r.fatMassKg,
                 "proteinMassKg": r.proteinMassKg, "proteinPercent": r.proteinPct, "boneMineralKg": r.boneMassKg,
                 "waterMassKg": r.bodyWaterMassKg, "skeletalMuscleMassKg": r.skeletalMuscleMassKg,
-            ].compactMapValues { $0 }
+            ]
+            merged[r.date, default: [:]].merge(fields.compactMapValues { $0 }) { _, later in later }
         }
         for r in d.bodyHistoryLogs {
             let fields: [String: Double?] = [
@@ -1198,12 +1254,59 @@ public struct WeeklyExportBuilder: Sendable {
                 "proteinMassKg": r.proteinMassKg, "proteinPercent": r.proteinPercent, "boneMineralKg": r.boneMineralKg,
                 "waterMassKg": r.waterMassKg, "skeletalMuscleMassKg": r.skeletalMuscleMassKg,
                 "estimatedWaistToHipRatio": r.estimatedWaistToHipRatio,
+                // The tape. `daily_logs.waist_cm` only — there is no ledger
+                // column for it and there is not going to be one; the InBody
+                // sheet writes it beside the weight it was taken with.
+                "waistCm": r.waistCm,
             ]
             merged[r.date, default: [:]].merge(fields.compactMapValues { $0 }) { _, log in log }
         }
+        /* ── A MASS THE ROW DID NOT STORE IS STILL DERIVABLE ─────────────────
+           `bone kg` went missing from scans that plainly recorded a bone
+           MINERAL PERCENT and a weight. The InBody sheet stores percentages —
+           `bone_mineral`, `water_percent`, `protein_percent`, `muscle_percent`
+           — and the kg columns beside them are `weight × pct`, written by
+           whichever save path happened to run. When one did not, the column
+           stayed null and the document printed a dash for a number it was
+           holding both halves of.
+
+           `BodyComposition.derive` is the ONE implementation of that
+           arithmetic (`Body/Composition.swift`), the same one the InBody sheet
+           prints live. Derived values only FILL — a stored mass always wins,
+           because a scale that reported a mass directly is a better witness
+           than a percentage rounded to one decimal.
+
+           Folded in BEFORE the window is taken, so the 14-day median a scan is
+           judged against and the number printed beside it are the same number.
+           Judging a derived bone mass against a median of stored-only ones
+           would flag the very rows this fill exists to complete. */
+        func filledMasses(_ row: [String: Double]) -> [String: Double] {
+            let derived = BodyComposition.derive(BodyCompInput(
+                weightKg: row["weightKg"], bodyFatPct: row["bodyFatPct"],
+                musclePercent: row["musclePercent"], waterPercent: row["waterPercent"],
+                boneMineral: row["boneMineral"], proteinPercent: row["proteinPercent"]
+            ))
+            var out = row
+            for (key, value) in [
+                "fatMassKg": derived.fatMassKg, "fatFreeMassKg": derived.fatFreeMassKg,
+                "muscleMassKg": derived.muscleMassKg, "waterMassKg": derived.waterMassKg,
+                "boneMineralKg": derived.boneMineralKg, "proteinMassKg": derived.proteinMassKg,
+            ] {
+                guard out[key] == nil, let value, value.isFinite else { continue }
+                out[key] = value
+            }
+            return out
+        }
+        merged = merged.mapValues(filledMasses)
+
         // Only days with a metric beyond bare weight; the daily table lists weight.
         let beyondWeight = ["bmi", "bodyFatPct", "musclePercent", "waterPercent", "visceralFat", "bmr", "boneMineral",
-                            "muscleMassKg", "fatFreeMassKg", "skeletalMuscleMassKg", "estimatedWaistToHipRatio"]
+                            "muscleMassKg", "fatFreeMassKg", "skeletalMuscleMassKg", "estimatedWaistToHipRatio",
+                            // A day that recorded only a weight and a waist is
+                            // a measurement day. It is the one reading in this
+                            // table nothing derives, so if it is absent here it
+                            // is absent from the document entirely.
+                            "waistCm"]
         let scanned = merged.keys.sorted()
             .filter { date in beyondWeight.contains { merged[date]![$0] != nil } }
 
@@ -1298,7 +1401,13 @@ public struct WeeklyExportBuilder: Sendable {
         var waterByDate: [String: Double] = [:]
         for w in d.ledgerWater { waterByDate[w.date, default: 0] += w.amountMl }
         var cardioByDate: [String: [Double]] = [:]
-        for c in d.ledgerCardio { if let m = c.durationMin { cardioByDate[c.date, default: []].append(m) } }
+        // Deduped, like the week's own bouts. This read the raw rows, so the
+        // trend line carried the duplication back through every week the
+        // ledger covers — the one place the reader would go to check whether
+        // the week's cardio total was an outlier.
+        for c in Self.dedupeCardio(d.ledgerCardio) {
+            if let m = c.durationMin { cardioByDate[c.date, default: []].append(m) }
+        }
         var volByDate: [String: [Double]] = [:]
         for s in d.ledgerSessions {
             // Seed rows are scaffolding; a session with no rows has no volume.

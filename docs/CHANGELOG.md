@@ -44,6 +44,64 @@ _Nothing yet._
 
 ---
 
+## [7.4.0] — 2026-09-20 · The weekly export stops losing the week
+
+The Markdown weekly export — Settings → the week's **Export** — had been
+dropping or duplicating what it was built to report. Eight defects, and the
+eight things the document now carries that it was already holding in memory.
+
+### Fixed
+- **Cardio is counted once.** A re-imported HealthKit bout carries the instant
+  of the import, not its start, and the export's duplicate rule keyed on that
+  instant — so a week with a handful of walks reported **228 bouts and
+  40,559 kcal**. Bouts are now identified by `hk_uuid`, or by what the bout
+  physically was, and the week-over-week ledger is deduped the same way.
+- **The treadmill stops labelling the next exercise.** An exercise whose every
+  set is a warm-up printed a bare **Treadmill** immediately above the first real
+  movement. An exercise with nothing to list now prints no heading; the bout is
+  under `warm-ups` and on the day's own cardio row.
+- **Set qualities render.** Cold, Momentum, Short ROM, Form broke, Assisted and
+  Cut short reach the set line for the first time — the export was writing a
+  null for the column and the reader could not parse a set tagged with two of
+  them at once.
+- **A timed lift keeps its load.** A set that recorded a duration was rendered
+  as a cardio bout, and `100 × 5` was replaced by `2:00`. The duration is now a
+  token beside the set; only distance, incline, or a duration with no lift under
+  it makes a bout.
+- **A second weigh-in no longer erases the first.** Two scans on one date merge
+  field by field, so an afternoon re-weigh cannot delete that morning's visceral
+  fat and bone mass. Masses the scan did not store are derived from its own
+  percentages — the same arithmetic the InBody sheet shows live.
+- **Supplements count toward the day.** Psyllium husk's fibre, calories and
+  carbohydrate were reaching the weekly mean and not the daily row. The day's
+  totals now include the stack and name what it contributed.
+
+### Added
+- **Waist in the Body Composition table**, beside the weight it was taken with —
+  and the columns are spelled as the InBody sheet spells them (Body fat,
+  Skeletal muscle, Bone mineral, W:H ratio), reported figures first and derived
+  masses after.
+- **Rest, planned and measured**, on every exercise.
+- **Per-day cardio**, on every day, including the days that had none. A bout is
+  a thing a day contains, not part of whichever session shared its date.
+- **A vitals row per day** — REM, awake, bed and wake times, respiratory rate,
+  blood oxygen, wrist temperature, VO2max, daylight, stand hours, walking
+  distance, active and BMR calories.
+- **Session heart rate and energy**, each flagged when estimated.
+- **Which record a PR was** — weight, reps, volume or e1RM — and the estimated
+  1RM behind it.
+- **Tonnage per muscle** beside the set counts in Sets by Muscle.
+- **§8 · Legend** — the scales the rows are on (DOMS, fatigue, stress, RPE), the
+  set-line grammar, and what an absence means.
+
+### Changed
+- **Sessions read as a ledger.** Two heading lines instead of one eight-field
+  run, a blank line between movements, sets indented under the movement they
+  belong to.
+- **`target` and `prescribed` are one field.** Both came from the same plan row.
+  The prescription prints when the plan names the movement; the bare rep window
+  prints only when it does not.
+
 ## [7.3.0] — 2026-09-20 · The wrist reads the day, and both screens read your heart
 
 The Watch stops needing the phone to answer "how am I doing". Three pages of

@@ -294,7 +294,16 @@ struct WeekReportTests {
         let (report, _) = try built()
         #expect(report.scanDate == "2026-08-25")
         #expect(report.bodyFatPct == 17.2)
-        #expect(report.muscleMassKg == 36.8)
+        /* 82.4 kg × 44.7 % = 36.83 kg of lean soft tissue, DERIVED — the scan
+           stores the percentage and not the mass, and the export completes it
+           now rather than falling through to `skeletalMuscleMassKg`.
+
+           This read 36.8 and that was the SKELETAL muscle mass standing in for
+           the lean one. The two are different compartments (`Composition.swift`
+           says so in capitals) and they agree to a tenth in this seed by
+           coincidence. The fallback is still there for a scan with no muscle
+           percentage at all; this scan has one. */
+        #expect(report.muscleMassKg == 36.83)
     }
 
     // MARK: - Records

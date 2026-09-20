@@ -32,6 +32,15 @@ public struct HistorySetRow: Codable, FetchableRecord, Sendable, Equatable, Iden
     /// with `||`, never `??`. `PrEngine.buildBaselines` already does.
     public var est1rmKg: Double?
     public var rpe: Double?
+    /// HOW THE SET WENT — `workout_sets.quality`, the `+`-joined grammar
+    /// `SetTags.parseQuality` owns. Nil is a clean set: "the question was
+    /// never asked" is the same value as "nothing to report", which is why the
+    /// column is read and never defaulted.
+    ///
+    /// Selected since the weekly export needed it. Postgres has carried the
+    /// column all along and `v14.setQuality` added it locally; the only thing
+    /// between a logged "Cold" and the document was this SELECT.
+    public var quality: String?
     /// The cardio axes — see `WorkoutSet.durationSec`. All three nil on a
     /// lifted set, which is what `SetFormat.cardio` reads as "not a cardio set".
     public var durationSec: Int?
@@ -73,6 +82,7 @@ public struct HistorySetRow: Codable, FetchableRecord, Sendable, Equatable, Iden
         case pairId = "pair_id"
         case est1rmKg = "est_1rm_kg"
         case rpe
+        case quality
         case durationSec = "duration_sec"
         case incline
         case distanceKm = "distance_km"
@@ -104,7 +114,7 @@ public extension AppDatabase {
         SELECT s.id, s.session_id, s.exercise_id,
                COALESCE(e.name, es.name, s.exercise_id) AS exercise_name,
                s.set_index, s.fold_order, s.weight_kg, s.reps, s.set_type,
-               s.side, s.pair_id, s.est_1rm_kg, s.rpe,
+               s.side, s.pair_id, s.est_1rm_kg, s.rpe, s.quality,
                s.duration_sec, s.incline, s.distance_km, s.elevation_m, s.exercise_order,
                s.actual_rest_sec,
                sess.date, sess.day_key
