@@ -237,7 +237,25 @@ public struct WeeklyExportBuilder: Sendable {
                     // local, so a bout and the session it sat beside disagreed
                     // about what time it was by three hours.
                     "startedAt": j(c.createdAt.map(stamp)),
-                    "source": (c.fromHealthkit ?? false) ? "health" : "manual",
+                    /* ── THREE PROVENANCES, BECAUSE THE STAMP MEANS THREE
+                       THINGS ────────────────────────────────────────────────
+                       `cardio_logs` has never had a start column; `created_at`
+                       is all there is. On a row the CURRENT ingest filed it is
+                       the bout's start and the row also carries `hk_uuid` —
+                       both are written in the same statement, and the repair
+                       pass that corrects a drifted start adopts the key at the
+                       same time. A row Health filed with NO key predates that
+                       rule, so its stamp is the instant of the IMPORT: the
+                       Tuesday walk taken at 18:58 exported as `from 21:11`,
+                       which is when the batch ran.
+
+                       `import` is therefore not a guess about the row — it is
+                       the absence of the evidence that would make `from` true,
+                       and the document prints `imported HH:MM`, which is a fact
+                       about the ledger rather than a claim about the athlete. */
+                    "source": (c.fromHealthkit ?? false)
+                        ? ((c.hkUuid?.isEmpty == false) ? "health" : "import")
+                        : "manual",
                 ] as [String: Any]
             },
             "supplementProtocol": supplementStack(rows.customs),
@@ -248,8 +266,79 @@ public struct WeeklyExportBuilder: Sendable {
             // daily target with no anchor behind it. See the constant's own
             // comment in `WeeklyExport`.
             "leverBaselineKcal": WeeklyExport.leverBaselineKcal,
+            "insomnia": insomniaWindow(rows).map(Self.encodeToJSON),
             "anomalies": anomalies,
         ])
+    }
+
+    /// `ExportPrescription` from the instruction in force, else from the plan.
+    static func prescriptionPayload(
+        _ rx: Prescription?, plan: ProgramExercise?, phase: ProgramPhase
+    ) -> Any {
+        if let rx {
+            return [
+                "sets": j(rx.sets.map(Double.init) ?? plan.map { Double($0.sets(for: phase)) }),
+                "reps": j(rx.repRange ?? plan?.reps),
+                "loadKg": j(rx.loadKg),
+                "rpeCap": j(rx.rpeCap),
+                "structure": rx.structure.rawValue,
+                "setLoads": j(rx.setLoads),
+                "leadRule": rx.leadRule.rawValue,
+                "notes": j(rx.notes),
+                "effectiveFrom": rx.effectiveFrom,
+                "version": Double(rx.version),
+                "source": "prescription",
+            ] as [String: Any]
+        }
+        guard let plan else { return NSNull() }
+        return [
+            "sets": Double(plan.sets(for: phase)), "reps": plan.reps, "loadKg": j(plan.wk1Kg),
+            "structure": Prescription.Structure.straight.rawValue,
+            "leadRule": Prescription.LeadRule.none.rawValue,
+            "source": "plan",
+        ] as [String: Any]
+    }
+
+    // MARK: - The insomnia window
+
+    /// Every night in the trailing eight weeks that met one of the conditions,
+    /// oldest first.
+    ///
+    /// The RULE is `WeeklyExport.isInsomniaNight` and lives there, so the
+    /// renderer's own derivation of the exported week and this window's count
+    /// cannot disagree about what a bad night is. The night is filed under the
+    /// morning it ENDED on — `Night.nightOf`, the same bucketing every other
+    /// sleep reader uses — so the date beside it is the date the rest of the
+    /// document uses for that night.
+    func insomniaWindow(_ d: Rows) -> [ExportInsomniaNight] {
+        var tagged: Set<String> = []
+        for l in d.insomniaLogs where l.sleepOnsetTrouble { tagged.insert(l.date) }
+        var byDate: [String: ExportInsomniaNight] = [:]
+        for sl in d.insomniaSleep {
+            let date = Night.nightOf(Self.utcStamp(sl.startTime))
+            let onset = Self.onsetMinutes(sl)
+            let awake = sl.awakeMin.map(Double.init)
+            let tag = tagged.contains(date)
+            guard WeeklyExport.isInsomniaNight(onsetMin: onset, awakeMin: awake, tag: tag) else { continue }
+            // The night's own duration, then the stages — `sleepMinutesOf`'s
+            // tiers minus the `daily_logs` column, which this window does not
+            // join for.
+            let stages = [sl.deepMin, sl.remMin, sl.coreMin].compactMap { $0 }.filter { $0 > 0 }
+            let duration = sl.durationMin > 0 ? Double(sl.durationMin)
+                : (stages.isEmpty ? nil : Double(stages.reduce(0, +)))
+            byDate[date] = ExportInsomniaNight(
+                date: date,
+                onsetLocal: sl.onsetTime.map(clock),
+                onsetMin: onset, awakeMin: awake, durationMin: duration, tag: tag)
+        }
+        /* A night the athlete TAGGED and the watch never recorded is still a
+           night — the tag is the athlete's own account, which is evidence
+           whatever the watch did. It lands with no figures rather than being
+           dropped for having none. */
+        for date in tagged where byDate[date] == nil {
+            byDate[date] = ExportInsomniaNight(date: date, tag: true)
+        }
+        return byDate.values.sorted { $0.date < $1.date }
     }
 
     // MARK: - One physical bout is one row
@@ -281,30 +370,110 @@ public struct WeeklyExportBuilder: Sendable {
     /// cycle and a Friday swim would collapse into one.
     ///
     /// The row KEPT is the first, so an id other tables may reference survives.
+    /// A minute either way on a duration, and a hundred metres on a distance.
+    ///
+    /// ── WHY AN EXACT KEY WAS NOT ENOUGH ─────────────────────────────────────
+    /// The key was `date|kind|duration|distance|kcal`, compared byte for byte,
+    /// and two copies of one Tuesday walk still both reached the document:
+    /// Health re-states a bout's energy as later samples arrive, so the copies
+    /// agreed on 32 minutes and 3.35 km and disagreed on the calories — one
+    /// field out of five, and the walk was counted twice.
+    ///
+    /// `kcal` is out of the key entirely for that reason: it is the one figure
+    /// the source revises. What is left is what a bout physically WAS, compared
+    /// with the tolerance a measurement of it deserves. Two genuinely distinct
+    /// walks on one day that agree on kind, duration to the minute and distance
+    /// to a hundred metres are the same walk for a document with no other way
+    /// to tell them apart — and that trade is deliberate: double-counting a
+    /// real bout is a number the reader cannot correct for, and merging two
+    /// identical ones costs a total they can still see.
+    static let cardioDurationToleranceMin: Double = 1
+    static let cardioDistanceToleranceM: Double = 100
+
+    /// `cardio_logs` deduped to the bouts that PHYSICALLY happened.
+    ///
+    /// ── THE START IS NOT IN THE KEY AT ALL ──────────────────────────────────
+    /// It used to be, and that is what let the first wave of duplicates
+    /// through. On a row Health filed today `created_at` IS the bout's start
+    /// (`CardioIngest` says so in its own words), but the ledger is full of
+    /// rows for which it is not: a row pulled back from the web era, one
+    /// written before that rule existed, one whose stamp did not survive a
+    /// round trip. Every one of those carries THE INSTANT OF THE IMPORT, so
+    /// twenty-three re-imports of one walk produced twenty-three distinct keys.
+    /// A re-import minutes or hours later is exactly the case this has to
+    /// catch, so the stamp cannot be evidence of identity.
+    ///
+    /// `hk_uuid` is still a shortcut TO a match and never away from one: two
+    /// rows carrying it are the same workout whatever else drifted, and two
+    /// rows carrying DIFFERENT ones can still be the same physical walk
+    /// re-imported under a new key.
+    ///
+    /// A row with no measurement at all is never deduped: a key built from
+    /// absences is the same key for every such row, and a Monday cycle and a
+    /// Friday swim would collapse into one.
+    ///
+    /// THE ROW KEPT IS THE FIRST, which is the EARLIEST start: every caller
+    /// fetches `.order(Column("date"), Column("created_at"))`, so first-seen
+    /// and earliest-stamped are the same row. Keeping the first also keeps an
+    /// id other tables may reference.
+    ///
+    /// ── AND THE ORDER IS WHAT MAKES THE FOLD REPRODUCIBLE ───────────────────
+    /// A TOLERANCE is not an equivalence: 30.0, 30.9 and 31.8 minutes match
+    /// pairwise at each step and the ends do not match each other, so a greedy
+    /// fold over them can leave one survivor or two depending on which row it
+    /// sees first. There is no order-free answer to that — every grouping of a
+    /// non-transitive relation has to pick an anchor — so the anchor is pinned
+    /// instead: the earliest `created_at`, which is the first import of the
+    /// bout, and every caller fetches in that order. Two runs over one week
+    /// therefore always produce the same document.
+    ///
+    /// ponytail: a chain of three re-imports each drifting under the tolerance
+    /// from the last can still split into two bouts. It needs three passes to
+    /// land durations 0.9 min apart in a row, and the cost of getting it wrong
+    /// is one extra bout in a total the reader can see — not a number that
+    /// silently halves.
     static func dedupeCardio(_ rows: [CardioLogRow]) -> [CardioLogRow] {
-        var seen = Set<String>()
         var out: [CardioLogRow] = []
         for c in rows {
-            let key: String?
-            if let uuid = c.hkUuid?.trimmingCharacters(in: .whitespacesAndNewlines), !uuid.isEmpty {
-                // Lowercased for the same reason the ingest lowercases it: a
-                // uuid that changes case stops matching itself across a round
-                // trip, and the duplicate returns wearing a different hat.
-                key = "hk|" + uuid.lowercased()
-            } else if c.durationMin != nil || c.distanceM != nil || c.activeKcal != nil || c.kcal != nil {
-                key = [
-                    "phys", c.date, c.kind,
-                    c.durationMin.map { String($0) } ?? "",
-                    c.distanceM.map { String($0) } ?? "",
-                    (c.activeKcal ?? c.kcal).map { String($0) } ?? "",
-                ].joined(separator: "|")
-            } else {
-                key = nil
-            }
-            guard let key else { out.append(c); continue }
-            if seen.insert(key).inserted { out.append(c) }
+            if out.contains(where: { isSameBout($0, c) }) { continue }
+            out.append(c)
         }
         return out
+    }
+
+    /// Whether two rows describe one physical bout.
+    static func isSameBout(_ a: CardioLogRow, _ b: CardioLogRow) -> Bool {
+        guard a.date == b.date, a.kind == b.kind else { return false }
+        // Lowercased for the same reason the ingest lowercases it: a uuid that
+        // changes case stops matching itself across a round trip, and the
+        // duplicate returns wearing a different hat.
+        func uuid(_ r: CardioLogRow) -> String? {
+            let key = r.hkUuid?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return (key?.isEmpty == false) ? key : nil
+        }
+        if let ua = uuid(a), let ub = uuid(b), ua == ub { return true }
+
+        /* A field present on one row and absent on the other is a DISAGREEMENT,
+           not a match: a bout that measured no distance and one that walked
+           3.35 km are different bouts, whatever their durations. `compared`
+           makes sure at least one real measurement was actually tested — two
+           rows carrying nothing but a date and a kind must not fold together. */
+        var compared = false
+        switch (a.durationMin, b.durationMin) {
+        case let (x?, y?):
+            guard abs(x - y) <= cardioDurationToleranceMin else { return false }
+            compared = true
+        case (nil, nil): break
+        default: return false
+        }
+        switch (a.distanceM, b.distanceM) {
+        case let (x?, y?):
+            guard abs(x - y) <= cardioDistanceToleranceM else { return false }
+            compared = true
+        case (nil, nil): break
+        default: return false
+        }
+        return compared
     }
 
     // MARK: - The fetch
@@ -415,6 +584,16 @@ public struct WeeklyExportBuilder: Sendable {
         var ledgerVolumeBySession: [String: Double]
         var ledgerWater: [WaterIntakeRow]
         var ledgerCardio: [CardioLogRow]
+        /* Eight weeks of nights and the daily rows that carry their tag — the
+           insomnia tracker's window. Ended at the exported week's end, so a
+           report of an old week counts the eight weeks BEFORE it and not the
+           eight before today. */
+        var insomniaSleep: [SleepSessionRow]
+        var insomniaLogs: [DailyLogRow]
+        /// Every prescription ever written, oldest first. The table is tiny —
+        /// one row per movement per change — and resolving "what was in force
+        /// on this session's day" needs the ladder, not a slice of it.
+        var prescriptions: [Prescription]
     }
 
     func fetch(weekStart: String, weekEnd: String) throws -> Rows {
@@ -547,6 +726,10 @@ public struct WeeklyExportBuilder: Sendable {
             let hrvFrom = ISODate.addDays(weekStart, -42) ?? weekStart
 
             // Bedtimes: widened a day at the front, bucketed by `nightOf`.
+            // EIGHT WEEKS ending at the exported week's end — 55 days before
+            // the week starts, which is the week itself plus seven before it.
+            let insomniaFromDate = ISODate.addDays(weekStart, -49) ?? weekStart
+            let insomniaFrom = Self.utc("\(ISODate.addDays(insomniaFromDate, -1) ?? insomniaFromDate)T12:00:00Z")
             let sleepFrom = Self.utc("\(ISODate.addDays(weekStart, -1) ?? weekStart)T12:00:00Z")
             let sleepTo = Self.utc("\(ISODate.addDays(weekEnd, 1) ?? weekEnd)T12:00:00Z")
 
@@ -588,7 +771,17 @@ public struct WeeklyExportBuilder: Sendable {
                 customs: try CustomSupplementRow.filter(user).order(Column("created_at"), Column("id")).fetchAll(db).map(Self.custom),
                 volumeOverrides: volumeOverrides,
                 ledgerLogs: ledgerLogs, ledgerNutrition: ledgerNutrition, ledgerSessions: ledgerSessions,
-                ledgerVolumeBySession: volumeBySession, ledgerWater: ledgerWater, ledgerCardio: ledgerCardio
+                ledgerVolumeBySession: volumeBySession, ledgerWater: ledgerWater, ledgerCardio: ledgerCardio,
+                insomniaSleep: insomniaFrom == nil ? [] : try SleepSessionRow
+                    .filter(user && Column("start_time") >= insomniaFrom! && Column("start_time") < (sleepTo ?? Date()))
+                    .order(Column("start_time")).fetchAll(db),
+                insomniaLogs: try DailyLogRow
+                    .filter(user && Column("date") >= insomniaFromDate && Column("date") <= weekEnd)
+                    .order(Column("date")).fetchAll(db),
+                prescriptions: try PrescriptionRow
+                    .filter(user)
+                    .order(Column("effective_from"), Column("version"))
+                    .fetchAll(db).map(Prescription.init)
             )
         }
     }
@@ -698,6 +891,21 @@ public struct WeeklyExportBuilder: Sendable {
                 "nutritionException": j((l?.nutritionException?.isEmpty == false) ? l?.nutritionException : nil),
                 "nutritionEstimated": l?.nutritionEstimated ?? false,
                 "hrvFlag": j(hrvFlagOf(date, l?.hrvMs)),
+                /* ── THE NIGHT'S LATENCY, AND HOW OFTEN IT BROKE ─────────────
+                   `onset_time` is the first asleep sample (v31), so the gap to
+                   `start_time` IS the time it took to fall asleep — the figure
+                   the insomnia tracker is named for, and one nothing has ever
+                   read. Nil on a pre-v31 night rather than zero: a night nobody
+                   measured an onset for did not have an instant one. */
+                "sleepOnsetMin": j(sl.flatMap(Self.onsetMinutes)),
+                "awakenings": j(sl?.awakenings.map(Double.init)),
+                /* WHICH HRV THIS IS. Absent, not `false`, when the column has
+                   never been written: an old row is a reading of UNKNOWN
+                   provenance, and calling it a calendar-day mean would let §7
+                   report a mixture that may not be one. */
+                "hrvOvernight": j(l?.hrvOvernight),
+                // Only where there is an HRV for it to be the stamp OF.
+                "hrvSyncedAt": j(l?.hrvMs == nil ? nil : l.map { stamp($0.updatedAt) }),
                 "targetProfile": j(shape?.label), "trackCarbs": shape?.carbs ?? true, "trackFat": shape?.fat ?? true,
             ]
             // Present ONLY when the night is disputed. `false` on every row is a
@@ -706,6 +914,15 @@ public struct WeeklyExportBuilder: Sendable {
             if l?.sleepInaccurate == true { fields["sleepInaccurate"] = true }
             return try make(fields)
         }
+    }
+
+    /// Minutes from getting into bed to the first asleep sample. Nil when the
+    /// night carries no onset, and nil for a NEGATIVE gap — an onset stamped
+    /// before the window it belongs to is a broken row, not a fast sleeper.
+    static func onsetMinutes(_ sl: SleepSessionRow) -> Double? {
+        guard let onset = sl.onsetTime else { return nil }
+        let minutes = onset.timeIntervalSince(sl.startTime) / 60
+        return minutes >= 0 ? jsRound(minutes) : nil
     }
 
     /// `withNutrients`: the day's micros (food and stack apart) and the
@@ -867,6 +1084,8 @@ public struct WeeklyExportBuilder: Sendable {
 
         return try d.sessions.enumerated().map { sessionIndex, s in
             let program = Schedule.programForContext(ctx, s.date).program
+            // The versions in force on THIS session's day.
+            let current = Prescriptions.current(d.prescriptions, on: s.date)
             let mine = d.sets.filter { $0.sessionId == s.id }
             let span = d.spans[s.id]
             let pos = sessionPos[s.id] ?? Int.max
@@ -976,9 +1195,28 @@ public struct WeeklyExportBuilder: Sendable {
                         // (`Exercises/Tags.swift`). Nil for a movement the plan
                         // does not name, and a nil is not a `false`.
                         "compound": j(planned?.isCompound),
-                        "prescription": planned.map { p -> [String: Any] in
-                            ["sets": Double(p.sets(for: phase)), "reps": p.reps, "loadKg": j(p.wk1Kg)]
-                        } ?? NSNull(),
+                        /* ── THE CURRENT INSTRUCTION, ELSE THE JULY BLUEPRINT ─
+                           `ProgramExercise.wk1Kg` is the load the program was
+                           COMPILED with. It was the only thing this field ever
+                           carried, so the document printed `prescribed … @ 32
+                           kg` for Incline DB Press while the coach had moved it
+                           to 34 in August and 36 in September, and every `load
+                           Δ` beside it was measured against a number nobody had
+                           worked to since the block began.
+
+                           `prescriptions` is the instruction with a date on it.
+                           Resolved at the SESSION'S day and not at the week's
+                           start: a prescription that came into force mid-week
+                           applies to the sessions after it and not to the ones
+                           before, which is what `effective_from` means.
+
+                           The blueprint is still the fallback for a movement
+                           nobody has prescribed — it is the best statement of
+                           intent that exists — and it is LABELLED, because a
+                           delta against a blueprint is a different claim from a
+                           delta against this week's instruction. */
+                        "prescription": Self.prescriptionPayload(
+                            current[ExerciseAliases.canonicalName(r.exerciseName)], plan: planned, phase: phase),
                         "previous": previousBest(r.exerciseName, before: pos).map { prev -> [String: Any] in
                             ["date": prev.date, "weightKg": prev.weightKg, "reps": prev.reps]
                         } ?? NSNull(),

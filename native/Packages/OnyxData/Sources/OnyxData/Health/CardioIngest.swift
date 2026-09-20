@@ -27,7 +27,7 @@ public struct CardioIngestReport: Sendable, Equatable {
 
 public extension HealthSync {
 
-    /// Every mapped cardio bout Apple Health holds for today and yesterday,
+    /// Every mapped cardio bout Apple Health holds for the last `days` days,
     /// into the ledger, without being asked.
     ///
     /// ── WHY THIS EXISTS AT ALL ──────────────────────────────────────────────
@@ -58,13 +58,29 @@ public extension HealthSync {
     /// or denied is an empty report rather than a throw — the same courtesy
     /// `syncRecent` extends, and for the same reason. There is nothing a person
     /// can do differently about "denied" and "no bouts recorded".
+    ///
+    /// ── AND `days` IS HOW AN OLD ROW GETS ITS START BACK ───────────────────
+    /// Two days is the ordinary window. A BACKFILL passes a wider one, because
+    /// the repair below — `startDrifted`, which replaces an import instant with
+    /// `HKWorkout.startDate` — can only run on a day this loop actually visits.
+    /// Rows imported before `hk_uuid` existed have carried the moment of the
+    /// import as their start ever since, and the export has no way to prove one
+    /// is a start (it prints `imported HH:MM` and says so in §7). Health still
+    /// holds those workouts; nothing had ever gone back to ask.
+    ///
+    /// ponytail: a flat day count, walked backwards. A query per day is what
+    /// this already costs, and 90 of them once is cheaper than a second import
+    /// path that reads a range and has to decide which day each bout belongs
+    /// to — a decision `ingestCardio` already makes correctly.
     @discardableResult
-    func syncCardioBouts(now: Date = Date(), calendar: Calendar = .current) async throws -> CardioIngestReport {
-        let today = LogicalDayISO.string(now, calendar: calendar)
-        let yesterday = NightWindow.previousDay(today)
+    func syncCardioBouts(
+        now: Date = Date(), calendar: Calendar = .current, days: Int = 2
+    ) async throws -> CardioIngestReport {
+        var day = LogicalDayISO.string(now, calendar: calendar)
         var out = CardioIngestReport()
-        for day in [today, yesterday] {
+        for _ in 0..<max(1, days) {
             out = out + (try await ingestCardio(day: day, now: now, calendar: calendar))
+            day = NightWindow.previousDay(day)
         }
         return out
     }

@@ -69,14 +69,44 @@ public actor HealthSync {
             : (calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86_400))
 
         var payload = HealthPayload(date: dateISO)
+        /// Re-filed entries struck out of a dietary total, named on the way
+        /// out. A number that silently halves is worse than one that is wrong:
+        /// the athlete may have been looking at it.
+        var duplicates: [String] = []
         for metric in HealthCatalogue.metrics {
             // One metric that throws is one metric that is absent. A device
             // without a wrist temperature sensor must not cost the day its
             // steps, and `quantity` already treats "no samples" as `nil` —
             // this catches the rarer case where the store itself refuses.
-            let raw = try? await reader.quantity(
+            var raw = try? await reader.quantity(
                 metric.identifier, reduce: metric.reduce, start: start, end: end
             )
+            /* ── A DIETARY TOTAL IS RE-SUMMED WITHOUT THE RE-FILED ENTRIES ───
+               `HKStatisticsQuery` adds up every sample it is handed, and a food
+               logger that re-syncs writes the same meal twice — same app, same
+               instant, same amount, a new uuid. Apple's dedupe is between
+               DEVICES and has nothing to say about it, so calcium reached
+               3,142 mg against a 1,000 mg target on three days in seven and the
+               export threw the reading out rather than repairing it.
+
+               DIETARY ONLY. Every other quantity in the catalogue measures the
+               body, where the statistics query's cross-device dedupe is exactly
+               what is wanted and a hand-rolled sum would double-count every
+               minute an iPhone and a Watch both recorded.
+
+               A reader that cannot answer returns nil and the total stands. */
+            if metric.reduce == .sum, HealthCatalogue.isDietary(metric.identifier),
+               let samples = try? await reader.quantitySamples(metric.identifier, start: start, end: end),
+               !samples.isEmpty {
+                let (total, dropped) = QuantitySamples.dedupedSum(samples)
+                if !dropped.isEmpty {
+                    let apps = Set(dropped.map(\.source)).sorted().joined(separator: ", ")
+                    duplicates.append(
+                        "\(metric.key.rawValue) — \(dropped.count) re-filed \(apps) "
+                        + "sample\(dropped.count == 1 ? "" : "s") dropped")
+                    raw = total
+                }
+            }
             if let value = HealthCatalogue.round(raw, reduce: metric.reduce, scale: metric.scale) {
                 payload[metric.key] = value
                 /* ── AND, FOR A DIETARY MICRO, WHO WROTE IT ──────────────────
@@ -141,7 +171,9 @@ public actor HealthSync {
         // local store and then the outbox — under the id of the user who just
         // signed out.
         try Task.checkCancellation()
-        return try database.ingest(payload, userId: userId, now: now)
+        var report = try database.ingest(payload, userId: userId, now: now)
+        report.declined.append(contentsOf: duplicates)
+        return report
     }
 
     // MARK: - Editing a night (E2)

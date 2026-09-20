@@ -124,6 +124,30 @@ public struct ExportDay: Codable, Equatable, Sendable {
     /// own words. Present ONLY when the reading is doubted — a nil is "the
     /// gate had no objection", which is every ordinary night.
     public var hrvFlag: String?
+    /// The night's SLEEP LATENCY in minutes — bed to first asleep sample
+    /// (`sleep_sessions.onset_time − start_time`). Nil on a night written
+    /// before v31 and on one the watch never sampled an onset for.
+    public var sleepOnsetMin: Double?
+    /// `sleep_sessions.awakenings` — merged awake intervals of five minutes or
+    /// more, counted AFTER onset.
+    public var awakenings: Double?
+    /// Whether `hrvMs` is the mean of the samples inside the night's BED
+    /// WINDOW, or the calendar day's mean.
+    ///
+    /// ── THE TWO ARE NOT COMPARABLE, AND THE COLUMN HELD BOTH ────────────────
+    /// Overnight SDNN runs far above the waking figure — on this athlete ~100 ms
+    /// against ~60 — so a week in which the night resolved on Thursday and not
+    /// on Wednesday put two different measurements in one column, and
+    /// `VitalsGate.hrvArtifact` judged the overnight reading against a median
+    /// of daytime ones and called the good night an artifact. Carried so the
+    /// document can say which reading it is holding.
+    public var hrvOvernight: Bool?
+    /// When the row carrying this HRV was last written — `daily_logs.updated_at`
+    /// in the athlete's own zone. Printed beside a FLAGGED reading only: a
+    /// reading the watch filed hours after the night it describes is the first
+    /// thing to check, and the stamp is the only evidence of it the document
+    /// can carry.
+    public var hrvSyncedAt: String?
     public var targetProfile: String?
     public var trackCarbs: Bool?
     public var trackFat: Bool?
@@ -143,8 +167,19 @@ public struct ExportCardio: Codable, Equatable, Sendable {
     /// twin's doc comment for why the column carries both.
     public var startedAt: String?
     public var elevationM: Double?
-    /// `health` | `manual`. Optional only so a fixture written before this
-    /// field existed still decodes; the builder always supplies it.
+    /// `health` | `import` | `manual`. Optional only so a fixture written
+    /// before this field existed still decodes; the builder always supplies it.
+    ///
+    /// ── WHY `import` HAD TO BECOME ITS OWN WORD ─────────────────────────────
+    /// `cardio_logs` has no start column — `created_at` is the only timestamp
+    /// it has ever had — and on a row the CURRENT ingest filed it is the bout's
+    /// start, by that ingest's own rule. On a row imported before `hk_uuid`
+    /// existed it is the instant of the IMPORT, and the two are
+    /// indistinguishable by value: a Tuesday walk taken at 18:58 exported as
+    /// `from 21:11`, which is when the batch ran. A row Health filed with no
+    /// key is therefore `import`, and the document says `imported HH:MM` — the
+    /// moment the ledger learned of the bout, which is a fact, rather than a
+    /// start it cannot prove.
     public var source: String?
 }
 
@@ -209,14 +244,63 @@ public struct ExportExercise: Codable, Equatable, Sendable {
     public var previous: ExportPrevious?
 }
 
-/// `3 × 8–12 @ 40 kg` — the plan's own row, never a back-formed average.
+/// `3 × 8–12 @ 40 kg` — what the athlete is being asked for, never a
+/// back-formed average.
+///
+/// ── TWO SOURCES, AND THE ROW SAYS WHICH ─────────────────────────────────────
+/// `source: "prescription"` is a dated instruction from `prescriptions`, the
+/// CURRENT version in force on the session's day. `source: "plan"` is
+/// `ProgramExercise.wk1Kg` — the July blueprint the program was compiled with,
+/// which is what this field carried alone until v6 and why every `load Δ` was
+/// drawn against a number nobody had worked to since the block began.
 public struct ExportPrescription: Codable, Equatable, Sendable {
-    public var sets: Double
-    /// The window as the plan writes it: `"8–12"`, `"55s"`.
-    public var reps: String
-    /// `ProgramExercise.wk1Kg`. Absent for bodyweight and for a plan row that
-    /// never carried a load.
+    /// Optional since v6: a prescription may state a load and a window and
+    /// leave the count to the plan, and a fabricated `3` is a claim.
+    public var sets: Double?
+    /// The window as it is written: `"8–12"`, `"55s"`. Never parsed on the way
+    /// in — a spelling this app cannot read still reaches the document intact.
+    public var reps: String?
     public var loadKg: Double?
+    /// The ceiling the set was not meant to pass. A set rated ABOVE it is
+    /// flagged on its movement's line: the prescription was not followed, and
+    /// that is a different finding from a missed rep.
+    public var rpeCap: Double?
+    /// `STRAIGHT` | `TOPSET_BACKOFF` — `Prescription.Structure`.
+    public var structure: String?
+    /// Per-set loads, top set first, on a `TOPSET_BACKOFF`. A ladder cannot be
+    /// said with one number and an average of it describes a session nobody
+    /// performed.
+    public var setLoads: [Double]?
+    /// `ALTERNATE` | `LEFT` | `RIGHT` | `NONE` — `Prescription.LeadRule`.
+    public var leadRule: String?
+    public var notes: String?
+    /// The day this version came into force, and its ordinal. Printed so the
+    /// audit can see that a load moved and when, rather than only that it is
+    /// where it is.
+    public var effectiveFrom: String?
+    public var version: Double?
+    /// `prescription` | `plan`.
+    public var source: String?
+
+    public init(
+        sets: Double? = nil, reps: String? = nil, loadKg: Double? = nil, rpeCap: Double? = nil,
+        structure: String? = nil, setLoads: [Double]? = nil, leadRule: String? = nil,
+        notes: String? = nil, effectiveFrom: String? = nil, version: Double? = nil,
+        source: String? = nil
+    ) {
+        self.sets = sets; self.reps = reps; self.loadKg = loadKg; self.rpeCap = rpeCap
+        self.structure = structure; self.setLoads = setLoads; self.leadRule = leadRule
+        self.notes = notes; self.effectiveFrom = effectiveFrom; self.version = version
+        self.source = source
+    }
+
+    /// The load a comparison is drawn against — the TOP SET on a ladder, which
+    /// is the load the session is built around. Comparing the day's heaviest
+    /// set to a back-off would report progress for doing less.
+    public var referenceLoadKg: Double? {
+        if structure == Prescription.Structure.topsetBackoff.rawValue, let first = setLoads?.first { return first }
+        return loadKg
+    }
 }
 
 /// The previous best set of one movement — the comparison every ACTUAL line is
@@ -325,6 +409,30 @@ public struct ExportJoint: Codable, Equatable, Sendable {
     public var note: String?
 }
 
+/// One night the insomnia tracker names.
+///
+/// The three qualifying conditions are ORed and each is a different complaint:
+/// a long latency is trouble getting to sleep, a long awake total is trouble
+/// staying there, and the tag is the athlete saying so regardless of what the
+/// watch measured. A night can meet more than one.
+public struct ExportInsomniaNight: Codable, Equatable, Sendable {
+    public var date: String
+    /// The wall clock the athlete actually fell asleep at.
+    public var onsetLocal: String?
+    /// Minutes from getting into bed to the first asleep sample.
+    public var onsetMin: Double?
+    public var awakeMin: Double?
+    public var durationMin: Double?
+    /// `daily_logs.sleep_onset_trouble` — ticked by hand.
+    public var tag: Bool
+
+    public init(date: String, onsetLocal: String? = nil, onsetMin: Double? = nil,
+                awakeMin: Double? = nil, durationMin: Double? = nil, tag: Bool = false) {
+        self.date = date; self.onsetLocal = onsetLocal; self.onsetMin = onsetMin
+        self.awakeMin = awakeMin; self.durationMin = durationMin; self.tag = tag
+    }
+}
+
 public struct ExportBodyComp: Codable, Equatable, Sendable {
     public var date: String
     public var weightKg: Double?
@@ -428,4 +536,13 @@ public struct WeeklyExportInput: Codable, Equatable, Sendable {
     public var anomalies: [String]?
     /// Free text the athlete keeps against the protocol, at most three lines.
     public var protocolNotes: [String]?
+    /// Every night in the TRAILING EIGHT WEEKS that met one of the insomnia
+    /// conditions, oldest first — the exported week included.
+    ///
+    /// The window and not the week, because the running count is the finding:
+    /// two bad nights is a fortnight, two bad nights every week for eight is a
+    /// pattern, and the rows are the same rows either way. The renderer prints
+    /// the ones inside the week in full and counts the rest, so the count
+    /// cannot disagree with the list it was taken over.
+    public var insomnia: [ExportInsomniaNight]?
 }

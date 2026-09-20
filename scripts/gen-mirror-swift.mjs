@@ -63,6 +63,10 @@ const TYPES = {
   jsonb: 'JSONText',
   json: 'JSONText',
   _text: 'JSONText',
+  // A Postgres array of numbers, as PostgREST serialises it: `[42.5, 37.5]`.
+  // JSONText for the same reason `_text` is — the raw JSON is the column, and
+  // the one reader that wants `[Double]` decodes it where it reads it.
+  _numeric: 'JSONText',
 }
 
 /** GRDB column types, for the CREATE TABLE. */
@@ -244,6 +248,13 @@ function generate() {
   out.push('    /// The tables added at `since: 2`, registered by `v21.genericModel`.')
   out.push('    static func migrateMirrorV2(_ db: Database) throws {')
   for (const [table, def] of generated.filter(([, d]) => (d.since ?? 1) === 2)) out.push(migrationFor(table, def))
+  out.push('    }')
+  out.push('')
+  // Tables the fixture marks `since: 3` (export v6, 2026-09-20). Registered by
+  // `v33.prescriptions`. Append-only like V1 and V2.
+  out.push('    /// The tables added at `since: 3`, registered by `v33.prescriptions`.')
+  out.push('    static func migrateMirrorV3(_ db: Database) throws {')
+  for (const [table, def] of generated.filter(([, d]) => (d.since ?? 1) === 3)) out.push(migrationFor(table, def))
   out.push('    }')
   out.push('}')
   out.push('')

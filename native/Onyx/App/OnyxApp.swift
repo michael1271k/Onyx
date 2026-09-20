@@ -89,6 +89,16 @@ struct OnyxApp: App {
                 // already hold them.
                 environment?.drainPendingWater()
                 environment?.refreshHealth()
+                /* ── THE REMINDERS ARE RE-ARMED HERE AND NOWHERE ELSE ────────
+                   They are one-shots for the coming week, so a slot answered
+                   since the last foreground has to stop being scheduled and a
+                   new week has to be armed. There is no background refresh on
+                   a free developer account, so "the app was opened" is the only
+                   clock this has. `refresh` is a no-op when the toggle is off. */
+                if let environment {
+                    OnyxReminders.refresh(
+                        database: environment.database, userId: environment.userIdString)
+                }
             }
         }
     }

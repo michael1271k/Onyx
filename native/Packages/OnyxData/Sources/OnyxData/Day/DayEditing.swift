@@ -611,12 +611,18 @@ public extension AppDatabase {
             let minutes = row.durationMin
             // The same artifact gate the ingest runs; a re-read that finds a
             // strap artifact leaves the stored figure alone.
+            /* `overnight: true`, unconditionally. This re-read is taken over
+               the edited BED WINDOW, so it is an overnight mean by
+               construction, and the band it is judged against has to be built
+               from overnight means or the good night is the outlier — the
+               defect `hrvHistory` documents. */
             let accepted = try hrvMs.flatMap { v in
-                try VitalsGate.hrvArtifact(v, history: Self.hrvHistory(db, userId: userId, before: date)) == nil ? v : nil
+                try VitalsGate.hrvArtifact(
+                    v, history: Self.hrvHistory(db, userId: userId, before: date, overnight: true)) == nil ? v : nil
             }
             _ = try Self.patchDailyLog(db, userId: userId, date: date, now: now, clearing: []) {
                 $0.sleepMinutes = minutes
-                if let accepted { $0.hrvMs = accepted }
+                if let accepted { $0.hrvMs = accepted; $0.hrvOvernight = true }
             }
             return row
         }

@@ -72,9 +72,24 @@ public enum NutrientTargets {
         t("potassium", "Potassium", 3400, "mg", .floor, "Minerals"),
         t("calcium", "Calcium", 1000, "mg", .floor, "Minerals"),
         t("iron", "Iron", 10, "mg", .floor, "Minerals"),
-        t("magnesium", "Magnesium", 400, "mg", .floor, "Minerals"),
-        t("vitaminC", "Vitamin C", 90, "mg", .floor, "Vitamins"),
-        t("vitaminD", "Vitamin D", 2000, "IU", .floor, "Vitamins"),
+        /* ── THREE FLOORS THE STACK MEETS, NOT THE FOOD LOG ──────────────────
+           `fromStack` says where a nutrient is EXPECTED to come from, and these
+           three were marked as food's job while the stack has been delivering
+           every milligram of them: magnesium glycinate 300 mg, D3 + K2 5 000 IU
+           and the multivitamin's 470 mg of vitamin C, all of them in
+           `SupplementNutrients.table` and all of them credited on the day.
+
+           The cost of the wrong mark is one line: §7 names every non-stack
+           floor the food source did not report, so the document ended each week
+           saying magnesium and vitamin D were "not reported by the food source
+           on 7 of 7 days" — true, irrelevant, and read as a deficiency against
+           a target the stack was bought to meet. Nothing else changes: the
+           weekly mean has always summed food AND stack, and the nutrient grid
+           marks a stack-sourced row with a pill glyph, which is now correct for
+           these three too. */
+        t("magnesium", "Magnesium", 400, "mg", .floor, "Minerals", stack: true),
+        t("vitaminC", "Vitamin C", 90, "mg", .floor, "Vitamins", stack: true),
+        t("vitaminD", "Vitamin D", 2000, "IU", .floor, "Vitamins", stack: true),
         t("satFat", "Saturated Fat", 20, "g", .ceiling, "Macros"),
         t("sugar", "Added Sugar", 40, "g", .ceiling, "Macros"),
         t("vitaminB12", "Vitamin B12", 2.4, "mcg", .floor, "Vitamins", stack: true),

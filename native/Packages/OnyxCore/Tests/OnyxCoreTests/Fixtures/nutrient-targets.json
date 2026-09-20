@@ -68,7 +68,7 @@
           "unit": "mg",
           "kind": "floor",
           "group": "Minerals",
-          "fromStack": false
+          "fromStack": true
         },
         {
           "key": "vitaminC",
@@ -77,7 +77,7 @@
           "unit": "mg",
           "kind": "floor",
           "group": "Vitamins",
-          "fromStack": false
+          "fromStack": true
         },
         {
           "key": "vitaminD",
@@ -86,7 +86,7 @@
           "unit": "IU",
           "kind": "floor",
           "group": "Vitamins",
-          "fromStack": false
+          "fromStack": true
         },
         {
           "key": "satFat",

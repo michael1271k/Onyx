@@ -63,6 +63,9 @@ private struct SettingsForm: View {
     /// account row. Bound with `$` rather than a computed `Binding` because it
     /// has no GRDB row to proxy.
     @AppStorage("onyx.warmupCalculator") private var warmupCalculator = false
+    /// `OnyxReminders.enabledKey` — spelled once, there, and read here through
+    /// the same string so the toggle and the scheduler cannot drift.
+    @AppStorage(OnyxReminders.enabledKey) private var remindersEnabled = false
 
     @State private var isSigningOut = false
     @State private var isDeleting = false
@@ -132,6 +135,11 @@ private struct SettingsForm: View {
                     )
                 }
                 NavigationLink {
+                    PrescriptionsView(database: environment.database, userId: environment.userIdString)
+                } label: {
+                    LabeledContent("Prescriptions", value: "Paste")
+                }
+                NavigationLink {
                     ReportsListView()
                 } label: {
                     LabeledContent("Reports", value: "Weekly")
@@ -181,10 +189,31 @@ private struct SettingsForm: View {
             Section {
                 Toggle("Track effort (RPE)", isOn: trackRpe)
                 Toggle("Warm-up calculator", isOn: $warmupCalculator)
+                /* ── THE TWO FIGURES NOTHING ELSE COLLECTS ──────────────────
+                   Every other number arrives on its own: the watch files the
+                   steps, the scale the weight, the logger the sets. A fatigue
+                   rating is a person answering a question about themselves and
+                   the waist is a person fetching a tape, and the weekly audit
+                   keeps finding the same two gaps. Off until asked, because an
+                   app that requests notification permission at launch gets
+                   "Don't Allow" and can never ask again. */
+                Toggle("Log reminders", isOn: $remindersEnabled)
+                    .onChange(of: remindersEnabled) { _, on in
+                        Task { @MainActor in
+                            if on, await !OnyxReminders.requestAuthorization() {
+                                // Refused at the system sheet. The switch goes
+                                // back rather than sitting on beside nothing.
+                                remindersEnabled = false
+                                return
+                            }
+                            OnyxReminders.refresh(
+                                database: environment.database, userId: environment.userIdString)
+                        }
+                    }
             } header: {
                 OnyxSectionHeader("Training", .train)
             } footer: {
-                Text("Adds an RPE control to every logged set. Half of the double-progression rule reads it. The warm-up calculator adds a row of ramp-up loads to each card that can resolve a working weight.")
+                Text("Adds an RPE control to every logged set. Half of the double-progression rule reads it. The warm-up calculator adds a row of ramp-up loads to each card that can resolve a working weight. Reminders ask for the day's fatigue slots and for the Thursday waist, and only for the ones still unanswered.")
             }
 
             // ── THE MANUAL CASCADE (W2, decision 11) ────────────────────────

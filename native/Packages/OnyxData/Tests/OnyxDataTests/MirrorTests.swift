@@ -117,7 +117,9 @@ struct MirrorTests {
         // lever_periods, stress_logs); `workout_sessions`, `workout_sets` and
         // `exercises` are bespoke because they land in tables that already
         // exist locally in a different shape.
-        #expect(MirrorCatalogue.tables.count == 29)
+        // 30 since the export v6 wave added `prescriptions` (`since: 3`).
+        #expect(MirrorCatalogue.tables.count == 30)
+        #expect(Set(MirrorCatalogue.tables.map(\.name)).contains("prescriptions"))
         let names = Set(MirrorCatalogue.tables.map(\.name))
         #expect(!names.contains("workout_sets"))
         // And the tape table is absent on purpose — ONYX does not do manual
@@ -139,7 +141,7 @@ struct MirrorTests {
             }
             // Spot-check a wide one, column for column against the fixture.
             let columns = try conn.columns(in: "daily_logs").map(\.name)
-            #expect(columns.count == 52)
+            #expect(columns.count == 53)
             #expect(columns.contains("sleep_onset_trouble"))
             #expect(columns.contains("estimated_waist_to_hip_ratio"))
             // The 51st, added by `v20.sleepInaccurate`. A fresh install runs the

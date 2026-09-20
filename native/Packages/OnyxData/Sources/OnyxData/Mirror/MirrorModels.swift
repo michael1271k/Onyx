@@ -65,6 +65,7 @@ public struct DailyLogRow: Codable, FetchableRecord, PersistableRecord, Sendable
     public var nutritionEstimated: Bool
     public var sleepOnsetTrouble: Bool
     public var sleepInaccurate: Bool?
+    public var hrvOvernight: Bool?
 
     public enum CodingKeys: String, CodingKey {
         case id
@@ -119,6 +120,7 @@ public struct DailyLogRow: Codable, FetchableRecord, PersistableRecord, Sendable
         case nutritionEstimated = "nutrition_estimated"
         case sleepOnsetTrouble = "sleep_onset_trouble"
         case sleepInaccurate = "sleep_inaccurate"
+        case hrvOvernight = "hrv_overnight"
     }
 
     public init(
@@ -173,7 +175,8 @@ public struct DailyLogRow: Codable, FetchableRecord, PersistableRecord, Sendable
         nutritionException: String? = nil,
         nutritionEstimated: Bool,
         sleepOnsetTrouble: Bool,
-        sleepInaccurate: Bool? = nil
+        sleepInaccurate: Bool? = nil,
+        hrvOvernight: Bool? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -227,6 +230,7 @@ public struct DailyLogRow: Codable, FetchableRecord, PersistableRecord, Sendable
         self.nutritionEstimated = nutritionEstimated
         self.sleepOnsetTrouble = sleepOnsetTrouble
         self.sleepInaccurate = sleepInaccurate
+        self.hrvOvernight = hrvOvernight
     }
 }
 
@@ -1858,6 +1862,77 @@ public struct ReportRow: Codable, FetchableRecord, PersistableRecord, Sendable, 
     }
 }
 
+// MARK: - prescriptions
+
+/// Mirrors `public.prescriptions` (training). Pulled whole.
+public struct PrescriptionRow: Codable, FetchableRecord, PersistableRecord, Sendable, Equatable {
+    public static let databaseTableName = "prescriptions"
+
+    public var id: String
+    public var userId: String
+    public var exerciseKey: String
+    public var version: Int
+    public var effectiveFrom: String
+    public var loadKg: Double?
+    public var sets: Int?
+    public var repRange: String?
+    public var rpeCap: Double?
+    public var structure: String
+    public var setLoads: JSONText?
+    public var leadRule: String
+    public var notes: String?
+    public var createdAt: Date
+
+    public enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case exerciseKey = "exercise_key"
+        case version
+        case effectiveFrom = "effective_from"
+        case loadKg = "load_kg"
+        case sets
+        case repRange = "rep_range"
+        case rpeCap = "rpe_cap"
+        case structure
+        case setLoads = "set_loads"
+        case leadRule = "lead_rule"
+        case notes
+        case createdAt = "created_at"
+    }
+
+    public init(
+        id: String,
+        userId: String,
+        exerciseKey: String,
+        version: Int,
+        effectiveFrom: String,
+        loadKg: Double? = nil,
+        sets: Int? = nil,
+        repRange: String? = nil,
+        rpeCap: Double? = nil,
+        structure: String,
+        setLoads: JSONText? = nil,
+        leadRule: String,
+        notes: String? = nil,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.userId = userId
+        self.exerciseKey = exerciseKey
+        self.version = version
+        self.effectiveFrom = effectiveFrom
+        self.loadKg = loadKg
+        self.sets = sets
+        self.repRange = repRange
+        self.rpeCap = rpeCap
+        self.structure = structure
+        self.setLoads = setLoads
+        self.leadRule = leadRule
+        self.notes = notes
+        self.createdAt = createdAt
+    }
+}
+
 // MARK: - Schema
 
 extension AppDatabase {
@@ -1921,6 +1996,7 @@ extension AppDatabase {
                 t.column("nutrition_estimated", .boolean).notNull()
                 t.column("sleep_onset_trouble", .boolean).notNull()
                 t.column("sleep_inaccurate", .boolean)
+                t.column("hrv_overnight", .boolean)
             }
             try db.create(table: "daily_metrics") { t in
                 t.primaryKey("id", .text)
@@ -2297,6 +2373,26 @@ extension AppDatabase {
                 t.primaryKey(["user_id", "starts_on"])
             }
     }
+
+    /// The tables added at `since: 3`, registered by `v33.prescriptions`.
+    static func migrateMirrorV3(_ db: Database) throws {
+            try db.create(table: "prescriptions") { t in
+                t.primaryKey("id", .text)
+                t.column("user_id", .text).notNull()
+                t.column("exercise_key", .text).notNull()
+                t.column("version", .integer).notNull()
+                t.column("effective_from", .text).notNull()
+                t.column("load_kg", .double)
+                t.column("sets", .integer)
+                t.column("rep_range", .text)
+                t.column("rpe_cap", .double)
+                t.column("structure", .text).notNull()
+                t.column("set_loads", .text)
+                t.column("lead_rule", .text).notNull()
+                t.column("notes", .text)
+                t.column("created_at", .datetime).notNull()
+            }
+    }
 }
 
 /// Every mirrored table, with the strategy that keeps it current.
@@ -2428,6 +2524,10 @@ public enum MirrorCatalogue {
                     conflict: "id", order: ["id"],
                     pull: { try await $0.pull(ReportRow.self, from: $1) },
                     push: { try await $1.pushRow(ReportRow.self, from: $0, table: "reports", conflict: "id", ref: $2) }),
+        MirrorTable(name: "prescriptions", group: .training, strategy: .full,
+                    conflict: "id", order: ["id"],
+                    pull: { try await $0.pull(PrescriptionRow.self, from: $1) },
+                    push: { try await $1.pushRow(PrescriptionRow.self, from: $0, table: "prescriptions", conflict: "id", ref: $2) }),
     ]
 
     /// By name. Every lookup the pusher and the realtime wiring do is by name,

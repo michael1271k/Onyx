@@ -140,6 +140,12 @@ public enum HealthCatalogue {
         .sugar, .sodium, .potassium, .calcium, .iron, .magnesium, .vitaminC, .vitaminD, .satFat,
     ]
 
+    /// A food type. The prefix IS the classification — every dietary quantity
+    /// HealthKit defines carries it, and nothing else does.
+    public static func isDietary(_ identifier: String) -> Bool {
+        identifier.hasPrefix("HKQuantityTypeIdentifierDietary")
+    }
+
     public static let sleepIdentifier = "HKCategoryTypeIdentifierSleepAnalysis"
     /// Read a second time, over the night's bed window, for readiness v9.
     public static let hrvIdentifier = "HKQuantityTypeIdentifierHeartRateVariabilitySDNN"
