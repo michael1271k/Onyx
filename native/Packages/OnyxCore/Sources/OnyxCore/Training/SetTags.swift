@@ -42,8 +42,52 @@ public enum SetTags {
         "ghost": SetTag(label: "G", full: "Ghost set — logged, not counted"),
     ]
 
-    /// The composition order — stable across sessions.
-    private static let tagOrder = ["warmup", "failure", "dropset", "ghost"]
+    /// The composition order — stable across sessions, and the order every
+    /// chip row on either client draws in.
+    ///
+    /// Public since W3: the watch's Set Quality panel needs the four kinds in
+    /// a fixed order, and a second list spelled out on the wrist is how two
+    /// clients start disagreeing about what a set can be.
+    public static let tagKeys = ["warmup", "failure", "dropset", "ghost"]
+
+    private static let tagOrder = tagKeys
+
+    /// ── THE THIRD LENGTH, AND WHY THE TABLE NEEDED ONE (W3) ─────────────────
+    /// `SetTag.label` is a single glyph (`W`) and `SetTag.full` is a sentence
+    /// ("Ghost set — logged, not counted"). A chip needs the word in between,
+    /// and the phone has been spelling that word out in a `switch` inside
+    /// `LoggerModel.SetKind` since wave U2 — where the watch cannot see it.
+    ///
+    /// So the word and its four-word meaning move here and the phone's enum
+    /// delegates. That is a de-duplication and not a new table: two
+    /// hand-maintained copies of one vocabulary both look right, which is the
+    /// same argument `Program` makes about the muscle map.
+    ///
+    /// `nil` and `"normal"` both answer the unmarked set, because "normal" is
+    /// the ABSENCE of a claim rather than a fifth kind — which is why neither
+    /// client draws a chip for it.
+    public static func word(for setType: String?) -> String {
+        switch setType {
+        case "warmup":  "Warm-up"
+        case "failure": "Failure"
+        case "dropset": "Drop"
+        case "ghost":   "Ghost"
+        default:        "Normal"
+        }
+    }
+
+    /// What choosing a kind MEANS, in four words. Both clients keep one of
+    /// these on screen at all times rather than stacking a hint under every
+    /// chip.
+    public static func hint(for setType: String?) -> String {
+        switch setType {
+        case "warmup":  "Before the work"
+        case "failure": "Taken to failure"
+        case "dropset": "No record from it"
+        case "ghost":   "Logged, counts for nothing"
+        default:        "Counts as work"
+        }
+    }
 
     /// Sets that are RECORDED but do not count as work: warm-ups and ghosts.
     public static func isWorkingSet(_ setType: String?) -> Bool {

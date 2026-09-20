@@ -48,6 +48,8 @@ struct RestView: View {
     @State private var rung: Double = -1
     @State private var didWarn = false
     @State private var didFire = false
+    @State private var isEditing = false
+    @State private var isConfirmingCancel = false
 
     private var chosen: RpeStop? {
         let index = Int(rung.rounded())
@@ -60,7 +62,7 @@ struct RestView: View {
         // not reserve space draws the button over the countdown.
         VStack(spacing: OnyxSpace.xs) {
             ScrollView {
-            // ── THE ORDER IS DIGITS, RATING, RECEIPT ────────────────────
+            // ── THE ORDER IS NOW, NOW, CONTROL, THEN THE PAST ───────────
             // The set line sat directly under the digits for one build, on the
             // reasoning that a receipt for the set belongs beside the clock
             // counting its rest. The 40 mm shot said otherwise: countdown plus
@@ -70,11 +72,23 @@ struct RestView: View {
             // "nobody navigates to a rating" is the whole argument for the
             // ladder living here rather than on a page of its own.
             //
-            // So the rating comes second and the receipt third. Both remain
-            // above `Next ·`, which is the only line here about the future and
-            // the right thing to put below the fold.
+            // W3 added the recovery curve and the budget could not hold five
+            // rows, so the order is now: the countdown, the curve under it
+            // (the other thing that is true RIGHT NOW), then ONE row carrying
+            // both the receipt and the rate, then the control, then `Next ·`
+            // — the only line here about the future and the right thing to
+            // put below the fold.
+            //
+            // The ladder stays above the fold, which is the rule this comment
+            // has defended since it was written. The first build of this wave
+            // broke it in the other direction: the heart row and `Next ·` were
+            // drawn BELOW the pinned Skip button, where watchOS puts them off
+            // the display rather than clipping them. That is what adding a row
+            // here costs — measure it, do not guess.
             VStack(spacing: 2) {
                 clock
+                spark
+                receipt
                 ladder
                 if let exercise = pulse.exercise {
                     Text("Next · \(exercise)")
@@ -115,8 +129,35 @@ struct RestView: View {
         // It replaces the system time of day in that corner, which is the right
         // trade mid-workout and has to be the same trade on both screens.
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { WatchSessionTimer() }
+            // The same two gestures the set screen's clock carries, in the
+            // corner this screen has free. Pause has to be reachable from the
+            // screen you are actually on during a rest, and cancel has to be
+            // the same gesture in both places or it is two things to remember.
+            ToolbarItem(placement: .topBarTrailing) {
+                WatchSessionTimer()
+                    .onTapGesture {
+                        model.togglePause()
+                        WKInterfaceDevice.current().play(.click)
+                    }
+                    .onLongPressGesture(minimumDuration: 0.6) {
+                        WKInterfaceDevice.current().play(.retry)
+                        isConfirmingCancel = true
+                    }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint(model.isPaused ? "Resumes the session" : "Pauses the session")
+            }
         }
+        .sheet(isPresented: $isConfirmingCancel) {
+            DiscardSheet(setCount: model.sets.count) {
+                model.cancelSession()
+                dismiss()
+            }
+        }
+        // ── THE SHEET IS PRESENTED, THE CROWN IS NOT SHARED ─────────────────
+        // While it is up it owns the Crown for its own two rows, and this
+        // view's ladder is not on screen to contest it. Dismissing gives the
+        // rung back, which is why the rating survives an edit.
+        .sheet(isPresented: $isEditing) { EditLastSetSheet() }
         .focusable()
         // The Crown means the ladder here, and nothing else is on screen — so
         // it is unambiguous by construction rather than by a focus ring.
@@ -160,21 +201,34 @@ struct RestView: View {
     /// exceed 1 and the circle closed and kept going.
     ///
     /// The 48 pt it occupied is what the set line below and the toolbar clock
-    /// above are now spending, and the digits — which are the answer to the
-    /// only question a dropped wrist is asking — got bigger by being alone.
+    /// above are now spending.
+    ///
+    /// ── AND THE RECEIPT LEFT THIS STACK IN W3 ───────────────────────────────
+    /// It was a second line inside this property. The wave that added the
+    /// recovery curve had to choose what sits directly under the countdown,
+    /// and the answer is the other thing that is true RIGHT NOW — the curve.
+    /// The receipt is a fact about a set that has finished, so it moved down
+    /// and shares a row with the rate.
     private var clock: some View {
-        VStack(spacing: 0) {
-            Text(timerInterval: Date()...pulse.endsAt, countsDown: true)
-                // `figure` and not `hero` — see the token. This screen carries
-                // a control as well as a number, and at 40 mm `hero` took the
-                // ladder off the bottom of it.
-                .font(WatchType.figure)
-                .foregroundStyle(WatchInk.primary)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            lastSet
-        }
+        Text(timerInterval: Date()...pulse.endsAt, countsDown: true)
+            // ── `value`, AND THE STEP DOWN WAS MEASURED (W3) ────────────────
+            // It was `hero`, then `figure`, each time because the row under it
+            // was being clipped. W3 added the recovery curve and the budget
+            // ran out: the cover's scroll viewport is about 95 pt once the bar
+            // and the pinned Skip button have taken theirs, and `figure` alone
+            // spends 40 of it — the first build of this wave drew the receipt
+            // and the `Next ·` line off the bottom of the display, which is
+            // what watchOS does instead of clipping.
+            //
+            // At `value` the countdown, the curve, the receipt and the ladder
+            // all fit above the fold. It is still the biggest thing here and
+            // the only monospaced one, so it still reads as the answer to "how
+            // long left".
+            .font(WatchType.value)
+            .foregroundStyle(WatchInk.primary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
     }
 
     /// The set that earned this rest — `70 kg × 8 · RPE 8`.
@@ -197,15 +251,136 @@ struct RestView: View {
     /// Nil until a phone new enough to send the set is talking to this watch,
     /// and nil for a rest the watch started itself. It draws nothing then,
     /// rather than a row of dashes.
+    /// ── AND IT IS THE EDIT DOOR (W3) ────────────────────────────────────────
+    /// A receipt is where you notice the number is wrong, and until W3 the
+    /// wrist's only remedy was to undo the set and do it again. Tapping it
+    /// opens the two Crown rows on the set it names — the same `ValueRow` the
+    /// logger uses, because a focused number has one look on this device.
+    ///
+    /// It is tappable only when there is a set to edit: `lastSetLine` is nil
+    /// for a rest this watch started itself (the pulse carries no numbers) and
+    /// for a phone too old to send them, and a control that appears half the
+    /// time is worse than one that appears with the thing it acts on.
     @ViewBuilder
     private var lastSet: some View {
         if let line = lastSetLine {
-            Text(line)
-                .font(WatchType.label)
-                .foregroundStyle(WatchInk.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            Button {
+                isEditing = true
+            } label: {
+                Text(line)
+                    .font(WatchType.label)
+                    .foregroundStyle(WatchInk.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .disabled(model.lastLogged == nil || isLuminanceReduced)
+            .accessibilityHint("Edits the load and reps of this set")
         }
+    }
+
+    // MARK: - The heart
+
+    /// ── A SHAPE, NOT A CHART ────────────────────────────────────────────────
+    /// `LineMark` would work and costs more than it is worth here: Swift
+    /// Charts is a framework the watch target does not link today, loaded on
+    /// the launch path during an `HKWorkoutSession`, re-running scale and axis
+    /// layout on every redraw — including the 1 Hz ticks of the always-on
+    /// state — to draw a polyline with no axes, no legend and nothing to hit
+    /// test. `WatchInk`'s header refuses a mesh gradient on this device for
+    /// the same reason.
+    ///
+    /// ── AND THE DELTA IS AGAINST THE PULSE, NOT THE BUFFER ──────────────────
+    /// `RestPulse.bpm` is the reading at the instant the rest started, which is
+    /// the only thing "since rest began" can honestly mean here:
+    /// `recentSamples` is a rolling window of this launch and has no idea when
+    /// you racked the bar.
+    ///
+    /// ── THE CURVE ALONE ─────────────────────────────────────────────────────
+    /// A 12 pt strip, full width, no axis and no number.
+    ///
+    /// Its own row because it is the only thing on this screen that is a
+    /// SHAPE, and a polyline squeezed between two text runs is a squiggle.
+    /// Twelve points is what the budget had, and it is enough to read a fall
+    /// from a plateau, which is the whole question.
+    @ViewBuilder
+    private var spark: some View {
+        if model.workout.recentSamples.count > 1, !isLuminanceReduced {
+            Spark(values: model.workout.recentSamples)
+                .stroke(
+                    WatchInk.record,
+                    style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
+                )
+                .frame(height: 12)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 1)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// The set that earned this rest on the left, what your heart is doing on
+    /// the right — ONE row.
+    ///
+    /// ── WHY THEY SHARE A LINE ───────────────────────────────────────────────
+    /// They were two rows, and two did not fit: the first build of this wave
+    /// had the receipt drawn off the bottom of the display, which is what
+    /// watchOS does instead of clipping. They are also the same KIND of line —
+    /// a small secondary fact under a hero number — so sharing one is not only
+    /// a concession to points.
+    ///
+    /// Only the left half is a button. Tapping a heart rate to edit a set
+    /// would be a target that does not mean what it shows.
+    @ViewBuilder
+    private var receipt: some View {
+        if lastSetLine != nil || model.workout.heartRate != nil {
+            HStack(spacing: OnyxSpace.xs) {
+                lastSet
+                Spacer(minLength: 0)
+                if let bpm = model.workout.heartRate, !isLuminanceReduced {
+                    // ── GOLD, LIKE THE CURVE AND LIKE THE SET SCREEN ────────
+                    // It was `primary`, and the same fact was then white here
+                    // and gold two screens over. Worse, it orphaned the gold
+                    // curve directly above it — a colour with no labelled
+                    // owner — and put a second white numeral under the
+                    // countdown, which is the one thing on this screen that
+                    // is allowed to be a white numeral.
+                    Text("\(bpm)")
+                        .font(WatchType.label)
+                        .foregroundStyle(WatchInk.record)
+                        .monospacedDigit()
+                        .accessibilityLabel("Heart rate \(bpm) beats per minute")
+                    if let drop = recovered {
+                        // A recovery is a NEGATIVE delta and it is the good
+                        // one, so the sign is printed rather than inferred
+                        // from a colour — this screen has two inks and
+                        // neither of them means "good".
+                        // ── AN ARROW, NOT A SIGN ────────────────────────────
+                        // Two integers of similar magnitude either side of a
+                        // minus is the RANGE idiom: "104 −44" reads first as
+                        // "104 to 44". An arrow cannot be read that way, and
+                        // it costs the same width — which this row does not
+                        // have to spare at 40 mm.
+                        Text(drop > 0 ? "↓\(drop)" : "↑\(-drop)")
+                            .font(WatchType.label)
+                            .foregroundStyle(WatchInk.secondary)
+                            .monospacedDigit()
+                            .accessibilityLabel(
+                                drop > 0 ? "down \(drop) since the set" : "up \(-drop) since the set"
+                            )
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// How far the rate has come down since the pulse was sent. Nil when the
+    /// pulse carried no reading — an older phone, or a rest this watch started
+    /// before its own sensor had settled.
+    private var recovered: Int? {
+        guard let start = pulse.bpm, let now = model.workout.heartRate else { return nil }
+        return start - now
     }
 
     private var lastSetLine: String? {
@@ -213,7 +388,12 @@ struct RestView: View {
         // `×` and not `x`: on `SetView` the lowercase letter is a layout element
         // standing between two focusable rows, and here this is a sentence.
         // `WatchModel.lastTime` already spells the same fact the same way.
-        let set = "\(Deck.fmtKg(load)) kg × \(reps)"
+        // ── NO `kg`, BECAUSE THE ROW IS SHARED NOW ──────────────────────
+        // The heart rate and its delta took the right-hand end of this line
+        // in W3 and the 49 mm shot came back "42.5 kg × 12 · RPE…". The unit
+        // is the one thing here that can go: `×` already says this is a set,
+        // and every other load on this wrist is in kilograms.
+        let set = "\(Deck.fmtKg(load)) × \(reps)"
         guard let rpe = pulse.rpe else { return set }
         // `trimNum` and not `fmtKg`: the output is identical for every rung on
         // the ladder, and one of them is a weight formatter being asked about a
@@ -236,12 +416,19 @@ struct RestView: View {
     /// MEANS to someone who has not memorised a ten-point scale.
     private var ladder: some View {
         Group {
+            // ── THE UNRATED WORD IS PRIMARY INK ─────────────────────────────
+            // Grey word on a grey fill with no glyph reads as a disabled
+            // placeholder, and `Skip rest` directly under it is white on a
+            // similar pill — so the one control this screen exists to offer
+            // was the quietest thing on it and the escape hatch was the
+            // loudest. The chevron says it is a control; the Crown is what
+            // turns it.
             if let chosen {
                 Text("\(chosen.label) · \(chosen.hint)")
                     .foregroundStyle(WatchInk.primary)
             } else {
-                Text("Rate")
-                    .foregroundStyle(WatchInk.secondary)
+                Text("Rate ›")
+                    .foregroundStyle(WatchInk.primary)
             }
         }
         .font(WatchType.value)
@@ -261,6 +448,9 @@ struct RestView: View {
             dismiss()
         }
         .font(WatchType.label)
+        // Secondary ink: it is the way out, not the thing to do. See the
+        // ladder's note about which of the two was shouting.
+        .foregroundStyle(WatchInk.secondary)
         .buttonStyle(.bordered)
         // ── `.small`, AND IT IS THE FOLD THAT ASKED ─────────────────────────
         // A default `.bordered` button renders ~35 pt tall on a 40 mm case for
@@ -307,6 +497,142 @@ struct RestView: View {
                 return
             }
             try? await Task.sleep(for: .milliseconds(250))
+        }
+    }
+}
+
+// MARK: - The sparkline
+
+/// A polyline over the readings, normalised to its own range.
+///
+/// ── IT IS A SHAPE AND NOT A TIME SERIES, AND IT DRAWS NO AXIS ───────────────
+/// `WorkoutSessionController.recentSamples` are the readings THIS LAUNCH saw,
+/// at whatever cadence HealthKit delivered them — not a fixed grid. Spacing
+/// them evenly is therefore a drawing decision and not a measurement, which is
+/// exactly why there is no axis under it and no number derived from it: the
+/// figure beside it is the current rate, read from the same controller.
+///
+/// Fewer than two readings draws nothing. A flat run draws the middle line
+/// rather than dividing by a zero range — a heart that has not moved is a real
+/// state, and `hi == lo` is how it arrives.
+struct Spark: Shape {
+    let values: [Int]
+
+    func path(in rect: CGRect) -> Path {
+        guard values.count > 1 else { return Path() }
+        let lo = Double(values.min() ?? 0)
+        let hi = Double(values.max() ?? 0)
+        let dx = rect.width / CGFloat(values.count - 1)
+        return Path { path in
+            for (i, value) in values.enumerated() {
+                let fraction = hi > lo ? (Double(value) - lo) / (hi - lo) : 0.5
+                let point = CGPoint(
+                    x: rect.minX + CGFloat(i) * dx,
+                    y: rect.maxY - CGFloat(fraction) * rect.height
+                )
+                if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+        }
+    }
+}
+
+// MARK: - Editing the set behind you
+
+/// The two numbers of the last logged set, on the Crown.
+///
+/// ── WHY A SHEET AND NOT A THIRD PAGE ────────────────────────────────────────
+/// It is reached from the receipt that names the set, it is about one set, and
+/// it ends by being dismissed — which is a sheet. A page would have to exist
+/// on the rest screen whether or not there was anything to edit, and the rest
+/// screen's vertical budget is the one this app has fought hardest for.
+///
+/// ── AND WHY IT SAVES ON DISMISS RATHER THAN ON EVERY DETENT ─────────────────
+/// The panel one screen over writes an `amend` per tap because a tap is a
+/// decision. A Crown turn is not: scrubbing 40 kg to 42.5 passes through eight
+/// values, and writing each one would put eight permanent events in a log that
+/// is never compacted for one correction. So the numbers are local until the
+/// button, and `editLast` refuses a patch that changes nothing.
+private struct EditLastSetSheet: View {
+
+    @Environment(WatchModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+
+    private enum Field: Hashable { case load, reps }
+    @FocusState private var field: Field?
+
+    @State private var load: Double = 0
+    @State private var reps: Int = 0
+
+    var body: some View {
+        VStack(spacing: OnyxSpace.xs) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: OnyxSpace.s) {
+                    Text(model.lastLoggedMovement?.plan.name ?? "Last set")
+                        .font(WatchType.name)
+                        .foregroundStyle(WatchInk.primary)
+                        .lineLimit(2)
+                        .allowsTightening(true)
+                    HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.xs) {
+                        ValueRow(value: Deck.fmtKg(load), unit: "kg", font: WatchType.figure, isFocused: field == .load)
+                            .focusable()
+                            .focused($field, equals: .load)
+                            .digitalCrownRotation(
+                                $load,
+                                from: 0, through: 500, by: Ceilings.loadStepFineKg,
+                                sensitivity: .medium, isContinuous: false, isHapticFeedbackEnabled: true
+                            )
+                            .onTapGesture { field = .load }
+                            .accessibilityElement()
+                            .accessibilityLabel("Load")
+                            .accessibilityValue("\(Deck.fmtKg(load)) kilograms")
+                            .accessibilityAdjustableAction { direction in
+                                let step = direction == .increment ? Ceilings.loadStepFineKg : -Ceilings.loadStepFineKg
+                                load = Deck.nudgeLoad(load, step)
+                            }
+                        Text("x")
+                            .font(WatchType.label)
+                            .foregroundStyle(WatchInk.secondary)
+                            .accessibilityHidden(true)
+                        ValueRow(value: "\(reps)", unit: "reps", font: WatchType.value, isFocused: field == .reps)
+                            .focusable()
+                            .focused($field, equals: .reps)
+                            .digitalCrownRotation(
+                                Binding(get: { Double(reps) }, set: { reps = max(1, Int($0.rounded())) }),
+                                from: 1, through: 50, by: 1,
+                                sensitivity: .low, isContinuous: false, isHapticFeedbackEnabled: true
+                            )
+                            .onTapGesture { field = .reps }
+                            .accessibilityElement()
+                            .accessibilityLabel("Reps")
+                            .accessibilityValue("\(reps)")
+                            .accessibilityAdjustableAction { direction in
+                                reps = max(1, reps + (direction == .increment ? 1 : -1))
+                            }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Button {
+                model.editLast(load: load, reps: reps)
+                WKInterfaceDevice.current().play(.success)
+                dismiss()
+            } label: {
+                Label("Save", systemImage: "checkmark")
+                    .font(WatchType.value)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(WatchInk.commit)
+            .foregroundStyle(WatchInk.onCommit)
+        }
+        .containerBackground(WatchInk.ground, for: .navigation)
+        .onAppear {
+            // Seeded from the LOG, not from the pulse: the pulse is a message
+            // that may predate an amend, and this sheet writes over whatever
+            // it shows.
+            load = model.lastLogged?.weightKg ?? 0
+            reps = model.lastLogged?.reps ?? 0
+            field = .load
         }
     }
 }

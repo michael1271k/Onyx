@@ -44,6 +44,47 @@ _Nothing yet._
 
 ---
 
+## [7.2.0] — 2026-09-20 · The wrist logs the whole workout
+
+The Watch stops being a place to tick a set and becomes the place to run a
+session: pause it, throw it away, reorder it, describe what you just lifted,
+and watch your heart come back down — none of it needing the phone out of your
+pocket.
+
+### Added
+- **Set Quality panel on the Watch** — scroll down from the set screen for a
+  second page: what the set WAS (warm-up, failure, drop, ghost), which side it
+  was on a one-limb movement, and how it went (the six technique tags, several
+  at once). Every tap writes immediately; there is no Save button. Same four
+  kinds, same six tags and the same words the phone's set-options sheet uses.
+- **Pause and discard on the Watch** — tap the session clock to stop and start
+  it; hold it to discard the workout. The clock takes the pauses off itself, a
+  paused session stops feeding the Activity rings, and a discarded one takes
+  its `HKWorkout` with it.
+- **A deck you can rearrange from the wrist** — tap a movement to jump to it,
+  swipe right for "Do next" or "Add set", swipe left to skip it (skipped
+  movements sink to the bottom and come back with a tap) or to swap it for a
+  same-muscle movement from your own plan.
+- **Edit the set you just logged** — tap the receipt on the rest screen and
+  correct the load and the reps on the Crown.
+- **Heart rate where you are looking** — the current rate on the set screen,
+  and on the rest screen a sparkline of the last sixty readings with how far
+  the rate has come down since you racked the bar.
+
+### Changed
+- The phone's set kinds and set-quality tags now read one table in the domain
+  instead of their own copies of it. One visible consequence: the quality chip
+  that said **"Cold start"** now says **"Cold"** — which is what the weekly
+  export has always called it.
+- Reordering the deck is one piece of arithmetic on both devices, so a session
+  rearranged on the wrist groups on the phone exactly the way it was performed.
+
+### Fixed
+- Starting a workout session on the Watch could build a second `HKWorkoutSession`
+  over the top of a paused one, orphaning the first one's energy.
+
+---
+
 ## [7.1.0] — 2026-09-19 · Logging the past scores the past
 
 Anything logged for a day that has already happened — a glass of water, a

@@ -36,7 +36,27 @@ final class WatchModel {
     // MARK: - Stored
 
     private(set) var store: AppDatabase?
+    /// The store would not OPEN. Fatal to the app, and the only thing that
+    /// replaces the whole screen with `StoreErrorView`.
     private(set) var storeError: String?
+
+    /// The last WRITE that failed, if any.
+    ///
+    /// ── A WRITE FAILURE IS NOT A BROKEN APP (W3, AFTER REVIEW) ──────────────
+    /// Every failed write used to land in `storeError`, which is cleared in
+    /// exactly one place — inside `start()`, behind `store == nil`, so once
+    /// per launch. One throw therefore replaced the logger with "Store
+    /// unavailable" and the raw text of the error for the rest of the
+    /// workout, with a force-quit as the only way back. And the throw was not
+    /// hypothetical: `EventStore.record` refuses a write while the PHONE
+    /// holds the pencil, and this wave put the pause and discard gestures on
+    /// a toolbar that renders over the mirror screen — which is exactly that
+    /// state.
+    ///
+    /// So a write failure is its own field, it is cleared by the next write
+    /// that works, and it is reported where there is room to report it
+    /// (`DeckView`, `FinishView`) rather than by taking the screen.
+    private(set) var writeError: String?
 
     /// Who is signed in, what today is, and how the plan resolves it — sent by
     /// the phone over `updateApplicationContext` and cached so a cold launch out
@@ -50,23 +70,32 @@ final class WatchModel {
     /// The live session's id, once a set has been logged into it.
     private(set) var sessionId: String?
 
-    /// The instant the session's elapsed clock counts up from.
+    /// The session row's own `started_at`. WALL TIME, pauses still in it.
     ///
-    /// ── TWO WRITERS, IN THAT ORDER, AND BOTH ARE RIGHT ──────────────────────
-    /// `adopt` sets it from the session row's own `started_at`, which is the
-    /// only answer available when this watch is the device running the workout
-    /// — there is no pause control on the wrist, so wall time IS elapsed time.
-    ///
-    /// A `RestPulse` carrying a `timerOrigin` then overwrites it, because the
-    /// phone holds the pencil in that case and the phone's number has the
-    /// banked pauses already taken out of it. A session paused for eleven
-    /// minutes is eleven minutes younger than `started_at` says, and the wrist
-    /// showing a different hour from the phone in your hand is worse than the
-    /// wrist showing nothing.
-    ///
-    /// Nil before a session and on a rest pulse from a phone that predates the
-    /// field — the toolbar draws no timer rather than a wrong one.
+    /// Nil before a session — the toolbar draws no timer rather than a wrong
+    /// one. `clock(at:)` is what a view reads; this is one of its two inputs.
     private(set) var sessionStartedAt: Date?
+
+    /// The origin a PHONE-DRIVEN session sent us, pauses already subtracted.
+    ///
+    /// ── TWO WRITERS, AND THE OTHER ONE WINS WHEN IT SPEAKS ──────────────────
+    /// A `RestPulse` carries `timerOrigin` because the phone holds the pencil
+    /// in that case and its number has the banked pauses already taken out of
+    /// it. A session paused for eleven minutes is eleven minutes younger than
+    /// `started_at` says, and the wrist showing a different hour from the phone
+    /// in your hand is worse than the wrist showing nothing.
+    ///
+    /// ── AND WHY IT IS NO LONGER WRITTEN INTO `sessionStartedAt` (W3) ────────
+    /// It used to be, and that was correct while the wrist had no pause
+    /// control: one field, one origin, nothing to subtract twice. Now the watch
+    /// keeps its own `PauseLedger` and `clock(at:)` subtracts it — so folding
+    /// an already-adjusted origin into the same field would take the same
+    /// pause off twice and run the wrist's clock fast by exactly the length of
+    /// every pause in the session.
+    ///
+    /// Nil on a wrist-driven session and on a pulse from a phone that predates
+    /// the field, which is when the ledger below answers instead.
+    private(set) var remoteOrigin: Date?
 
     /// The fold — every surviving set of this session, in fold order. This is
     /// what makes the watch and the phone agree: it is not a list the watch
@@ -90,8 +119,53 @@ final class WatchModel {
     /// runtime, not a heart-rate feature.
     let workout = WorkoutSessionController()
 
+    /// The session clock's ledger, as the event log last stated it.
+    ///
+    /// Re-read from `set_events` on every commit rather than accumulated here,
+    /// for the reason `sets` is: the log is the truth and a second tally in a
+    /// model is a third answer. `SessionRun.resolve` turns it into an origin —
+    /// see `timerOrigin`.
+    private(set) var pauses = PauseLedger()
+
+    // MARK: - The deck, as this wrist has rearranged it (W3)
+
+    /// How this session has moved today's deck about — the order, the skips,
+    /// the added sets, the swaps and the jump.
+    ///
+    /// ── LOCAL, AND THAT IS THE DESIGN AND NOT A SHORTCUT ────────────────────
+    /// What CROSSES to the phone is `exercise_order` on the logged rows, which
+    /// is what the session report groups by — so a deck rearranged here and a
+    /// deck rearranged on the phone produce the same history. The arrangement
+    /// itself is a view of today: it has no row, it does not survive a
+    /// relaunch, and it must not, because the routine is a template and a
+    /// wrist reordering one workout is not editing next week's.
+    ///
+    /// ── AND IT IS A VALUE IN OnyxCore, NOT FIVE PROPERTIES HERE (W3) ────────
+    /// It was five, and review found five defects in them in one pass — every
+    /// one arithmetic, and none of them reachable by a test, because this type
+    /// is `@MainActor`, watchOS-only and in the app target. `DeckArrangement`
+    /// is the same five keyed on the SLOT rather than on the name currently in
+    /// it, with a suite under it.
+    private var arrangement = DeckArrangement()
+
     private var link: WatchLink?
     private var setsObserver: AnyDatabaseCancellable?
+
+    #if DEBUG
+    /// Which screen the shot loop asked for (`ONYX_WATCH_SCREEN`).
+    ///
+    /// ── WHY IT IS MODEL STATE AND NOT A VIEW'S ──────────────────────────────
+    /// Four of the six screens this wave added are reached by NAVIGATION from
+    /// inside a live session — the deck, the quality page, the cancel dialog,
+    /// the finish card — and a simulator can tap none of them. W1's
+    /// `watch-shot.sh` refuses those names by name rather than photographing
+    /// `StartView` under the wrong filename, and says the hook is W3's to add.
+    /// This is that hook: one value, read by whichever view owns the screen,
+    /// so each screen is reached along the path a finger would take rather
+    /// than by a second rendering nobody ships.
+    enum DebugScreen: String { case rest, deck, quality, pause, cancel, finish }
+    var debugScreen: DebugScreen?
+    #endif
 
     // MARK: - Derived
 
@@ -102,31 +176,102 @@ final class WatchModel {
     /// deck is at most a dozen movements, the fold is already in memory, and a
     /// cache here would be a third answer to "what has been logged" beside the
     /// log and the projection.
-    var movements: [Movement] {
+    /// Today's prescription, before this session rearranged anything.
+    private var planDeck: [ProgramExercise] {
         guard let day, let context else { return [] }
-        let phase = context.schedule.phase
-        return day.exercises(for: phase).enumerated().map { order, plan in
-            let ids = Self.identities(of: plan)
+        return day.exercises(for: context.schedule.phase)
+    }
+
+    var movements: [Movement] {
+        arrangement.slots(of: planDeck).map { slot in
+            let ids = Self.identities(of: slot.plan)
+            let rows = sets.filter { ids.contains($0.exerciseId) }
             return Movement(
-                plan: plan,
-                order: order,
-                logged: sets.filter { ids.contains($0.exerciseId) && SetTags.isWorkingSet($0.setType) }
+                slot: slot,
+                rows: rows,
+                logged: rows.filter { SetTags.isWorkingSet($0.setType) }
             )
         }
     }
 
-    /// Where you are: the first movement with a working set still owed.
+    /// Where you are: the movement you jumped to, else the first one still
+    /// owed. A skipped movement is owed nothing.
     ///
     /// Nil once the deck is finished, which is what turns the tick into a
     /// finish button.
     var cursor: Cursor? {
-        for movement in movements where movement.logged.count < movement.plannedSets {
-            return Cursor(movement: movement, setNumber: movement.logged.count + 1)
-        }
-        return nil
+        let owing = movements.filter { !$0.isSkipped && $0.logged.count < $0.plannedSets }
+        // The pin outranks the order for exactly as long as it still owes a
+        // set. Falling through rather than sticking is what stops a jump from
+        // becoming a mode you have to leave.
+        let movement = owing.first { $0.id == arrangement.pinned } ?? owing.first
+        guard let movement else { return nil }
+        return Cursor(movement: movement, setNumber: movement.logged.count + 1)
     }
 
     var isFinished: Bool { day != nil && cursor == nil && !sets.isEmpty }
+
+    /// The set the quality panel describes: the last one logged into this
+    /// session, in fold order.
+    ///
+    /// NOT `cursor`'s set — that one does not exist yet, and `SetPatch` amends
+    /// a set that does. The panel names it for the same reason the phone's
+    /// options sheet prints the movement in its title bar: you reached it by a
+    /// swipe, and the only evidence you are describing the set you meant is
+    /// the line at the top.
+    var lastLogged: WorkoutSet? { sets.last }
+
+    /// The movement `lastLogged` belongs to, for the panel's header.
+    var lastLoggedMovement: Movement? {
+        guard let last = lastLogged else { return nil }
+        return movements.first { Self.identities(of: $0.plan).contains(last.exerciseId) }
+    }
+
+    // MARK: - The clock
+
+    /// What the session clock reads at `now` — the instant it counts up from,
+    /// and whether it is frozen.
+    ///
+    /// ── THE ARITHMETIC IS `SessionRun`'s, NOT THIS FILE'S ───────────────────
+    /// `SessionRun.resolve` is the phone's own clock repair, pure and in
+    /// OnyxCore with a table test under it: it bounds an OPEN pause at fifteen
+    /// minutes (a session jetsammed at 18:40 and reopened at 07:00 was never
+    /// thirteen hours of rest) and it clamps the total so `pausedTotal` can
+    /// never outgrow the wall interval — the bug that printed a confident
+    /// `0:00` on an intact session. The wrist gets exactly that behaviour by
+    /// calling it rather than by subtracting a number here.
+    ///
+    /// `now` is a parameter so the toolbar's `TimelineView` can pass its own
+    /// date and the view stays a function of it.
+    func clock(at now: Date = Date()) -> (origin: Date, isPaused: Bool)? {
+        // The phone's own origin already has its pauses out of it, and the
+        // phone is the device the athlete is looking at. Subtracting this
+        // wrist's ledger on top would take every pause off twice.
+        //
+        // ── UNLESS THE LOG SAYS A PAUSE IS OPEN ─────────────────────────────
+        // A pause is an EVENT, not a rest pulse, so a pause taken on the
+        // phone never updates `remoteOrigin` — the wrist kept counting for
+        // the whole pause and then jumped backwards when the next pulse
+        // arrived. The ledger is the thing both devices share, so it wins
+        // whenever it has something to say.
+        if let remoteOrigin, pauses.openedAt == nil { return (remoteOrigin, false) }
+        guard let sessionStartedAt else { return nil }
+        let resolved = SessionRun.resolve(
+            startedAt: sessionStartedAt,
+            banked: pauses.banked,
+            pauseOpenedAt: pauses.openedAt,
+            now: now
+        )
+        return (sessionStartedAt.addingTimeInterval(resolved.pausedTotal), resolved.pausedAt != nil)
+    }
+
+    /// True while the session clock is stopped, for the toolbar's glyph.
+    ///
+    /// The LEDGER and not `clock()`: the latter defaults `now` to `Date()`,
+    /// and a view body that reads the wall clock is not a function of its
+    /// state — which is the whole reason `clock(at:)` takes the instant as a
+    /// parameter. An open pause is an open pause whatever time it is.
+    var isPaused: Bool { pauses.openedAt != nil }
 
     /// Cut or bulk, as the phone resolved it.
     ///
@@ -224,14 +369,19 @@ final class WatchModel {
     private func adopt(_ session: WorkoutSession) {
         guard let store, sessionId != session.id else { return }
         sessionId = session.id
-        // The row's own start. Wall time, and correct here: the watch has no
-        // pause control, so nothing has been banked out of it. A phone-driven
-        // session overwrites this from the rest pulse — see `sessionStartedAt`.
+        // The row's own start — wall time. `clock(at:)` takes the pauses off
+        // it, from the ledger `reload` reads two lines below.
         sessionStartedAt = session.startedAt
         holdsPencil = (try? store.holdsPencil(sessionId: session.id)) ?? true
         observeSets(session.id)
         seedCursor()
         if !workout.isRunning { workout.start() }
+        // ── AND HEALTHKIT AGREES WITH THE LOG ───────────────────────────────
+        // `observeSets` has just read the ledger. A session rejoined after a
+        // relaunch while paused would otherwise start a RUNNING
+        // `HKWorkoutSession` — the rings accruing active energy for the rest
+        // of a pause, which is the one thing `pause()` exists to prevent.
+        if pauses.openedAt != nil { workout.pause() }
     }
 
     /// Watch the projection.
@@ -268,6 +418,11 @@ final class WatchModel {
         guard let store, let context else { return }
         do {
             sets = try store.sets(sessionId: id, userId: context.userId)
+            // The clock's ledger comes off the same log and in the same read:
+            // a `pause` written on the phone reaches this wrist as an event,
+            // `ingest` commits it, and this is the line that makes the wrist's
+            // timer stop with the phone's.
+            pauses = try store.pauseLedger(sessionId: id)
             seedCursor()
         } catch {
             storeError = String(describing: error)
@@ -275,12 +430,24 @@ final class WatchModel {
     }
 
     private func resolveDay() {
+        let previous = day?.key
         guard let context else { return day = nil }
         guard let scheduled = Schedule.scheduleDayIn(context.schedule, context.today),
               let key = scheduled.dayKey
         else { return day = nil }
         let (program, _) = Schedule.programForContext(context.schedule, context.today)
         day = program.day(key: key)
+        // ── THE ARRANGEMENT IS RECONCILED AGAINST THE DECK, NOT THE KEY ─────
+        // A different day is obviously a different deck. So is the SAME day
+        // after the routine behind it is edited on the phone, and that is the
+        // case the first version missed: an order holding plan indices then
+        // names different movements, and a movement added on the phone never
+        // appears on the wrist at all. `DeckArrangement.reconcile` compares
+        // the exercise ids, so both cases are one check — and a context push
+        // that changed only a tile or the theme still keeps a reorder made
+        // two movements ago.
+        arrangement.reconcile(with: planDeck)
+        _ = previous
     }
 
     /// Put the plan's numbers — or last time's — into the two editable values.
@@ -318,7 +485,7 @@ final class WatchModel {
             let id = try ensureSession(store: store, context: context, day: day)
             let snapshot = SetSnapshot(
                 exerciseId: Self.exerciseId(of: cursor.movement.plan),
-                setIndex: cursor.setNumber,
+                setIndex: cursor.movement.nextStoreIndex,
                 weightKg: load,
                 reps: reps,
                 setType: "normal",
@@ -330,6 +497,13 @@ final class WatchModel {
             )
             let event = try store.appendSet(sessionId: id, snapshot)
             link?.send(events: [event])
+            // ── RE-READ BEFORE THE REST CLOCK IS BUILT ──────────────────────
+            // `observeSets` reloads through a `Task`, so without this the
+            // fold is still the one from before this append: `sets.last` is
+            // the PREVIOUS set and `cursor` still points at the movement just
+            // logged — so the rest screen's receipt showed the wrong set and
+            // its "Next ·" line named the movement you had just finished.
+            reload(id)
             startRest(after: cursor.movement)
             return true
         } catch EventStoreError.notSessionOwner {
@@ -344,17 +518,348 @@ final class WatchModel {
         }
     }
 
+    /// What to do when a store write throws.
+    ///
+    /// `notSessionOwner` is not an error to report — it is the phone having
+    /// taken the pencil, which the UI already has a whole screen for. Every
+    /// other throw is a write failure, which is a banner and not a takeover.
+    private func failed(_ error: any Error) {
+        if case EventStoreError.notSessionOwner = error {
+            holdsPencil = false
+            return
+        }
+        writeError = String(describing: error)
+    }
+
+    /// Amend the set just logged, and hand the event to the phone.
+    ///
+    /// ── ONE DOOR FOR EVERY CORRECTION ON THIS WRIST ─────────────────────────
+    /// The rating, the kind, the side, the quality tags and the two numbers all
+    /// describe the SAME set — the last one in the fold — and they all reach
+    /// the log the same way: one `amend`, one event, one send. Before W3 the
+    /// rating had its own copy of this, which re-READ the log to find the event
+    /// it had just written; `amendSet` returns it.
+    ///
+    /// An empty patch is refused by `amendSet` itself (an event that changes
+    /// nothing is permanent noise in a log that is never compacted), so every
+    /// caller below checks that its value actually moved before calling.
+    /// `OnyxData.SetPatch` spelled out: OnyxCore has a `SetPatch` of its own
+    /// (the deck draft's), both modules are imported here, and the two are
+    /// unrelated types. Every other mention below is inferred from this one.
+    @discardableResult
+    func amend(_ setId: String?, _ patch: OnyxData.SetPatch) -> Bool {
+        guard let store, let sessionId, let setId else { return false }
+        // The panel renders against ONE set and this re-resolves it, so a set
+        // arriving from the phone between the render and the tap would
+        // otherwise retarget the amend. The caller passes the id it drew.
+        guard sets.contains(where: { $0.id == setId }) else { return false }
+        do {
+            let event = try store.amendSet(sessionId: sessionId, setId: setId, patch)
+            link?.send(events: [event])
+            writeError = nil
+            return true
+        } catch {
+            failed(error)
+            return false
+        }
+    }
+
     /// Rate the set just logged. `nil` is not a value to write — it is the
     /// absence of one, and the rest screen dismissing itself is how you say it.
     func rate(_ value: Double) {
-        guard let store, let sessionId, let last = sets.last else { return }
+        amend(sets.last?.id, OnyxData.SetPatch(rpe: value))
+    }
+
+    // MARK: - The quality panel (W3)
+    //
+    // ── EVERY ONE NAMES ITS SET ─────────────────────────────────────────────
+    // They each re-read `sets.last` at tap time, and the panel renders
+    // against one set. Between the render and the finger landing, a set
+    // logged on the PHONE can arrive over `WatchLink`, commit, and reload the
+    // fold — so the tag landed on the phone's set instead. Passing the id the
+    // panel drew makes a stale tap a refusal rather than a wrong write.
+
+    /// Mark what the last set WAS. Passing the kind it already carries
+    /// withdraws it — the phone's own grammar, and the reason there is no
+    /// "Work" chip: normal is the ABSENCE of a claim.
+    func setKind(_ key: String, on setId: String) {
+        guard let row = sets.first(where: { $0.id == setId }) else { return }
+        let next = (row.setType == key) ? "normal" : key
+        guard next != row.setType else { return }
+        amend(setId, OnyxData.SetPatch(setType: next))
+    }
+
+    /// Toggle one technique tag on the last set.
+    ///
+    /// Several at once, in `SetTags.qualityKeys` order, joined by `+` — the
+    /// one grammar, parsed in OnyxCore and shared with the phone and the
+    /// export. An empty list clears the column, which is the one field
+    /// `SetPatch` is allowed to null (`OnyxData.SetPatch.clearedQuality`).
+    func toggleQuality(_ key: String, on setId: String) {
+        guard let row = sets.first(where: { $0.id == setId }) else { return }
+        var keys = Set(SetTags.parseQuality(row.quality))
+        if keys.contains(key) { keys.remove(key) } else { keys.insert(key) }
+        amend(setId, OnyxData.SetPatch(quality: SetTags.joinQuality(Array(keys)) ?? OnyxData.SetPatch.clearedQuality))
+    }
+
+    /// Mark which limb the last set was.
+    ///
+    /// ── ONE WAY, AND THE PANEL SAYS SO ──────────────────────────────────────
+    /// `SetPatch` cannot clear `side`: nil means UNCHANGED, and there is no
+    /// second flag. That is deliberate upstream — clearing a side means two
+    /// rows becoming one, which is a void-and-append and not a patch. So this
+    /// switches L to R and back, and the only way to un-side a set is to undo
+    /// it. A side with no `pairId` is an ordinary set everywhere it is counted
+    /// (`SessionVolume`: "a side without a pairId is an ordinary set"), so
+    /// marking one costs the session's tonnage nothing.
+    func setSide(_ side: String, on setId: String) {
+        guard let row = sets.first(where: { $0.id == setId }), row.side != side else { return }
+        amend(setId, OnyxData.SetPatch(side: side))
+    }
+
+    /// Correct the last set's two numbers, from the rest screen's receipt.
+    ///
+    /// The estimate travels with them. `commitSet` derives `est_1rm_kg` at tick
+    /// time so a watch-logged set carries what a phone-logged one would; an
+    /// edit that moved the load and left the estimate behind would leave a
+    /// 1RM from a set that was never performed sitting in the PR engine's
+    /// input.
+    func editLast(load: Double, reps: Int) {
+        guard let last = sets.last else { return }
+        guard load != last.weightKg || reps != last.reps else { return }
+        amend(last.id, OnyxData.SetPatch(
+            weightKg: load,
+            reps: reps,
+            est1rmKg: OneRepMax.estimate(weight: load, reps: Double(reps))
+        ))
+    }
+
+    // MARK: - The clock's two buttons (W3)
+
+    /// Stop the session clock, or start it again.
+    ///
+    /// TWO writes, deliberately, and neither is derived from the other: the
+    /// `pause` event is what the elapsed clock reads and what survives a
+    /// relaunch and a merge, and the `HKWorkoutSession` pause is what stops the
+    /// rings accruing exercise nobody did. `WorkoutSessionController` keeps its
+    /// own flag because HealthKit's state does not survive a launch and the
+    /// log's does.
+    func togglePause() {
+        guard let store, let sessionId else { return }
         do {
-            _ = try store.amendSet(sessionId: sessionId, setId: last.id, SetPatch(rpe: value))
-            if let event = try? store.setEvents(sessionId: sessionId).last {
-                link?.send(events: [event])
-            }
+            let paused = try store.isPaused(sessionId: sessionId)
+            let event = paused
+                ? try store.resumeSession(sessionId)
+                : try store.pauseSession(sessionId)
+            link?.send(events: [event])
+            if paused { workout.resume() } else { workout.pause() }
+            pauses = try store.pauseLedger(sessionId: sessionId)
+            // ── THIS WRIST IS STEERING THE CLOCK NOW ────────────────────────
+            // `remoteOrigin` is the phone's already-adjusted origin, and
+            // `clock(at:)` prefers it. Left in place it outlives the reason
+            // for it: a pause taken here would write its event, stop the
+            // `HKWorkoutSession`, and leave the wrist counting up with no
+            // pause glyph while the phone's hero sat frozen — the two
+            // disagreeing by exactly the length of every pause.
+            remoteOrigin = nil
+            writeError = nil
         } catch {
-            storeError = String(describing: error)
+            failed(error)
+        }
+    }
+
+    /// Throw the session away — this workout did not happen.
+    ///
+    /// The phone's `LoggerModel.cancel` is the model: `discardSession` rather
+    /// than a close, because an empty-but-finished session row is the worse
+    /// outcome. The three things this adds are the wrist's: the `HKWorkout` is
+    /// DISCARDED rather than saved (`WorkoutSessionController.cancel`, which
+    /// until now had no caller anywhere in the app), the pencil is released so
+    /// the phone is not left locked out of a session that no longer exists, and
+    /// the local deck arrangement goes with it.
+    ///
+    /// Nothing is sent over the link. The phone learns about the discard the
+    /// way it learns about everything else — from the store, when the two next
+    /// sync — and a `WatchLink` message saying "forget that" is a second
+    /// deletion protocol for a case the event log already covers by having no
+    /// events to fold.
+    ///
+    /// ── THE LOG LETS GO FIRST ───────────────────────────────────────────────
+    /// `workout.cancel()` ran first and the teardown ran unconditionally, and
+    /// both are the wrong way round. `discardSession` returns FALSE when the
+    /// row belongs to another account — nothing is deleted — and it can
+    /// throw, in which case `releasePencil` never ran and the wrist kept the
+    /// pencil on a session it had just forgotten, locking the phone out of a
+    /// session that still existed. Either way the `HKWorkout` was already in
+    /// the bin and `rejoinLiveSession` brought every set back on the next
+    /// context push.
+    ///
+    /// So: the store, checked; then Health; then the model.
+    func cancelSession() {
+        guard let store, let sessionId, let context else { return }
+        do {
+            guard try store.discardSession(id: sessionId, userId: context.userId) else {
+                writeError = "That session belongs to another account."
+                return
+            }
+            try? store.releasePencil(sessionId: sessionId)
+        } catch {
+            failed(error)
+            return
+        }
+        workout.cancel()
+        writeError = nil
+        setsObserver = nil
+        self.sessionId = nil
+        sessionStartedAt = nil
+        remoteOrigin = nil
+        pauses = PauseLedger()
+        sets = []
+        rest = nil
+        arrangement = DeckArrangement()
+    }
+
+    // MARK: - Rearranging today's deck (W3)
+
+    /// Do this movement next — put it immediately after the one you are on.
+    ///
+    /// ── THE ARITHMETIC IS SHARED, AND IT IS NOT HERE ────────────────────────
+    /// `DeckArrangement` keeps the order and `DeckOrder.move` permutes it —
+    /// the same function `LoggerModel.moveExercise` calls — so the two clients
+    /// agree about which rows have to be re-stamped. What is left here is the
+    /// three things a value type cannot do: write the new order onto the log,
+    /// re-seed the numbers under the Crown, and make a haptic.
+    func doNext(_ movement: Movement) {
+        arrangement.reconcile(with: planDeck)
+        arrangement.moveNext(movement.originId, after: cursor?.movement.originId, in: planDeck)
+        restampOrder()
+        seedCursor()
+    }
+
+    /// Put a movement aside for this session, or take it back.
+    func toggleSkip(_ movement: Movement) {
+        arrangement.reconcile(with: planDeck)
+        arrangement.toggleSkip(movement.originId)
+        restampOrder()
+        // ── AND RE-SEED, BECAUSE THE CURSOR MOVED ───────────────────────────
+        // Skipping the movement you are on hands the cursor to the next one,
+        // and without this the Crown keeps the load of the movement you just
+        // put aside — 40 kg of Chest Press logged against a Lat Pulldown that
+        // prescribes 47. `restampOrder` self-heals it only when a row was
+        // actually amended, which on a deck with nothing logged is never.
+        seedCursor()
+    }
+
+    /// Jump the cursor to a movement. The pin lasts only while that movement
+    /// still owes a set — see `cursor`.
+    func jump(to movement: Movement) {
+        guard !movement.isSkipped, !movement.isDone else { return }
+        arrangement.reconcile(with: planDeck)
+        arrangement.pin(movement.originId)
+        seedCursor()
+    }
+
+    /// One more set of a movement, today only.
+    ///
+    /// ── IT TAKES A TARGET, AND THAT IS NOT DECORATION ───────────────────────
+    /// The deck's swipe action used to `jump` and then call a no-argument
+    /// version of this. `jump` refuses a movement that is finished or
+    /// skipped — silently, and correctly — and the no-argument version then
+    /// fell through to the cursor, so "one more set" swiped on the movement
+    /// you had just FINISHED added the set to a different one. That is the
+    /// exact gesture the action exists for.
+    func addSet(to movement: Movement) {
+        arrangement.reconcile(with: planDeck)
+        arrangement.addSet(to: movement.originId)
+        seedCursor()
+    }
+
+    /// One more set of the movement you are on — the logger screen's door.
+    func addSet() {
+        guard let target = cursor?.movement ?? lastLoggedMovement else { return }
+        addSet(to: target)
+    }
+
+    /// The movements this wrist may swap a card for.
+    ///
+    /// ── ONLY WHAT THE PHONE ALREADY SENT ────────────────────────────────────
+    /// Every candidate is a `ProgramExercise` out of `WatchContext.schedule`,
+    /// so it arrives carrying the `exerciseId` the phone resolved — and the
+    /// watch resolves, it never mints (see `exerciseId(of:)`): a catalogue row
+    /// created on this wrist would carry a uuid no other client has seen, and
+    /// the movement would exist twice the moment the two logs met.
+    ///
+    /// Same-muscle, by the primary movers `MuscleMap` already resolved for
+    /// both names. A lift with no movers offers nothing rather than
+    /// everything.
+    func swapCandidates(for movement: Movement) -> [ProgramExercise] {
+        guard let context else { return [] }
+        let wanted = Set(movement.plan.movers.primary)
+        guard !wanted.isEmpty else { return [] }
+        let onDeck = Set(movements.map(\.plan.id))
+        var seen: Set<String> = []
+        return context.schedule.programs
+            .flatMap(\.days)
+            .flatMap(\.exercises)
+            .filter { candidate in
+                guard !onDeck.contains(candidate.id), !seen.contains(candidate.id) else { return false }
+                guard !Set(candidate.movers.primary).isDisjoint(with: wanted) else { return false }
+                seen.insert(candidate.id)
+                return true
+            }
+            .sorted { $0.name < $1.name }
+    }
+
+    /// Whether the deck should offer a swap on this row at all.
+    ///
+    /// A BOOLEAN and not `!swapCandidates(for:).isEmpty`: the deck asks this
+    /// once per row inside a `swipeActions` builder, on every render of a
+    /// `List` inside a running `HKWorkoutSession`, and the full version walks
+    /// every program × every day × every exercise and then SORTS the result —
+    /// to answer yes or no.
+    func hasSwapCandidate(for movement: Movement) -> Bool {
+        guard movement.rows.isEmpty, let context else { return false }
+        let wanted = Set(movement.plan.movers.primary)
+        guard !wanted.isEmpty else { return false }
+        let onDeck = Set(movements.map(\.plan.id))
+        return context.schedule.programs.contains { program in
+            program.days.contains { day in
+                day.exercises.contains { candidate in
+                    !onDeck.contains(candidate.id)
+                        && !Set(candidate.movers.primary).isDisjoint(with: wanted)
+                }
+            }
+        }
+    }
+
+    /// Put another movement in this one's place for today.
+    func swap(_ movement: Movement, for candidate: ProgramExercise) {
+        // A movement with ANY row against it is not swapped: the rows would be
+        // orphaned under an id the deck no longer names, and the honest
+        // gesture there is to skip it. `rows` and not `logged` for the reason
+        // the restamp uses it — a warm-up is still a row. The deck hides the
+        // action in that case, and this is the second guard rather than the
+        // first.
+        guard movement.rows.isEmpty else { return }
+        arrangement.reconcile(with: planDeck)
+        arrangement.swap(movement.originId, for: candidate, in: planDeck)
+        restampOrder()
+        seedCursor()
+    }
+
+    private func restampOrder() {
+        guard let store, let sessionId else { return }
+        for movement in movements {
+            for row in movement.rows where row.exerciseOrder != movement.order {
+                do {
+                    let event = try store.amendSet(
+                        sessionId: sessionId, setId: row.id, OnyxData.SetPatch(exerciseOrder: movement.order)
+                    )
+                    link?.send(events: [event])
+                } catch {
+                    storeError = String(describing: error)
+                }
+            }
         }
     }
 
@@ -416,8 +921,12 @@ final class WatchModel {
             let claim = try store.claimPencil(sessionId: sessionId, force: true)
             holdsPencil = true
             link?.send(ownership: claim)
+            // Taking the pencil is taking the clock with it — see
+            // `togglePause`, and `remoteOrigin`'s own header.
+            remoteOrigin = nil
+            writeError = nil
         } catch {
-            storeError = String(describing: error)
+            failed(error)
         }
     }
 
@@ -425,11 +934,21 @@ final class WatchModel {
 
     private func startRest(after movement: Movement) {
         let seconds = RestTargets.clamp(Double(movement.plan.restSec ?? 120))
+        let last = sets.last
         let pulse = RestPulse(
             sessionId: sessionId ?? "",
             endsAt: Date().addingTimeInterval(seconds),
             duration: seconds,
             exercise: cursor?.movement.plan.name ?? movement.plan.name,
+            // ── THE SET THAT EARNED IT, ON A WRIST-STARTED REST (W3) ────────
+            // These were left nil, which is how an OLDER PHONE's pulse
+            // arrives — so the rest screen drew no receipt, and this wave's
+            // "edit the set you just logged" was unreachable on every
+            // session logged without a phone. Which is every session this
+            // client exists for.
+            loadKg: last?.weightKg,
+            reps: last?.reps,
+            rpe: last?.rpe,
             // The one reading only this device can take. Nil until the sensor
             // has settled, which is a missing number and not a zero.
             bpm: workout.heartRate
@@ -471,8 +990,19 @@ final class WatchModel {
             // the only stale thing that would be on it.
             bpm: workout.heartRate ?? rest.bpm
         )
-        self.rest = pulse
+        // ── THE MESSAGE GETS THE FRESH RATE, THE SCREEN KEEPS THE OLD ONE ───
+        // `bpm` is two things at once: on the WIRE it is "what the wrist reads
+        // now", which the phone's deck wants fresh. Locally it is the BASELINE
+        // the rest screen's recovery delta is measured from — the rate at the
+        // instant you racked the bar. Writing the fresh one into both made
+        // +15 s wipe the number the sparkline row exists to show: "120 −28"
+        // became "120", for the rest of the countdown.
         link?.send(rest: pulse)
+        self.rest = RestPulse(
+            sessionId: pulse.sessionId, endsAt: pulse.endsAt, duration: pulse.duration,
+            exercise: pulse.exercise, loadKg: pulse.loadKg, reps: pulse.reps, rpe: pulse.rpe,
+            timerOrigin: pulse.timerOrigin, bpm: rest.bpm
+        )
     }
 
     func stopRest() {
@@ -501,13 +1031,24 @@ final class WatchModel {
             )
             try store.releasePencil(sessionId: sessionId)
         } catch {
-            storeError = String(describing: error)
+            // ── AND THE SESSION STAYS OPEN ──────────────────────────────────
+            // The teardown used to run whatever happened, so a throw in the
+            // metrics write left the `HKWorkout` saved, the session row still
+            // live, the pencil still held — and the model believing the
+            // workout was over. Returning leaves the finish button on screen,
+            // which is a second tap rather than a lost session.
+            failed(error)
+            return
         }
+        writeError = nil
         setsObserver = nil
         self.sessionId = nil
         sessionStartedAt = nil
+        remoteOrigin = nil
+        pauses = PauseLedger()
         sets = []
         rest = nil
+        arrangement = DeckArrangement()
     }
 
     // MARK: - Inbound
@@ -549,8 +1090,8 @@ final class WatchModel {
             rest = pulse
             // The phone's origin wins while the phone holds the pencil: it has
             // the banked pauses already subtracted. Nil from an older phone
-            // leaves whatever `adopt` read off the row.
-            if let origin = pulse?.timerOrigin { sessionStartedAt = origin }
+            // leaves the wrist resolving its own ledger — see `remoteOrigin`.
+            if let origin = pulse?.timerOrigin { remoteOrigin = origin }
             answerWithHeartRate(pulse)
         }
     }
@@ -587,21 +1128,59 @@ final class WatchModel {
 extension WatchModel {
 
     /// One movement of today's deck, with what has been logged against it.
+    /// One movement of today's deck, with what has been logged against it.
+    ///
+    /// A `DeckArrangement.Slot` — the position, the plan in it, whether it is
+    /// skipped and how many sets have been added — plus the rows. The slot
+    /// half is arithmetic and lives in OnyxCore with a suite under it; this
+    /// half is the log.
     struct Movement: Identifiable, Equatable {
-        let plan: ProgramExercise
-        /// Dense from 0 — what `SetSnapshot.exerciseOrder` carries, so a
-        /// watch-logged session groups on the phone the way it happened.
-        let order: Int
+        let slot: DeckArrangement.Slot
+        /// EVERY row of this movement, whatever kind it is.
+        ///
+        /// ── AND WHY THE RESTAMP WALKS THIS AND NOT `logged` ─────────────────
+        /// `logged` drops warm-ups and ghosts, which is right for counting
+        /// work and catastrophic for re-stamping position: mark the only set
+        /// of a movement as a warm-up and then reorder the deck, and that row
+        /// is invisible to the loop and keeps the `exercise_order` it was
+        /// appended with. `SessionAnalysis.grouped` ranks a movement by the
+        /// MINIMUM order across all its rows, warm-ups included, so the stale
+        /// value drags the movement back to where it used to sit — and
+        /// `RoutineOrder.save` carries that into next week's deck on every
+        /// device. The phone's own restamp has always walked every row
+        /// (`LoggerModel.moveExercise`, `row.isDone`, no kind filter); this is
+        /// the watch agreeing with it.
+        let rows: [WorkoutSet]
+        /// The WORKING sets — what the deck owes is counted against these.
         let logged: [WorkoutSet]
 
-        var id: String { plan.id }
+        var plan: ProgramExercise { slot.plan }
+        /// Dense from 0 — what `SetSnapshot.exerciseOrder` carries, so a
+        /// watch-logged session groups on the phone the way it happened.
+        var order: Int { slot.order }
+        var isSkipped: Bool { slot.isSkipped }
 
-        /// The phase's own set count. `cutSets` may legitimately be zero, which
-        /// drops the movement — `exercises(for:)` has already filtered those
-        /// out by the time this is built.
-        var plannedSets: Int { plan.sets }
+        /// The SLOT, not the movement in it. A `ForEach` keyed on the
+        /// displayed movement re-identifies the row the instant it is
+        /// swapped, which tears down the gesture that did the swapping.
+        var id: String { slot.originId }
+        var originId: String { slot.originId }
+
+        /// The phase's own set count, plus anything added on the wrist.
+        /// `cutSets` may legitimately be zero, which drops the movement —
+        /// `exercises(for:)` has already filtered those out by the time this
+        /// is built.
+        var plannedSets: Int { plan.sets + slot.extraSets }
 
         var isDone: Bool { logged.count >= plannedSets }
+
+        /// What the NEXT set of this movement is stored under.
+        ///
+        /// `rows` and not `logged`: marking the last set a warm-up drops it
+        /// out of `logged`, so a `logged.count + 1` index would hand the next
+        /// set the index the warm-up already holds, and two rows of one
+        /// movement would collide on `(exercise_id, set_index)`.
+        var nextStoreIndex: Int { rows.count + 1 }
     }
 
     /// The set you are about to do.
@@ -732,7 +1311,11 @@ extension WatchModel {
             // showed a session timer at 0:00 — true of a watch that had just
             // opened its own session a second earlier, and not the state under
             // review, which is a phone 45 minutes into a workout.
-            if let origin = rest?.timerOrigin { sessionStartedAt = origin }
+            if let origin = rest?.timerOrigin { remoteOrigin = origin }
+            // A heart, so the sparkline has a shape. A simulator has none, and
+            // `recentSamples` is `private(set)` against exactly this — the
+            // seed goes through the controller's own DEBUG door.
+            workout.seedDebugSamples(Self.debugHeartSeries)
         }
         rest = RestPulse(
             sessionId: sessionId ?? "preview",
@@ -742,8 +1325,48 @@ extension WatchModel {
             loadKg: 42.5,
             reps: 12,
             rpe: 8.5,
-            timerOrigin: Date().addingTimeInterval(-45 * 60)
+            timerOrigin: Date().addingTimeInterval(-45 * 60),
+            // The rate AT THE MOMENT THE REST STARTED, which is what the rest
+            // screen's recovery delta is measured from. Without it the shot
+            // showed a curve and a number with nothing to compare them to — a
+            // real state (an older phone sends no rate) and not the one under
+            // review.
+            bpm: Self.debugHeartSeries.first
         )
+    }
+
+    /// A recovery curve, not a random walk: the rate is still up at the top of
+    /// the rest and settles over the next two minutes, which is the SHAPE the
+    /// sparkline exists to show. A flat or noisy seed would photograph a line
+    /// that says nothing and pass review anyway.
+    static let debugHeartSeries: [Int] = {
+        (0..<60).map { i in
+            let t = Double(i) / 59
+            return Int((148 - 44 * (1 - pow(1 - t, 2.2))).rounded())
+        }
+    }()
+
+    /// Put sets in the log so the deck, the quality panel and the finish card
+    /// have something real to draw.
+    ///
+    /// It goes through `commitSet` — the ordinary path, events, fold, rest
+    /// clock and all — rather than writing rows, for the reason
+    /// `seedDebugContext` goes through the cache: a screenshot of a second
+    /// code path is a screenshot of something that does not ship. The rest
+    /// cover it opens is closed again, because every screen that wants these
+    /// sets wants them WITHOUT a cover over the top.
+    func seedDebugSets(_ count: Int) {
+        for _ in 0..<count {
+            guard cursor != nil else { break }
+            // `commitSet` re-reads the fold itself now, so the loop advances
+            // the way a finger does. It did not, and every set here was
+            // appended as set 1 of the first movement: the deck showed "2/3"
+            // while the quality panel's header said "Set 1", which is how
+            // that defect was caught.
+            _ = commitSet()
+        }
+        rest = nil
+        workout.seedDebugSamples(Self.debugHeartSeries)
     }
 }
 #endif

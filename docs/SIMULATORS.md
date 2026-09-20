@@ -55,21 +55,47 @@ what `OnyxWatchApp` reads.
 |---|---|---|
 | `start` | none — the app's own first screen | ✅ |
 | `set` | `ONYX_WATCH_AUTOSTART=1` | ✅ |
-| `rest` | `ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=rest` | ✅ |
-| `deck` | — | ❌ W3 adds the seed |
-| `finish` | — | ❌ W3 adds the seed |
+| `quality` | `…SCREEN=quality` + one slow swipe | ✅ W3 |
+| `qualitytags` | the same, three swipes down the panel | ✅ W3 |
+| `rest` | `…SCREEN=rest` | ✅ |
+| `deck` | `…SCREEN=deck` | ✅ W3 |
+| `deckswipe` | the same, plus a sideways swipe on row one | ✅ W3 |
+| `pause` | `…SCREEN=pause` | ✅ W3 |
+| `cancel` | `…SCREEN=cancel` | ✅ W3 |
+| `finish` | `…SCREEN=finish` | ✅ W3 |
 | `dashboard` | — | ❌ W4 builds the screen first |
 
-The three missing ones are presented by SwiftUI navigation inside a live
-session, and nothing in `WatchModel` can be seeded to put them up. The script
-**refuses them by name** rather than landing on `StartView` and writing the PNG
-under the asked-for name. A plausible photograph of the wrong screen is worse
-than a missing one — the phone loop shipped a twelve-shot run shifted by one
-exactly that way.
+Every one of these but `start` also passes `ONYX_WATCH_AUTOSTART=1`. The
+missing one is presented by SwiftUI navigation inside a live session, and
+nothing in `WatchModel` can be seeded to put it up yet. The script **refuses
+it by name** rather than landing on `StartView` and writing the PNG under the
+asked-for name. A plausible photograph of the wrong screen is worse than a
+missing one — the phone loop shipped a twelve-shot run shifted by one exactly
+that way.
 
 To add one: seed the state in `WatchModel` (`#if DEBUG`, beside
-`seedDebugRest`), add a branch to the `ONYX_WATCH_SCREEN` block in
-`OnyxWatchApp.swift`, and add the case to `screen_env()` in the script.
+`seedDebugRest`), add a case to `WatchModel.DebugScreen`, add a branch to the
+`ONYX_WATCH_SCREEN` block in `OnyxWatchApp.swift`, and add the case to
+`screen_env()` in the script.
+
+### And two of them need a finger
+
+`quality`, `qualitytags` and `deckswipe` are a SCROLL or a SWIPE away rather
+than a state away, and no launch environment can seed a scroll offset. The app
+carried a DEBUG `scrollPosition` write for exactly this and it never landed —
+a scroll position written before layout is kept and never performed. So
+`screen_gesture()` drives `axe` instead, with coordinates calibrated against
+the accessibility tree (`axe describe-ui`) rather than by eye.
+
+Two things were measured and are worth not rediscovering:
+
+- **A fast flick comes back.** Whatever `scrollTargetBehavior` makes of a
+  thrown synthetic gesture on this SDK, it returns to where it started. Only a
+  slow drag (~1.5 s) of rather more than half a page moves and stays.
+- **`.scrollInputBehavior(.disabled, for: .handGestureShortcut)` disables the
+  scroll view's input ENTIRELY** on this SDK, not just the double pinch. With
+  it on, no swipe of any length or speed moved the set screen's pager by a
+  point. It is not in `SetView` for that reason, and the comment there says so.
 
 ## `SHOT_DERIVED` — the rule with teeth
 

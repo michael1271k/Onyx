@@ -144,29 +144,25 @@ enum SetQuality: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
-    /// Shown on the row and on the chip. Kept to two words.
-    var label: String {
-        switch self {
-        case .momentum:      "Momentum"
-        case .partialRom:    "Short ROM"
-        case .formBreakdown: "Form broke"
-        case .neededWarmup:  "Cold start"
-        case .assisted:      "Assisted"
-        case .cutShort:      "Cut short"
-        }
-    }
+    /// ── THE WORDS COME FROM `SetTags`, NOT FROM HERE (W3) ───────────────────
+    /// These were two `switch`es duplicating `SetTags.quality`, and the copies
+    /// had already drifted: this one said "Cold start" where OnyxCore's table
+    /// — the one the weekly export prints and the golden vector pins — says
+    /// "Cold". Two hand-maintained copies of one vocabulary both look right,
+    /// which is how a coach's report and the chip that wrote it end up naming
+    /// the same set differently.
+    ///
+    /// The watch's Set Quality panel (W3) reads the OnyxCore table because it
+    /// cannot see this file, so the drift would have become a third spelling.
+    /// One table, three readers. The chip now says "Cold".
+    ///
+    /// The fallback is unreachable — `allCases` and `SetTags.quality` hold the
+    /// same six keys, which `TrainingGoldenTests` pins — and it is the raw key
+    /// rather than a crash, because a label is never worth a trap.
+    var label: String { SetTags.quality[rawValue]?.label ?? rawValue }
 
     /// The whole sentence, for the sheet's hint line and for VoiceOver.
-    var full: String {
-        switch self {
-        case .momentum:      "Used body English to move the load"
-        case .partialRom:    "Cut the range short to finish the set"
-        case .formBreakdown: "The last reps lost position"
-        case .neededWarmup:  "The first reps were poor — needed a longer warm-up"
-        case .assisted:      "A spotter or the other arm helped"
-        case .cutShort:      "Stopped before the target for a reason other than failure"
-        }
-    }
+    var full: String { SetTags.quality[rawValue]?.full ?? rawValue }
 
     // MARK: - More than one of them at a time
 

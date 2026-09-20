@@ -1,0 +1,77 @@
+{
+  "module": "sessions/deckOrder",
+  "fn": "DeckOrder.move + Move.applied",
+  "note": "W3. Hand-computed. `to` is a DESTINATION INDEX, never a List.onMove insertion offset. A destination outside the deck is clamped (\"do this one next\" on the last card asks for a position past the end); a `from` outside the deck is a no-op. `restamp` is the inclusive range of NEW positions whose exercise_order changed — the rows the two clients re-amend — and null means nothing moved. `order` is the identity permutation [0..count) after the move, so a reader can see the deck.",
+  "cases": [
+    {
+      "name": "down one",
+      "input": { "count": 5, "from": 0, "to": 1 },
+      "expected": { "to": 1, "restamp": [0, 1], "order": [1, 0, 2, 3, 4] }
+    },
+    {
+      "name": "up two",
+      "input": { "count": 5, "from": 3, "to": 1 },
+      "expected": { "to": 1, "restamp": [1, 3], "order": [0, 3, 1, 2, 4] }
+    },
+    {
+      "name": "to the end",
+      "input": { "count": 5, "from": 1, "to": 4 },
+      "expected": { "to": 4, "restamp": [1, 4], "order": [0, 2, 3, 4, 1] }
+    },
+    {
+      "name": "destination clamped past the end",
+      "input": { "count": 5, "from": 2, "to": 9 },
+      "expected": { "to": 4, "restamp": [2, 4], "order": [0, 1, 3, 4, 2] }
+    },
+    {
+      "name": "destination clamped below zero",
+      "input": { "count": 5, "from": 2, "to": -3 },
+      "expected": { "to": 0, "restamp": [0, 2], "order": [2, 0, 1, 3, 4] }
+    },
+    {
+      "name": "adjacent, upwards",
+      "input": { "count": 4, "from": 2, "to": 1 },
+      "expected": { "to": 1, "restamp": [1, 2], "order": [0, 2, 1, 3] }
+    },
+    {
+      "name": "do next, from the tail",
+      "input": { "count": 4, "from": 3, "to": 1 },
+      "expected": { "to": 1, "restamp": [1, 3], "order": [0, 3, 1, 2] }
+    },
+    {
+      "name": "onto itself is a no-op",
+      "input": { "count": 5, "from": 2, "to": 2 },
+      "expected": { "to": 2, "restamp": null, "order": [0, 1, 2, 3, 4] }
+    },
+    {
+      "name": "clamped onto itself is a no-op",
+      "input": { "count": 3, "from": 2, "to": 7 },
+      "expected": { "to": 2, "restamp": null, "order": [0, 1, 2] }
+    },
+    {
+      "name": "from past the end is a no-op",
+      "input": { "count": 3, "from": 5, "to": 0 },
+      "expected": { "to": 5, "restamp": null, "order": [0, 1, 2] }
+    },
+    {
+      "name": "negative from is a no-op",
+      "input": { "count": 4, "from": -1, "to": 2 },
+      "expected": { "to": -1, "restamp": null, "order": [0, 1, 2, 3] }
+    },
+    {
+      "name": "one movement cannot move",
+      "input": { "count": 1, "from": 0, "to": 0 },
+      "expected": { "to": 0, "restamp": null, "order": [0] }
+    },
+    {
+      "name": "one movement, destination clamped onto it",
+      "input": { "count": 1, "from": 0, "to": 3 },
+      "expected": { "to": 0, "restamp": null, "order": [0] }
+    },
+    {
+      "name": "an empty deck",
+      "input": { "count": 0, "from": 0, "to": 0 },
+      "expected": { "to": 0, "restamp": null, "order": [] }
+    }
+  ]
+}
