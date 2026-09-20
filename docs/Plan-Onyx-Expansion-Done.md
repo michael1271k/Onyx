@@ -592,3 +592,52 @@ tests, not photographed; the new surfaces were shot through `PreviewHarness`
 with the `axe` CLI (`xcodebuildmcp` exposed no tap tools; `snapshot_ui` timed
 out). `native-shot.sh` had W1's silent-exit bug (uninstalled default device);
 fixed. The harness's `day-past` session card is a fixture, not a store row.
+
+---
+
+## Wave 3 Summary — 7.2.0
+
+**Worked.** The wrist runs a session. Set Quality is page two of `SetView` —
+four kinds, the side on a one-limb movement, six technique tags several at a
+time, every tap an `amend`. Pause writes both halves (the event the clock reads,
+and the `HKWorkoutSession` so the rings stop); hold the clock to discard, which
+is `WorkoutSessionController.cancel()`'s first caller ever. The deck reorders by
+swipe, sharing `DeckOrder.move` with `LoggerModel.moveExercise` under a golden
+vector. Rest gains an editable receipt and a recovery curve. The phone's
+`SetKind`/`SetQuality` now read `SetTags`, which caught a drift: the chip that
+said "Cold start" says "Cold", as the export always has.
+
+**The plan was wrong about four things.** (1) `ScheduleResolution` does not
+exist — no swap-the-movement path exists on the phone at all, so the wrist's
+swap is its own thing, restricted to names the phone already sent. (2) Four kind
+capsules do not fit one line at 146 pt; `WatchPanel` puts them 2 × 2, which is
+the call the phone's own sheet makes at an accessibility size. (3) There is no
+system page indicator for a `ScrollView` — `PageIndexViewStyle` belongs to
+`TabView`, the control this screen cannot use — so the dots are drawn. (4) A
+`Chart` was not worth a framework on the launch path for an axis-less polyline;
+the sparkline is a `Shape`.
+
+**Failed, and was caught.** `onScrollTargetVisibilityChange(threshold:)` measures
+a fraction of the TARGET, and page two is ~380 pt in a ~95 pt viewport — so it
+never fired, `page` never left `.set`, and the Crown kept moving a load nobody
+could see. My own screenshots showed it (the lit dot stayed on page one) and I
+read past it twice. Review also found: a reorder after a swap dropped the
+swapped movement AND its logged sets, then re-stamped over their
+`exercise_order`; any refused write bricked the app behind "Store unavailable"
+until a force-quit; `cancelSession` binned the `HKWorkout` before the database
+agreed; "Add set" from a finished row added it elsewhere; the edit door was
+unreachable on a wrist-started rest. The five deck properties are now
+`DeckArrangement` in OnyxCore — keyed on the SLOT, never the name in it — with a
+suite, because none of those five was reachable by any test this repo can run.
+
+**`.scrollInputBehavior(.disabled, for: .handGestureShortcut)` disables the
+scroll view's input ENTIRELY on this SDK**, not just the double pinch. With it
+on, no swipe of any length moved the pager by a point.
+
+**Left open.** (1) The watch-to-phone tick is unphotographed — the simulator is
+still signed out, as W2 recorded; `WatchConvergenceTests` covers it. (2) 40 mm is
+asserted by `OnyxWatchLayoutTests`, never seen: the pair is a 49 mm Ultra 2.
+(3) The focus ring on the value rows appears in no shot — verify on device.
+(4) Double-tap arbitration between the tick and the pager is unverified, and the
+fix is NOT to restore the modifier above. (5) The quality panel is three
+screenfuls at 40 mm; it scrolls, and nothing shortens it without dropping a tag.
