@@ -119,6 +119,60 @@ struct OnyxWatchApp: App {
                             // Every planned set, which is what empties the
                             // cursor and turns the tick into a finish button.
                             model.seedDebugSets(99)
+                        case .widget:
+                            // The widget faces read the App Group suite, and
+                            // the only thing that ever writes it is a live
+                            // session's `publishLiveSnapshot`. Two sets put
+                            // one there through the ordinary path — a
+                            // photograph of a literal would prove the face
+                            // draws and nothing about whether a widget has
+                            // anything to draw FROM.
+                            //
+                            // A heart first, because a simulator has none and
+                            // the circular face's WHOLE content is the rate:
+                            // without this the shot is an honest "—" that
+                            // reviews nothing. Same call `seedDebugRest`
+                            // makes for the sparkline.
+                            model.workout.seedDebugSamples([131, 138, 142])
+                            // THREE, so the cursor advances off "Chest
+                            // Press" — the shortest name in the seeded deck
+                            // — onto "Neutral-Grip Lat Pulldown", which is
+                            // the length this 162 pt slot actually has to
+                            // survive. A face photographed with its easiest
+                            // input is a face whose truncation nobody has
+                            // reviewed.
+                            model.seedDebugSets(3)
+                        case .dashboard, .train, .fuel:
+                            // ── THE CONTEXT, WHICH AUTOSTART USUALLY SEEDS ──
+                            // These three are the only screens reached with
+                            // `ONYX_WATCH_AUTOSTART` OFF, and the seed above
+                            // is inside that branch — so the first run of
+                            // this hook drew whatever context the simulator
+                            // happened to be holding from an earlier wave.
+                            // It photographed "No volume yet" on the Train
+                            // page and the kcal fallback on Fuel: a cached
+                            // payload from before those fields existed. A
+                            // real screen, under the right filename, showing
+                            // last month's wire format — which is the exact
+                            // failure `seedDebugContext`'s own header records
+                            // having shipped once already.
+                            model.seedDebugContext()
+                            // ── THE LAST NAME `watch-shot.sh` REFUSED (W4) ──
+                            // W1 left `dashboard` unreachable and said so by
+                            // name rather than photographing `StartView`
+                            // under its filename. It is reached the way a
+                            // finger reaches it — a real push onto the real
+                            // stack, from `RootView` — and the PAGE within it
+                            // is picked by `DashboardView` off the same
+                            // value.
+                            //
+                            // No seeded sets: the dashboard is the screen you
+                            // open BEFORE a session, its numbers come from
+                            // `WatchTiles` (which `seedDebugContext` above
+                            // already filled), and a session behind it would
+                            // photograph the in-session entry point instead
+                            // of the one this page is normally reached from.
+                            break
                         }
                     }
                     #endif

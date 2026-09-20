@@ -4,6 +4,8 @@ import Observation
 import OnyxCore
 import OnyxData
 import OnyxUI
+// For the timeline reload a wrist-tapped glass owes the Home Screen (W4).
+import WidgetKit
 
 /// The phone's half of the watch link.
 ///
@@ -48,6 +50,21 @@ final class PhoneWatchBridge {
     /// and the set is already safe in the log.
     private(set) var lastError: String?
 
+    /// Run the pending-water drain (W4). Set once by `AppEnvironment.start`.
+    ///
+    /// ── A CLOSURE, BECAUSE THE DRAIN NEEDS THE SESSION AND THIS DOES NOT ───
+    /// `drainPendingWater` writes under the signed-in user id, and this type
+    /// deliberately holds a database and no auth — it is a wire, and the one
+    /// thing it has ever taken off the wire for itself is a heart rate.
+    /// Handing it `AppEnvironment` to reach one method would give the wire a
+    /// reference to the whole app; handing it the method is the same call
+    /// with none of that.
+    ///
+    /// Optional because the harness and the tests build a bridge with no
+    /// environment behind it, and a glass arriving there should be a no-op
+    /// rather than a trap — the key simply waits for a launch that has one.
+    var onWaterQueued: (() -> Void)?
+
     /// The wrist's last heart rate, and when it arrived (W10, decision 3).
     ///
     /// ── THE ONE THING THE PHONE TAKES OFF AN INBOUND REST PULSE ─────────────
@@ -66,10 +83,33 @@ final class PhoneWatchBridge {
     private(set) var lastBpm: Int?
     private(set) var lastBpmAt: Date?
 
-    /// How long a wrist reading stays a reading. Two minutes is longer than a
-    /// working rest and shorter than a set plus a rest, so a number that stops
-    /// arriving disappears within one set of the watch going quiet.
-    static let bpmStaleAfter: TimeInterval = 120
+    /// How long a wrist reading stays a reading.
+    ///
+    /// `LiveWorkoutSnapshot.bpmStaleAfter` since W4, not a second 120: the
+    /// watch draws the same sensor on its own faces now, and two devices
+    /// disagreeing about when a heart rate stopped being one is the drift a
+    /// shared constant exists to prevent.
+    static let bpmStaleAfter: TimeInterval = LiveWorkoutSnapshot.bpmStaleAfter
+
+    /// Wakes once, `bpmStaleAfter` after the last reading, to make the expiry
+    /// an actual mutation (W4).
+    ///
+    /// ── WHY A TIMER AFTER ALL, WHEN `liveBpm` ARGUED AGAINST ONE ───────────
+    /// `liveBpm` is COMPUTED, and the note above it says a timer whose only
+    /// job is to nil a field would run for the whole of every workout. That
+    /// was right while the only readers were views that redraw when a set
+    /// lands. The Live Activity is not one: `LiveActivityController` caches
+    /// the last value it was handed and only re-pushes when something tells
+    /// it to, and `@Observable` fires on a STORED-property mutation — two
+    /// minutes elapsing is not one. So the Lock Screen and the Dynamic
+    /// Island kept drawing 142 from a watch that had come off the wrist,
+    /// which is precisely what `liveBpm`'s own doc says must never happen.
+    ///
+    /// Not a `Timer`, and not running for the whole workout: one `Task` per
+    /// reading, replaced by the next one, cancelled when the app tears the
+    /// bridge down. A workout produces one of these per rest pulse and each
+    /// costs a sleep.
+    private var bpmExpiry: Task<Void, Never>?
 
     /// The wrist's heart rate if it is still fresh, otherwise nil.
     ///
@@ -190,6 +230,34 @@ final class PhoneWatchBridge {
         return schedule
     }
 
+    /// Clear `lastBpm` once the reading has aged out, so the expiry is a
+    /// mutation something can observe.
+    ///
+    /// ── IT RE-CHECKS RATHER THAN ASSUMING ──────────────────────────────────
+    /// A pulse that arrives while this is asleep replaces the task, but the
+    /// replaced one may already be past its `sleep` and about to write. The
+    /// guard is `liveBpm == nil` — the same computed answer every reader
+    /// uses — so a task that wakes to find a fresher reading in place does
+    /// nothing rather than blanking it.
+    private func scheduleBpmExpiry() {
+        bpmExpiry?.cancel()
+        bpmExpiry = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.bpmStaleAfter))
+            guard !Task.isCancelled, let self, self.liveBpm == nil else { return }
+            self.lastBpm = nil
+            self.lastBpmAt = nil
+        }
+    }
+
+    // ── NO `deinit` CANCEL, AND IT IS NOT NEEDED ────────────────────────────
+    // A `deinit` is nonisolated on a `@MainActor` class under Swift 6, so it
+    // cannot touch `bpmExpiry` at all — "main actor-isolated property cannot
+    // be referenced from a nonisolated context", which is a build error and
+    // not a warning. It is also unnecessary: the task captures `[weak self]`
+    // and does nothing when the bridge has gone, and the worst case is one
+    // sleeping task outliving it by under two minutes. This bridge lives for
+    // the lifetime of the app in every shipping path anyway.
+
     /// Mirror the phone's rest clock onto the wrist. `nil` stops it.
     func send(rest: RestPulse?) {
         link?.send(rest: rest)
@@ -221,7 +289,30 @@ final class PhoneWatchBridge {
                 if let bpm = pulse?.bpm, bpm > 0 {
                     lastBpm = bpm
                     lastBpmAt = Date()
+                    scheduleBpmExpiry()
                 }
+            case .water(let ml):
+                // ── THE WRIST'S GLASS, INTO THE PHONE'S OWN MAILBOX (W4) ───
+                // Not written here. `PendingWater` is the same key Control
+                // Center's `AddWaterIntent` drops a glass into, and
+                // `AppEnvironment.drainPendingWater` is what turns it into a
+                // `water_intake` row — under the signed-in user, through
+                // `addWaterGlass`, with the ledger re-summed and the day
+                // rescored at the door. This bridge has a database and no
+                // idea who is signed in, and inventing a second write path
+                // for the same 250 ml is how two glasses stop being one row.
+                PendingWater.add(ml, to: AppDatabase.appGroupDefaults())
+                // The widgets' optimistic figure reads the mailbox directly
+                // (`WidgetStore.snapshot`), so this is what makes the Home
+                // Screen agree with the wrist before the drain has run.
+                WidgetCenter.shared.reloadAllTimelines()
+                // And the drain itself, now rather than at the next return to
+                // `.active`: a `transferUserInfo` wakes this app in the
+                // BACKGROUND, which is not a scene phase change, so without
+                // this the glass would sit in the mailbox until the phone was
+                // next picked up. Signed out it does nothing and the key
+                // waits, which is `drainPendingWater`'s own behaviour.
+                onWaterQueued?()
             case .context:
                 // Phone → watch only. The watch has no plan resolution to send.
                 break

@@ -268,54 +268,21 @@ struct OnyxWorkoutActivityWidget: Widget {
                 // not already cost.
                 OnyxMark(size: 14, tint: Color.onyx.day(context.state.dayKey), opacity: 1)
             } compactTrailing: {
-                // Whichever number is the answer RIGHT NOW: the rest clock while
-                // resting, the load while working. Two facts competing for one
-                // ~44 pt slot is how the compact region becomes unreadable.
-                Group {
-                    if let countdown = restCountdown(
-                        context.state.restEndsAt, total: context.state.restTotalSec
-                    ) {
-                        Text(timerInterval: countdown, countsDown: true)
-                            // ── RESERVED, AND MONOSPACED ────────────────────
-                            // With a real lower bound the widest reading over
-                            // this range is the whole rest ("3:00"), not the
-                            // remainder it happened to be opened at — and this
-                            // slot is ~44 pt with no room to grow. Proportional
-                            // digits also re-measure the slot on every tick,
-                            // which shunts the leading mark beside it. Same
-                            // pair of defences `WorkoutElapsed` takes.
-                            .monospacedDigit()
-                            .frame(minWidth: 44, maxWidth: 44, alignment: .trailing)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            // The timer wears the MOVEMENT's colour on every
-                            // surface — see `WorkoutRestBand.accent`.
-                            .foregroundStyle(
-                                WorkoutMuscleTag.tint(context.state.primaryMuscle)
-                                    ?? Color.onyx.day(context.state.dayKey)
-                            )
-                    } else if let sec = context.state.cardioElapsedSec {
-                        // ── A REAL BRANCH, BECAUSE THE HACK BELOW CANNOT ────
-                        // The `else` is a string surgery on a load the producer
-                        // composed ("42.5 kg × 12" minus its unit), and a bout
-                        // has no " kg " in it to cut — it would have printed
-                        // the whole line into a ~44 pt slot, or, before the
-                        // producer learned what cardio was, "0 kg × 0" with the
-                        // middle removed. The bout's own clock is the one
-                        // number that fits, and it is the axis a treadmill
-                        // block is prescribed in.
-                        Text(SetFormat.clock(Double(sec)))
-                            .monospacedDigit()
-                            .frame(minWidth: 44, maxWidth: 44, alignment: .trailing)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            .foregroundStyle(Color.onyx.cardio)
-                    } else {
-                        Text(context.state.load.replacingOccurrences(of: " kg ", with: ""))
-                            .foregroundStyle(Color.onyx.day(context.state.dayKey))
-                    }
-                }
-                .font(OnyxWidgetType.figure(12))
+                // Whichever number is the answer RIGHT NOW: the rest clock
+                // while resting, the bout's clock on a treadmill, the wrist's
+                // heart rate under the bar, the load with no watch speaking.
+                // Two facts competing for one ~44 pt slot is how the compact
+                // region becomes unreadable, so the branches are ordered and
+                // exactly one draws.
+                //
+                // ── AND IT LIVES IN `Shared/` (W4) ──────────────────────────
+                // It was written out here, and `WidgetPreviews.islandCompact`
+                // — the only thing that PHOTOGRAPHS this slot — carried a
+                // copy of three of its four branches. Adding the heart rate
+                // to this one left the copy behind, so the contact sheet
+                // reviewed a stand-in that no longer matched. One view, both
+                // callers; see `WorkoutCompactTrailing`.
+                WorkoutCompactTrailing(state: context.state)
             } minimal: {
                 // One glyph for the whole activity, so it says what is
                 // happening and not what the app is: resting, walking, or

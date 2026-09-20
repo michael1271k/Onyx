@@ -1,5 +1,8 @@
 import Testing
 import Foundation
+// `PendingWater` left `Shared/` for OnyxCore in W4, so the wrist's own water
+// button could reach `glassMl` — `Shared/` is in neither watch target.
+import OnyxCore
 @testable import Onyx
 
 /// The Control Center water mailbox (W5) — the arithmetic between a tap in

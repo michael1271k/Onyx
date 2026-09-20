@@ -49,7 +49,9 @@ mkdir -p "$OUT"
 # W3 added the five it owns. Each is reached along the path a finger would
 # take — `WatchModel.debugScreen` is read by whichever view owns the screen,
 # the sets go in through `commitSet`, and the deck is a real push onto the
-# real `NavigationStack`. `dashboard` is still W4's.
+# real `NavigationStack`. W4 added the last four, including `dashboard`, which
+# W1 named here as unreachable and which is the only name this list has ever
+# refused.
 screen_env() {
   case "$1" in
     start)   echo "" ;;
@@ -60,8 +62,30 @@ screen_env() {
     pause)   echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=pause" ;;
     cancel)  echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=cancel" ;;
     finish)  echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=finish" ;;
-    dashboard)
-      echo "NOT_REACHABLE" ;;
+    # ── W4's four ──────────────────────────────────────────────────────────
+    # `dashboard` was the last name this script refused. It is a pushed screen
+    # now, reached the way a finger reaches it, and `train`/`fuel` are the same
+    # screen with a different page selected — `DashboardView` reads the value
+    # and moves its own `TabView`, because a NavigationPath can name a
+    # destination and not a tab within one.
+    #
+    # NO autostart on the three: the dashboard is the screen you open BEFORE a
+    # session (`StartView`'s toolbar), and a live session behind it would
+    # photograph the in-session entry point instead.
+    dashboard) echo "ONYX_WATCH_SCREEN=dashboard" ;;
+    train)     echo "ONYX_WATCH_SCREEN=train" ;;
+    fuel)      echo "ONYX_WATCH_SCREEN=fuel" ;;
+    # The live-workout widget's two faces, at their real sizes. Autostart AND
+    # two sets, because the faces read the App Group suite and the only thing
+    # that writes it is a live session's `publishLiveSnapshot` — a shot of the
+    # idle faces would prove the view draws and nothing about the data path.
+    #
+    # ⚠️ This is NOT a photograph of the Smart Stack. Relevance is the
+    # system's judgement about a workout there is no heart to drive, `simctl`
+    # cannot force a stack to surface a card, and a screenshot of one that did
+    # not is exactly the wrong-screen shot this file refuses. See
+    # `LiveWidgetPreview`.
+    widget)  echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=widget" ;;
     *) echo "UNKNOWN" ;;
   esac
 }
@@ -138,6 +162,23 @@ xcodebuild -project "$ROOT/native/Onyx.xcodeproj" \
 APP="$DERIVED/Build/Products/Debug-watchsimulator/OnyxWatch.app"
 xcrun simctl install "$UDID" "$APP"
 
+# ── THE WARM-UP LAUNCH, AND WHY IT IS NOT PARANOIA ─────────────────────────
+# The FIRST launch after an install is slower than every one after it — the
+# system has a new binary to page in, the dyld cache is cold, and SwiftUI has
+# no compiled layout to reuse. `shoot` waits 8 s, which is enough for a warm
+# process and is NOT enough for this one: W4 shot `widgets-activity` three
+# times and got a solid-black PNG twice, both times as the FIRST screen of
+# the run, while every screen after it in the same run was fine.
+#
+# A black PNG is the worst possible failure here, because it reviews as "the
+# screen is broken" rather than as "the loop is broken" — and it lands under
+# a correct filename. One throwaway launch pays the cost once, before
+# anything is photographed.
+xcrun simctl launch "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+sleep 6
+xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+sleep 1
+
 # ── The shots ──────────────────────────────────────────────────────────────
 shoot() {
   local screen="$1"
@@ -145,11 +186,11 @@ shoot() {
 
   case "$env" in
     UNKNOWN)
-      echo "  unknown screen '$screen' — known: start set quality qualitytags rest deck deckswipe pause cancel finish" >&2; return 1 ;;
+      echo "  unknown screen '$screen' — known: start set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget" >&2; return 1 ;;
     NOT_REACHABLE)
       echo "  '$screen' has no launch hook yet: it is presented by navigation" >&2
       echo "  inside a live session. Add a case to WatchModel.DebugScreen and a" >&2
-      echo "  branch to OnyxWatchApp's ONYX_WATCH_SCREEN block first (W4)." >&2
+      echo "  branch to OnyxWatchApp's ONYX_WATCH_SCREEN block first." >&2
       return 1 ;;
   esac
 
@@ -223,7 +264,7 @@ shoot() {
 }
 
 read -ra SCREENS <<< "$SCREEN"
-[ "$SCREEN" = "all" ] && SCREENS=(start set quality qualitytags rest deck deckswipe pause cancel finish)
+[ "$SCREEN" = "all" ] && SCREENS=(start set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget)
 
 status=0
 for s in ${SCREENS[@]+"${SCREENS[@]}"}; do

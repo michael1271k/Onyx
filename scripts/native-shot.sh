@@ -82,6 +82,23 @@ xcodebuild -project "$ROOT/native/Onyx.xcodeproj" \
 APP="$DERIVED/Build/Products/Debug-iphonesimulator/Onyx.app"
 xcrun simctl install "$UDID" "$APP"
 
+# ── THE WARM-UP LAUNCH, AND WHY IT IS NOT PARANOIA ─────────────────────────
+# The FIRST launch after an install is slower than every one after it — the
+# system has a new binary to page in, the dyld cache is cold, and SwiftUI has
+# no compiled layout to reuse. `shoot` waits 8 s, which is enough for a warm
+# process and is NOT enough for this one: W4 shot `widgets-activity` three
+# times and got a solid-black PNG twice, both times as the FIRST screen of
+# the run, while every screen after it in the same run was fine.
+#
+# A black PNG is the worst possible failure here, because it reviews as "the
+# screen is broken" rather than as "the loop is broken" — and it lands under
+# a correct filename. One throwaway launch pays the cost once, before
+# anything is photographed.
+xcrun simctl launch "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+sleep 6
+xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+sleep 1
+
 # ── The shots ──────────────────────────────────────────────────────────────
 # Dynamic Type is mandatory in this design system and the largest accessibility
 # size is where fixed heights and truncated labels show up, so every screen is

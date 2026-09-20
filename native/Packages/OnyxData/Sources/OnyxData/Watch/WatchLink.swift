@@ -53,6 +53,18 @@ public final class WatchLink: NSObject, Sendable {
         /// The rest clock started, changed or stopped on the other device.
         /// `nil` ends it.
         case rest(RestPulse?)
+        /// Millilitres of water tapped on the WRIST (W4). Watch → phone only.
+        ///
+        /// ── WHY THE WATCH CANNOT JUST LOG IT ────────────────────────────────
+        /// It has no water to log into. The wrist's store holds sets and
+        /// nothing else (`OnyxWatchApp`'s header), the day's ledger lives in
+        /// the phone's `water_intake`, and an App Group is per DEVICE — so the
+        /// `PendingWater` mailbox the phone's Control Center button drops a
+        /// glass into is a container on a different chip. The wrist's button
+        /// therefore posts the millilitres and the phone drops them in the
+        /// SAME mailbox, drained by the same `drainPendingWater` through the
+        /// same `addWaterGlass`. One row, one code path, two devices.
+        case water(Double)
     }
 
     /// A payload key. Free functions rather than a `Codable` envelope because
@@ -69,6 +81,7 @@ public final class WatchLink: NSObject, Sendable {
         static let ownership = "pencil"
         static let context = "context"
         static let rest = "rest"
+        static let water = "water"
     }
 
     private let onInbound: @Sendable (Inbound) -> Void
@@ -142,6 +155,39 @@ public final class WatchLink: NSObject, Sendable {
         wc.sendMessage(body, replyHandler: nil) { _ in }
     }
 
+    /// Post a glass of water to the phone (W4). Watch → phone.
+    ///
+    /// ── `transferUserInfo`, LIKE A SET AND NOT LIKE A TIMER ─────────────────
+    /// A glass is a FACT, and the wrist is the one device that knows it
+    /// happened. `sendMessage` would drop it the moment the phone is in a
+    /// locker — which is most of a workout — and there is no second road: the
+    /// watch has no `water_intake` table to keep it in until the two meet
+    /// (`Inbound.water` says why). Queued, persisted across relaunch and
+    /// reboot, FIFO: the same guarantee a set gets, for the same reason.
+    ///
+    /// ── AND WHY THAT DOES NOT DOUBLE-COUNT ──────────────────────────────────
+    /// `PendingWater` is a mailbox the phone ADDS to and empties under its own
+    /// transaction, and WatchConnectivity delivers a `transferUserInfo`
+    /// exactly once. A transfer that is never delivered is a glass that is
+    /// lost, which is the honest failure here — the alternative, a queue the
+    /// wrist replays, is a glass logged twice.
+    /// - Returns: whether the transfer was CREATED. False means nothing is
+    ///   queued and nothing ever will be — there is no counterpart app, or
+    ///   `WCSession` has not finished activating, which is the state for the
+    ///   first moment after launch and the Fuel page is two taps away.
+    ///
+    ///   The caller has to know, because the wrist draws the glass
+    ///   optimistically: `WatchModel.addWaterGlass` incremented its own
+    ///   figure whatever happened here, so a tap in that first moment played
+    ///   the haptic, moved the number and queued nothing. A lost glass with
+    ///   a confirmation is worse than a lost glass.
+    @discardableResult
+    public func send(waterMl ml: Double) -> Bool {
+        guard ml > 0, let wc = active() else { return false }
+        wc.transferUserInfo([Key.kind: Kind.water, Key.payload: ml])
+        return true
+    }
+
     /// Replace the watch's copy of "who is signed in and what is today".
     ///
     /// PHONE SIDE ONLY in practice — the watch has no plan resolution of its
@@ -193,6 +239,13 @@ public final class WatchLink: NSObject, Sendable {
             guard let data else { return onInbound(.rest(nil)) }
             guard let pulse = try? OnyxJSON.decoder.decode(RestPulse.self, from: data) else { return }
             onInbound(.rest(pulse))
+        case Kind.water:
+            // A bare `Double`, not JSON: `Double` is on WatchConnectivity's
+            // documented list of allowed dictionary value types, and a
+            // one-number payload does not need an encoder. The cast is where
+            // a malformed transfer dies — quietly, like every other kind here.
+            guard let ml = message[Key.payload] as? Double, ml > 0 else { return }
+            onInbound(.water(ml))
         default:
             return
         }

@@ -1,5 +1,7 @@
 import AppIntents
 import Foundation
+// `PendingWater`, which moved here from this file — see the note below.
+import OnyxCore
 import OnyxData
 import WidgetKit
 
@@ -13,42 +15,14 @@ import WidgetKit
 /// suite name is spelled in exactly one place. Both targets link OnyxData;
 /// nothing here may reach further than that (no `LoggerModel`, no store).
 
-// MARK: - The pending-water mailbox
-
-/// Millilitres tapped in Control Center that the store has not seen yet.
-///
-/// ── WHY A KEY AND NOT A WRITE ───────────────────────────────────────────────
-/// The extension opens `onyx.sqlite` read-only (`WidgetStore` says why: two
-/// processes migrating one schema is a race with no winner), so a control
-/// cannot add the glass itself. It adds 250 to this App Group key and reloads
-/// the timelines; the water face reads the key for the optimistic figure
-/// (`WidgetStore.snapshot`), and the app drains it into the ledger the next
-/// time it is active (`AppEnvironment.drainPendingWater`) — through the same
-/// `addWaterGlass` the Pulse tab's tap uses, so a queued glass and a tapped
-/// one are the same row.
-public enum PendingWater {
-    public static let key = "onyx.pending.waterMl"
-    /// One glass. The same 250 the Pulse tab's water row adds.
-    public static let glassMl: Double = 250
-
-    /// Queue `ml` more.
-    public static func add(_ ml: Double, to defaults: UserDefaults) {
-        defaults.set(pending(in: defaults) + ml, forKey: key)
-    }
-
-    /// What is queued, without touching it.
-    public static func pending(in defaults: UserDefaults) -> Double {
-        max(0, defaults.double(forKey: key))
-    }
-
-    /// What is queued, and the queue emptied.
-    @discardableResult
-    public static func take(from defaults: UserDefaults) -> Double {
-        let ml = pending(in: defaults)
-        defaults.removeObject(forKey: key)
-        return ml
-    }
-}
+// ── THE MAILBOX MOVED TO OnyxCore (W4) ──────────────────────────────────────
+// `PendingWater` used to be declared here. It is a `UserDefaults` key and two
+// arithmetic functions with nothing iOS about them, and `Shared/` is compiled
+// into the phone app and the phone's widget extension and NEITHER watch
+// target — so the wrist's new "+1 glass" button could not see it and would
+// have had to write `250` a third time. It lives in
+// `OnyxCore/Widget/PendingWater.swift` now, which both watch targets already
+// link. The intent below, which writes to the PHONE's own App Group, stays.
 
 // MARK: - +250 ml
 

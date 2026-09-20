@@ -323,10 +323,46 @@ struct WorkoutRestBand: View {
                 }
                 .progressViewStyle(.linear)
                 .tint(accent)
-                Text(timerInterval: countdown, countsDown: true)
-                    .font(OnyxWidgetType.figure(11))
-                    .monospacedDigit()
-                    .foregroundStyle(accent)
+                // ── THE READING ROW, UNDER THE BAR ──────────────────────────
+                // The countdown and the heart rate together, because they are
+                // both READINGS and the four things either side of them are
+                // CONTROLS.
+                //
+                // ── AND WHY THE HEART IS NOT OUT THERE WITH THEM ────────────
+                // It was, for one build: a red element standing between the
+                // teal `+` circle and the teal skip circle, in the exact slot
+                // the Lock Screen puts a button. At arm's length that reads as
+                // a control that failed to render, not as your pulse — which
+                // is the "colour that failed to apply" failure this band's own
+                // `accent` note already records once. Inside the bar's column
+                // it is unambiguously a number.
+                HStack(spacing: 6) {
+                    Text(timerInterval: countdown, countsDown: true)
+                        .monospacedDigit()
+                        .foregroundStyle(accent)
+                    if let bpm = state.bpm {
+                        // ── RED ON THE GLYPH, ORDINARY INK ON THE NUMBER ────
+                        // A red NUMERAL beside teal ones reads as a value in a
+                        // bad state, and on a card that also carries a gold
+                        // `2 PR` the eye has no reason to read it as a
+                        // measurement. The glyph is what says "heart" — the
+                        // strongest convention on the platform, and the half
+                        // that survives the accented and vibrant rendering
+                        // modes, because the meaning is in the shape.
+                        HStack(spacing: 2) {
+                            Image(systemName: "heart.fill")
+                                .foregroundStyle(Color.onyx.danger)
+                            Text("\(bpm)")
+                                .monospacedDigit()
+                                .foregroundStyle(Color.onyx.textPrimary)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Heart rate")
+                        .accessibilityValue("\(bpm) beats per minute, from your watch")
+                    }
+                }
+                .font(OnyxWidgetType.figure(11))
+                .lineLimit(1)
             }
             nudge(15, "plus", "Add 15 seconds to the rest")
             if showsSkip { WorkoutSkipRest(dayKey: state.dayKey, compact: true, tint: accent) }
@@ -354,6 +390,82 @@ struct WorkoutRestBand: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+}
+
+/// The Dynamic Island's compact TRAILING slot — whichever number is the
+/// answer right now.
+///
+/// ── WHY IT IS A VIEW IN `Shared/` AND NOT FOUR BRANCHES IN THE ISLAND ───────
+/// It was four branches in `OnyxWidgets.swift` and a COPY of three of them in
+/// `WidgetPreviews.islandCompact`, which is the app's contact sheet for this
+/// surface. The copy is documented there as a stand-in "free to drift", and it
+/// did: W4 added the heart rate to the real slot and the photograph of that
+/// slot kept showing the load, so the shot reviewed the harness rather than
+/// the shipped code — and a shot that reviews a stand-in is the failure this
+/// whole file's header is about.
+///
+/// The expanded island and the Lock Screen already avoid this by being made of
+/// `Shared/` views taking plain values. This is that treatment applied to the
+/// one region that had not had it.
+///
+/// ── THE ORDER IS "WHAT IS THE QUESTION RIGHT NOW" ───────────────────────────
+/// Resting, it is the countdown. Walking, it is the bout's clock. Under the
+/// bar it is the heart rate (W4, decision 4) — the one reading you cannot see
+/// — and only with no watch speaking does it fall back to the load, which is
+/// a number you are holding.
+///
+/// ~44 pt, reserved and monospaced on every branch: this slot has no room to
+/// grow, and proportional digits re-measure it on every tick, which shunts the
+/// mark beside it.
+struct WorkoutCompactTrailing: View {
+    let state: OnyxWorkoutAttributes.ContentState
+
+    var body: some View {
+        Group {
+            if let countdown = restCountdown(state.restEndsAt, total: state.restTotalSec) {
+                Text(timerInterval: countdown, countsDown: true)
+                    .monospacedDigit()
+                    .frame(minWidth: 44, maxWidth: 44, alignment: .trailing)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    // The timer wears the MOVEMENT's colour on every surface —
+                    // see `WorkoutRestBand.accent`.
+                    .foregroundStyle(
+                        WorkoutMuscleTag.tint(state.primaryMuscle) ?? Color.onyx.day(state.dayKey)
+                    )
+            } else if let sec = state.cardioElapsedSec {
+                // ── A REAL BRANCH, BECAUSE THE FALLBACK CANNOT ──────────────
+                // The `else` below is string surgery on a load the producer
+                // composed ("42.5 kg × 12" minus its unit), and a bout has no
+                // " kg " in it to cut — it would print the whole line into a
+                // ~44 pt slot. The bout's own clock is the one number that
+                // fits, and it is the axis a treadmill block is prescribed in.
+                Text(SetFormat.clock(Double(sec)))
+                    .monospacedDigit()
+                    .frame(minWidth: 44, maxWidth: 44, alignment: .trailing)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .foregroundStyle(Color.onyx.cardio)
+            } else if let bpm = state.bpm {
+                // Red on the glyph, ordinary ink on the number — the rule
+                // `WorkoutRestBand`'s reading row states at length.
+                HStack(spacing: 2) {
+                    Image(systemName: "heart.fill").foregroundStyle(Color.onyx.danger)
+                    Text("\(bpm)").monospacedDigit().foregroundStyle(Color.onyx.textPrimary)
+                }
+                .frame(minWidth: 44, maxWidth: 44, alignment: .trailing)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Heart rate")
+                .accessibilityValue("\(bpm) beats per minute, from your watch")
+            } else {
+                Text(state.load.replacingOccurrences(of: " kg ", with: ""))
+                    .foregroundStyle(Color.onyx.day(state.dayKey))
+            }
+        }
+        .font(OnyxWidgetType.figure(12))
     }
 }
 

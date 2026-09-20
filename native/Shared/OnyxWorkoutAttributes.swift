@@ -199,6 +199,28 @@ struct OnyxWorkoutAttributes: ActivityAttributes {
         /// `timerOrigin` for what a required key does to a running activity.
         var cardioElapsedSec: Int?
         var cardioDistanceKm: Double?
+        /// The wrist's heart rate, if a watch is on it and has spoken
+        /// recently (W4, founder decision 4).
+        ///
+        /// ── THE ONE NUMBER THE PHONE CANNOT TAKE ITSELF ─────────────────────
+        /// The sensor is on the other device. `PhoneWatchBridge.liveBpm` is
+        /// the reading the wrist echoed back on the last rest pulse, already
+        /// aged out at two minutes — so a nil here is "no watch, or a watch
+        /// that has gone quiet", never a heart at rest. The card must not
+        /// draw a zero for it, and it does not: every reader is an `if let`.
+        ///
+        /// ── AND WHY IT DOES NOT COST AN UPDATE A BEAT ───────────────────────
+        /// It is in `ContentState`, so it participates in `Hashable`, so a
+        /// changed rate is a changed state — which would be an ActivityKit
+        /// update per sample if anything pushed one per sample. Nothing does:
+        /// `liveBpm` only moves when a `RestPulse` arrives, which is a rest
+        /// starting, a ±15 s nudge or the wrist's echo. A few times a minute,
+        /// which is inside the budget the rest of this card is written
+        /// against.
+        ///
+        /// Optional, like every field added after the first release — see
+        /// `timerOrigin` for what a required key does to a running activity.
+        var bpm: Int?
         /// The workout's own day key — "cb_b", "legs_a".
         ///
         /// ── WHY A KEY AND NOT A COLOUR ──────────────────────────────────────

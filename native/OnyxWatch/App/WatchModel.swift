@@ -110,6 +110,26 @@ final class WatchModel {
     /// The rest clock, or nil. Mirrored to the phone as a `RestPulse`.
     private(set) var rest: RestPulse?
 
+    /// Millilitres tapped on the Fuel page that the phone has not confirmed
+    /// yet (W4).
+    ///
+    /// ── WHY THE WRIST KEEPS A NUMBER IT DOES NOT OWN ────────────────────────
+    /// The glass is posted to the phone and written there — this device has no
+    /// `water_intake` table (`WatchLink.Inbound.water`). The round trip is a
+    /// `transferUserInfo` out, a drain on the phone, a commit, and a fresh
+    /// application context back, which is seconds at best and minutes with the
+    /// phone in a locker. A button whose number does not move until then is a
+    /// button people press twice.
+    ///
+    /// So the page draws `tiles.addingWater(pendingWaterMl)` and this is the
+    /// addend. It is the same optimism the phone's own widget takes on the
+    /// same mailbox (`WidgetStore.snapshot` reads `PendingWater.pending`), and
+    /// it is cleared the moment a context arrives, because that context IS the
+    /// phone's answer — including the answer "I have not drained it yet",
+    /// which flicks the reading back for one push rather than leaving it
+    /// permanently one glass high.
+    private(set) var pendingWaterMl = 0
+
     /// The set being edited right now. Seeded from the plan and from what you
     /// lifted last time, then moved by the Crown.
     var load: Double = 0
@@ -151,6 +171,14 @@ final class WatchModel {
     private var link: WatchLink?
     private var setsObserver: AnyDatabaseCancellable?
 
+    /// The last snapshot handed to the widget extension (W4).
+    ///
+    /// Not what is IN the suite — what this process last wrote there. It is
+    /// the de-dupe cursor for `publishLiveSnapshot`, which is reached twice
+    /// on every commit (once through `seedCursor`, once from `startRest`
+    /// with the new rest on it) and from seven places in all.
+    private var lastPublished: LiveWorkoutSnapshot?
+
     #if DEBUG
     /// Which screen the shot loop asked for (`ONYX_WATCH_SCREEN`).
     ///
@@ -163,7 +191,10 @@ final class WatchModel {
     /// This is that hook: one value, read by whichever view owns the screen,
     /// so each screen is reached along the path a finger would take rather
     /// than by a second rendering nobody ships.
-    enum DebugScreen: String { case rest, deck, quality, pause, cancel, finish }
+    /// `dashboard` is W4's, and it is the last name `watch-shot.sh` refused
+    /// (W1 left it named as unreachable and said so by name rather than
+    /// photographing `StartView` under its filename).
+    enum DebugScreen: String { case rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget }
     var debugScreen: DebugScreen?
     #endif
 
@@ -458,7 +489,27 @@ final class WatchModel {
     /// prescription for the rest of the workout. `logged.last` wins over the
     /// plan's `wk1Kg` when there is one: what you actually lifted five minutes
     /// ago is a better prediction than a seed written months ago.
+    ///
+    /// ── AND IT IS WHERE THE SMART STACK CARD IS PUBLISHED (W4) ─────────────
+    /// Seven callers, and they are every change the card cares about:
+    /// `adopt` (rejoining a live session), `reload` (every commit, void,
+    /// amend and phone-side ingest — the observer path) and the five deck
+    /// mutators (`doNext`, `toggleSkip`, `jump`, `addSet`, `swap`). W4 first
+    /// published only from the four REST beats, which left the card
+    /// confidently wrong after any deck edit: skip or swap the movement you
+    /// are resting before and the blob is seconds old, so `isLive` is true,
+    /// `load()` hands it back, and the face draws a movement you have just
+    /// removed against a denominator that no longer exists. `voidLast` was
+    /// crisper — the card read 8/12 while the log held 7 — and neither
+    /// self-repairs if the next commit never comes.
+    ///
+    /// One line here rather than six at the call sites, because this is
+    /// already the thing they all end in.
     private func seedCursor() {
+        // BEFORE the guard, not after it: a finished deck has no cursor and
+        // is exactly the state the card must still describe — the last rest
+        // of the session is the one you are most likely to be looking at.
+        defer { publishLiveSnapshot() }
         guard let cursor else { return }
         if let previous = cursor.movement.logged.last {
             load = previous.weightKg
@@ -663,6 +714,9 @@ final class WatchModel {
             // disagreeing by exactly the length of every pause.
             remoteOrigin = nil
             writeError = nil
+            // A paused session whose card still counted a rest down was the
+            // one state the live face could be confidently wrong about.
+            publishLiveSnapshot()
         } catch {
             failed(error)
         }
@@ -717,6 +771,7 @@ final class WatchModel {
         sets = []
         rest = nil
         arrangement = DeckArrangement()
+        clearLiveSnapshot()
     }
 
     // MARK: - Rearranging today's deck (W3)
@@ -955,6 +1010,10 @@ final class WatchModel {
         )
         rest = pulse
         link?.send(rest: pulse)
+        // The Smart Stack's card, on the two beats the plan names: a commit
+        // (which is the only caller of this) and a rest pulse (which is this).
+        // One call covers both because a commit always starts a rest.
+        publishLiveSnapshot()
     }
 
     /// ±15 s, clamped and snapped to the same grid the phone's control uses.
@@ -1003,11 +1062,153 @@ final class WatchModel {
             exercise: pulse.exercise, loadKg: pulse.loadKg, reps: pulse.reps, rpe: pulse.rpe,
             timerOrigin: pulse.timerOrigin, bpm: rest.bpm
         )
+        publishLiveSnapshot()
     }
 
     func stopRest() {
         rest = nil
         link?.send(rest: nil)
+        publishLiveSnapshot()
+    }
+
+    // MARK: - What the Smart Stack reads (W4)
+
+    /// The tiles the dashboard pages draw — the phone's, plus whatever water
+    /// this wrist has tapped and the phone has not confirmed.
+    ///
+    /// ONE place adds the optimistic glass, so the Fuel page's face and any
+    /// later reader cannot disagree about how much water today has had.
+    ///
+    /// ── THE COMPLICATION DOES NOT GET IT, AND MUST NOT ──────────────────────
+    /// The watch's Water complication reads the suite directly
+    /// (`WatchTiles.load`), so between a tap here and the phone's next
+    /// context push the Fuel page reads 2 000 ml and a face on the clock
+    /// reads 1 750. That is the right side of the trade: this page knows the
+    /// tap happened because it is the thing that was tapped, and a
+    /// complication that adds an optimistic 250 would be a face asserting a
+    /// number no store has agreed to — on the one surface with no way to
+    /// explain itself.
+    var dashboardTiles: WatchTiles? {
+        context?.tiles?.addingWater(pendingWaterMl)
+    }
+
+    /// Write the running session where the complication extension can read it,
+    /// and tell WidgetKit twice.
+    ///
+    /// ── TWO CALLS, AND THE SECOND ONE IS THE POINT ──────────────────────────
+    /// `reloadTimelines` refreshes what the card DRAWS. It does not re-ask
+    /// `LiveWorkoutProvider.relevance()`, whose answer the system caches — so
+    /// without `invalidateRelevance` the card would update perfectly inside a
+    /// Smart Stack it never rose to the top of, which is the whole feature.
+    ///
+    /// ── AND WHY NOT `reloadAllTimelines` ────────────────────────────────────
+    /// Eleven widgets live in that extension and reloads are budgeted on a
+    /// watch. Regenerating all eleven on every set commit is how the live card
+    /// becomes the one widget that stops updating. `reloadAllTimelines` stays
+    /// where it belongs — the once-a-push context arrival, which is when the
+    /// other ten actually change.
+    private func publishLiveSnapshot() {
+        // ── `sessionId`, AND NOT `cursor` ───────────────────────────────────
+        // The guard read `let cursor` and cleared the card without one. But
+        // `cursor` is nil the moment the deck is FINISHED (`isFinished` keys
+        // off exactly that), so committing the last planned set ran
+        // commit → startRest → publish → cursor nil → clear: the rest clock
+        // running, the session still open, `finish()` not called, and the
+        // Smart Stack card already gone to "No session running" and dropped
+        // out of `relevance()`. The 45-minute window never got a chance to
+        // matter. The session is over when `sessionId` is nil and at no other
+        // moment.
+        guard sessionId != nil else { return clearLiveSnapshot() }
+        // The movement the card is ABOUT: the one you are walking to, or —
+        // on the last rest of the session — the one you have just finished.
+        // `lastLoggedMovement` is the same fallback `addSet()` uses.
+        guard let movement = cursor?.movement ?? lastLoggedMovement else {
+            return clearLiveSnapshot()
+        }
+        // ── BOTH FOLDS FILTER THE SAME WAY ──────────────────────────────────
+        // `done` walked every movement and `planned` only the unskipped ones,
+        // so skipping a movement you had already logged two sets of printed
+        // "9/8" on the card. A progress whose numerator can outrun its
+        // denominator is not a progress.
+        let live = movements.filter { !$0.isSkipped }
+        let next = LiveWorkoutSnapshot(
+            exercise: movement.plan.name,
+            setsDone: live.reduce(0) { $0 + $1.logged.count },
+            setsPlanned: live.reduce(0) { $0 + $1.plannedSets },
+            // Nil until the sensor settles — a reading that has not arrived
+            // and not a heart that has stopped.
+            bpm: workout.heartRate,
+            restEndsAt: rest?.endsAt,
+            dayKey: day?.key,
+            primaryMuscle: Self.primaryMuscle(of: movement.plan),
+            // The instant the rate was taken, so a face can age it at two
+            // minutes the way the phone ages its own copy. Nil when there is
+            // no rate to date.
+            bpmAt: workout.heartRate == nil ? nil : Date()
+        )
+        // Nothing the card draws has moved — and this method is reached twice
+        // per commit (`seedCursor` then `startRest`). Reloads are budgeted on
+        // a watch; spending two on an unchanged card is how the live one
+        // stops updating. See `LiveWorkoutSnapshot.sameReading`.
+        guard !next.sameReading(as: lastPublished) else { return }
+        lastPublished = next
+        next.save()
+        WidgetCenter.shared.reloadTimelines(ofKind: LiveWorkoutSnapshot.widgetKind)
+        WidgetCenter.shared.invalidateRelevance(ofKind: LiveWorkoutSnapshot.widgetKind)
+    }
+
+    /// The session is over. Called on finish and on discard.
+    ///
+    /// `LiveWorkoutSnapshot.load` already refuses a blob older than its stale
+    /// window, so this is not what stops a jetsammed session haunting the
+    /// stack — it is what stops a FINISHED one haunting it for the next
+    /// three-quarters of an hour.
+    private func clearLiveSnapshot() {
+        // Nothing to clear and nothing published — a no-op rather than two
+        // reloads on every launch that has no session.
+        guard lastPublished != nil || LiveWorkoutSnapshot.load() != nil else { return }
+        lastPublished = nil
+        LiveWorkoutSnapshot.clear()
+        WidgetCenter.shared.reloadTimelines(ofKind: LiveWorkoutSnapshot.widgetKind)
+        WidgetCenter.shared.invalidateRelevance(ofKind: LiveWorkoutSnapshot.widgetKind)
+    }
+
+    /// The token this movement's muscle chip resolves, or nil.
+    ///
+    /// The phone's rule, spelled where the wrist can reach it:
+    /// `LoggerModel.primaryMuscle(of:)` reads `plan.movers.primary.first` and
+    /// validates it through `LandmarkMuscle`, so the deck rail, the Lock
+    /// Screen and this card cannot call one movement three things. The
+    /// phone's cardio fallback is not mirrored — it tests `SetRow.isCardio`,
+    /// which is a phone type — and the face falls back to the split's colour,
+    /// which is the right answer for a bout anyway.
+    static func primaryMuscle(of plan: ProgramExercise) -> String? {
+        guard let token = plan.movers.primary.first,
+              LandmarkMuscle.from(token: token) != nil
+        else { return nil }
+        return token
+    }
+
+    // MARK: - Water, from the wrist (W4)
+
+    /// One glass — the same 250 ml the phone's Pulse row and its Control
+    /// Centre button add.
+    ///
+    /// Posted, not written: see `WatchLink.Inbound.water` for why this device
+    /// cannot log it itself, and `pendingWaterMl` for what the page draws in
+    /// the meantime.
+    /// - Returns: whether the glass was queued. False means the link could
+    ///   not take it — no counterpart app, or `WCSession` still activating,
+    ///   which is the state for the first moment after launch. The caller
+    ///   plays no haptic and the figure does not move, because a glass that
+    ///   was confirmed and then lost is worse than one that visibly did not
+    ///   take.
+    @discardableResult
+    func addWaterGlass() -> Bool {
+        let ml = PendingWater.glassMl
+        guard link?.send(waterMl: ml) == true else { return false }
+        pendingWaterMl += Int(ml)
+        return true
     }
 
     // MARK: - Finishing
@@ -1049,6 +1250,7 @@ final class WatchModel {
         sets = []
         rest = nil
         arrangement = DeckArrangement()
+        clearLiveSnapshot()
     }
 
     // MARK: - Inbound
@@ -1065,9 +1267,21 @@ final class WatchModel {
             if let sessionId {
                 holdsPencil = (try? store.holdsPencil(sessionId: sessionId)) ?? true
             }
+        case .water:
+            // Watch → phone only. A glass tapped on the wrist is posted and
+            // written there; nothing sends one back (`WatchLink.Inbound.water`).
+            break
         case .context(let next):
             context = next
             WatchContextCache.save(next)
+            // ── THE PHONE HAS ANSWERED, WHATEVER IT SAID (W4) ───────────────
+            // `pendingWaterMl` is an optimistic addend over the phone's own
+            // reading, and this context IS the phone's reading. Clearing it
+            // here means a push that arrives BEFORE the drain has run flicks
+            // the Fuel page back by one glass for one push — which is honest,
+            // and strictly better than a wrist that is permanently one glass
+            // high because an addend was never taken off.
+            pendingWaterMl = 0
             // `save`, not `set` (W7): the complication extension is a second
             // process on this wrist and reads the palette back out of the
             // suite (`OnyxTheme.load`) the way the phone's widgets do. The
@@ -1289,7 +1503,11 @@ extension WatchModel {
                 kcal: 1_640, kcalGoal: 2_150, todayLabel: "Upper B", todayLogged: false,
                 restDay: false, stressIndex: 41.5, sorenessCount: 3,
                 week: (0..<7).map { WatchTiles.WeekDay(trained: $0 % 2 == 0, fuelHit: $0 != 3, sleepHit: $0 > 1) },
-                medianBedtime: "23:12", lastBedtime: "00:16"
+                medianBedtime: "23:12", lastBedtime: "00:16",
+                // W4's four. Without them the Train page photographs "No
+                // volume yet" and the Fuel page falls back to the kcal line
+                // — both real states, and neither the one under review.
+                weekSets: 84, weekVolumeKg: 12_430, proteinG: 118, proteinGoalG: 185
             )
         )
         WatchContextCache.save(next)
