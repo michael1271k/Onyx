@@ -124,6 +124,45 @@ public struct HealthKitReader: HealthReading {
         }
     }
 
+    /// Raw samples, for the dietary types whose total a re-sync can inflate.
+    public func quantitySamples(
+        _ identifier: String, start: Date, end: Date
+    ) async throws -> [QuantitySample]? {
+        guard isAvailable,
+              let type = HKObjectType.quantityType(forIdentifier: .init(rawValue: identifier))
+        else { return nil }
+        // The same half-open window the statistics query uses, so the deduped
+        // sum and the total it replaces are taken over the same samples.
+        let predicate = HKQuery.predicateForSamples(
+            withStart: start, end: end, options: [.strictStartDate]
+        )
+        let unit = Self.unit(for: identifier)
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil
+            ) { _, samples, error in
+                if let error {
+                    // Absence is not failure, and neither is a store that
+                    // refuses: the caller keeps the statistics total.
+                    if (error as? HKError)?.code == .errorNoData {
+                        continuation.resume(returning: [])
+                        return
+                    }
+                    continuation.resume(returning: nil)
+                    return
+                }
+                let out = (samples as? [HKQuantitySample] ?? []).map {
+                    QuantitySample(
+                        source: $0.sourceRevision.source.name,
+                        start: $0.startDate, end: $0.endDate,
+                        value: $0.quantity.doubleValue(for: unit))
+                }
+                continuation.resume(returning: out)
+            }
+            store.execute(query)
+        }
+    }
+
     public func sleepSamples(start: Date, end: Date) async throws -> [SleepSample] {
         guard isAvailable,
               let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)

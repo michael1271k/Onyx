@@ -384,7 +384,13 @@ public actor SyncCoordinator: MirrorRefreshing {
             // The report is kept rather than discarded so the UI can say what
             // arrived — a row that appears in the ledger with no account of
             // where it came from is the kind of data people stop trusting.
-            if let report = try? await health.syncCardioBouts(now: now, calendar: calendar),
+            // A BACKFILL walks back a quarter. `ingestCardio` repairs a
+            // `created_at` that is an import instant rather than a start, and
+            // it can only repair a day it visits — so the rows that have been
+            // exporting `imported 21:11` for a walk taken at 18:58 are reached
+            // here and nowhere else.
+            if let report = try? await health.syncCardioBouts(
+                now: now, calendar: calendar, days: isBackfill ? 90 : 2),
                !report.isEmpty {
                 lastCardioIngest = report
             }

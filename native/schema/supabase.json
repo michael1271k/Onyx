@@ -41,7 +41,15 @@
     "NOT NULL DEFAULT: the DDL is pasted by hand, and a pull of `plans` that ran before",
     "the paste must not fail to decode a row the server has always served. nil reads as",
     "the default (`is_legacy` false, `sort` 0, `kind` day) and `encodeIfPresent` keeps the",
-    "column out of a push body until Postgres grows it -- the `sleep_inaccurate` rule."
+    "column out of a push body until Postgres grows it -- the `sleep_inaccurate` rule.",
+    "",
+    "`since: 3` marks the table added by the export v6 wave (2026-09-20): `prescriptions`,",
+    "the CURRENT instruction per movement, appended and never overwritten. The generator",
+    "emits it into `migrateMirrorV3`, which `v33.prescriptions` registers; a fresh install",
+    "runs V1, V2 and V3 in order. `daily_logs.hrv_overnight` is a column on an OLDER table",
+    "and follows the v21 rule -- listed in `cols` for a fresh install and altered in by the",
+    "same migration for a store that already exists. It was introspected live on 2026-09-20",
+    "and had been missing from this file since it was written."
   ],
   "strategies": {
     "cursor": "Delta by a monotonic timestamp column. Only trustworthy on a table whose updated_at is maintained by the server-side trigger; a client-written timestamp from a slow phone lands in the past and is skipped forever.",
@@ -56,7 +64,7 @@
         "id"
       ],
       "cursor": "updated_at",
-      "cols": "id:uuid,user_id:uuid,date:date,steps:int4?,water_ml:numeric?,sleep_minutes:int4?,carbs_g:numeric?,protein_g:numeric?,fats_g:numeric?,weight_kg:numeric?,lean_mass_kg:numeric?,bmi:numeric?,training_minutes:int4?,active_energy:numeric?,body_fat_pct:numeric?,standing_minutes:int4?,avg_heart_rate:int4?,avg_rest_heart_rate:int4?,respiratory_rate:numeric?,blood_oxygen:numeric?,muscle_percent:numeric?,water_percent:numeric?,bone_mineral:numeric?,visceral_fat:numeric?,bmr:numeric?,created_at:timestamptz,updated_at:timestamptz,hrv_ms:numeric?,exercise_minutes:int4?,stand_hours:int4?,vo2max:numeric?,wrist_temp_delta:numeric?,time_in_daylight_min:int4?,effort_rating:int2?,mood:int2?,journal_md:text?,distance_m:numeric?,protein_percent:numeric?,muscle_mass_kg:numeric?,water_mass_kg:numeric?,fat_mass_kg:numeric?,bone_mineral_kg:numeric?,protein_mass_kg:numeric?,fat_free_mass_kg:numeric?,weighin_skip_reason:text?,skeletal_muscle_mass_kg:numeric?,estimated_waist_to_hip_ratio:numeric?,waist_cm:numeric?,nutrition_exception:text?,nutrition_estimated:bool,sleep_onset_trouble:bool,sleep_inaccurate:bool?"
+      "cols": "id:uuid,user_id:uuid,date:date,steps:int4?,water_ml:numeric?,sleep_minutes:int4?,carbs_g:numeric?,protein_g:numeric?,fats_g:numeric?,weight_kg:numeric?,lean_mass_kg:numeric?,bmi:numeric?,training_minutes:int4?,active_energy:numeric?,body_fat_pct:numeric?,standing_minutes:int4?,avg_heart_rate:int4?,avg_rest_heart_rate:int4?,respiratory_rate:numeric?,blood_oxygen:numeric?,muscle_percent:numeric?,water_percent:numeric?,bone_mineral:numeric?,visceral_fat:numeric?,bmr:numeric?,created_at:timestamptz,updated_at:timestamptz,hrv_ms:numeric?,exercise_minutes:int4?,stand_hours:int4?,vo2max:numeric?,wrist_temp_delta:numeric?,time_in_daylight_min:int4?,effort_rating:int2?,mood:int2?,journal_md:text?,distance_m:numeric?,protein_percent:numeric?,muscle_mass_kg:numeric?,water_mass_kg:numeric?,fat_mass_kg:numeric?,bone_mineral_kg:numeric?,protein_mass_kg:numeric?,fat_free_mass_kg:numeric?,weighin_skip_reason:text?,skeletal_muscle_mass_kg:numeric?,estimated_waist_to_hip_ratio:numeric?,waist_cm:numeric?,nutrition_exception:text?,nutrition_estimated:bool,sleep_onset_trouble:bool,sleep_inaccurate:bool?,hrv_overnight:bool?"
     },
     "daily_metrics": {
       "group": "daily",
@@ -338,6 +346,15 @@
       ],
       "full": true,
       "cols": "id:uuid,user_id:uuid,type:text,period_start:date,period_end:date,content_md:text?,session_summary_md:text?,weight_report_md:text?,metrics:jsonb?,notion_page_id:text?,created_at:timestamptz"
+    },
+    "prescriptions": {
+      "group": "training",
+      "pk": [
+        "id"
+      ],
+      "full": true,
+      "since": 3,
+      "cols": "id:uuid,user_id:uuid,exercise_key:text,version:int4,effective_from:date,load_kg:numeric?,sets:int4?,rep_range:text?,rpe_cap:numeric?,structure:text,set_loads:_numeric?,lead_rule:text,notes:text?,created_at:timestamptz"
     }
   }
 }

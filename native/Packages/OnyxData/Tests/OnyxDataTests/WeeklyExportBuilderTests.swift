@@ -135,9 +135,14 @@ struct WeeklyExportBuilderTests {
             // typed, so its stamp is the moment of typing; `cl2` came from
             // Health, so its stamp IS the bout's start and the export may say so.
             try CardioLogRow(id: "cl1", userId: user, date: "2026-08-26", kind: "walk", distanceM: 5000, durationMin: 50, kcal: 250, createdAt: t).insert(conn)
+            // `hk_uuid` is what makes the stamp a START rather than an import
+            // instant — the current ingest writes both in one statement, so a
+            // Health row without a key predates the rule and its `created_at`
+            // is the moment of the import (`source: "import"`).
             try CardioLogRow(id: "cl2", userId: user, date: "2026-08-29", kind: "run", distanceM: 3000, durationMin: 18, kcal: 200,
                              fromHealthkit: true, createdAt: iso("2026-08-29T06:12:00Z"),
-                             activeKcal: 200, totalKcal: 230, avgHr: 150, effort: 7, elevationM: 120).insert(conn)
+                             activeKcal: 200, totalKcal: 230, avgHr: 150, effort: 7, elevationM: 120,
+                             hkUuid: "8f1c-run").insert(conn)
             try SleepSessionRow(id: "sl1", userId: user, startTime: iso("2026-08-22T22:30:00Z"), endTime: iso("2026-08-23T06:30:00Z"),
                                 durationMin: 480, deepMin: 60, remMin: 100, coreMin: 300, awakeMin: 20, createdAt: t).insert(conn)
             try SleepSessionRow(id: "sl2", userId: user, startTime: iso("2026-08-24T00:15:00Z"), endTime: iso("2026-08-24T07:00:00Z"),
@@ -194,6 +199,11 @@ struct WeeklyExportBuilderTests {
         gotStripped.bodyComp = got.bodyComp?.map { var x = $0; x.anomaly = nil; return x }
         gotStripped.leverBaselineKcal = nil
         gotStripped.anomalies = nil
+        /* The insomnia window reads EIGHT WEEKS of nights and the daily rows
+           that tag them, which is history and not this week — the same bargain
+           `withoutReadiness` and `withoutV5` already struck. Asserted by hand
+           below. */
+        gotStripped.insomnia = nil
         #expect(got.sessions.map(withoutV5) == want.sessions)
         #expect(got.volumeByMuscle == want.volumeByMuscle)
         #expect(got.tonnageByMuscle == want.tonnageByMuscle)
@@ -216,6 +226,18 @@ struct WeeklyExportBuilderTests {
            which is the whole point of the stored value winning. */
         #expect(got.bodyComp == want.bodyComp)
         #expect(got.cardio == want.cardio)
+        /* ── THE INSOMNIA WINDOW ────────────────────────────────────────
+           One night qualifies in the eight weeks this seed covers: the night
+           of the 24th, whose `daily_logs` row ticks `sleep_onset_trouble`. It
+           carries no onset stamp, so the latency is unknown and the tag is
+           what names it — which is the whole reason the tag is one of the three
+           conditions and not a decoration on the other two. The night of the
+           23rd slept 480 minutes with 20 awake and no tag, and is not a
+           finding. */
+        #expect(got.insomnia?.map(\.date) == ["2026-08-24"])
+        #expect(got.insomnia?.first?.tag == true)
+        #expect(got.insomnia?.first?.onsetMin == nil)
+        #expect(got.insomnia?.first?.awakeMin == 10)
         #expect(got.supplementProtocol == want.supplementProtocol)
         #expect(got.ledger == want.ledger)
         #expect(gotStripped == want)
@@ -301,7 +323,8 @@ struct WeeklyExportBuilderTests {
          "weightKg": 65, "calories": 2000, "proteinG": 170, "carbsG": 206, "fatG": 55, "steps": 8000, "distanceM": 6000,
          "sleepMin": 480, "deepMin": 60, "remMin": 100, "restingHr": 52, "hrvMs": 60, "wristTempDeltaC": 0.2, "bloodOxygenPct": 97,
          "avgHr": 70, "respiratoryRate": 14.5, "vo2max": 46.1, "daylightMin": 40, "exerciseMin": 30, "standHours": 12, "standMin": 55,
-         "coreMin": 300, "awakeMin": 20, "bedTime": "2026-08-22T22:30:00Z", "wakeTime": "2026-08-23T06:30:00Z", 
+         "coreMin": 300, "awakeMin": 20, "bedTime": "2026-08-22T22:30:00Z", "wakeTime": "2026-08-23T06:30:00Z",
+         "hrvSyncedAt": "2026-08-23T00:00:00Z",
          "waterMl": 2000, "supplementsTaken": 3, "supplementsPlanned": 3,
          "supplementsLog": [{"key": "caffeine", "time": "11:45"}, {"key": "creatine", "time": "15:00"}, {"key": "omega3", "time": "15:00"}],
          "supplementsSkipped": [], "supplementsSkippedUnplanned": [], "supplementsLater": [],

@@ -11,8 +11,9 @@ public struct IngestReport: Sendable, Equatable {
     /// correction that quietly stops being honoured is invisible otherwise.
     public var declined: [String] = []
     /// The stored `hrv_ms` is the night's mean (the watch was worn to sleep)
-    /// rather than the calendar day's. Nothing in the schema carries this yet;
-    /// it is reported so the day can say which reading it holds.
+    /// rather than the calendar day's. Stored in `daily_logs.hrv_overnight`
+    /// since v33 — see `hrvHistory`, whose band depends on it — and reported
+    /// here as well so a caller can see what one pass decided.
     public var hrvOvernight: Bool = false
 
     public var isEmpty: Bool { tables.isEmpty }
@@ -62,7 +63,24 @@ public extension AppDatabase {
             // `Readiness.constants.baselineDays` of prior nights, median and MAD — so a
             // strap that slipped cannot move the z-score for six weeks.
             var payload = payload
-            if let hrv = payload[.hrv], let why = VitalsGate.hrvArtifact(hrv, history: try Self.hrvHistory(db, userId: userId, before: date)) {
+            /* ── THE BAND IS BUILT FROM THE SAME KIND OF NIGHT ───────────
+               `daily_logs.hrv_ms` holds TWO different measurements. When the
+               night's bed window resolves, `HealthSync` writes the mean of the
+               SDNN samples inside it; when it does not, the calendar day's mean
+               stands. Overnight SDNN runs far above the waking figure — on this
+               athlete around 100 ms against 60 — so judging an overnight
+               reading against a median of daytime ones made the good night the
+               outlier. Three Friday mornings running read 102, 93.9 and 119.8
+               and were declined, and the readings were never wrong.
+
+               `hrv_overnight` is what tells the two apart. It has existed in
+               Postgres since readiness v9 and was missing from
+               `native/schema/supabase.json`, so nothing on this device could
+               read or write it — the fact was computed every sync and thrown
+               away. It is stored now, and the history is filtered to match. */
+            if let hrv = payload[.hrv], let why = VitalsGate.hrvArtifact(
+                hrv, history: try Self.hrvHistory(
+                    db, userId: userId, before: date, overnight: payload.hrvOvernight)) {
                 report.declined.append("hrv \(hrv)ms — \(why)")
                 payload[.hrv] = nil
             }
@@ -165,6 +183,14 @@ extension AppDatabase {
         set(\.respiratoryRate, payload[.respiratoryRate])
         set(\.bloodOxygen, payload[.bloodOxygen])
         set(\.hrvMs, payload[.hrv])
+        /* WHICH READING IT IS, stored beside it. Written only when there IS an
+           HRV: a `false` on a day that measured none would claim a calendar-day
+           mean nobody took, and the export reads the absence as "provenance
+           unknown" rather than as a claim. */
+        if payload[.hrv] != nil {
+            row.hrvOvernight = payload.hrvOvernight
+            touched = true
+        }
         set(\.vo2max, payload[.vo2max])
         // `wrist_temp_delta` stores the raw value the source sends — since
         // 2026-07 that is the night's AVERAGE wrist temperature in °C, not a
@@ -206,14 +232,49 @@ extension AppDatabase {
 
     /// The athlete's prior HRV readings inside the readiness baseline window,
     /// the day itself excluded — the band `VitalsGate.hrvArtifact` judges by.
-    static func hrvHistory(_ db: Database, userId: String, before date: String) throws -> [Double] {
+    ///
+    /// ── ONLY THE NIGHTS OF THE SAME KIND ────────────────────────────────────
+    /// An overnight mean is judged against overnight means and a calendar-day
+    /// mean against calendar-day means, because the two are different
+    /// measurements of different things and a band built from one cannot
+    /// contain the other.
+    ///
+    /// A row with NO provenance is one written before `hrv_overnight` reached
+    /// this device, and it is admitted to BOTH bands: an unknown reading is
+    /// still the athlete's own history, and excluding it would leave the gate
+    /// with nothing to judge by until eight new nights had accumulated — which
+    /// is a gate that cannot fire, not a gate that is careful.
+    ///
+    /// ponytail: the mixed band is a transitional cost and it shrinks every
+    /// night. Drop the `IS NULL` clause once the history behind this window is
+    /// entirely post-v33 — but note what the filter costs an athlete whose bed
+    /// window resolves unevenly: the rarer KIND may never reach
+    /// `hrvMinHistory` inside the 42-day window, and `hrvArtifact` then returns
+    /// nil and only the flat 5–300 ms physiologic bound applies. That is a gate
+    /// that declines to judge rather than one that judges wrongly, which is the
+    /// right way round — but it is a gate that is not working, and if it
+    /// persists the answer is to make the bed window resolve, not to widen the
+    /// band back.
+    ///
+    /// ponytail: THE SCORE STILL MIXES. `ScoringWindow.hrvBaseline` and
+    /// `ReadinessHistoryBuilder` average `hrv_ms` over their trailing window
+    /// with no regard for provenance, exactly as this function did before v33,
+    /// so `inputs.hrvZ` — and through it the battery's `hrvQ` and the stress
+    /// term — still compare an overnight reading against a band that may be
+    /// half daytime. Filtering them is the same one-line change and a
+    /// completely different blast radius: it moves every stored daily score and
+    /// needs a history rescore and new golden vectors. Its own wave.
+    static func hrvHistory(
+        _ db: Database, userId: String, before date: String, overnight: Bool
+    ) throws -> [Double] {
         let from = ISODate.addDays(date, -Readiness.constants.baselineDays) ?? date
         return try Double.fetchAll(
             db, sql: """
                 SELECT hrv_ms FROM daily_logs
                 WHERE user_id = ? AND date >= ? AND date < ? AND hrv_ms IS NOT NULL
+                  AND (hrv_overnight IS NULL OR hrv_overnight = ?)
                 """,
-            arguments: [userId, from, date]
+            arguments: [userId, from, date, overnight]
         )
     }
 

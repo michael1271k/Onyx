@@ -51,6 +51,30 @@ public protocol HealthReading: Sendable {
         _ identifier: String, start: Date, end: Date
     ) async throws -> [String: Double]
 
+    /// Raw quantity samples in a window, for a type whose TOTAL cannot be
+    /// trusted — `nil` from a reader that cannot answer.
+    ///
+    /// ── WHY A SUM IS NOT ALWAYS A SUM ───────────────────────────────────────
+    /// `HKStatisticsQuery` adds up every sample it is given, and a food logger
+    /// that re-syncs an entry writes it a second time: same app, same instant,
+    /// same value, a new uuid. Apple's own dedupe is between DEVICES — an
+    /// iPhone and a Watch recording the same walk — and has nothing to say
+    /// about one app filing one meal twice. So calcium arrived at 3,142 mg
+    /// against a 1,000 mg target on three days in seven, the export refused to
+    /// believe it (correctly), and the reading was thrown out of the week's
+    /// mean instead of being repaired.
+    ///
+    /// Used for the DIETARY types only. Every other quantity here is a
+    /// measurement of the body, where the statistics query's cross-device
+    /// dedupe is exactly what is wanted and re-summing by hand would
+    /// double-count every minute two devices both recorded.
+    ///
+    /// Declared in the protocol and not only in an extension, for the reason
+    /// `quantityBySource` states in its own comment.
+    func quantitySamples(
+        _ identifier: String, start: Date, end: Date
+    ) async throws -> [QuantitySample]?
+
     /// Raw sleep-category samples in a window. Not reduced: the stage union in
     /// `Sleep.aggregate` needs the individual intervals.
     func sleepSamples(start: Date, end: Date) async throws -> [SleepSample]
@@ -73,6 +97,101 @@ public extension HealthReading {
     /// A store that records no workouts — every test double, and any device
     /// without a watch.
     func workouts(start: Date, end: Date) async throws -> [WorkoutSample] { [] }
+
+    /// `nil` — "this reader cannot answer", which leaves the statistics total
+    /// standing. Not `[]`: an empty ARRAY is "the window holds no samples",
+    /// which would zero a reading the total already found.
+    func quantitySamples(
+        _ identifier: String, start: Date, end: Date
+    ) async throws -> [QuantitySample]? { nil }
+}
+
+/// One `HKQuantitySample`, reduced to what a duplicate check needs: who wrote
+/// it, when it covers, and how much.
+public struct QuantitySample: Sendable, Equatable {
+    /// `HKSource.name` — "MyFitnessPal", "Onyx", "iPhone".
+    public let source: String
+    public let start: Date
+    public let end: Date
+    public let value: Double
+
+    public init(source: String, start: Date, end: Date, value: Double) {
+        self.source = source; self.start = start; self.end = end; self.value = value
+    }
+}
+
+public enum QuantitySamples {
+
+    /// The window's total with a WHOLE RE-FILED IMPORT removed.
+    ///
+    /// ── WHY NOT SIMPLY "DROP THE SECOND COPY OF A SAMPLE" ───────────────────
+    /// That was the first rule and it is too eager. A food logger files every
+    /// item of one meal under the MEAL's timestamp, not the item's, so two
+    /// entries at 08:10 for the same app are the ordinary case — and two eggs
+    /// logged as two entries agree on their source, their interval AND their
+    /// amount while being two eggs. Dropping one halves a number the athlete
+    /// entered correctly, silently, which is a worse failure than the one this
+    /// exists to fix: an inflated total is at least VISIBLE, and the export
+    /// already refuses to believe it.
+    ///
+    /// ── WHAT A RE-SYNC ACTUALLY LOOKS LIKE ──────────────────────────────────
+    /// The import runs again and files the DAY again, so every distinct entry
+    /// appears exactly twice — or three times, after three passes. That is a
+    /// signature nothing a person does can imitate: it requires every item of
+    /// the day to have been eaten the same number of times.
+    ///
+    /// So: count the occurrences of each distinct entry, take their greatest
+    /// common divisor, and divide by it. A day filed twice has every count even
+    /// and comes back halved. A day with two eggs and one apple has counts
+    /// `[2, 1]`, a gcd of 1, and is left completely alone.
+    ///
+    /// ponytail: a PARTIAL re-file — some items duplicated and not others —
+    /// is not caught, and is left to the export's implausibility check, which
+    /// is where it lands today. Catching it needs a per-sample identity
+    /// HealthKit does not expose.
+    ///
+    /// Returns the sum and what it dropped, so the ingest can say so rather
+    /// than quietly halving a number the athlete may have been looking at.
+    public static func dedupedSum(_ samples: [QuantitySample]) -> (total: Double, dropped: [QuantitySample]) {
+        // Rounded, because a value that crossed a unit conversion is equal to
+        // within float noise and not to the bit.
+        func key(_ s: QuantitySample) -> String {
+            [
+                s.source,
+                String(s.start.timeIntervalSince1970.rounded()),
+                String(s.end.timeIntervalSince1970.rounded()),
+                String((s.value * 1e6).rounded()),
+            ].joined(separator: "|")
+        }
+        var counts: [String: Int] = [:]
+        for s in samples { counts[key(s), default: 0] += 1 }
+        // One entry filed once is the ordinary day and needs no arithmetic.
+        guard counts.values.contains(where: { $0 > 1 }) else {
+            return (samples.reduce(0) { $0 + $1.value }, [])
+        }
+        let factor = counts.values.reduce(0, gcd)
+        guard factor > 1 else { return (samples.reduce(0) { $0 + $1.value }, []) }
+
+        var keep = counts.mapValues { $0 / factor }
+        var total = 0.0
+        var dropped: [QuantitySample] = []
+        for s in samples {
+            let k = key(s)
+            if let remaining = keep[k], remaining > 0 {
+                keep[k] = remaining - 1
+                total += s.value
+            } else {
+                dropped.append(s)
+            }
+        }
+        return (total, dropped)
+    }
+
+    private static func gcd(_ a: Int, _ b: Int) -> Int {
+        var x = abs(a), y = abs(b)
+        while y != 0 { (x, y) = (y, x % y) }
+        return x
+    }
 }
 
 /// One `HKWorkout`, reduced to what `SessionMetrics` and the cardio import need.

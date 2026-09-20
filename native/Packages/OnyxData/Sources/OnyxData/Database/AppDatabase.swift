@@ -1336,6 +1336,54 @@ public final class AppDatabase: Sendable {
             try Self.adoptOnyxWire(db)
         }
 
+        // ── v33 ─────────────────────────────────────────────────────────────
+        // Export v6 (2026-09-20): the CURRENT prescription, and the one bit
+        // that says which HRV a row is holding.
+        //
+        // ── `prescriptions` IS APPEND-ONLY, AND THAT IS THE POINT ──────────
+        // The export printed `ProgramExercise.wk1Kg` as `prescribed` — the load
+        // the program was COMPILED with in July — for two months while the
+        // coach moved Incline DB Press 32 → 34, Lat Pulldown 45 → 50 and the
+        // RDL 30 → 40. Every `load Δ` in the document was therefore drawn
+        // against a number nobody had worked to since the block began.
+        //
+        // A prescription is an instruction with a date on it, so each paste
+        // INSERTS a version and nothing is ever updated: "the top set went
+        // 34 → 36 on the 14th" is the whole argument a progression review is
+        // made of, and an UPDATE destroys it. `Prescriptions.current` resolves
+        // the version in force on a given day.
+        //
+        // ── AND `hrv_overnight` ALREADY EXISTS IN POSTGRES ─────────────────
+        // Introspected live on 2026-09-20: `daily_logs.hrv_overnight boolean`.
+        // It has been there since readiness v9 and was never in
+        // `native/schema/supabase.json`, so the mirror never carried it and
+        // nothing on this device could read or write it — while `HealthSync`
+        // computed the fact every sync and threw it away. That is why three
+        // Friday mornings read 102 / 93.9 / 119.8 ms against a median near 60
+        // and were flagged as artifacts: the column holds the OVERNIGHT mean
+        // when the night's bed window resolves and the CALENDAR-DAY mean when
+        // it does not, and `VitalsGate.hrvArtifact` was judging one against a
+        // history of the other.
+        //
+        // Guarded like v30 and v31: `migrateMirrorV1` is generated from
+        // `supabase.json` and a fresh install already has the column.
+        migrator.registerMigration("v33.prescriptions") { db in
+            try Self.migrateMirrorV3(db)
+            let existing = Set(try db.columns(in: "daily_logs").map(\.name))
+            if !existing.contains("hrv_overnight") {
+                try db.alter(table: "daily_logs") { t in
+                    t.add(column: "hrv_overnight", .boolean)
+                }
+            }
+            /* The version ladder is resolved per exercise and per day, and both
+               reads are `WHERE user_id = ? AND exercise_key = ?` followed by an
+               ORDER BY on the pair that decides which version wins. */
+            try db.create(
+                index: "prescriptions_user_exercise",
+                on: "prescriptions", columns: ["user_id", "exercise_key", "effective_from", "version"],
+                ifNotExists: true)
+        }
+
         return migrator
     }
 }

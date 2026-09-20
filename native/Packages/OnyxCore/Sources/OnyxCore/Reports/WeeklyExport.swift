@@ -829,6 +829,140 @@ public enum WeeklyExport {
         }
     }
 
+    /// The week's records, one per movement — the best, and how many sessions
+    /// set one.
+    ///
+    /// "Best" is the tonnage rule with ties to the heavier load: the same rule
+    /// `bestSet` uses and the same one `dedupePrs` uses, so the set this list
+    /// names and the set the PR engine picked are the same set. Order is first
+    /// appearance, which is the order the week happened in.
+    static func dedupeWeeklyPrs(_ sessions: [ExportSession]) -> [(pr: ExportPr, sessions: Int)] {
+        var best: [String: ExportPr] = [:]
+        var counts: [String: Int] = [:]
+        var order: [String] = []
+        for s in sessions {
+            for p in s.prs {
+                if counts[p.name] == nil { order.append(p.name) }
+                counts[p.name, default: 0] += 1
+                guard let cur = best[p.name] else { best[p.name] = p; continue }
+                let a = p.weightKg * p.reps, b = cur.weightKg * cur.reps
+                if a > b || (a == b && p.weightKg > cur.weightKg) { best[p.name] = p }
+            }
+        }
+        return order.map { (pr: best[$0]!, sessions: counts[$0]!) }
+    }
+
+    /// `2026-09-18T07:41:12+03:00` → `2026-09-18 07:41`. A stamp a person reads.
+    static func stampText(_ iso: String) -> String {
+        String(iso.prefix(16)).replacingOccurrences(of: "T", with: " ")
+    }
+
+    // MARK: - v6 · the thresholds the document flags on
+
+    /// A night took longer than this to begin — `sleep_sessions.onset_time`
+    /// minus its start, in minutes.
+    public static let insomniaOnsetMin: Double = 45
+    /// A night spent longer than this awake after onset.
+    public static let insomniaAwakeMin: Double = 60
+    /// Blood oxygen at or under this is worth a second look. A healthy night
+    /// sits at 95–100 %; 94 % is not an emergency and is not nothing, and the
+    /// document's job is to make sure it is not read as nothing.
+    public static let spo2FloorPct: Double = 95
+
+    /// A blood-oxygen reading below the floor. A nil is not low.
+    static func isLowSpo2(_ d: ExportDay) -> Bool {
+        guard let v = d.bloodOxygenPct, v.isFinite, v > 0 else { return false }
+        return v < spo2FloorPct
+    }
+
+    /// True when a night meets any of the three insomnia conditions. ONE rule,
+    /// so the builder's window and anything that later asks the same question
+    /// cannot answer it differently.
+    public static func isInsomniaNight(onsetMin: Double?, awakeMin: Double?, tag: Bool) -> Bool {
+        if tag { return true }
+        if let onsetMin, onsetMin.isFinite, onsetMin > insomniaOnsetMin { return true }
+        if let awakeMin, awakeMin.isFinite, awakeMin > insomniaAwakeMin { return true }
+        return false
+    }
+
+    // MARK: - v6 · the current prescription
+
+    /// The `prescribed …` field of a movement's heading.
+    ///
+    /// Everything the instruction states and nothing it does not. A ladder
+    /// prints every rung (`42.5/37.5/37.5 kg`), because an average of one
+    /// describes a session nobody performed. `cap @8` is the ceiling the sets
+    /// were not meant to pass; `v3 from 2026-09-15` is which instruction this
+    /// is, so a week where a load moved reads as a load that moved.
+    static func prescriptionText(_ p: ExportPrescription) -> String {
+        let load: String? = {
+            if let loads = p.setLoads, loads.count > 1 {
+                return loads.map { grp(exact($0)) }.joined(separator: "/") + " kg"
+            }
+            return p.loadKg.map { "\(grp(exact($0))) kg" }
+        }()
+        let shape = [p.sets.map { grp(exact($0)) }, p.reps].compactMap { $0 }.joined(separator: " × ")
+        var body = "prescribed"
+        if !shape.isEmpty { body += " \(shape)" }
+        if let load { body += " @ \(load)" }
+        if let cap = p.rpeCap { body += " cap @\(js(cap))" }
+        /* THE BLUEPRINT SAYS SO. `plan` is `ProgramExercise.wk1Kg` — the load
+           the program was compiled with and not an instruction anybody has
+           given since. Named, because a `load Δ` drawn against a blueprint is a
+           different claim from one drawn against this week's prescription, and
+           the reader cannot tell them apart from the numbers. */
+        if p.source == "plan" { body += " (plan)" }
+        else if let v = p.version {
+            body += " (v\(grp(exact(v)))"
+                + (p.effectiveFrom.map { " from \($0)" } ?? "") + ")"
+        }
+        return body
+    }
+
+    /// `load +2.00 kg · reps +1 · RPE cap 8 exceeded S2 @9` — the day measured
+    /// against the instruction.
+    ///
+    /// Nil when there is no prescription to measure against, which is every
+    /// movement the plan does not name. The REPS delta is measured against the
+    /// WINDOW and not against one end of it: `8–12` means any of those five
+    /// answers is the prescription met, and a delta from the floor would report
+    /// a miss for hitting the ceiling.
+    static func prescriptionDelta(_ ex: ExportExercise, best: ExportSet, overCap: [String]) -> String? {
+        guard let p = ex.prescription else { return nil }
+        let load = p.referenceLoadKg.map { "load \(signed(best.weightKg - $0, 2) ?? noData) kg" }
+        let reps = Prescriptions.repBounds(p.reps).map { w -> String in
+            let d = Prescriptions.repDelta(best.reps, window: w)
+            return d == 0 ? "reps in window" : "reps \(signed(d, 0) ?? noData)"
+        }
+        let cap = overCap.isEmpty ? nil
+            : "RPE cap \(js(p.rpeCap ?? 0)) exceeded \(overCap.joined(separator: ", "))"
+        let body = line([load, reps, cap])
+        return body.isEmpty ? nil : "vs prescribed " + body
+    }
+
+    /// A session's logged set qualities, counted — `[(Momentum, 3), (Cold, 1)]`.
+    ///
+    /// Counted PER SIDE, like every other reading of the column: a unilateral
+    /// pair where only the left arm used body English is one tagged side, and
+    /// folding it to "one tagged set" would lose which arm. Warm-ups and ghosts
+    /// are excluded, as they are from every other count in this document.
+    /// Ordered by `SetTags.qualityKeys`, so two sessions list the same tags in
+    /// the same order.
+    static func qualityTally(_ s: ExportSession) -> [(label: String, count: Int)] {
+        var counts: [String: Int] = [:]
+        for ex in s.exercises {
+            for row in workingRows(ex) {
+                for side in sides(row) {
+                    for key in SetTags.parseQuality(side.quality) { counts[key, default: 0] += 1 }
+                }
+            }
+        }
+        return SetTags.qualityKeys.compactMap { key in
+            guard let n = counts[key], n > 0, let named = SetTags.quality[key] else { return nil }
+            return (label: named.label.lowercased(), count: n)
+        }
+    }
+
     /// The heaviest working set of one movement — tonnage, ties to the heavier
     /// load. `dedupePrs`' own rule, so the "best set" this document prints and
     /// the set the PR engine picks are the same set.
@@ -971,6 +1105,62 @@ public enum WeeklyExport {
             }(),
         ]))
 
+        /* ── THE INSOMNIA TRACKER ───────────────────────────────────────────
+           Every night that took more than `insomniaOnsetMin` to begin, spent
+           more than `insomniaAwakeMin` broken, or that the athlete TAGGED as
+           trouble falling asleep. Three conditions, ORed, because they are
+           three different complaints: getting to sleep, staying there, and the
+           athlete's own account, which is evidence whatever the watch measured.
+
+           The payload carries the trailing EIGHT WEEKS and this prints the
+           week's nights in full and counts the window, so the running figure
+           cannot disagree with the list it was taken from. `none` and not
+           silence: a week with no bad night is the reading a tracker exists to
+           show. */
+        let insomnia = input.insomnia ?? []
+        /* THE WEEK'S NIGHTS ARE DERIVED FROM THE WEEK'S ROWS, not read out of
+           the window. Every field the rule needs is already on `ExportDay`, so
+           a payload that carries no history still names this week's bad nights
+           correctly — and the two can never disagree about the same seven days,
+           which a list and a separate count of it otherwise can. The window is
+           read for ONE thing: how many such nights the last eight weeks held. */
+        let derived = days.compactMap { d -> ExportInsomniaNight? in
+            let tag = d.sleepOnsetTrouble == true
+            guard isInsomniaNight(onsetMin: d.sleepOnsetMin, awakeMin: d.awakeMin, tag: tag) else { return nil }
+            return ExportInsomniaNight(
+                date: d.date,
+                onsetLocal: clockOrNil(d.bedTime).flatMap { bed in
+                    guard let onset = d.sleepOnsetMin, onset.isFinite else { return nil }
+                    return clockOfMinutes((minutesOfDay(bed) ?? 0) + onset)
+                },
+                onsetMin: d.sleepOnsetMin, awakeMin: d.awakeMin,
+                durationMin: sleepMinutes(d), tag: tag)
+        }
+        /* The window's own in-week rows are kept only where the days could not
+           answer — a payload built before `sleepOnsetMin` existed carries the
+           night and no detail, and dropping it would under-count the week
+           against the very figure printed beside it. Derived wins on detail;
+           the union is by date. */
+        let derivedDates = Set(derived.map(\.date))
+        let carriedOnly = insomnia.filter {
+            $0.date >= input.weekStart && $0.date <= input.weekEnd && !derivedDates.contains($0.date)
+        }
+        let thisWeek = (derived + carriedOnly).sorted { $0.date < $1.date }
+        L.append("insomnia " + line([
+            "nights \(thisWeek.count) of \(days.count)",
+            insomnia.isEmpty ? nil : "8w \(insomnia.count)",
+        ]))
+        for n in thisWeek {
+            L.append("  " + line([
+                n.date,
+                n.onsetLocal.map { "onset_local \($0)" },
+                val(n.onsetMin).map { "onset \($0) m" },
+                val(n.awakeMin).map { "awake \($0) m" },
+                hm(n.durationMin).map { "duration \($0)" },
+                n.tag ? "trouble falling asleep" : nil,
+            ]))
+        }
+
         let flaggedDays = days.filter { $0.hrvFlag?.isEmpty == false }
         L.append("vitals " + line([
             val(meanOf(days.map(\.hrvMs)), 1).map { "HRV \($0) ms" },
@@ -1003,8 +1193,22 @@ public enum WeeklyExport {
             "compound_sets_over_8.5 \(compoundHard)",
             rpes.isEmpty ? nil : "mean_set_rpe \(val(rpes.reduce(0, +) / Double(rpes.count), 2) ?? noData)",
         ]))
-        let allPrs = sessions.flatMap(\.prs)
-        L.append("PRs " + (allPrs.isEmpty ? none : allPrs.map { p in
+        /* ── ONE MOVEMENT, ONE LINE ─────────────────────────────────────────
+           This was `sessions.flatMap(\.prs)`, which prints a record once per
+           SESSION that set one: Chest Press came out twice — Sunday 42.5 × 9
+           and Thursday 42.5 × 12 — reading as two different records rather
+           than one record beaten twice. The BEST is listed once, by the tonnage
+           rule `bestSet` and `dedupePrs` already share, and the repeat is
+           stated rather than dropped, because PRing twice in a week is itself
+           the finding.
+
+           The axes are the winning record's OWN, never a union across the week.
+           A union would claim a load PR for a week that set a rep PR on the
+           heavier day and a load PR on the lighter one, which is two facts
+           about two sessions presented as one about neither. */
+        let allPrs = dedupeWeeklyPrs(sessions)
+        L.append("PRs " + (allPrs.isEmpty ? none : allPrs.map { entry in
+            let p = entry.pr
             let lift: String
             // A timed movement's record is a DURATION. `BW × 60` for a 60-second
             // side plank reads as sixty repetitions of it.
@@ -1022,6 +1226,7 @@ public enum WeeklyExport {
                 lift,
                 axes.isEmpty ? nil : "PR \(axes)",
                 valExact(p.e1rmKg).map { "e1RM \($0) kg" },
+                entry.sessions > 1 ? "(\(entry.sessions) sessions)" : nil,
             ])
         }.joined(separator: sep)))
 
@@ -1074,8 +1279,23 @@ public enum WeeklyExport {
                percentages, the waist, the indices — then the masses DERIVED
                from them. The old table interleaved the two, so `fat kg` sat
                beside `BF%` and nothing said which of the pair was measured. */
+            /* ── THE TAPE MOVES OR IT DOES NOT ──────────────────────────────
+               One waist reading is a number; the CHANGE is the finding, and a
+               reader comparing rows by eye across a nineteen-column table was
+               being asked to do arithmetic the document could do for them.
+               Against the previous WAISTED scan, which is not always the
+               previous row: a scan that recorded a weight and no tape is a
+               valid scan and is not a gap in this series. The first waist of
+               the week has nothing before it and prints `—`. */
+            var lastWaist: Double?
+            var waistDelta: [String: Double] = [:]
+            for b in bodyComp {
+                guard let w = b.waistCm, w.isFinite else { continue }
+                if let prev = lastWaist { waistDelta[b.date] = w - prev }
+                lastWaist = w
+            }
             L.append(contentsOf: markdownTable(
-                header: ["date", "Weight (kg)", "Waist (cm)", "Body fat (%)", "Muscle (%)",
+                header: ["date", "Weight (kg)", "Waist (cm)", "Waist Δ (cm)", "Body fat (%)", "Muscle (%)",
                          "Skeletal muscle (kg)", "Visceral fat", "Water (%)", "Protein (%)",
                          "Bone mineral (%)", "BMI", "BMR (kcal)", "W:H ratio",
                          "fat (kg)", "lean (kg)", "fat-free (kg)", "water (kg)", "protein (kg)", "bone (kg)",
@@ -1084,6 +1304,7 @@ public enum WeeklyExport {
                     [
                         b.date,
                         val(b.weightKg, 2) ?? dash, val(b.waistCm, 1) ?? dash,
+                        signed(waistDelta[b.date], 1) ?? dash,
                         val(b.bodyFatPct, 1) ?? dash, val(b.musclePercent, 1) ?? dash,
                         val(b.skeletalMuscleMassKg, 2) ?? dash, val(b.visceralFat, 1) ?? dash,
                         val(b.waterPercent, 1) ?? dash, val(b.proteinPercent, 1) ?? dash,
@@ -1095,7 +1316,7 @@ public enum WeeklyExport {
                         b.anomaly == nil ? "OK" : "ANOMALOUS",
                     ]
                 },
-                align: [.left] + Array(repeating: Align.right, count: 18) + [.left]))
+                align: [.left] + Array(repeating: Align.right, count: 19) + [.left]))
             L.append("")
 
             for b in bodyComp where b.anomaly != nil {
@@ -1139,6 +1360,13 @@ public enum WeeklyExport {
                 L.append("clean_scan_means " + line([
                     val(meanOf(valid.map(\.weightKg)), 2).map { "weight \($0) kg" },
                     val(meanOf(valid.map(\.waistCm)), 1).map { "waist \($0) cm" },
+                    // LAST MINUS FIRST across the week's valid scans — the one
+                    // figure a weekly review is actually asking the tape for.
+                    {
+                        let tape = valid.compactMap { $0.waistCm?.isFinite == true ? $0.waistCm : nil }
+                        guard tape.count > 1 else { return nil }
+                        return signed(tape[tape.count - 1] - tape[0], 1).map { "waist Δ \($0) cm" }
+                    }(),
                     val(meanOf(valid.map(\.bodyFatPct)), 1).map { "body fat \($0) %" },
                     val(meanOf(valid.map(\.musclePercent)), 1).map { "muscle \($0) %" },
                     val(meanOf(valid.map(\.skeletalMuscleMassKg)), 2).map { "skeletal muscle \($0) kg" },
@@ -1217,6 +1445,7 @@ public enum WeeklyExport {
                 day.nutritionEstimated ? "estimate" : nil,
                 day.sleepInaccurate == true ? "disputed sleep" : nil,
                 day.hrvFlag == nil ? nil : "HRV flagged",
+                isLowSpo2(day) ? "SpO2 low" : nil,
             ].compactMap { $0 }
             L.append(line([
                 day.date,
@@ -1312,9 +1541,19 @@ public enum WeeklyExport {
                 val(s.durationMin).map { "\($0) min" },
                 s.sessionRpe.map { "sRPE \(js($0))" },
             ]))
+            /* ── WHAT WAS LOGGED ABOUT HOW THE SETS WENT ────────────────────
+               The qualities ride on the individual set lines, where they
+               belong, and a reader scanning a session for "was this a clean
+               day" had to read every one of them to find out. The tally is the
+               answer to that question in one field, and the breakdown says
+               which kind — three sets of momentum and one cold start is a
+               different session from four cold starts. */
+            let tally = qualityTally(s)
             L.append(line([
                 "working_sets \(working)",
                 "failure_sets \(failed)",
+                tally.isEmpty ? nil : "tagged_sets \(tally.reduce(0) { $0 + $1.count }) "
+                    + "(" + tally.map { "\($0.label) \($0.count)" }.joined(separator: ", ") + ")",
                 valExact(s.volumeKg).map { "tonnage \($0) kg" },
                 /* The heart and the energy the session cost. Both carried since
                    v3 and printed nowhere, and both carry their own "this was
@@ -1375,10 +1614,7 @@ public enum WeeklyExport {
                    there is one, the bare window when there is not, and never
                    both saying the same thing. */
                 let window = (ex.repWindow?.isEmpty == false) ? ex.repWindow! : nil
-                let prescribed = ex.prescription.map { p in
-                    "prescribed \(grp(exact(p.sets))) × \(p.reps)"
-                        + (p.loadKg.map { " @ \(grp(exact($0))) kg" } ?? "")
-                }
+                let prescribed = ex.prescription.map(prescriptionText)
                 let restatesWindow = ex.prescription.map { window == nil || window == $0.reps } ?? false
                 let indirect = ex.secondaryMuscles ?? []
                 let meta = line([
@@ -1390,7 +1626,21 @@ public enum WeeklyExport {
                     // which made the one intensity variable the document could
                     // not see the one the athlete changes most often.
                     val(ex.restTargetSec).map { "rest \($0) s" },
-                    val(ex.restActualSec).map { "actual rest \($0) s" },
+                    /* ── `actual rest` IS SUPPRESSED, ON PURPOSE ──────────────
+                       `workout_sets.actual_rest_sec` is the gap between two log
+                       COMMITS, which is what the logger can see and not what
+                       the athlete rested: a set entered while the next one is
+                       already under way reads 1 s, and a set entered after a
+                       phone call reads 304 s. Neither is a rest interval, and a
+                       document that prints them invites the audit to read a
+                       fabricated variable as an intensity choice.
+
+                       ponytail: the intended figure is the rest TARGET plus
+                       whatever the timer was extended by on the day (90 s + 15
+                       added = 105). The timer knows both; nothing stores the
+                       extension yet. Restore this line the moment
+                       `workout_sets` carries it — `restActualSec` stays on the
+                       payload so the builder half does not have to be rebuilt. */
                     (ex.primaryMuscles?.isEmpty == false) ? "trains \(ex.primaryMuscles!.joined(separator: ", "))" : nil,
                     indirect.isEmpty ? nil : "indirect \(indirect.joined(separator: ", "))",
                     ex.sets.isEmpty ? "no sets logged" : nil,
@@ -1398,9 +1648,18 @@ public enum WeeklyExport {
                 L.append("")
                 L.append("**\(ex.name)**" + (meta.isEmpty ? "" : " — " + meta))
                 var num = 0
+                /* Every working set rated ABOVE the prescription's ceiling, by
+                   its ordinal. Collected here because this is the one loop that
+                   knows what a set is CALLED — `S2` is a position in the
+                   printed list and cannot be recovered from the payload. */
+                var overCap: [String] = []
+                let cap = ex.prescription?.rpeCap
                 for row in printable {
                     let ordinal: String
                     if sides(row).contains(where: { $0.isGhost }) { ordinal = "G" } else { num += 1; ordinal = "S\(num)" }
+                    if let cap, ordinal != "G", let rpe = setRpe(row), rpe > cap {
+                        overCap.append("\(ordinal) @\(js(rpe))")
+                    }
                     // INDENTED. The sets are the movement's rows, not siblings
                     // of its heading, and two spaces is the cheapest thing that
                     // says so in a format with no other nesting.
@@ -1428,6 +1687,15 @@ public enum WeeklyExport {
                     } else {
                         L.append("  best \(lift) · first time logged")
                     }
+                    // AND AGAINST THE INSTRUCTION. `previous` says what the
+                    // body did last time; this says what it was asked for, and
+                    // a week can move on one while standing still on the other.
+                    if let d = prescriptionDelta(ex, best: best, overCap: overCap) { L.append("  " + d) }
+                } else if !overCap.isEmpty, let cap {
+                    // No comparable best set — a cardio movement, or one with
+                    // no working set at all — but a ceiling was still passed,
+                    // and that is a finding of its own.
+                    L.append("  vs prescribed RPE cap \(js(cap)) exceeded \(overCap.joined(separator: ", "))")
                 }
             }
 
@@ -1507,9 +1775,46 @@ public enum WeeklyExport {
 
         // ── 7 · ANOMALIES ─────────────────────────────────────────────────────
         for d in days {
-            if let why = d.hrvFlag { anomalies.append("HRV flagged \(d.date) — \(why)") }
+            /* ── A FLAG IS NOT A DIAGNOSIS, SO IT CARRIES ITS EVIDENCE ───────
+               Three Friday mornings running read 102, 93.9 and 119.8 ms against
+               a median near 60, and the gate did the only thing it can — said
+               it did not believe them. It was right to object and wrong about
+               why: `daily_logs.hrv_ms` holds TWO different measurements. When
+               the night's bed window resolves, `HealthSync` writes the mean of
+               the samples INSIDE it; when it does not, the calendar-day mean
+               stands. Overnight SDNN runs far above the waking figure, so an
+               overnight reading judged against a median of daytime ones is
+               always an outlier, and the good night is thrown out.
+
+               `hrvOvernight` is what tells the two apart, and the reading and
+               the moment the row was last written ride with it — a value the
+               watch filed hours after the night it describes is the first thing
+               a reader checks and the document could not show it. */
+            if let why = d.hrvFlag {
+                anomalies.append(line([
+                    "HRV flagged \(d.date) — \(why)",
+                    val(d.hrvMs, 1).map { "raw \($0) ms" },
+                    d.hrvOvernight.map { $0 ? "overnight window" : "calendar-day mean" },
+                    d.hrvSyncedAt.map { "synced \(stampText($0))" },
+                ]))
+            }
             if d.sleepInaccurate == true { anomalies.append("disputed sleep \(d.date)") }
+            if isLowSpo2(d), let spo2 = d.bloodOxygenPct {
+                anomalies.append("SpO2 \(val(spo2, 1) ?? noData) % on \(d.date)"
+                    + " — below \(js(spo2FloorPct)) %")
+            }
             for x in doubtedNutrients(d) { anomalies.append("implausible micro excluded \(d.date) \(x)") }
+        }
+        /* ── AND THE MIXTURE ITSELF IS THE FINDING ──────────────────────────
+           A week whose HRV column holds both kinds of reading cannot be
+           averaged, and §2's mean silently does. Named once, with the split, so
+           the audit knows what it is holding rather than discovering it from
+           the spread. */
+        let overnightDays = days.filter { $0.hrvOvernight == true }.count
+        let daytimeDays = days.filter { $0.hrvOvernight == false && $0.hrvMs != nil }.count
+        if overnightDays > 0 && daytimeDays > 0 {
+            anomalies.append("mixed HRV provenance — \(overnightDays) overnight,"
+                + " \(daytimeDays) calendar-day; the week's HRV mean averages two different measurements")
         }
         /* ── A NUTRIENT THE FOOD LOG NEVER REPORTED ─────────────────────────
            There is no food database in this app. Every food micronutrient
@@ -1540,6 +1845,18 @@ public enum WeeklyExport {
                     + "\(silent.count) of \(fedDays.count) day\(fedDays.count == 1 ? "" : "s") with food logged")
             }
         }
+        /* A bout whose only timestamp is the moment the ledger learned of it.
+           `CardioIngest` repairs `created_at` from `HKWorkout.startDate` on
+           every pass that still finds the workout; a row Health no longer holds
+           can never be repaired, and the document says so once rather than
+           printing an invented start seven times. */
+        let unprovable = cardio.filter { $0.source == "import" }
+        if !unprovable.isEmpty {
+            anomalies.append("cardio start unprovable on \(unprovable.count) bout"
+                + "\(unprovable.count == 1 ? "" : "s")"
+                + " — imported before hk_uuid existed, so the stamp is the import, not the start: "
+                + unprovable.map { "\($0.date) \(clock($0.startedAt))" }.joined(separator: ", "))
+        }
         // A stamp that cannot be true says so rather than being quietly drawn.
         for s in sessions {
             guard let a = s.startedAt, let b = s.endedAt, !a.isEmpty, !b.isEmpty, b < a else { continue }
@@ -1565,23 +1882,46 @@ public enum WeeklyExport {
         L.append("")
         L.append("## 8 · LEGEND")
         L.append(contentsOf: [
-            "scales     DOMS 0–5, 0 none and 5 unusable · fatigue 1–5, 1 fresh and 5 spent"
-                + " · stress 1–5, 1 calm and 5 acute · RPE 1–10",
+            /* ── THE DOMS SCALE IS 0–3 AND ALWAYS HAS BEEN ──────────────────
+               `DomsMuscles.levels` is four words and `maxSeverity` is 3; this
+               line said 0–5, so an audit reading `Hamstrings 2` was told the
+               athlete was at the bottom of a six-point scale when they were at
+               the middle of a four-point one. The words are given, not just the
+               bounds — the numbers are an index INTO them. */
+            "scales     DOMS 0–3 — 0 none, 1 mild, 2 moderate, 3 severe"
+                + " · fatigue 1–5, 1 fresh and 5 spent · stress 1–5, 1 calm and 5 acute · RPE 1–10",
+            /* The side convention, stated once. A bare muscle name is BOTH
+               sides — the stored default and what every row written before
+               laterality existed means — so `Hamstrings 2` and `Hamstrings@L 0`
+               are a bilateral rating and a left-only one, not a rating and a
+               rating that forgot to say. */
+            "DOMS token muscle[/sub-region][@L|@R] · a BARE name is both sides, which is the default"
+                + " · @L and @R are one side only · a 0 is a rating of none, not a missing entry",
             "set line   S1 the first WORKING set · G a ghost set · L/R the two sides of one set"
                 + " · @8.5 the RPE · F failed the next rep, suppressed at 10 where it is implied",
             "set line   a bare m:ss after the value is the set's MEASURED duration"
                 + " · drop/cold/momentum/short ROM/form broke/assisted/cut short are logged qualities",
+            "movement   prescribed is the CURRENT instruction — vN from DATE is which version"
+                + " · (plan) marks the July blueprint, where no prescription has been written"
+                + " · a/b/c kg is a top set and its back-offs",
+            "movement   vs prescribed compares the day's BEST set to it — reps in window means the"
+                + " window was met, and a reps Δ is distance outside it, never from one end",
             "warm-ups   listed once per session and given no ordinal — S1 is the first working set",
-            "cardio     per DAY, never inside a session · from HH:MM an imported start,"
-                + " typed HH:MM the moment a manual row was written · speed is distance ÷ duration",
+            "cardio     per DAY, never inside a session · from HH:MM an imported start the row can"
+                + " prove · imported HH:MM the moment the ledger learned of the bout, which is NOT"
+                + " a start · typed HH:MM when a manual row was written · speed is distance ÷ duration",
             "body       the reported columns are the scale's own; the kg columns are weight × those"
                 + " percentages · ANOMALOUS rows print but are excluded from every mean",
             "body       T4WM is the trailing-four weigh-in mean; its sample centre is which part"
-                + " of the week those four scans came from",
+                + " of the week those four scans came from · Waist Δ is against the previous"
+                + " WAISTED scan, not the previous row",
+            "sleep      insomnia names a night over 45 m to onset, over 60 m awake, or tagged"
+                + " · the 8w figure counts the same conditions over the trailing eight weeks",
             "muscle     direct is primary-mover sets, indirect is half-credited assistance"
                 + " · only direct work can earn OVER; only the total can fall UNDER",
             "absence    a field with nothing behind it is OMITTED, never zeroed"
-                + " · — is a recorded blank in a table · none is an empty list",
+                + " · — is a recorded blank in a table · none is an empty list"
+                + " · actual rest is withheld until the timer stores the extension it measured",
         ])
 
         return L.joined(separator: "\n")
@@ -1600,7 +1940,17 @@ public enum WeeklyExport {
                    an imported row states when the bout began, a typed row
                    states when the athlete wrote it down, and the reader can
                    tell which claim it is holding. */
-                clockOrNil(c.startedAt).map { c.source == "health" ? "from \($0)" : "typed \($0)" },
+                clockOrNil(c.startedAt).map { clock -> String in
+                    switch c.source {
+                    case "health": return "from \(clock)"
+                    case "manual": return "typed \(clock)"
+                    // A row Health filed with no `hk_uuid` — imported before the
+                    // key existed, so its `created_at` is the instant of the
+                    // IMPORT and not a start. Saying `imported` is the only
+                    // claim the row supports.
+                    default: return "imported \(clock)"
+                    }
+                },
                 val(c.durationMin, 1).map { "\($0) min" },
                 val(c.distanceM.map { $0 / 1000 }, 2).map { "\($0) km" },
                 val(c.kcal).map { "\($0) kcal" },

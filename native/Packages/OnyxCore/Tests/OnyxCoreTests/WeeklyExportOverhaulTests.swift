@@ -142,13 +142,23 @@ struct WeeklyExportOverhaulTests {
         #expect(windowOnly.contains("**Fly** — target 12–15"))
     }
 
-    @Test("rest reaches the document, planned and measured")
+    /// ── THE PLAN'S REST PRINTS; THE MEASURED ONE DOES NOT ──────────────────
+    /// `actual_rest_sec` is the gap between two log COMMITS — 1 s when the next
+    /// set is entered while it is still under way, 304 s after a phone call —
+    /// and neither figure is a rest interval. It is withheld until the timer
+    /// stores the extension it already measures. The payload still CARRIES it,
+    /// which is what this test pins: the suppression is at the render boundary
+    /// and the builder half does not have to be rebuilt to restore it.
+    @Test("rest reaches the document planned, and the measured gap is withheld")
     func restIsPrinted() throws {
         let md = try build(payload(sessions: session("""
         [{"name": "Fly", "restTargetSec": 90, "restActualSec": 104,
           "sets": [{"weightKg": 15, "reps": 13, "failure": false}]}]
         """)))
-        #expect(md.contains("rest 90 s · actual rest 104 s"))
+        #expect(md.contains("rest 90 s"))
+        // §8 names the withheld field once, which is what a legend is for; the
+        // FIGURE reaches no movement's heading.
+        #expect(!md.contains("actual rest 104 s"))
     }
 
     // MARK: - §4 · a powder is food
@@ -212,7 +222,10 @@ struct WeeklyExportOverhaulTests {
         #expect(md.contains("Waist (cm)"))
         #expect(md.contains("Body fat (%)"))
         // Padded to the header's width, like every cell in the table.
-        #expect(md.contains("| 2026-09-17 |       84.20 |       82.0 |         18.4 |"))
+        // The Δ column sits beside the reading. One scan has nothing before it,
+        // so its delta is a recorded blank and not a zero.
+        #expect(md.contains("Waist Δ (cm)"))
+        #expect(md.contains("| 2026-09-17 |       84.20 |       82.0 |            — |         18.4 |"))
         // The abbreviations that appeared in no screen the athlete has ever seen.
         #expect(!md.contains("| BF% |"))
         #expect(md.contains("waist 82.0 cm"))
@@ -225,6 +238,27 @@ struct WeeklyExportOverhaulTests {
         let md = try build(payload())
         let headings = md.components(separatedBy: "\n").filter { $0.hasPrefix("## ") }
         #expect(headings.last == "## 8 · LEGEND")
-        #expect(md.contains("DOMS 0–5"))
+        // `DomsMuscles.levels` is four words and `maxSeverity` is 3. The legend
+        // said 0–5 for as long as it has existed.
+        #expect(md.contains("DOMS 0–3"))
+        #expect(!md.contains("DOMS 0–5"))
+        // The side convention the tokens above use, stated where a reader looks.
+        #expect(md.contains("a BARE name is both sides"))
+    }
+
+    // MARK: - §3 · the tape moves
+
+    @Test("a second waisted scan states the change, and skips a scan with no tape")
+    func theWaistDelta() throws {
+        let md = try build(payload(extra: """
+        "bodyComp": [
+          {"date": "2026-09-15", "weightKg": 84.2, "waistCm": 82.4},
+          {"date": "2026-09-16", "weightKg": 84.0},
+          {"date": "2026-09-17", "weightKg": 83.8, "waistCm": 81.9}
+        ]
+        """))
+        // −0.5 against the PREVIOUS WAISTED scan, two rows up.
+        #expect(md.contains("−0.5"))
+        #expect(md.contains("waist Δ −0.5 cm"))
     }
 }

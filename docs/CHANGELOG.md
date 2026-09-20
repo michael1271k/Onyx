@@ -44,6 +44,76 @@ _Nothing yet._
 
 ---
 
+## [7.5.0] — 2026-09-20 · The export prints the instruction you are actually working to
+
+The coach's second audit, closed. The document stopped comparing this week's
+lifts against a July blueprint, stopped presenting an import timestamp as the
+moment a walk began, and stopped throwing out the one HRV reading worth having.
+
+### Added
+- **Prescriptions.** You → Prescriptions takes a pasted block from the weekly
+  audit — a markdown table or one movement a line — shows you everything it
+  read, every field it could not find and every line it refused, and appends a
+  new version per movement. Nothing is ever overwritten: the day a load moved
+  stays in the record. The export renders `prescribed` from the version in
+  force on each session's own day.
+- **Per-movement deltas against that instruction.** Each movement now prints
+  `vs prescribed load +2.00 kg · reps in window`, and names by ordinal any set
+  rated above the prescription's RPE cap. A rep delta is measured against the
+  WINDOW: `8–12` means any of those five answers met it.
+- **Insomnia tracker**, in §2 of the export. Every night over 45 minutes to
+  onset, over 60 minutes awake, or tagged as trouble falling asleep, with its
+  onset clock, awake total and duration — and a running count over the trailing
+  eight weeks.
+- **Log reminders** (You → Training). Local notifications for the day's
+  unanswered fatigue slots and for the Thursday waist, armed a week ahead and
+  re-armed on every foreground. A slot you have already answered is not asked.
+- **Set-quality tally** in each session's header — `tagged_sets 3 (momentum 2,
+  cold 1)`. The tokens have ridden on the set lines since 7.4.0; the session now
+  says how many there are without your having to count them.
+- **Waist Δ** column in the body-composition table, against the previous WAISTED
+  scan, plus the week's own change on the clean-scan means line.
+- **SpO₂ below 95 %** is flagged on the day and named in the anomalies.
+
+### Fixed
+- **A walk's start time.** `cardio_logs` has only ever had `created_at`, and on
+  a row imported before `hk_uuid` existed that is the instant of the IMPORT, not
+  the bout — so a Tuesday walk taken at 18:58 exported as `from 21:11`. Such a
+  row now prints `imported 21:11` and is named in the anomalies, and a backfill
+  sync walks back 90 days repairing the stamp from Apple Health's own record.
+- **Duplicate bouts that agreed on everything but their calories.** The dedupe
+  key was exact and included energy — the one figure Health revises as later
+  samples arrive — so two copies of one walk both reached the document. It now
+  matches on the day, the kind, the duration to within a minute and the distance
+  to within a hundred metres, and keeps the earliest.
+- **The Friday HRV that was never wrong.** `daily_logs.hrv_ms` holds two
+  different measurements — the mean inside the night's bed window when it
+  resolves, the calendar day's when it does not — and overnight SDNN runs far
+  above the waking figure. The artifact gate was judging one against a history
+  of the other and declining the good nights. The provenance is stored now
+  (`hrv_overnight`, a column Postgres has had all along), the gate compares like
+  with like, and a flagged reading prints its raw value, which window it came
+  from and when the row was written.
+- **Calcium, magnesium and vitamin D.** A food logger that re-syncs writes the
+  same meal twice — same app, same instant, same amount — and Apple's dedupe is
+  between DEVICES. Dietary totals are now re-summed without the re-filed
+  entries, so calcium stopped reading 3,142 mg against a 1,000 mg target. And
+  magnesium, vitamin D and vitamin C are marked as stack-sourced, which is where
+  they have always come from: the export no longer reports them as missing from
+  the food log every week.
+- **One PR line per movement.** A lift PRd twice in a week was listed twice; the
+  best is listed once and says `(2 sessions)`.
+- The DOMS legend said 0–5 for a scale that has always been 0–3, and never said
+  that a bare muscle name means both sides.
+
+### Removed
+- `actual rest` is withheld from the document until it is a rest interval. It
+  was the gap between two log commits — 1 s when the next set was entered while
+  it was under way, 304 s after a phone call — and neither figure is a choice
+  anyone made.
+
+---
+
 ## [7.4.0] — 2026-09-20 · The weekly export stops losing the week
 
 The Markdown weekly export — Settings → the week's **Export** — had been

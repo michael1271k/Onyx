@@ -50,7 +50,14 @@ struct CardioDedupeTests {
         #expect(WeeklyExportBuilder.dedupeCardio(rows).count == 1)
     }
 
-    @Test("two genuinely different bouts survive")
+    /// ── `kcal` IS NOT AN IDENTITY, AND THAT IS THE POINT ───────────────────
+    /// It was in the key, compared byte for byte, and that is how two copies of
+    /// one Tuesday walk both reached the document: Health re-states a bout's
+    /// energy as later samples arrive, so the copies agreed on 32 minutes and
+    /// 3.35 km and disagreed on the calories. Energy is the one figure the
+    /// source revises, so it is out of the key entirely and `e` now folds into
+    /// `a` — deliberately, and the reason it is worth one test of its own.
+    @Test("two genuinely different bouts survive; two that differ only in energy do not")
     func differentBoutsAreNotCollapsed() {
         let rows = [
             bout("a", at: 1_000, kind: "walk"),
@@ -60,7 +67,50 @@ struct CardioDedupeTests {
             bout("e", at: 1_000, kind: "walk", kcal: 55),
             bout("f", at: 1_000, kind: "walk", date: "2026-09-18"),
         ]
-        #expect(WeeklyExportBuilder.dedupeCardio(rows).count == 6)
+        let out = WeeklyExportBuilder.dedupeCardio(rows)
+        #expect(out.count == 5)
+        #expect(!out.map(\.id).contains("e"))
+    }
+
+    /// The defect this wave was given: two copies of one walk, minutes apart in
+    /// their stamps and a few calories apart in their energy, both exported.
+    @Test("a re-import whose stamp AND energy drifted is one bout, kept at the earliest")
+    func aDriftedCopyFolds() {
+        let rows = [
+            bout("a", at: 68_280, durationMin: 32, distanceM: 3350, kcal: 190),
+            bout("b", at: 82_020, durationMin: 32, distanceM: 3350, kcal: 196),
+        ]
+        let out = WeeklyExportBuilder.dedupeCardio(rows)
+        #expect(out.count == 1)
+        // The fetch is ordered by `created_at`, so the first row IS the
+        // earliest start — and keeping it keeps an id other tables may hold.
+        #expect(out.first?.id == "a")
+    }
+
+    /// A minute either way, and a hundred metres.
+    @Test("the tolerance is a tolerance, not an equality")
+    func toleranceHolds() {
+        let within = [
+            bout("a", at: 1_000, durationMin: 32, distanceM: 3350),
+            bout("b", at: 2_000, durationMin: 32.9, distanceM: 3430),
+        ]
+        #expect(WeeklyExportBuilder.dedupeCardio(within).count == 1)
+        let beyond = [
+            bout("a", at: 1_000, durationMin: 32, distanceM: 3350),
+            bout("b", at: 2_000, durationMin: 34, distanceM: 3350),
+        ]
+        #expect(WeeklyExportBuilder.dedupeCardio(beyond).count == 2)
+    }
+
+    /// One row measured a distance and the other did not. An absence is a
+    /// disagreement, not a wildcard.
+    @Test("a measurement present on one row and absent on the other is not a match")
+    func absenceIsNotAWildcard() {
+        let rows = [
+            bout("a", at: 1_000, durationMin: 32, distanceM: 3350),
+            bout("b", at: 2_000, durationMin: 32, distanceM: nil),
+        ]
+        #expect(WeeklyExportBuilder.dedupeCardio(rows).count == 2)
     }
 
     @Test("a row with no uuid and no measurement at all is never deduped")
