@@ -15,8 +15,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/App/OnyxApp.swift": {
-    "mtime": 1789741625.6492066,
-    "ast_hash": "9e6ac175f010d0d3b9fc3f3d1c1bab77",
+    "mtime": 1789903954.1531086,
+    "ast_hash": "2be0fd4d22d4d7b8c9d9230a5c9d6198",
     "semantic_hash": ""
   },
   "native/Onyx/App/PhoneWatchBridge.swift": {
@@ -420,8 +420,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Settings/SettingsTabView.swift": {
-    "mtime": 1789846923.8172822,
-    "ast_hash": "65cf8f2e8aec535ebfd9e465f04f4b87",
+    "mtime": 1789903954.153884,
+    "ast_hash": "66c4d1b9a940fe9c5f8ed9100e91826a",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Settings/SyncStatusView.swift": {
@@ -890,8 +890,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Nutrition/NutrientTargets.swift": {
-    "mtime": 1789307813.9049487,
-    "ast_hash": "bbc5da84357cb2115dd0f1b043b3b0c0",
+    "mtime": 1789903954.154938,
+    "ast_hash": "3da974274ef61995ef72a7dddb73e285",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Nutrition/NutritionPhase.swift": {
@@ -935,8 +935,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Reports/ExportTypes.swift": {
-    "mtime": 1789897471.7714348,
-    "ast_hash": "0ef5fb0cde2b388575b296d318b41890",
+    "mtime": 1789903954.1553996,
+    "ast_hash": "fcd248c70e3b1728e4a964aec3e9e7d3",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Reports/ReportTargets.swift": {
@@ -945,8 +945,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Reports/WeeklyExport.swift": {
-    "mtime": 1789897471.7717373,
-    "ast_hash": "d737b054ee60c3214da29c1c7f79fc4a",
+    "mtime": 1789903954.1562898,
+    "ast_hash": "a46dff1f925086f69dd69cadc4660569",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Sources/OnyxCore/Schedule/DayLayout.swift": {
@@ -1795,13 +1795,13 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/Fixtures/nutrient-line.json": {
-    "mtime": 1788804916.7156332,
-    "ast_hash": "447f2a72a3ecf5eeb9516f0ea703762a",
+    "mtime": 1789903954.157431,
+    "ast_hash": "6aec9ecd790e0dc13e739b8f3fb037da",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/Fixtures/nutrient-targets.json": {
-    "mtime": 1788804916.7150118,
-    "ast_hash": "705c3055ef2bf8a49d43643eb66490f5",
+    "mtime": 1789903954.1576848,
+    "ast_hash": "50310a395e19406a25c27de2eb889410",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/Fixtures/nutrition-phase-derive.json": {
@@ -2330,8 +2330,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/Fixtures/weekly-export.json": {
-    "mtime": 1789897471.7722661,
-    "ast_hash": "bd2d5f690e680f9624ac034f53486f5c",
+    "mtime": 1789903954.1589022,
+    "ast_hash": "07d77f4f85e981cfb588ba8253825c43",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/Fixtures/weigh-in-skip.json": {
@@ -2500,7 +2500,7 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/ReportsGoldenTests.swift": {
-    "mtime": 1789897471.772435,
+    "mtime": 1789898056.56389,
     "ast_hash": "010973d0d47cfcedf1cb2dbd5972aaf5",
     "semantic_hash": ""
   },
@@ -2620,8 +2620,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Database/AppDatabase.swift": {
-    "mtime": 1789846923.8188586,
-    "ast_hash": "dd88585e25a1943552abdfcecf67afd1",
+    "mtime": 1789903954.1606455,
+    "ast_hash": "dd249218b31b8e7933d13f2647877009",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Database/ExerciseCatalog.swift": {
@@ -2640,8 +2640,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Day/DayEditing.swift": {
-    "mtime": 1789846923.819407,
-    "ast_hash": "321e774ecdf02981f6fc7af3741cb29a",
+    "mtime": 1789903954.1611447,
+    "ast_hash": "b37566c2d00938c69c078cc5b8f2beb4",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Day/NutritionWeek.swift": {
@@ -2690,23 +2690,23 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Health/CardioIngest.swift": {
-    "mtime": 1789591371.928148,
-    "ast_hash": "13e7d66474a57d200049db40db893e89",
+    "mtime": 1789903954.1614966,
+    "ast_hash": "ec79aa7fc88aa3df2f1dd48110738013",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Health/DailyLogIngest.swift": {
-    "mtime": 1789846923.8202257,
-    "ast_hash": "1b31506a7e8104b68bb32f40beff21eb",
+    "mtime": 1789903954.161821,
+    "ast_hash": "08d75b3b650cba2ff191dff69605145d",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Health/HealthKitReader.swift": {
-    "mtime": 1789502235.1572173,
-    "ast_hash": "24a3ff9d283d194c7d23fd17ca81527f",
+    "mtime": 1789903954.1621242,
+    "ast_hash": "b0ea7881b58ac458a56ea845e13b07cd",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Health/HealthMetrics.swift": {
-    "mtime": 1789221313.953687,
-    "ast_hash": "7926480e9fdb1173ac0fc88f4add2621",
+    "mtime": 1789903954.1623938,
+    "ast_hash": "3f27ec08de11360ec45b50181ec2e27c",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Health/HealthObservers.swift": {
@@ -2720,13 +2720,13 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Health/HealthReading.swift": {
-    "mtime": 1789502235.157373,
-    "ast_hash": "7b3aac15c4d01c604c44738393c70918",
+    "mtime": 1789903954.1628504,
+    "ast_hash": "bb8f7228e342937db41e2b543eec5d53",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Health/HealthSync.swift": {
-    "mtime": 1789846923.8204288,
-    "ast_hash": "a660b5d1cfc85e970d9ef0dcff03f767",
+    "mtime": 1789903954.1637337,
+    "ast_hash": "a5697cad22e1d88051da91078b26c7ab",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Health/SessionMetrics.swift": {
@@ -2755,7 +2755,7 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/History/SessionHistoryStore.swift": {
-    "mtime": 1789897471.7726066,
+    "mtime": 1789898056.5648563,
     "ast_hash": "2ab05787e97a58f9918dba0781853f3d",
     "semantic_hash": ""
   },
@@ -2770,8 +2770,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/History/WeeklyExportBuilder.swift": {
-    "mtime": 1789897471.7728724,
-    "ast_hash": "87fde6ef8f9d69fc4bacad5ff33cbbef",
+    "mtime": 1789903954.1645744,
+    "ast_hash": "46011649866ea4b549c5c4ff602feae5",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Mirror/JSONText.swift": {
@@ -2780,8 +2780,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Mirror/MirrorModels.swift": {
-    "mtime": 1789737298.160091,
-    "ast_hash": "796874fb07057b275bd4b06f7dca3497",
+    "mtime": 1789903954.1651645,
+    "ast_hash": "e60a5c004ff35361e47fa24481383c14",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Mirror/MirrorPuller.swift": {
@@ -2875,8 +2875,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Sync/SyncCoordinator.swift": {
-    "mtime": 1789846923.8223593,
-    "ast_hash": "b042681f3486ea8a6a9a2e073bae8f8d",
+    "mtime": 1789903954.1658146,
+    "ast_hash": "f3e5ae8f7c9d766f549831b086efb714",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Sources/OnyxData/Sync/SyncEngine.swift": {
@@ -3050,8 +3050,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Tests/OnyxDataTests/MirrorTests.swift": {
-    "mtime": 1789837737.7423246,
-    "ast_hash": "a54f5294646b557ed277bbc8748098ba",
+    "mtime": 1789903954.1670687,
+    "ast_hash": "3d3379994cbd3bb0f758de32e8a9a845",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Tests/OnyxDataTests/MuscleFocusTests.swift": {
@@ -3210,8 +3210,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Tests/OnyxDataTests/WeeklyExportBuilderTests.swift": {
-    "mtime": 1789897495.2173064,
-    "ast_hash": "e6489d7511b9a2d583760e5b9a572c6b",
+    "mtime": 1789903954.1676643,
+    "ast_hash": "1054702d33e1898b753fb5fe691b944d",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Tests/OnyxDataTests/WidgetSnapshotBuilderTests.swift": {
@@ -3385,13 +3385,13 @@
     "semantic_hash": ""
   },
   "native/schema/supabase.json": {
-    "mtime": 1789737298.1624901,
-    "ast_hash": "9784e3583c29c78eeaff9828a762cfa6",
+    "mtime": 1789903954.1683335,
+    "ast_hash": "3edfe816b1a5767ca417989ad826b936",
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1789897747.5854921,
-    "ast_hash": "4e257962e486e74947b3a487a347d75f",
+    "mtime": 1789903954.1686125,
+    "ast_hash": "0786f601380a686d7ad05dd674f51e49",
     "semantic_hash": ""
   },
   "scripts/check-swift.sh": {
@@ -3410,8 +3410,8 @@
     "semantic_hash": ""
   },
   "scripts/gen-mirror-swift.mjs": {
-    "mtime": 1789307813.9554892,
-    "ast_hash": "4bc1d27956ebb81f0da9babf7e9e0bd6",
+    "mtime": 1789903954.1691866,
+    "ast_hash": "ac9cf9fff67a51eb2e4d3ea1baeb942e",
     "semantic_hash": ""
   },
   "scripts/gen-report-bundle.mjs": {
@@ -3455,8 +3455,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1789897747.5860124,
-    "ast_hash": "5473379508ac614ff7f7047604ed8791",
+    "mtime": 1789903954.1522393,
+    "ast_hash": "a12cdb5ff032a9db907e1acaf677598a",
     "semantic_hash": ""
   },
   "docs/GIT.md": {
@@ -3485,8 +3485,8 @@
     "semantic_hash": ""
   },
   "native/project.yml": {
-    "mtime": 1789897753.973022,
-    "ast_hash": "aa0f01b19503a5f810f290334ee0a2c3",
+    "mtime": 1789903954.1680107,
+    "ast_hash": "442de37b7bbbd7bf373898355f2dffe4",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png": {
@@ -3975,7 +3975,7 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Tests/OnyxDataTests/WeekReportTests.swift": {
-    "mtime": 1789897495.2176254,
+    "mtime": 1789898056.5660636,
     "ast_hash": "1b6f601794e4ff6a793f2cb2ee63a856",
     "semantic_hash": ""
   },
@@ -4160,18 +4160,68 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/WeeklyExportOverhaulTests.swift": {
-    "mtime": 1789897588.6780977,
-    "ast_hash": "1f9bbe7b6cfb4f6809540b53492746af",
+    "mtime": 1789903954.1595356,
+    "ast_hash": "897d4e541fa836980f7ab6c96732215e",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Tests/OnyxCoreTests/WeeklyExportRegold.swift": {
-    "mtime": 1789897471.7842126,
+    "mtime": 1789898056.5644686,
     "ast_hash": "842708a06587d562bb1eccb75d535e11",
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Tests/OnyxDataTests/CardioDedupeTests.swift": {
-    "mtime": 1789897610.828643,
-    "ast_hash": "56d7293ddf998e38c340fa3a6d1cecb8",
+    "mtime": 1789903954.1665282,
+    "ast_hash": "814b9bbf586e56cf3236e24779479b88",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxCore/Sources/OnyxCore/Training/PrescriptionPaste.swift": {
+    "mtime": 1789903954.1567817,
+    "ast_hash": "3cd33baed47c680458cb171ef923a3ff",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxCore/Sources/OnyxCore/Training/Prescriptions.swift": {
+    "mtime": 1789903954.1571126,
+    "ast_hash": "2b3d96b1b5a172be3c1bd9db8319645b",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxCore/Tests/OnyxCoreTests/PrescriptionPasteTests.swift": {
+    "mtime": 1789903954.1591802,
+    "ast_hash": "3ee19eb290a073f07e756b2ae40fa6a0",
+    "semantic_hash": ""
+  },
+  "docs/sql/w6-export-v6.sql": {
+    "mtime": 1789903954.1527526,
+    "ast_hash": "22dba2379ad1d504fa4fc682e1e31095",
+    "semantic_hash": ""
+  },
+  "native/Onyx/Features/Settings/PrescriptionsView.swift": {
+    "mtime": 1789903954.1533637,
+    "ast_hash": "f90b85903b2e578c0c65596853bac6ba",
+    "semantic_hash": ""
+  },
+  "native/Onyx/Features/Shell/Reminders.swift": {
+    "mtime": 1789903954.1544142,
+    "ast_hash": "5a846f1b89fd38bb40bf2ec6175d1098",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxCore/Tests/OnyxCoreTests/WeeklyExportV6Tests.swift": {
+    "mtime": 1789903954.1597753,
+    "ast_hash": "d450310a8ae1f6e91073cad4329ec672",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxData/Sources/OnyxData/Training/PrescriptionStore.swift": {
+    "mtime": 1789903954.1661336,
+    "ast_hash": "691b1a533c0901843afa98a2c016bf31",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxData/Tests/OnyxDataTests/PrescriptionStoreTests.swift": {
+    "mtime": 1789903954.1672697,
+    "ast_hash": "0b972b78e27423bd79e87fec8da7f090",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxData/Tests/OnyxDataTests/DietaryDedupeTests.swift": {
+    "mtime": 1789903954.1667495,
+    "ast_hash": "e52a97b941b3f11c025db99297582115",
     "semantic_hash": ""
   }
 }
