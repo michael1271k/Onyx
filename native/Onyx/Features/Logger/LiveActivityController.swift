@@ -30,6 +30,20 @@ final class LiveActivityController {
 
     private var activity: Activity<OnyxWorkoutAttributes>?
 
+    /// The wrist's last heart rate, as the logger last read it (W4).
+    ///
+    /// ── WHY A PROPERTY AND NOT A PARAMETER ON `update` ──────────────────────
+    /// There are eight `update(model:clock:)` call sites in `LiveLoggerView`
+    /// and every one of them would have to grow the same argument, read off
+    /// the same environment, to say the same thing. A property set once by
+    /// the one `onChange` that actually watches the bridge is the same
+    /// information with one place to forget instead of eight.
+    ///
+    /// Not `@Observable` and not published: nothing redraws from it. The
+    /// caller sets it and then pushes, which is the only ordering that
+    /// matters.
+    var liveBpm: Int?
+
     /// Cheap enough to ask every time and it can change while the app runs —
     /// the user can revoke Live Activities in Settings mid-session.
     private var isEnabled: Bool {
@@ -103,7 +117,7 @@ final class LiveActivityController {
         do {
             activity = try Activity.request(
                 attributes: attributes,
-                content: .init(state: Self.state(from: model, clock: clock), staleDate: nil)
+                content: .init(state: Self.state(from: model, clock: clock, bpm: liveBpm), staleDate: nil)
             )
         } catch {
             // Declined, unsupported, or over the system's activity budget. The
@@ -120,7 +134,7 @@ final class LiveActivityController {
             return
         }
         Task {
-            await activity.update(.init(state: Self.state(from: model, clock: clock), staleDate: nil))
+            await activity.update(.init(state: Self.state(from: model, clock: clock, bpm: liveBpm), staleDate: nil))
         }
     }
 
@@ -140,7 +154,7 @@ final class LiveActivityController {
     /// Compose the card. Every formatting decision the deck already made is
     /// carried across as text rather than re-derived on the far side.
     private static func state(
-        from model: LoggerModel, clock: any PauseControlling
+        from model: LoggerModel, clock: any PauseControlling, bpm: Int?
     ) -> OnyxWorkoutAttributes.ContentState {
         let current = model.currentSet
 
@@ -247,6 +261,10 @@ final class LiveActivityController {
             // card's slot back on `load`.
             cardioElapsedSec: cardioSec,
             cardioDistanceKm: cardioKm,
+            // The wrist, if one is on it and has spoken inside the staleness
+            // window. Read by the caller off `PhoneWatchBridge.liveBpm`,
+            // which has already aged it — see `ContentState.bpm`.
+            bpm: bpm,
             dayKey: model.day.key
         )
     }

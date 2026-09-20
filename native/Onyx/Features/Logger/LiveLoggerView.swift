@@ -291,7 +291,26 @@ struct LiveLoggerView: View {
             // a session nobody is doing.
             guard !model.isEditing else { return }
             model.attach()
+            // Before `start`, so the FIRST card already carries the wrist's
+            // reading rather than acquiring it one pulse later.
+            activity.liveBpm = environment?.watchBridge.liveBpm
             activity.start(model: model, clock: clock)
+        }
+        // ── THE WRIST'S HEART RATE, ONTO THE LOCK SCREEN (W4, DECISION 4) ───
+        // `PhoneWatchBridge` is `@Observable`, so reading `liveBpm` here
+        // registers and this fires whenever the wrist echoes one — which is a
+        // rest starting, a ±15 s nudge, or the watch answering a pulse. A few
+        // times a minute, not a few times a second: the sensor's own sampling
+        // never reaches this property (`ContentState.bpm` says why that
+        // matters for ActivityKit's update budget).
+        //
+        // It also fires when the reading goes STALE and the bridge starts
+        // answering nil, which is what takes the number off the card rather
+        // than freezing it at whatever the watch last said before it left.
+        .onChange(of: environment?.watchBridge.liveBpm) { _, bpm in
+            guard !model.isEditing else { return }
+            activity.liveBpm = bpm
+            activity.update(model: model, clock: clock)
         }
         .onChange(of: model.completedSets) { _, _ in
             guard !model.isEditing else { return }

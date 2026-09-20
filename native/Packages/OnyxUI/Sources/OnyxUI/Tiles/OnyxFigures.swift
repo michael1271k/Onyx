@@ -142,10 +142,14 @@ struct GlassArc: View {
   var lineWidth: CGFloat = 12
   var monochrome = false
 
-  /// One glass. The same 250 `PendingWater.glassMl` queues and the Pulse tab's
-  /// water row adds — a face that segmented at 200 would show a tap filling
-  /// four fifths of a segment.
-  static let glassMl: Double = 250
+  /// One glass — a face that segmented at 200 would show a tap filling four
+  /// fifths of a segment.
+  ///
+  /// `PendingWater.glassMl` itself since W4, not a literal promising to match
+  /// it: that enum left `Shared/` for OnyxCore when the wrist grew a water
+  /// button, and this package links OnyxCore, so the promise can be the
+  /// reference it was always describing.
+  static let glassMl: Double = PendingWater.glassMl
   static let maxSegments = 16
 
   /// How many segments the goal is worth, and how many of them are full.

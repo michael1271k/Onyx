@@ -11,6 +11,13 @@ import SwiftUI
 enum WatchRoute: Hashable {
     case deck
     case dashboard
+    #if DEBUG
+    /// The live-workout widget faces, at their real sizes (W4). DEBUG only:
+    /// it is a harness screen, reached by `ONYX_WATCH_SCREEN=widget` and by
+    /// nothing a finger can do — see `LiveWidgetPreview` for why the Smart
+    /// Stack itself cannot be photographed on a simulator.
+    case widgetPreview
+    #endif
 }
 
 /// What the app opens on.
@@ -53,6 +60,9 @@ struct RootView: View {
                 switch route {
                 case .deck: DeckView()
                 case .dashboard: DashboardView()
+                #if DEBUG
+                case .widgetPreview: LiveWidgetPreview()
+                #endif
                 }
             }
         }
@@ -65,6 +75,13 @@ struct RootView: View {
         // the one failure `watch-shot.sh` exists to refuse.
         .onChange(of: model.debugScreen, initial: true) { _, screen in
             if screen == .deck, path.isEmpty { path = [.deck] }
+            // W4's three, which are one screen with a page selection — the
+            // page itself is picked inside `DashboardView`, because the path
+            // can name a destination and not a tab within one.
+            if screen == .dashboard || screen == .train || screen == .fuel, path.isEmpty {
+                path = [.dashboard]
+            }
+            if screen == .widget, path.isEmpty { path = [.widgetPreview] }
         }
         #endif
         // ── REST IS A STATE, NOT A PAGE ─────────────────────────────────────

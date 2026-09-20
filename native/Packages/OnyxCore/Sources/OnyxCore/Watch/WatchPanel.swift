@@ -39,6 +39,124 @@ public enum WatchCase {
 
     /// 146 — the width a row may actually occupy at 40 mm.
     public static let content40mm: Double = width40mm - gutter * 2
+
+    /// The 49 mm Ultra 2 — the case every screenshot in this repository is
+    /// taken on. Stated so the gap between the gate and the photograph is a
+    /// number here rather than a remark in a shell script.
+    public static let width49mm: Double = 205
+    public static let height49mm: Double = 251
+
+    /// What the inline navigation bar with a back chevron takes off the top.
+    ///
+    /// ── 64, AND IT WAS MEASURED, NOT ESTIMATED ──────────────────────────────
+    /// W4 first wrote 28 here by the same subtraction `gutter` was arrived at,
+    /// and the accessibility tree said 64: the bar is a 36 pt circular Back
+    /// button at y=19 plus a 21.5 pt heading, and the group around them is
+    /// 64 pt tall. The error was 36 points — more than half a row — and the
+    /// test built on it happily asserted that a page fits which does not.
+    ///
+    /// Measured on the 49 mm pair, and used as the budget for 40 mm too. That
+    /// is deliberate and it is the conservative direction: a 40 mm bar is no
+    /// TALLER than this, so every "it fits" this constant produces is an
+    /// answer that also holds on the case nothing here can photograph.
+    public static let navBar: Double = 64
+
+    /// 187 — the page a pushed screen actually has on the 49 mm pair.
+    public static let content49mmHeight: Double = height49mm - navBar
+
+    /// 133 — the same, at 40 mm, against the measured 49 mm bar.
+    ///
+    /// Conservative by construction: the real 40 mm bar is smaller, so the
+    /// true page is a little taller than this. A layout that fits 133 fits
+    /// the device; one that does not may still fit, and this file will not
+    /// claim it does.
+    public static let content40mmHeight: Double = height40mm - navBar
+}
+
+/// The wrist's dashboard pages (W4, founder decision 2).
+///
+/// ── WHY THIS IS ARITHMETIC AND NOT A LAYOUT ─────────────────────────────────
+/// The same argument `WatchPanel` makes one type up, in the other dimension.
+/// The pages are a vertical `TabView`, so a page that does not fit does not
+/// clip and does not warn — it scrolls, which silently turns a glance into a
+/// gesture, and the paired simulator is an Ultra 2 whose 251 pt of height
+/// hides it completely. 40 mm has 197.
+///
+/// So how many faces a page may hold is decided here, replayed by
+/// `OnyxWatchLayoutTests`, and read by `DashboardPages` — which takes its row
+/// count from this and nowhere else.
+public enum WatchDashboard {
+
+    /// Between two rows on a page. `OnyxSpace.xs`, as a number, for the reason
+    /// `WatchPanel.gap` gives.
+    public static let gap: Double = 4
+
+    /// One accessory row: a `.accessoryRectangular` face — a glyph and two
+    /// lines of `footnote`/`caption2` — inside a card's own padding.
+    ///
+    /// ── 48.5, MEASURED OFF THE ACCESSIBILITY TREE ───────────────────────────
+    /// Not estimated. The Fuel page's three cards sit at y = 64, 116.5 and
+    /// 169 on the 49 mm pair, so the pitch is 52.5 and the row is that less
+    /// the 4 pt gap. W4's first guess was 42, which was six points light per
+    /// row and eighteen over a page — enough to turn "this fits" into a
+    /// button photographed half off the bottom of the display.
+    ///
+    /// Measured at 49 mm and used at 40 mm, like `WatchCase.navBar` and for
+    /// the same reason: a 40 mm row is no taller, so this over-counts, and
+    /// over-counting is the only direction a budget may be wrong in.
+    public static let rowHeight: Double = 48.5
+
+    /// The Fuel page's "+1 glass" button, which is a fourth element under
+    /// three faces. 54 pt measured, on the same tree.
+    public static let buttonHeight: Double = 54
+
+    /// How many rows fit a page WITHOUT it having to scroll.
+    ///
+    /// Floors at 1 rather than 0 — a page with no rows draws nothing at all,
+    /// silently, which is the failure mode `WatchPanel.columns` also refuses.
+    public static func rows(within height: Double = WatchCase.content40mmHeight) -> Int {
+        var n = 1
+        while used(rows: n + 1) <= height { n += 1 }
+        return n
+    }
+
+    /// The height `n` rows and their gaps occupy.
+    public static func used(rows n: Int) -> Double {
+        guard n > 0 else { return 0 }
+        return rowHeight * Double(n) + gap * Double(n - 1)
+    }
+
+    /// Does a page of `n` rows fit without scrolling?
+    public static func fits(rows n: Int, within height: Double = WatchCase.content40mmHeight) -> Bool {
+        n > 0 && used(rows: n) <= height
+    }
+
+    /// THREE faces a page — the design decision, which is not the same number
+    /// as `rows()` and deliberately so.
+    ///
+    /// ── WHAT THIS COSTS, STATED RATHER THAN HIDDEN ──────────────────────────
+    /// Three faces fit the 49 mm pair with 33 pt to spare, and do NOT fit the
+    /// 40 mm case: 153.5 pt of rows against a 133 pt page, so the third card
+    /// hangs about 20 pt below the fold and the Fuel page's button a further
+    /// 58. The page is a `ScrollView` and the Crown reaches both — which is
+    /// the same gesture that turns the page, on a screen whose whole
+    /// interaction is the Crown.
+    ///
+    /// It is three and not two because the pages were specified as three
+    /// readings each and the alternative is deleting a reading from every
+    /// page to buy a scroll nobody has to make on the case this app is worn
+    /// on. `OnyxWatchLayoutTests` asserts BOTH halves of that — what fits and
+    /// what hangs — so the cost is a number in the repository and a decision
+    /// a later wave can reverse by changing this one constant.
+    public static let facesPerPage = 3
+
+    /// How far a page of `facesPerPage` faces hangs below a given page, or 0.
+    public static func overflow(
+        rows n: Int, button: Bool = false, within height: Double = WatchCase.content40mmHeight
+    ) -> Double {
+        let content = used(rows: n) + (button ? buttonHeight + gap : 0)
+        return max(0, content - height)
+    }
 }
 
 /// The Set Quality panel's grid (W3).

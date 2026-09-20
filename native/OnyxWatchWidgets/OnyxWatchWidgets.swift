@@ -3,14 +3,21 @@ import WidgetKit
 import OnyxCore
 import OnyxUI
 
-/// The watch's complications (W7).
+/// The watch's complications (W7) and its live-workout card (W4).
 ///
-/// Ten kinds, one per wearable `WidgetId`, every one a `StaticConfiguration`:
-/// a complication has no picker on the wrist — the FACE is the choice, made
-/// in the watch-face editor — so ten kinds is what "every dashboard tile as a
-/// complication" means here, where on the phone it is one kind with an
-/// intent. Ten is also `WidgetBundleBuilder`'s ceiling; an eleventh nests a
-/// second bundle the way `OnyxControls` does on the phone.
+/// Ten complication kinds, one per wearable `WidgetId`, every one a
+/// `StaticConfiguration`: a complication has no picker on the wrist — the
+/// FACE is the choice, made in the watch-face editor — so ten kinds is what
+/// "every dashboard tile as a complication" means here, where on the phone it
+/// is one kind with an intent.
+///
+/// ── ELEVEN, WITHOUT GIVING ONE UP (W4) ──────────────────────────────────────
+/// `@WidgetBundleBuilder` caps at ten **elements**, and W7's note here read
+/// that as ten widgets — so this wave was planned around picking a
+/// complication to delete. It is not: a NESTED bundle is one element, which is
+/// the same trick `OnyxControls` uses on the phone. `WatchComplications` is
+/// one element, `WatchLive` is the second, and the eleventh widget cost
+/// nothing. Verified by compiling it, not by reading a doc.
 ///
 /// ── WHERE THE NUMBERS COME FROM ─────────────────────────────────────────────
 /// Not from a store. The phone cuts `WatchTiles` out of the same snapshot its
@@ -19,6 +26,11 @@ import OnyxUI
 /// This extension reads that one value and hands it to `OnyxTile.accessory`,
 /// which is the SAME view the phone's Lock Screen draws — one face, both
 /// devices, by construction.
+///
+/// The live card's source is different and deliberately so: `WatchModel`
+/// writes `LiveWorkoutSnapshot` into the same suite on every commit and every
+/// rest pulse, because the phone cannot know what a wrist logged with the
+/// phone in a locker — and the heart rate has exactly one source on this pair.
 ///
 /// ⚠️ `kind:` strings are load-bearing, as on the phone: a kind that
 /// disappears takes every placed complication with it.
@@ -34,6 +46,18 @@ struct OnyxWatchWidgets: WidgetBundle {
         }
     }
 
+    @WidgetBundleBuilder
+    var body: some Widget {
+        WatchComplications().body
+        WatchLive().body
+    }
+}
+
+/// The ten watch-face complications. A sub-bundle, so the root counts them as
+/// ONE of its ten elements — see `OnyxWatchWidgets`. No `@main`: a bundle
+/// that is nested is constructed by its parent.
+struct WatchComplications: WidgetBundle {
+    @WidgetBundleBuilder
     var body: some Widget {
         RecoveryComplication()
         TrainComplication()
@@ -45,6 +69,15 @@ struct OnyxWatchWidgets: WidgetBundle {
         StressComplication()
         SorenessComplication()
         WeekRingsComplication()
+    }
+}
+
+/// The Smart Stack card. Alone in its own sub-bundle because the ten above
+/// have already spent the root's other element.
+struct WatchLive: WidgetBundle {
+    @WidgetBundleBuilder
+    var body: some Widget {
+        WorkoutLiveWidget()
     }
 }
 

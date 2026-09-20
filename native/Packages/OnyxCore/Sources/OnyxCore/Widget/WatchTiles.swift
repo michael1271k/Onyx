@@ -82,6 +82,34 @@ public struct WatchTiles: Codable, Sendable, Equatable {
     /// faces keep their readings.
     public let lastBedtime: String?
 
+    // ── ADDED BY W4, OPTIONAL AND LAST ──────────────────────────────────────
+    //
+    // The dashboard pages the wrist gained this wave ask two questions the
+    // complications never did — "how has the week gone" on the Train page and
+    // "how much protein is left" on the Fuel page — and neither number was on
+    // the wire. Appended rather than inserted, and optional like everything
+    // that arrives after a shape has shipped: an older phone sends a payload
+    // without these keys and a `decodeIfPresent` is what stops that being a
+    // watch whose faces all go blank the day the phone updates first.
+    //
+    // The budget moved from 2 KB to 2 KB — see `WatchTilesTests`, which pins
+    // the measured size rather than the intention.
+
+    /// Working sets logged across the current week. `OnyxSnapshot.Week.sets`.
+    public let weekSets: Int?
+    /// Tonnage across the current week, in kilograms.
+    ///
+    /// Nil, never 0, on a week with no sessions — `OnyxSnapshot.Week.volumeKg`
+    /// makes the same distinction for the same reason.
+    public let weekVolumeKg: Double?
+    /// Protein eaten today and the day's target, in grams.
+    ///
+    /// Rounded to whole grams on the phone, where the formatting rules live.
+    /// A tenth of a gram is not a reading anyone acts on and it is four more
+    /// characters on a 40 pt face.
+    public let proteinG: Int?
+    public let proteinGoalG: Int?
+
     public init(
         date: String, battery: Int? = nil, score: Int? = nil,
         sleepMin: Int? = nil, sleepScore: Int? = nil,
@@ -90,7 +118,9 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         kcal: Int? = nil, kcalGoal: Int? = nil,
         todayLabel: String, todayLogged: Bool, restDay: Bool,
         stressIndex: Double? = nil, sorenessCount: Int? = nil,
-        week: [WeekDay]? = nil, medianBedtime: String? = nil, lastBedtime: String? = nil
+        week: [WeekDay]? = nil, medianBedtime: String? = nil, lastBedtime: String? = nil,
+        weekSets: Int? = nil, weekVolumeKg: Double? = nil,
+        proteinG: Int? = nil, proteinGoalG: Int? = nil
     ) {
         self.date = date
         self.battery = battery
@@ -111,6 +141,10 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         self.week = week
         self.medianBedtime = medianBedtime
         self.lastBedtime = lastBedtime
+        self.weekSets = weekSets
+        self.weekVolumeKg = weekVolumeKg
+        self.proteinG = proteinG
+        self.proteinGoalG = proteinGoalG
     }
 
     enum CodingKeys: String, CodingKey {
@@ -122,6 +156,10 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         case todayLabel = "tl", todayLogged = "td", restDay = "r"
         case stressIndex = "x", sorenessCount = "so"
         case week = "wk", medianBedtime = "mb", lastBedtime = "lb"
+        // W4. As short as the rest, because this value is decoded on every
+        // timeline of every complication that reads it.
+        case weekSets = "ws", weekVolumeKg = "wv"
+        case proteinG = "p", proteinGoalG = "pg"
     }
 
     /// The projection. ONE place cuts the snapshot down, so the phone's
@@ -147,7 +185,14 @@ public struct WatchTiles: Codable, Sendable, Equatable {
             sorenessCount: s.soreness.map { $0.filter { $0.level > 0 }.count },
             week: s.weekRings.map { $0.suffix(7).map { WeekDay(trained: $0.trained, fuelHit: $0.fuelHit, sleepHit: $0.sleepHit) } },
             medianBedtime: s.sleep.medianBedtime,
-            lastBedtime: OnyxSnapshot.clockTime(s.sleep.startTime)
+            lastBedtime: OnyxSnapshot.clockTime(s.sleep.startTime),
+            // The week, as the Train page asks it. `sets` is a plain count and
+            // rides as one; `volumeKg` is nil on a week with no sessions and
+            // that nil is carried rather than flattened to 0.
+            weekSets: s.week.sets,
+            weekVolumeKg: s.week.volumeKg,
+            proteinG: s.macros.proteinG.map { Int($0.rounded()) },
+            proteinGoalG: s.macros.proteinGoalG.map { Int($0.rounded()) }
         )
     }
 
@@ -157,6 +202,48 @@ public struct WatchTiles: Codable, Sendable, Equatable {
     public var kcalRemaining: Int? {
         guard let kcal, let kcalGoal else { return nil }
         return kcalGoal - kcal
+    }
+
+    /// Protein left against the target, or nil. Same shape as `kcalRemaining`,
+    /// and nil for the same reason: a face with no target has nothing to
+    /// subtract from, and "0 g left" would be a claim about a goal that does
+    /// not exist.
+    public var proteinRemaining: Int? {
+        guard let proteinG, let proteinGoalG else { return nil }
+        return proteinGoalG - proteinG
+    }
+
+    /// The same payload with `ml` more water on it — the wrist's optimistic
+    /// glass (W4).
+    ///
+    /// ── WHY THE PAGE CANNOT JUST ADD IT WHEN IT DRAWS ───────────────────────
+    /// The Fuel page draws the SAME `AccessoryFace` the complication and the
+    /// phone's Lock Screen draw, and that face takes a `WatchTiles` and
+    /// composes every string from it. Handing it a second number to add would
+    /// be a second place the water reading is assembled, which is precisely
+    /// what one-face-both-devices exists to prevent. So the page hands it a
+    /// payload that already includes the glass.
+    ///
+    /// ── AND WHY `nil + 250` IS 250, NOT 250-OVER-NOTHING ────────────────────
+    /// `nil` here means the phone has sent no water reading for today, which
+    /// on the day's first glass is the true state — and the glass you just
+    /// tapped IS today's water. Adding to nil therefore produces the reading
+    /// rather than preserving the absence. `ml == 0` changes nothing at all,
+    /// so a page with nothing queued hands the face exactly what arrived.
+    public func addingWater(_ ml: Int) -> WatchTiles {
+        guard ml > 0 else { return self }
+        return WatchTiles(
+            date: date, battery: battery, score: score,
+            sleepMin: sleepMin, sleepScore: sleepScore,
+            waterMl: (waterMl ?? 0) + ml, waterGoalMl: waterGoalMl,
+            steps: steps, stepsGoal: stepsGoal,
+            kcal: kcal, kcalGoal: kcalGoal,
+            todayLabel: todayLabel, todayLogged: todayLogged, restDay: restDay,
+            stressIndex: stressIndex, sorenessCount: sorenessCount,
+            week: week, medianBedtime: medianBedtime, lastBedtime: lastBedtime,
+            weekSets: weekSets, weekVolumeKg: weekVolumeKg,
+            proteinG: proteinG, proteinGoalG: proteinGoalG
+        )
     }
 
     /// Fractional progress toward a goal, clamped, nil when unknown.

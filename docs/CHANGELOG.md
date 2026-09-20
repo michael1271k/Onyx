@@ -44,6 +44,66 @@ _Nothing yet._
 
 ---
 
+## [7.3.0] — 2026-09-20 · The wrist reads the day, and both screens read your heart
+
+The Watch stops needing the phone to answer "how am I doing". Three pages of
+the same faces your complications draw, a live-workout card that surfaces
+itself in the Smart Stack while you train, and a heart rate on the Lock Screen
+and in the Dynamic Island on the phone in your pocket.
+
+### Added
+- **Watch dashboard — Today, Train, Fuel** — three vertical pages, turned with
+  the Crown, reached from the Start screen's chart button before a session and
+  from the deck's during one. Every reading is the SAME accessory face your
+  watch face and your iPhone Lock Screen draw, so a number cannot say one
+  thing in a corner of a clock and another on a page. Today is battery and
+  readiness, last night's sleep and today's stress; Train is the session due,
+  the week's tonnage and sets, and seven days of marks; Fuel is calories left,
+  water and steps.
+- **A glass of water from the wrist** — a button under the water face on the
+  Fuel page. The wrist has no water ledger, so the glass is posted to the
+  iPhone and lands in the same mailbox Control Centre's button uses, written
+  by the same code that writes a tap on the Pulse tab — one row, whichever
+  device you tapped. The reading moves on the wrist immediately and settles
+  when the phone confirms.
+- **Live workout in the Smart Stack** — a card that raises itself while a
+  session is running: the movement, sets done against the deck, your heart
+  rate, and the rest counting down. It ranks through watchOS 11's own
+  workout-in-progress relevance and stands down when the session ends. Nothing
+  was given up for it — the ten complications are all still there.
+- **Heart rate on the watch face** — the same card as a circular complication,
+  for a corner of the clock during a workout.
+- **Heart rate on the iPhone's Live Activity** — the wrist's reading on the
+  rest band of the Lock Screen card and in the Dynamic Island's compact slot
+  while you work. It disappears when the watch goes quiet rather than freezing
+  at the last number it sent — a stale rate presented as live is the one thing
+  this reading must never do.
+
+### Changed
+- **The Fuel complication's second line is protein left** where it used to
+  repeat the calories the line above had already subtracted.
+- **`WatchTiles` carries four more readings** — the week's sets and tonnage,
+  and today's protein against its target. Optional and last, so a watch on
+  this build and a phone on the last one still understand each other.
+
+### Fixed
+- **The Lock Screen could keep drawing a heart rate from a watch that had come
+  off your wrist.** The reading was aged at two minutes but nothing woke to
+  apply the expiry, so the last number the watch sent stayed on the card until
+  something else happened to refresh it. Both devices now age a reading over
+  the same two minutes, from one constant.
+- **The Dynamic Island's compact slot was drawn twice** — once by the widget
+  and once by the app's own contact sheet, which is the only thing that
+  photographs it. The copy had already drifted. One view now, in `Shared/`.
+- The `dashboard` screenshot the shot loop has refused by name since 7.0.0 now
+  has a launch hook, along with `train`, `fuel` and the live widget's faces.
+- **The first screenshot of every shot run could come back solid black.** The
+  loop waited eight seconds after installing a fresh binary, which is enough
+  for a warm launch and not for the first one; it now takes a throwaway launch
+  before it photographs anything.
+
+---
+
 ## [7.2.0] — 2026-09-20 · The wrist logs the whole workout
 
 The Watch stops being a place to tick a set and becomes the place to run a

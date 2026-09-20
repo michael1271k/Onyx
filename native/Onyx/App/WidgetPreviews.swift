@@ -191,7 +191,7 @@ enum WidgetPreviews {
     static let activityStates: [(String, OnyxWorkoutAttributes.ContentState)] = {
         func state(
             rest: Date? = nil, prs: Int = 0, rpe: String = "", setLabel: String = "Set 3 of 4",
-            paused: Bool = false
+            paused: Bool = false, bpm: Int? = 142
         ) -> OnyxWorkoutAttributes.ContentState {
             .init(
                 exercise: "Seated Cable Row (Wide Grip)",
@@ -231,6 +231,15 @@ enum WidgetPreviews {
                 // this page photographs the fallback (`now...endsAt`) and
                 // reviews the bug rather than the fix. 97 s left of 150.
                 restTotalSec: rest == nil ? nil : 150,
+                // ── THE WRIST, SO THE TWO SURFACES THAT DRAW IT HAVE A SHOT ─
+                // W4 put the rate on the rest band and in the island's
+                // compact slot, and both branches are `if let` — so a fixture
+                // that left this nil would photograph the card as it looks
+                // with NO WATCH PAIRED and review nothing. The `paused` state
+                // below is deliberately the one that does leave it nil, which
+                // is what puts the load back in the compact slot and gets
+                // both branches into the contact sheet.
+                bpm: bpm,
                 dayKey: "arms"
             )
         }
@@ -244,7 +253,7 @@ enum WidgetPreviews {
             ("working", state(rpe: "RPE 8")),
             ("resting", state(rest: resting, rpe: "RPE 8")),
             ("record", state(rest: resting, prs: 2, rpe: "RPE 9", setLabel: "Set 4 of 4")),
-            ("paused", state(rpe: "RPE 8", paused: true)),
+            ("paused", state(rpe: "RPE 8", paused: true, bpm: nil)),
             // ── THE BOUT, WHICH THIS PAGE COULD NOT PHOTOGRAPH (W2) ─────────
             // Every fixture above is a lift, so the cardio branch W2 added to
             // `WorkoutCurrentSet` and to the compact island had no shot on this
@@ -325,27 +334,20 @@ enum WidgetPreviews {
     }
 
     /// The compact pair, at the width the system actually gives them.
+    ///
+    /// ── THE TRAILING SLOT IS THE SHIPPED VIEW, NOT A COPY OF IT (W4) ────────
+    /// This method used to restate three of the four branches
+    /// `OnyxWidgets.swift` draws there. W4 added a fourth to the real one and
+    /// this copy kept drawing the load — so the only photograph anybody takes
+    /// of this slot reviewed the stand-in. `WorkoutCompactTrailing` is in
+    /// `Shared/`, compiled into both targets, and is now the only place those
+    /// branches exist. What is still a stand-in here is the ARRANGEMENT — the
+    /// mark, the spacer and the capsule — which is what this page is for.
     private static func islandCompact(_ state: OnyxWorkoutAttributes.ContentState) -> some View {
         HStack(spacing: 4) {
             OnyxMark(size: 14, tint: Color.onyx.day(state.dayKey), opacity: 1)
             Spacer(minLength: 12)
-            Group {
-                if let countdown = restCountdown(state.restEndsAt, total: state.restTotalSec) {
-                    Text(timerInterval: countdown, countsDown: true)
-                        .monospacedDigit()
-                        .frame(minWidth: 44, maxWidth: 44, alignment: .trailing)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .foregroundStyle(
-                            WorkoutMuscleTag.tint(state.primaryMuscle)
-                                ?? Color.onyx.day(state.dayKey)
-                        )
-                } else {
-                    Text(state.load.replacingOccurrences(of: " kg ", with: ""))
-                        .foregroundStyle(Color.onyx.day(state.dayKey))
-                }
-            }
-            .font(OnyxWidgetType.figure(12))
+            WorkoutCompactTrailing(state: state)
         }
         .padding(.horizontal, 10)
         .frame(width: 170, height: 36)

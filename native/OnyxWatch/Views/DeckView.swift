@@ -70,6 +70,28 @@ struct DeckView: View {
         .containerBackground(WatchInk.ground, for: .navigation)
         .navigationTitle("Deck")
         .navigationBarTitleDisplayMode(.inline)
+        // ── THE DASHBOARD, DURING A SESSION (W4) ────────────────────────────
+        // The plan asked for this on a LONG PRESS OF THE SESSION TIMER. That
+        // gesture is taken, by the founder's own decision 3: W3 bound it to
+        // discard, on both `SetView` and `RestView`, and it is the only
+        // irreversible thing on this wrist. Rebinding it to a read-only page
+        // would either delete the discard or double-bind a hold, and neither
+        // is a trade worth a shortcut.
+        //
+        // The deck is where a reference belongs anyway — it is already the
+        // screen you reach from `SetView` when you want to look at something
+        // rather than do something — and this is the SAME glyph in the SAME
+        // corner `StartView` puts it in, so "chart, top right" is one thing to
+        // learn and not two.
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                // A dark disc with a light glyph — see `SetView`'s deck link
+                // for why `tint` alone made these near-white.
+                NavigationLink(value: WatchRoute.dashboard) { Image(systemName: "chart.bar.fill") }
+                    .tint(WatchInk.fill)
+                    .foregroundStyle(WatchInk.secondary)
+            }
+        }
         .navigationDestination(item: $swapping) { id in
             if let movement = model.movements.first(where: { $0.id == id }) {
                 SwapList(movement: movement)
@@ -261,59 +283,11 @@ private struct SwapList: View {
     }
 }
 
-/// The Control Center — readiness, the week, and what today costs.
-///
-/// ── IT IS ONE SWIPE FROM THE START CARD, NOT THE ROOT ───────────────────────
-/// A dashboard that opens the app puts a screen between you and the set you
-/// came to log. This one is reached deliberately, before a session, which is
-/// the only moment its numbers change a decision.
-///
-/// ── AND IT DRAWS NONE OF THE PHONE'S TILES ──────────────────────────────────
-/// `OnyxUI`'s tiles are fenced `#if os(iOS)` — they switch on `WidgetFamily`
-/// cases that do not exist on watchOS. That fence is also the right design call:
-/// a tile is a Home Screen face with a tile's information density, and at 40 mm
-/// the honest version of a dashboard is four rows of text.
-struct DashboardView: View {
-
-    @Environment(WatchModel.self) private var model
-
-    var body: some View {
-        List {
-            if let day = model.day {
-                row("Today", day.label)
-                row("Movements", "\(day.exercises(for: model.phase).count)")
-                row("Phase", model.phase.label)
-            } else {
-                row("Today", "Rest")
-            }
-            if model.sessionId != nil {
-                row("Logged", "\(model.sets.count) sets")
-            }
-            if let bpm = model.workout.heartRate {
-                row("Heart", "\(bpm) bpm")
-            }
-        }
-        .containerBackground(WatchInk.ground, for: .navigation)
-        .navigationTitle("Today")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func row(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(WatchType.label)
-                .foregroundStyle(WatchInk.secondary)
-            Spacer(minLength: OnyxSpace.s)
-            Text(value)
-                .font(WatchType.label)
-                .foregroundStyle(WatchInk.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .listRowBackground(
-            RoundedRectangle(cornerRadius: OnyxCorner.row, style: .continuous)
-                .fill(WatchInk.fill)
-        )
-        .accessibilityElement(children: .combine)
-    }
-}
+// ── `DashboardView` MOVED TO `DashboardPages.swift` (W4) ────────────────────
+// It lived here because it was four rows of `label: value` text and this file
+// was where the other list lived. It is three pages of accessory faces now —
+// the same faces the complications and the phone's Lock Screen draw — and it
+// is long enough to be its own file. Its old comment argued that "at 40 mm the
+// honest version of a dashboard is four rows of text", which was true only for
+// as long as the wrist had no way to draw a tile; `OnyxTile.accessory` is
+// unfenced and has been since W7.

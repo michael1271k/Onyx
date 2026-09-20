@@ -17,7 +17,8 @@ struct WatchTilesTests {
             kcal: 1_640, kcalGoal: 2_150, todayLabel: "Delts & Arms", todayLogged: false,
             restDay: false, stressIndex: 41.5, sorenessCount: 3,
             week: (0..<7).map { WatchTiles.WeekDay(trained: $0 % 2 == 0, fuelHit: $0 != 3, sleepHit: $0 > 1) },
-            medianBedtime: "23:12", lastBedtime: "00:16"
+            medianBedtime: "23:12", lastBedtime: "00:16",
+            weekSets: 84, weekVolumeKg: 12_430, proteinG: 118, proteinGoalG: 185
         )
     }
 
@@ -26,6 +27,74 @@ struct WatchTilesTests {
         let data = try JSONEncoder().encode(full)
         #expect(data.count <= 2_048, "wire size \(data.count) B")
         #expect(try JSONDecoder().decode(WatchTiles.self, from: data) == full)
+    }
+
+    /// The budget re-pinned, as the wave that spent some of it (cross-wave
+    /// law: extend with optional-and-last fields, then re-pin).
+    ///
+    /// ── WHY A CEILING AND NOT AN EQUALITY ───────────────────────────────────
+    /// An exact byte count would fail on a `Double` that serialises one digit
+    /// differently, which is a test that cries about the encoder rather than
+    /// about the payload. The number in the message is what a reader wants;
+    /// the assertion is that four more fields did not quietly double it.
+    @Test("W4's four fields cost the wire under 80 bytes")
+    func w4FieldsAreCheap() throws {
+        let before = WatchTiles(
+            date: full.date, battery: full.battery, score: full.score,
+            sleepMin: full.sleepMin, sleepScore: full.sleepScore,
+            waterMl: full.waterMl, waterGoalMl: full.waterGoalMl,
+            steps: full.steps, stepsGoal: full.stepsGoal,
+            kcal: full.kcal, kcalGoal: full.kcalGoal,
+            todayLabel: full.todayLabel, todayLogged: full.todayLogged, restDay: full.restDay,
+            stressIndex: full.stressIndex, sorenessCount: full.sorenessCount,
+            week: full.week, medianBedtime: full.medianBedtime, lastBedtime: full.lastBedtime
+        )
+        let grew = try JSONEncoder().encode(full).count - (try JSONEncoder().encode(before).count)
+        #expect(grew > 0, "the four fields encoded nothing")
+        #expect(grew < 80, "W4 added \(grew) B to the wire")
+    }
+
+    /// The compatibility half of "optional and last": a payload from a phone
+    /// that predates W4 has none of these keys and must still decode.
+    @Test("a pre-W4 payload decodes with the four new fields nil")
+    func oldPayloadStillDecodes() throws {
+        let legacy = #"""
+        {"d":"2026-09-18","b":72,"sc":81,"tl":"Delts & Arms","td":false,"r":false}
+        """#
+        let tiles = try JSONDecoder().decode(WatchTiles.self, from: Data(legacy.utf8))
+        #expect(tiles.battery == 72)
+        #expect(tiles.weekSets == nil)
+        #expect(tiles.weekVolumeKg == nil)
+        #expect(tiles.proteinG == nil)
+        #expect(tiles.proteinGoalG == nil)
+        // And the derived reading over two nils is nil, not zero.
+        #expect(tiles.proteinRemaining == nil)
+    }
+
+    /// The wrist's optimistic glass (W4).
+    @Test("adding water adds to a reading, creates one from nil, and 0 is a no-op")
+    func optimisticWater() {
+        let logged = WatchTiles(
+            date: "2026-09-18", waterMl: 1_750, waterGoalMl: 3_000,
+            todayLabel: "Rest", todayLogged: false, restDay: true
+        )
+        #expect(logged.addingWater(250).waterMl == 2_000)
+        // Nothing queued changes nothing at all — the same object, so a page
+        // with an empty queue hands the face exactly what arrived.
+        #expect(logged.addingWater(0) == logged)
+
+        // ── nil + 250 IS 250, AND THAT IS NOT A BREACH OF "nil IS NOT 0" ────
+        // Nil means the phone has sent no water reading for today. The glass
+        // you just tapped IS today's water, so the absence is answered rather
+        // than preserved.
+        let dry = WatchTiles(date: "2026-09-18", todayLabel: "Rest", todayLogged: false, restDay: true)
+        #expect(dry.waterMl == nil)
+        #expect(dry.addingWater(250).waterMl == 250)
+        // …and a payload with nothing queued keeps the absence.
+        #expect(dry.addingWater(0).waterMl == nil)
+        // Every other field survives the copy.
+        #expect(logged.addingWater(250).waterGoalMl == 3_000)
+        #expect(logged.addingWater(250).restDay)
     }
 
     @Test("nil readings are absent on the wire, not null and not zero")
@@ -65,6 +134,18 @@ struct WatchTilesTests {
         #expect(tiles.week?.count == 7)
         #expect(tiles.week?.map(\.trained) == [true, false, true, false, true, false, true])
         #expect(tiles.medianBedtime == "23:12")
+        // W4's four, off the snapshot's own fields. The week in this fixture
+        // has 40 sets and a NIL tonnage (`OnyxSnapshot.Week.volumeKg` is nil,
+        // never 0, on a week with no sessions) — so this pins that the
+        // projection carries the nil rather than flattening it, which is the
+        // mistake the whole payload's header is about.
+        #expect(tiles.weekSets == 40)
+        #expect(tiles.weekVolumeKg == nil)
+        // The fixture's macros carry no protein, so both sides stay nil and
+        // the derived reading refuses to subtract.
+        #expect(tiles.proteinG == nil)
+        #expect(tiles.proteinGoalG == nil)
+        #expect(tiles.proteinRemaining == nil)
         // Last night's bedtime is the device-zone clock of `startTime`; the
         // exact digits depend on the zone the test runs in, so only its shape
         // is pinned here.

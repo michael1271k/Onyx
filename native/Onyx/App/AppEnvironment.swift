@@ -422,6 +422,12 @@ public final class AppEnvironment {
         // build), and holding a set back for two seconds before handing it to a
         // watch that is sitting six inches away is the wrong trade for a
         // transfer that costs nothing.
+        // A glass tapped on the wrist lands in `PendingWater` and has to be
+        // drained by somebody who knows who is signed in (W4). Set before
+        // `start()` opens the link, or the first transfer to arrive — a
+        // queued one from a watch that has been waiting for this phone — is
+        // received with nothing to run.
+        watchBridge.onWaterQueued = { [weak self] in self?.drainPendingWater() }
         watchBridge.start()
         authTask = Task { [weak self] in
             guard let self else { return }

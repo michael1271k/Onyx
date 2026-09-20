@@ -111,4 +111,76 @@ struct OnyxWatchLayoutTests {
         // …and three would, which is the row a 49 mm shot would have approved.
         #expect(WatchPanel.fits(columns: 3, minWidth: WatchPanel.wordChip, within: ultra2 - WatchCase.gutter * 2))
     }
+
+    // MARK: - The dashboard pages (W4)
+    //
+    // The same gate in the other dimension. A page that overflows does not
+    // clip and does not warn — it becomes a page you have to SCROLL, which
+    // turns a glance into a gesture, and the Ultra 2 the shots come from has
+    // 54 pt of height the 40 mm case does not.
+    //
+    // ── EVERY NUMBER BELOW WAS MEASURED, AND THE FIRST SET WAS NOT ──────────
+    // W4 wrote this suite twice. The first version estimated a 28 pt
+    // navigation bar and a 42 pt row, and passed — asserting that three faces
+    // plus a button fit a page on which the button was photographed hanging
+    // half off the bottom. The bar is 64 and the row is 48.5, off the
+    // accessibility tree of the running app. A layout test built on a guess
+    // is worse than no layout test: it is a green light with a number behind
+    // it that nobody checked.
+
+    @Test("the bar is 64 pt, so the page is 133 at 40 mm and 187 at 49")
+    func thePageHeight() {
+        #expect(WatchCase.navBar == 64)
+        #expect(WatchCase.content40mmHeight == 133)
+        #expect(WatchCase.content49mmHeight == 187)
+    }
+
+    @Test("two faces fit the 40 mm page without scrolling, and three do not")
+    func whatFitsTheFloor() {
+        #expect(WatchDashboard.fits(rows: 2))
+        #expect(WatchDashboard.fits(rows: 3) == false)
+        #expect(WatchDashboard.rows() == 2)
+        // 48.5 × 2 + 4 = 101, of 133.
+        #expect(WatchDashboard.used(rows: 2) == 101)
+        #expect(WatchDashboard.used(rows: 3) == 153.5)
+    }
+
+    /// The design decision, and its price — both, because a suite that
+    /// asserted only the first would be claiming the pages fit.
+    @Test("the pages draw three faces anyway, and the third hangs 20.5 pt below the 40 mm fold")
+    func threeFacesAndWhatItCosts() {
+        #expect(WatchDashboard.facesPerPage == 3)
+        // One more than fits, on purpose — see `facesPerPage`.
+        #expect(WatchDashboard.facesPerPage == WatchDashboard.rows() + 1)
+        #expect(WatchDashboard.overflow(rows: 3) == 20.5)
+        // And the Fuel page's button is a further 58 under that.
+        #expect(WatchDashboard.overflow(rows: 3, button: true) == 78.5)
+    }
+
+    /// What the 49 mm pair actually shows, which is what the screenshots in
+    /// this wave are evidence of and no more.
+    @Test("three faces fit the pair with room, and the Fuel button is what hangs there")
+    func whatThePairShows() {
+        #expect(WatchDashboard.fits(rows: 3, within: WatchCase.content49mmHeight))
+        #expect(WatchDashboard.overflow(rows: 3, within: WatchCase.content49mmHeight) == 0)
+        // 33.5 pt spare — which is 24.5 short of the button, and is exactly
+        // why the first Fuel shot came back with "Add a glass" cut in half.
+        #expect(WatchCase.content49mmHeight - WatchDashboard.used(rows: 3) == 33.5)
+        #expect(WatchDashboard.overflow(rows: 3, button: true, within: WatchCase.content49mmHeight) == 24.5)
+        // A fourth face would "fit" the pair, which is the whole reason a
+        // screenshot cannot be this gate.
+        #expect(WatchDashboard.fits(rows: 4, within: WatchCase.content49mmHeight) == false)
+        #expect(WatchDashboard.rows(within: WatchCase.content49mmHeight) == 3)
+    }
+
+    /// A case shorter than anything shipped still answers, and answers 1
+    /// rather than 0: a page with no rows draws nothing at all, silently.
+    /// The same refusal `WatchPanel.columns` makes.
+    @Test("an impossible height still yields one row")
+    func degenerateHeight() {
+        #expect(WatchDashboard.rows(within: 10) == 1)
+        #expect(WatchDashboard.used(rows: 0) == 0)
+        #expect(WatchDashboard.fits(rows: 0) == false)
+        #expect(WatchDashboard.overflow(rows: 0) == 0)
+    }
 }

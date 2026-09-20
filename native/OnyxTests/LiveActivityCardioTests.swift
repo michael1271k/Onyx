@@ -56,6 +56,81 @@ struct LiveActivityCardioTests {
         #expect(state.cardioElapsedSec == nil)
         #expect(state.cardioDistanceKm == nil)
         #expect(cardioLine(sec: state.cardioElapsedSec, km: state.cardioDistanceKm) == nil)
+        // W4's field, on the same terms: a card encoded before the wrist's
+        // heart rate was on the wire decodes with no rate, and every reader
+        // is an `if let` — so the band and the island draw what they drew.
+        #expect(state.bpm == nil)
+    }
+
+    // MARK: - The wrist's heart rate (W4)
+
+    /// The rule again, for the field this wave added — and stated as its own
+    /// test rather than left to the assertion above, because the payload
+    /// above is a memory of ONE past shape and `bpm` has to survive every
+    /// shape that has ever been encoded, including the one with a bout on it.
+    @Test("A card from any previous build decodes with no heart rate")
+    func bpmIsAbsentOnEveryOlderCard() throws {
+        // The richest payload a pre-W4 build could write: every optional it
+        // knew about, filled. If `bpm` had been added as a required key this
+        // would throw, which is the in-flight workout losing its card.
+        let rich = """
+        {
+          "exercise": "Treadmill", "setLabel": "", "load": "", "rpe": "",
+          "lastTime": "", "volume": "0 kg", "setsDone": 0, "setsPlanned": 4,
+          "prsThisSession": 0, "dayKey": "cb_b",
+          "nextExercise": "Chest Press", "lastRpe": "RPE 9",
+          "restEndsAt": 780000000, "timerOrigin": 779999000,
+          "isPaused": false, "elapsed": "12:30",
+          "primaryMuscle": "cardio", "rpeValue": 8.5, "restTotalSec": 150,
+          "cardioElapsedSec": 750, "cardioDistanceKm": 0.37
+        }
+        """
+        let state = try JSONDecoder().decode(
+            OnyxWorkoutAttributes.ContentState.self, from: Data(rich.utf8)
+        )
+        #expect(state.bpm == nil)
+        #expect(state.cardioElapsedSec == 750)
+        #expect(state.restTotalSec == 150)
+    }
+
+    /// And the other direction, the one `newKeysAreIgnorable` makes for the
+    /// bout: a nil rate must be ABSENT from the wire, not `null` and above
+    /// all not `0`. A zero would be a heart that had stopped.
+    @Test("A nil heart rate is absent from the wire, and a real one is on it")
+    func bpmEncoding() throws {
+        var state = Self.treadmill
+        state.bpm = nil
+        let without = try #require(
+            try JSONSerialization.jsonObject(with: try JSONEncoder().encode(state)) as? [String: Any]
+        )
+        #expect(without["bpm"] == nil)
+
+        state.bpm = 142
+        let with = try #require(
+            try JSONSerialization.jsonObject(with: try JSONEncoder().encode(state)) as? [String: Any]
+        )
+        #expect(with["bpm"] as? Int == 142)
+        // Round-trips, so the card the phone composed is the card the
+        // extension draws.
+        let back = try JSONDecoder().decode(
+            OnyxWorkoutAttributes.ContentState.self, from: try JSONEncoder().encode(state)
+        )
+        #expect(back.bpm == 142)
+    }
+
+    /// The mistake, for this field, in the two lines it takes to make it.
+    @Test("A required heart rate would have killed the running activity")
+    func requiredBpmBreaksIt() {
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(
+                RequiredBpm.self, from: Data(Self.previousSchemaJSON.utf8)
+            )
+        }
+    }
+
+    private struct RequiredBpm: Decodable {
+        var exercise: String
+        var bpm: Int
     }
 
     /// The same payload read by the shape the rule forbids — the two fields

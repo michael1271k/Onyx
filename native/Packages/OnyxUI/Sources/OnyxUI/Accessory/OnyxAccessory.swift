@@ -27,10 +27,24 @@ import OnyxCore
 // MARK: - Which tiles have a wearable face
 
 public extension WidgetId {
-    /// The ids `WatchTiles` can answer, in gallery order: the ten whose whole
-    /// reading is one figure the payload carries. Each is one `StaticConfiguration`
-    /// in the watch bundle — ten is `WidgetBundleBuilder`'s ceiling, so a wave
-    /// that adds an eleventh nests a second bundle, as `OnyxControls` does.
+    /// The ids that get a COMPLICATION, in gallery order: the ten whose whole
+    /// reading is one figure the payload carries. Each is one
+    /// `StaticConfiguration` in the watch bundle.
+    ///
+    /// ── IT IS NOT "THE IDS `WatchTiles` CAN ANSWER" ANY MORE (W4) ───────────
+    /// It used to be, and the two lists came apart the moment the wrist got a
+    /// dashboard: `AccessoryReading` answers `.volume` now, and the Train page
+    /// draws that face, but no watch FACE offers it — a week's tonnage is not
+    /// a thing to keep in a corner of a clock. So this is the bundle's list
+    /// and nothing more. A reading that is not here is drawn by whoever asks
+    /// for it and appears in no gallery.
+    ///
+    /// ── AND TEN IS NOT A CEILING (W4) ──────────────────────────────────────
+    /// This note used to say an eleventh would have to nest a second bundle.
+    /// Half right: `@WidgetBundleBuilder` caps at ten ELEMENTS, and a nested
+    /// bundle is one element — which is exactly what `OnyxWatchWidgets` now
+    /// does to fit the live-workout widget beside these ten without giving
+    /// any of them up. Nothing here had to be dropped.
     static let wearable: [WidgetId] = [
         .recovery, .train, .fuel, .water, .steps, .sleep, .bedtime, .stress, .soreness, .weekRings,
     ]
@@ -242,7 +256,14 @@ struct AccessoryReading {
             // NUMBER never lies about it.
             progress = b.map { Double($0) / 100 }
             title = "Battery \(b.map { "\($0)%" } ?? dash)"
-            sub = t?.score.map { "Score \($0)" } ?? "No score yet"
+            // ── THE WORD, NOT JUST THE NUMBER (W4) ─────────────────────
+            // It read "Score 81". Alone in a corner of a watch face that is
+            // fine; stacked on the dashboard's Today page under "Battery
+            // 72%" and above "Sleep 7h25m / score 58" it is two bare numbers
+            // in two rows, differing in CASE, neither saying what it scores.
+            // The row below them ("Stress 42 / Baseline") is the pattern: a
+            // caption that says what the hero means.
+            sub = t?.score.map { "Readiness \($0)" } ?? "No score yet"
             inline = "Battery \(b.map { "\($0)%" } ?? dash)"
             accent = Color.onyx.battery(b)
 
@@ -267,9 +288,50 @@ struct AccessoryReading {
             hero = left.map { "\($0)" } ?? dash
             progress = WatchTiles.progress(t?.kcal, t?.kcalGoal)
             title = left.map { "\($0) kcal left" } ?? "No intake yet"
-            sub = t?.kcal.map { "\($0) of \(t?.kcalGoal.map { "\($0)" } ?? dash)" } ?? dash
+            // ── THE SECOND LINE IS PROTEIN WHEN THERE IS ONE (W4) ───────────
+            // It was "1640 of 2150" — the two numbers the line above has
+            // already subtracted for you, which is the same fact said twice
+            // on a face that has exactly two lines. Protein left is the other
+            // half of the question "what do I still have to eat", it is the
+            // one the Fuel page is read for, and it costs no room.
+            //
+            // Falls back to the old line when the phone sent no protein: an
+            // older build, or a day with no target. Never "0 g left" — a goal
+            // that does not exist has nothing left against it.
+            sub = t?.proteinRemaining.map { "\($0) g protein to go" }
+                ?? t?.kcal.map { "\($0) of \(t?.kcalGoal.map { "\($0)" } ?? dash)" }
+                ?? dash
             inline = title
             accent = OnyxDomain.fuel.accent
+
+        case .volume:
+            // ── NOT A COMPLICATION, AND THAT IS WHY IT IS NOT IN `wearable` ─
+            // The watch's Train dashboard page draws this face; no watch FACE
+            // does. `wearable` is the ten ids that get a `StaticConfiguration`
+            // in the bundle, which is a shorter list than the ids this type
+            // can answer — see that property's own note.
+            let sets = t?.weekSets
+            let kg = t?.weekVolumeKg
+            glyph = "chart.bar.fill"
+            // Tonnes to one place. "12.4t" fits a rectangular headline where
+            // "12 430 kg" does not, and a week's tonnage is not a figure
+            // anybody reads to the kilogram.
+            hero = kg.map { String(format: "%.1ft", $0 / 1000) } ?? dash
+            // No goal on the wire, so no ring. A fraction invented here would
+            // be decoration claiming to be a measurement — the rule this
+            // file's header states about `circular`.
+            progress = nil
+            // ── THE UNIT STAYS TERMINAL ─────────────────────────────────────
+            // It read "12.4 t this week", which puts a single letter between
+            // a decimal and a word: "t this" reads as one cluster and the
+            // unit stops being the end of the number. The qualifier belongs
+            // on the caption, where the face has a whole second line for it.
+            title = kg.map { "\(String(format: "%.1f", $0 / 1000)) t" } ?? "No volume yet"
+            // Zero sets in a week that has started is a real reading, unlike
+            // a zero tonnage — so this one prints its number.
+            sub = sets.map { "\($0) sets this week" } ?? dash
+            inline = kg.map { "Week \(String(format: "%.1f", $0 / 1000)) t" } ?? "Volume —"
+            accent = OnyxDomain.train.accent
 
         case .water:
             let ml = t?.waterMl
