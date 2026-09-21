@@ -71,12 +71,19 @@ xcrun simctl bootstatus "$UDID" -b >/dev/null
 # project and fails on an asset that does not exist.
 echo "Building…"
 (cd "$ROOT/native" && xcodegen generate >/dev/null)
+# `SHOT_SIGN=1` signs ad hoc so the entitlements are EMBEDDED (W5). An
+# unsigned simulator build carries none, and HealthKit refuses every call
+# without `com.apple.developer.healthkit` — so the `telemetry-*` screens,
+# which read the simulator's real Health store, photographed nothing. The
+# default stays unsigned: every other screen needs no entitlement.
+SIGNING=(CODE_SIGNING_ALLOWED=NO)
+if [ -n "${SHOT_SIGN:-}" ]; then SIGNING=(CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-); fi
 xcodebuild -project "$ROOT/native/Onyx.xcodeproj" \
   -scheme Onyx \
   -configuration Debug \
   -destination "id=$UDID" \
   -derivedDataPath "$DERIVED" \
-  CODE_SIGNING_ALLOWED=NO \
+  "${SIGNING[@]}" \
   build >/dev/null
 
 APP="$DERIVED/Build/Products/Debug-iphonesimulator/Onyx.app"
@@ -120,10 +127,15 @@ shoot() {
   # photographs Ion under whatever filename you asked for.
   # It is a launch argument, so it dies with the process and cannot leave the
   # simulator's container holding a colour the next run would inherit.
+  # `telemetry-*` read the simulator's REAL Health store, so they seed it
+  # first (`TelemetrySeed`, W5). The first run shows a permission sheet that
+  # has to be tapped once ("Turn On All"); after that the grant persists.
+  local seed=()
+  case "$screen" in telemetry-*) seed=(--onyx-telemetry-seed) ;; esac
   if [ -n "${SHOT_THEME:-}" ]; then
-    xcrun simctl launch "$UDID" "$BUNDLE_ID" --onyx-screen "$screen" --onyx-theme "$SHOT_THEME" >/dev/null
+    xcrun simctl launch "$UDID" "$BUNDLE_ID" --onyx-screen "$screen" --onyx-theme "$SHOT_THEME" "${seed[@]}" >/dev/null
   else
-    xcrun simctl launch "$UDID" "$BUNDLE_ID" --onyx-screen "$screen" >/dev/null
+    xcrun simctl launch "$UDID" "$BUNDLE_ID" --onyx-screen "$screen" "${seed[@]}" >/dev/null
   fi
   # The launch returns as soon as the process exists; the first frame is a
   # few hundred ms later. Shooting too early photographs the launch screen —
@@ -141,7 +153,7 @@ read -ra SCREENS <<< "$SCREEN"
 if [ "$SCREEN" = "all" ]; then
   # Keep in step with `PreviewHarness.Screen` — the harness is the authority and
   # an unknown name there renders a visible error rather than failing silently.
-  SCREENS=(signin backfill today today-mega today-edit today-edit-still today-sheet today-sheet-vitals today-sheet-steps today-sheet-muscle today-sheet-records today-stack-linked today-weighin today-board train train-done train-pending train-cardio train-empty train-monday train-past train-past-open train-customize train-customized mini-player logger logger-stats logger-lifts logger-paused logger-finish logger-timer logger-rest set-row set-row-split set-row-cardio set-row-records set-options effort-picker day day-rows day-past day-session day-two day-empty day-stress day-edit day-soreness day-hero pulse-squares pulse-squares-evening pulse-squares-empty sleep-edit stress stress-log stress-day fatigue quick-log scale scale-first day-swap doms stack stack-add fuel fuel-over fuel-empty fuel-calendar nutrients macro-edit you levers sync-status sync-doctor plan body volume library exercise reports report report-edit history history-week session session-ledger session-margin session-records session-pairs session-cardio exercise-history trends trends-empty body-trends body-trends-empty body-trends-stress appearance appearance-locked widgets)
+  SCREENS=(signin backfill today today-mega today-edit today-edit-still today-sheet today-sheet-vitals today-sheet-steps today-sheet-muscle today-sheet-records today-stack-linked today-weighin today-board train train-done train-pending train-cardio train-empty train-monday train-past train-past-open train-customize train-customized mini-player logger logger-stats logger-lifts logger-paused logger-finish logger-timer logger-rest telemetry-finish telemetry-detail hevy-card set-row set-row-split set-row-cardio set-row-records set-options effort-picker day day-rows day-past day-session day-two day-empty day-stress day-edit day-soreness day-hero pulse-squares pulse-squares-evening pulse-squares-empty sleep-edit stress stress-log stress-day fatigue quick-log scale scale-first day-swap doms stack stack-add fuel fuel-over fuel-empty fuel-calendar nutrients macro-edit you levers sync-status sync-doctor plan body volume library exercise reports report report-edit history history-week session session-ledger session-margin session-records session-pairs session-cardio exercise-history trends trends-empty body-trends body-trends-empty body-trends-stress appearance appearance-locked widgets)
 fi
 
 # `widgets` is a contact sheet of every tile; the harness pages it because a

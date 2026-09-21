@@ -169,6 +169,38 @@ extension LoggerModel {
         return (model, store)
     }
 
+    /// The finish-sheet fixture, re-timed for the heart-rate chart (W5).
+    ///
+    /// `previewUpperBWithHistory` logs its nine sets in one instant, which is
+    /// nine commits at the same second and a chart with one segment and eight
+    /// empty ones. This spreads them over the last forty minutes — the session
+    /// starts 46 minutes ago, the first commit at +4, the last at +38 — so the
+    /// segments the `TelemetrySeed`'s series is cut into have widths. Timestamps
+    /// are the only thing rewritten; the fold order, the loads and the store
+    /// are the fixture's own. `closed` also ends the session three minutes
+    /// ago, which is what `SessionDetailView` needs to open on it.
+    static func previewTelemetry(closed: Bool) -> (model: LoggerModel, store: AppDatabase) {
+        let fixture = previewUpperBWithHistory()
+        guard let sessionId = fixture.model.sessionId else { return fixture }
+        let start = Date().addingTimeInterval(-46 * 60)
+        let appends = ((try? fixture.store.setEvents(sessionId: sessionId)) ?? []).filter { $0.kind == .append }
+        try? fixture.store.seedRows { db in
+            try db.execute(sql: "UPDATE workout_sessions SET started_at = ? WHERE id = ?", arguments: [start, sessionId])
+            let span = 34.0 * 60
+            for (i, event) in appends.enumerated() {
+                let at = start.addingTimeInterval(4 * 60 + span * Double(i) / Double(max(1, appends.count - 1)))
+                try db.execute(sql: "UPDATE set_events SET created_at = ? WHERE id = ?", arguments: [at, event.id])
+            }
+            if closed {
+                try db.execute(
+                    sql: "UPDATE workout_sessions SET ended_at = ?, duration_min = 41 WHERE id = ?",
+                    arguments: [start.addingTimeInterval(43 * 60), sessionId]
+                )
+            }
+        }
+        return fixture
+    }
+
     /// Tick a run of sets on one movement, exactly as the UI would.
     ///
     /// It calls `toggleDone` rather than setting `isDone`, so a preview

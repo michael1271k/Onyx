@@ -1384,6 +1384,27 @@ public final class AppDatabase: Sendable {
                 ifNotExists: true)
         }
 
+        // ── v34: the post-workout heart-rate cache (Expansion W5) ───────────
+        // LOCAL ONLY, like `set_events`: decision 10 — the series is read
+        // from Health at view time and never synced, and this row is what
+        // stops a second open of the same session asking Health twice. No
+        // outbox kind names it and no puller fills it; `eraseLocalData` finds
+        // it through `sqlite_master` like every other table. `samples_json`
+        // is nullable because the Hevy decision (`hevy_decision`) lives on
+        // the same row and can land before any sample has: a null series is
+        // a cache MISS, not an empty series — an empty read is never cached.
+        migrator.registerMigration("v34.sessionTelemetry") { db in
+            try db.create(table: "session_telemetry", ifNotExists: true) { t in
+                t.primaryKey("session_id", .text)
+                    .references("workout_sessions", onDelete: .cascade)
+                t.column("samples_json", .blob)
+                t.column("segments_json", .blob)
+                t.column("source", .text)
+                t.column("fetched_at", .datetime)
+                t.column("hevy_decision", .text)
+            }
+        }
+
         return migrator
     }
 }

@@ -1,0 +1,16 @@
+{
+  "module": "sessions/workout-provenance",
+  "fn": "WorkoutProvenance.origin",
+  "note": "Expansion W5. Own is the bundle id or a nested target of it in either direction; nil is foreign, never own.",
+  "cases": [
+    { "name": "the phone app's own bundle", "input": { "sourceBundleId": "app.onyx.health.michael.native", "sourceName": "Onyx", "ownBundleId": "app.onyx.health.michael.native" }, "expected": { "kind": "own" } },
+    { "name": "the watch app, read from the phone", "input": { "sourceBundleId": "app.onyx.health.michael.native.watchkitapp", "sourceName": "Onyx", "ownBundleId": "app.onyx.health.michael.native" }, "expected": { "kind": "own" } },
+    { "name": "the phone app, read from the watch", "input": { "sourceBundleId": "app.onyx.health.michael.native", "sourceName": "Onyx", "ownBundleId": "app.onyx.health.michael.native.watchkitapp" }, "expected": { "kind": "own" } },
+    { "name": "Hevy", "input": { "sourceBundleId": "com.hevy.app", "sourceName": "Hevy", "ownBundleId": "app.onyx.health.michael.native" }, "expected": { "kind": "foreign", "name": "Hevy" } },
+    { "name": "a foreign source with no display name is named by its bundle", "input": { "sourceBundleId": "io.strong.app", "sourceName": null, "ownBundleId": "app.onyx.health.michael.native" }, "expected": { "kind": "foreign", "name": "io.strong.app" } },
+    { "name": "no bundle id at all is foreign, never own", "input": { "sourceBundleId": null, "sourceName": null, "ownBundleId": "app.onyx.health.michael.native" }, "expected": { "kind": "foreign", "name": "Unknown" } },
+    { "name": "no bundle id but a name keeps the name", "input": { "sourceBundleId": null, "sourceName": "Strong", "ownBundleId": "app.onyx.health.michael.native" }, "expected": { "kind": "foreign", "name": "Strong" } },
+    { "name": "a sibling prefix is not a nested target", "input": { "sourceBundleId": "app.onyx.health.michael.nativeX", "sourceName": null, "ownBundleId": "app.onyx.health.michael.native" }, "expected": { "kind": "foreign", "name": "app.onyx.health.michael.nativeX" } },
+    { "name": "an empty own bundle id owns nothing", "input": { "sourceBundleId": "app.onyx.health.michael.native", "sourceName": "Onyx", "ownBundleId": "" }, "expected": { "kind": "foreign", "name": "Onyx" } }
+  ]
+}

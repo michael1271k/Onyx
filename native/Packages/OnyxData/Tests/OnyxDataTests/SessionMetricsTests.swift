@@ -52,8 +52,20 @@ struct SessionMetricsTests {
         return session
     }
 
+    /// The app's own bundle id, as the test names it. A double's workout with
+    /// no `sourceBundleId` is FOREIGN (W5) — so every "the watch's own
+    /// workout" case below says whose it is.
+    private static let own = "app.onyx.test"
+    private func ownWorkout(_ s: WorkoutSession, startOffset: TimeInterval = 0, endOffset: TimeInterval = 0) -> WorkoutSample {
+        .init(start: s.startedAt!.addingTimeInterval(startOffset), end: s.endedAt!.addingTimeInterval(endOffset),
+              isLifting: true, sourceBundleId: Self.own, sourceName: "Onyx")
+    }
+    private func hevyWorkout(_ s: WorkoutSession) -> WorkoutSample {
+        .init(start: s.startedAt!, end: s.endedAt!, isLifting: true, sourceBundleId: "com.hevy.app", sourceName: "Hevy")
+    }
+
     private func sync(_ db: AppDatabase, _ reader: any HealthReading) async throws -> Int {
-        try await HealthSync(database: db, reader: reader, userId: user)
+        try await HealthSync(database: db, reader: reader, userId: user, ownBundleId: Self.own)
             .syncSessionMetrics(now: now, calendar: calendar)
     }
 
@@ -62,9 +74,7 @@ struct SessionMetricsTests {
         let db = try store()
         let s = try seed(db, id: "s1", daysAgo: 1)
         // The watch was started three minutes late and stopped two early.
-        let watch = Watch(workouts: [
-            .init(start: s.startedAt!.addingTimeInterval(180), end: s.endedAt!.addingTimeInterval(-120), isLifting: true),
-        ])
+        let watch = Watch(workouts: [ownWorkout(s, startOffset: 180, endOffset: -120)])
         #expect(try await sync(db, watch) == 1)
 
         let row = try #require(try db.session(id: "s1"))
@@ -82,11 +92,69 @@ struct SessionMetricsTests {
     func nonLiftingWorkoutIgnored() async throws {
         let db = try store()
         let s = try seed(db, id: "s1", daysAgo: 1)
-        let watch = Watch(workouts: [.init(start: s.startedAt!, end: s.endedAt!, isLifting: false)])
+        var run = ownWorkout(s); run.isLifting = false
+        let watch = Watch(workouts: [run])
         _ = try await sync(db, watch)
         let row = try #require(try db.session(id: "s1"))
         #expect(row.avgBpm == nil, "no measurement, and nothing to carry forward")
         #expect(row.caloriesBurned == nil, "no samples and no bodyweight: neither rule can fire")
+    }
+
+    // ── W5: provenance ──────────────────────────────────────────────────────
+
+    @Test("a Hevy workout overlapping the session is never adopted as the measurement")
+    func foreignWorkoutNotAdopted() async throws {
+        let db = try store()
+        let s = try seed(db, id: "s1", daysAgo: 1)
+        // Only Hevy's record overlaps. Before W5 this was `.first(where:
+        // \.isLifting)` and Hevy's 132 bpm landed here stamped measured.
+        _ = try await sync(db, Watch(workouts: [hevyWorkout(s)]))
+        let row = try #require(try db.session(id: "s1"))
+        #expect(row.avgBpm == nil, "no own workout, no measured heart rate")
+        #expect(row.caloriesBurned == nil, "and no samples to estimate from either")
+        #expect(row.avgBpmEstimated == false && row.caloriesEstimated == false)
+    }
+
+    @Test("a Hevy workout beside an estimate leaves the estimate standing")
+    func foreignWorkoutLeavesEstimate() async throws {
+        let db = try store()
+        let s = try seed(db, id: "s1", daysAgo: 1, avgBpm: 118, kcal: 400, bpmEstimated: true, kcalEstimated: true)
+        #expect(try await sync(db, Watch(workouts: [hevyWorkout(s)])) == 0)
+        let row = try #require(try db.session(id: "s1"))
+        #expect(row.avgBpm == 118 && row.avgBpmEstimated, "still the estimate, still flagged")
+        #expect(row.caloriesBurned == 400 && row.caloriesEstimated)
+    }
+
+    @Test("our own workout wins over Hevy's, whichever Health lists first")
+    func ownWinsOverForeign() async throws {
+        let db = try store()
+        let s = try seed(db, id: "s1", daysAgo: 1)
+        let watch = Watch(workouts: [hevyWorkout(s), ownWorkout(s, startOffset: 60, endOffset: -60)], bpm: 140)
+        #expect(try await sync(db, watch) == 1)
+        let row = try #require(try db.session(id: "s1"))
+        #expect(row.avgBpm == 140 && row.avgBpmEstimated == false)
+        #expect(row.caloriesBurned == 464, "8 kcal/min over OUR workout's 58 minutes, not Hevy's 60")
+    }
+
+    @Test("the phone's own estimated energy is not read back as a measurement")
+    func estimatedEnergyNotLaundered() async throws {
+        let db = try store()
+        let s = try seed(db, id: "s1", daysAgo: 1)
+        var own = ownWorkout(s); own.energyEstimated = true
+        _ = try await sync(db, Watch(workouts: [own]))
+        let row = try #require(try db.session(id: "s1"))
+        #expect(row.avgBpm == 132 && row.avgBpmEstimated == false, "the rate is still the watch's")
+        #expect(row.caloriesBurned == nil, "the energy on that workout is Onyx's own estimate: no samples, no bodyweight, nothing to write")
+        #expect(row.caloriesEstimated == false)
+    }
+
+    @Test("a workout with no source at all is foreign, never own")
+    func unsourcedIsForeign() async throws {
+        let db = try store()
+        let s = try seed(db, id: "s1", daysAgo: 1)
+        _ = try await sync(db, Watch(workouts: [.init(start: s.startedAt!, end: s.endedAt!, isLifting: true)]))
+        let row = try #require(try db.session(id: "s1"))
+        #expect(row.avgBpm == nil, "a reader that cannot say whose it is does not get to call it ours")
     }
 
     @Test("without a workout, calories come from the personal median and heart rate from the last measured session")
@@ -136,10 +204,7 @@ struct SessionMetricsTests {
         let db = try store()
         let s = try seed(db, id: "s1", daysAgo: 1, avgBpm: 118, kcal: 400, bpmEstimated: true, kcalEstimated: true)
         let measured = try seed(db, id: "s2", daysAgo: 2, avgBpm: 140, kcal: 600)
-        let watch = Watch(workouts: [
-            .init(start: s.startedAt!, end: s.endedAt!, isLifting: true),
-            .init(start: measured.startedAt!, end: measured.endedAt!, isLifting: true),
-        ], bpm: 131, kcalPerMinute: 10)
+        let watch = Watch(workouts: [ownWorkout(s), ownWorkout(measured)], bpm: 131, kcalPerMinute: 10)
         #expect(try await sync(db, watch) == 1, "only the estimated one is a candidate")
 
         let upgraded = try #require(try db.session(id: "s1"))
@@ -155,7 +220,7 @@ struct SessionMetricsTests {
         try seed(db, id: "old", daysAgo: 20)
         let open = WorkoutSession(id: "open", userId: user, dayKey: "legs_a", date: "2026-09-04", startedAt: now)
         try await db.writer.write { conn in try open.insert(conn) }
-        let watch = Watch(workouts: [.init(start: now.addingTimeInterval(-86_400 * 30), end: now, isLifting: true)])
+        let watch = Watch(workouts: [.init(start: now.addingTimeInterval(-86_400 * 30), end: now, isLifting: true, sourceBundleId: Self.own)])
         #expect(try await sync(db, watch) == 0)
     }
 

@@ -1,0 +1,79 @@
+{
+  "module": "sessions/hr-segments",
+  "fn": "HRSegments.build + HRSegments.summary",
+  "note": "Expansion W5. Seconds from the session's start. A movement's segment is [previous run's last commit, its own last commit), split by the pause ledger (first pause opens, resume closes, an open pause closes at the session's end); pieces are half-open; a sample on a boundary belongs to the segment that begins there. avg is Math.round of the mean. Hand-computed.",
+  "samples": [
+    { "at": 0, "bpm": 90 }, { "at": 60, "bpm": 91 }, { "at": 120, "bpm": 92 }, { "at": 180, "bpm": 93 }, { "at": 240, "bpm": 94 },
+    { "at": 300, "bpm": 95 }, { "at": 360, "bpm": 96 }, { "at": 420, "bpm": 97 }, { "at": 480, "bpm": 98 }, { "at": 540, "bpm": 99 },
+    { "at": 600, "bpm": 110 }, { "at": 660, "bpm": 112 }, { "at": 720, "bpm": 130 }, { "at": 780, "bpm": 135 },
+    { "at": 840, "bpm": 120 }, { "at": 900, "bpm": 124 }, { "at": 960, "bpm": 128 }, { "at": 1020, "bpm": 132 }, { "at": 1080, "bpm": 128 }, { "at": 1140, "bpm": 124 },
+    { "at": 1200, "bpm": 118 }, { "at": 1260, "bpm": 112 }, { "at": 1320, "bpm": 104 }, { "at": 1380, "bpm": 98 }, { "at": 1440, "bpm": 94 }
+  ],
+  "cases": [
+    {
+      "name": "two movements, a pause inside the second",
+      "input": {
+        "sessionStart": 0, "sessionEnd": 1500,
+        "markers": [
+          { "kind": "set", "exerciseId": "A", "at": 300 }, { "kind": "set", "exerciseId": "A", "at": 600 },
+          { "kind": "pause", "at": 700 }, { "kind": "resume", "at": 820 },
+          { "kind": "set", "exerciseId": "B", "at": 1000 }, { "kind": "set", "exerciseId": "B", "at": 1200 }
+        ]
+      },
+      "expected": {
+        "segments": [
+          { "exerciseId": "A", "start": 0, "end": 600, "avgBpm": 95, "maxBpm": 99, "continues": false },
+          { "exerciseId": "B", "start": 600, "end": 700, "avgBpm": 111, "maxBpm": 112, "continues": false },
+          { "exerciseId": "B", "start": 820, "end": 1200, "avgBpm": 126, "maxBpm": 132, "continues": true }
+        ],
+        "summary": { "avgBpm": 106, "maxBpm": 132 }
+      }
+    },
+    {
+      "name": "no markers: no segments, the whole series is the summary",
+      "input": { "sessionStart": 0, "sessionEnd": 1500, "markers": [] },
+      "expected": { "segments": [], "summary": { "avgBpm": 109, "maxBpm": 135 } }
+    },
+    {
+      "name": "a pause never resumed closes at the session's end and leaves the summary",
+      "input": {
+        "sessionStart": 0, "sessionEnd": 1500,
+        "markers": [
+          { "kind": "set", "exerciseId": "A", "at": 300 }, { "kind": "set", "exerciseId": "A", "at": 600 },
+          { "kind": "pause", "at": 700 }, { "kind": "resume", "at": 820 },
+          { "kind": "set", "exerciseId": "B", "at": 1000 }, { "kind": "set", "exerciseId": "B", "at": 1200 },
+          { "kind": "pause", "at": 1300 }
+        ]
+      },
+      "expected": {
+        "segments": [
+          { "exerciseId": "A", "start": 0, "end": 600, "avgBpm": 95, "maxBpm": 99, "continues": false },
+          { "exerciseId": "B", "start": 600, "end": 700, "avgBpm": 111, "maxBpm": 112, "continues": false },
+          { "exerciseId": "B", "start": 820, "end": 1200, "avgBpm": 126, "maxBpm": 132, "continues": true }
+        ],
+        "summary": { "avgBpm": 108, "maxBpm": 132 }
+      }
+    },
+    {
+      "name": "a run wholly inside a pause is dropped; a commit past the end clamps to it; a double pause opens once",
+      "input": {
+        "sessionStart": 0, "sessionEnd": 1500,
+        "markers": [
+          { "kind": "set", "exerciseId": "A", "at": 300 },
+          { "kind": "pause", "at": 350 }, { "kind": "pause", "at": 380 },
+          { "kind": "set", "exerciseId": "A", "at": 400 },
+          { "kind": "set", "exerciseId": "B", "at": 500 },
+          { "kind": "resume", "at": 900 },
+          { "kind": "set", "exerciseId": "C", "at": 2000 }
+        ]
+      },
+      "expected": {
+        "segments": [
+          { "exerciseId": "A", "start": 0, "end": 350, "avgBpm": 93, "maxBpm": 95, "continues": false },
+          { "exerciseId": "C", "start": 900, "end": 1500, "avgBpm": 116, "maxBpm": 132, "continues": false }
+        ],
+        "summary": { "avgBpm": 107, "maxBpm": 132 }
+      }
+    }
+  ]
+}

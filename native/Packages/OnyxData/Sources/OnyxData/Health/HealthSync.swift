@@ -17,11 +17,18 @@ public actor HealthSync {
     let database: AppDatabase
     let reader: any HealthReading
     let userId: String
+    /// What `WorkoutProvenance` calls "own" (Expansion W5). The running
+    /// process's bundle id in the app; a test names its own.
+    let ownBundleId: String
 
-    public init(database: AppDatabase, reader: any HealthReading, userId: String) {
+    public init(
+        database: AppDatabase, reader: any HealthReading, userId: String,
+        ownBundleId: String = Bundle.main.bundleIdentifier ?? ""
+    ) {
         self.database = database
         self.reader = reader
         self.userId = userId
+        self.ownBundleId = ownBundleId
     }
 
     /// Ask for permission. Safe to call on every launch: after the first, iOS

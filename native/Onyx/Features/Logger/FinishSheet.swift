@@ -1,6 +1,7 @@
 import SwiftUI
 import OnyxUI
 import OnyxCore
+import OnyxData
 
 /// How the session ends.
 ///
@@ -32,6 +33,13 @@ struct FinishSheet: View {
     let model: LoggerModel
     /// Returns false when there was nothing to finish; the sheet stays up.
     let onFinish: (Double?) -> Bool
+    /// Screenshot harness only: a foreign workout handed in instead of read
+    /// from Health. A Hevy-tagged `HKWorkout` cannot be seeded on a simulator
+    /// — the writer IS the source — so the compare card is proven with a
+    /// fixture here and the predicate with its golden vector.
+    #if DEBUG
+    var foreignFixture: WorkoutSample? = nil
+    #endif
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -80,6 +88,9 @@ struct FinishSheet: View {
     /// (W10). `@State` for the reason the three figures above are: it is a
     /// store read, and a read in `body` runs once per frame.
     @State private var trail: [Double] = []
+    /// A FOREIGN strength workout overlapping this session — Hevy's record of
+    /// it (W5, decision 7). Nil once answered, or when there is none.
+    @State private var foreign: WorkoutSample?
     @FocusState private var editing: Metric?
 
     private enum Metric: Hashable { case duration, bpm, calories }
@@ -100,6 +111,14 @@ struct FinishSheet: View {
                 VStack(spacing: OnyxSpace.l) {
                     dial
                     summary
+                    if let foreign { hevy(foreign) }
+                    if let sessionId = model.sessionId, !model.isEditing {
+                        TelemetryCard(
+                            sessionId: sessionId,
+                            storedAvgBpm: bpmMeasured ? avgBpm : nil,
+                            kcal: calories
+                        )
+                    }
                     shape
                     if !topMovement.isEmpty { heaviest }
                     if let sessionId = model.sessionId { summaryLink(sessionId) }
@@ -136,6 +155,7 @@ struct FinishSheet: View {
                 loadMetrics()
                 loadSuggestion()
                 trail = model.tonnageTrail()
+                await loadForeign()
             }
         }
         .presentationDetents([.medium, .large], selection: $detent)
@@ -274,6 +294,57 @@ struct FinishSheet: View {
             }
             provenanceLine
         }
+    }
+
+    // MARK: - Hevy logged this too (W5)
+
+    /// Read once the sheet is up, after the store's own figures. A decision
+    /// already recorded for this session (the card was shown on a previous
+    /// open, or on the summary page) keeps the card down.
+    private func loadForeign() async {
+        guard let session = model.sessionRow, !model.isEditing else { return }
+        if await environment.telemetry.hevyDecision(sessionId: session.id) != nil { return }
+        #if DEBUG
+        if let foreignFixture { foreign = foreignFixture; return }
+        #endif
+        foreign = await environment.foreignWorkout(for: session)
+    }
+
+    private func hevy(_ workout: WorkoutSample) -> some View {
+        HevyCompareCard(
+            onyx: .init(
+                avgBpm: avgBpm, kcal: calories, durationMin: durationMin, sets: model.completedSets,
+                bpmMeasured: bpmMeasured, kcalMeasured: caloriesMeasured
+            ),
+            hevy: workout,
+            onSkip: {
+                // Onyx's numbers stand. Nothing is written — not to the row,
+                // not to Health — and the answer is remembered on the local
+                // telemetry row so the summary page does not ask again.
+                if let id = model.sessionId {
+                    Task { await environment.telemetry.setHevyDecision(sessionId: id, .skip) }
+                }
+                withAnimation(OnyxMotion.fade) { foreign = nil }
+            },
+            onUse: {
+                // The two figures the phone could not measure, adopted as the
+                // athlete's answer: `setMetrics` stamps them measured, the
+                // same way a typed correction is, so a later Health sync
+                // cannot replace them with an estimate. Health itself is not
+                // touched; Hevy's workout stays Hevy's.
+                // Only the figures the phone could NOT measure: a typed
+                // answer, or the watch's own reading, is never replaced.
+                let bpm = bpmMeasured ? nil : workout.avgHr.map { Int(jsRound($0)) }
+                let kcal = caloriesMeasured ? nil : workout.activeKcal.map { Int(jsRound($0)) }
+                model.setMetrics(avgBpm: bpm, calories: kcal)
+                if let bpm { avgBpm = bpm; bpmMeasured = true; prefilled.remove(.bpm) }
+                if let kcal { calories = kcal; caloriesMeasured = true; prefilled.remove(.calories) }
+                if let id = model.sessionId {
+                    Task { await environment.telemetry.setHevyDecision(sessionId: id, .use) }
+                }
+                withAnimation(OnyxMotion.fade) { foreign = nil }
+            }
+        )
     }
 
     // MARK: - The shape of it

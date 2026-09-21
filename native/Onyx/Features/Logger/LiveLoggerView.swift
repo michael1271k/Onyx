@@ -790,9 +790,14 @@ struct LiveLoggerView: View {
     /// existed. Now the sheet stays up and the banner has somewhere to appear.
     private func finish(sessionRpe: Double?) -> Bool {
         if model.isEditing { return finishEdit(sessionRpe: sessionRpe) }
+        let finished = model.sessionId
         guard model.finish(sessionRpe: sessionRpe) else { return false }
         model.stopRest()
         activity.end()
+        // The phone's own `HKWorkout` when the watch did not run this one,
+        // and the heart-rate prefetch (W5). Off the main actor, after the
+        // row is closed, and nothing here waits for it.
+        if let finished { environment?.sessionFinished(sessionId: finished) }
         dismiss()
         return true
     }

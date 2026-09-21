@@ -316,6 +316,59 @@ enum LoggerPreviews {
             }
             .environment(LoggerPreviews.environment(over: finishing.store))
             .preferredColorScheme(.dark)
+        // ── W5: the heart-rate chart and the Hevy card ──────────────────────
+        // `telemetry-*` run the DEBUG seed first (`TelemetrySeedGate`), so
+        // the chart is a real read of the simulator's Health store and not a
+        // fixture drawn to look like one. `hevy-card` is the one screen that
+        // IS a fixture, for the reason `FinishSheet.foreignFixture` gives.
+        case "telemetry-finish":
+            let finishing = LoggerModel.previewTelemetry(closed: false)
+            // The catalogue rows, so "View summary" from this sheet opens on
+            // the page rather than on "Session not found" — the same seed
+            // `telemetry-detail` needs, for the same reason.
+            let _ = PreviewCatalogue.seed(finishing.store)
+            TelemetrySeedGate {
+                NavigationStack {
+                    LiveLoggerView(model: finishing.model)
+                        .sheet(isPresented: .constant(true)) {
+                            FinishSheet(model: finishing.model, onFinish: { _ in true })
+                        }
+                }
+            }
+            .environment(LoggerPreviews.environment(over: finishing.store))
+            .preferredColorScheme(.dark)
+        case "telemetry-detail":
+            let closed = LoggerModel.previewTelemetry(closed: true)
+            // `SessionAnalysis.page` resolves the store's owner from the
+            // catalogue rows (`localUserId`), which the logger fixture does
+            // not seed — without them the page answers "Session not found".
+            let _ = PreviewCatalogue.seed(closed.store)
+            let environment = LoggerPreviews.environment(over: closed.store)
+            let sessionId = closed.model.sessionId ?? ""
+            // The production path: a finish PREFETCHES the series into the
+            // cache (`AppEnvironment.sessionFinished`), and the page then
+            // opens on the cache row — which is what this screen photographs
+            // and what the log line "telemetry cache hit" proves.
+            TelemetrySeedGate(then: { await environment.telemetry.prefetch(sessionId: sessionId) }) {
+                NavigationStack {
+                    SessionDetailView(sessionId: sessionId)
+                }
+            }
+            .environment(environment)
+            .preferredColorScheme(.dark)
+        case "hevy-card":
+            let compared = LoggerModel.previewUpperBWithHistory()
+            NavigationStack {
+                LiveLoggerView(model: compared.model)
+                    .sheet(isPresented: .constant(true)) {
+                        FinishSheet(
+                            model: compared.model, onFinish: { _ in true },
+                            foreignFixture: .previewHevy(over: compared.model.sessionRow?.startedAt ?? Date())
+                        )
+                    }
+            }
+            .environment(LoggerPreviews.environment(over: compared.store))
+            .preferredColorScheme(.dark)
         case "logger-stats":
             // The second face. Shot with a session mid-flight for the same
             // reason the first is: an empty Live Stats page is five cards of
@@ -362,6 +415,29 @@ enum LoggerPreviews {
             }
             .environment(AppEnvironment.preview)
             .preferredColorScheme(.dark)
+        }
+    }
+}
+
+/// Runs `TelemetrySeed` before its content appears, when the launch asked for
+/// it — so the first Health read the content makes finds the series there.
+/// Without the argument it is the content and nothing else.
+private struct TelemetrySeedGate<Content: View>: View {
+    /// Runs after the seed and before the content — the finish's prefetch.
+    var then: (@Sendable () async -> Void)? = nil
+    @ViewBuilder let content: () -> Content
+    @State private var ready = !TelemetrySeed.requested
+
+    var body: some View {
+        if ready {
+            content()
+        } else {
+            ProgressView("Seeding Health…")
+                .task {
+                    await TelemetrySeed.run()
+                    await then?()
+                    ready = true
+                }
         }
     }
 }

@@ -381,9 +381,71 @@ public final class AppEnvironment {
     /// The pending throttled watch push, if any. See `scheduleWatchPush`.
     private var watchPush: Task<Void, Never>?
 
+    /// The post-workout heart-rate reader (Expansion W5, decision 10): Health
+    /// at view time, a local cache row after the first non-empty read, and a
+    /// ten-minute ear for the watch's late samples after a finish.
+    let telemetry: SessionTelemetry
+    /// Moves when a late refetch fills a session's cache. The telemetry card
+    /// keys its `.task` on it, so a chart that opened empty draws the series
+    /// the moment it lands — and nothing else re-renders for it.
+    private(set) var telemetryGeneration = 0
+    /// Sessions `sessionFinished` has already handled this launch.
+    private var finishedSessions: Set<String> = []
+
     public init(database: AppDatabase, supabase: SupabaseClient) {
         self.database = database
         self.supabase = supabase
+        let telemetry = SessionTelemetry(database: database, reader: Self.healthReader)
+        self.telemetry = telemetry
+        Task { [weak self] in
+            await telemetry.setOnLateArrival { _ in
+                Task { @MainActor in self?.telemetryGeneration &+= 1 }
+            }
+        }
+    }
+
+    /// The FOREIGN strength workout overlapping a session, if Health holds
+    /// one — a Hevy log of the same hour. Decision 7's card is drawn from
+    /// this and nothing is adopted until its second button is tapped.
+    func foreignWorkout(for session: WorkoutSession) async -> WorkoutSample? {
+        guard let start = session.startedAt, let end = session.endedAt, end > start else { return nil }
+        return await Self.healthReader
+            .liftingOverlap(start: start, end: end, ownBundleId: Bundle.main.bundleIdentifier ?? "")
+            .foreign
+    }
+
+    /// After a phone finish (Expansion W5): the phone's own `HKWorkout` when
+    /// nobody else wrote one (`WorkoutWriter.decide`, decisions 8 and 9),
+    /// then the telemetry prefetch. Detached and unawaited — the sheet has
+    /// already been dismissed, and neither write is anything a screen waits
+    /// on. Errors are HealthKit refusals and are dropped: the session row is
+    /// the record, the workout is a courtesy to the rings.
+    func sessionFinished(sessionId: String) {
+        // Once per session per launch: a second Finish tap during the
+        // dismiss animation reaches here again, and two detached decisions
+        // would both see "no workout yet" and write two.
+        guard finishedSessions.insert(sessionId).inserted else { return }
+        let database = self.database, telemetry = self.telemetry, userId = userIdString
+        // The wrist starts its `HKWorkoutSession` when it mirrors a phone
+        // session and sends its rate up — a bpm received during this
+        // session's interval means the watch's own workout is coming,
+        // whether or not a set was ever ticked there.
+        let lastBpmAt = watchBridge.lastBpmAt
+        Task.detached(priority: .utility) {
+            #if os(iOS)
+            if let session = try? database.session(id: sessionId, userId: userId),
+               let events = try? database.setEvents(sessionId: sessionId),
+               let device = try? database.deviceId() {
+                let watchWasLive = lastBpmAt.map { at in session.startedAt.map { at >= $0 } ?? false } ?? false
+                let decision = await WorkoutWriter.decide(
+                    session: session, events: events, localDeviceId: device, watchWasLive: watchWasLive,
+                    reader: Self.healthReader, ownBundleId: Bundle.main.bundleIdentifier ?? ""
+                )
+                _ = try? await HealthWorkoutWriter().write(session: session, decision: decision)
+            }
+            #endif
+            await telemetry.prefetch(sessionId: sessionId)
+        }
     }
 
     /// Build the real environment. Throws only for a configuration problem the
