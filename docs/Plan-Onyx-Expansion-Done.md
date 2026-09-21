@@ -721,3 +721,60 @@ agreed to.
 loops waited 8 s after installing a fresh binary, which is enough for a warm
 launch and not the first one — and a black PNG reviews as "the screen is
 broken" under a correct filename. Both scripts take a throwaway launch now.
+
+---
+
+## Wave 5 Summary — 7.6.0
+
+**Worked.** A workout now says whose it is. `WorkoutProvenance` classifies an
+`HKWorkout` by its source bundle id — own on either device (`…native` ↔
+`…native.watchkitapp`), foreign otherwise, and a source that is missing is
+FOREIGN, never own — and `HealthReading.liftingOverlap` is the one read that
+`SessionMetrics`, the Hevy card and the phone's `WorkoutWriter` all share, so
+they cannot disagree about which workout is the session's. The finish sheet
+and the session page draw the heart-rate series cut into its movements
+(`HRSegments`: `[previous run's last commit, own last commit)`, split by the
+pause ledger), numbered legend, muscle-coloured washes, one hero, two
+captions; AX5 keeps the numbers. Read from Health at view time, cached in
+`session_telemetry` after the first non-empty read of a CLOSED session, one
+refetch inside ten minutes of a finish when the watch's samples land. "Hevy
+logged this too" compares four rows, Skip is primary, "Use" fills only what
+Onyx could not measure. A phone-only session leaves an `HKWorkout` with its
+energy, flagged `app.onyx.estimated` when `Estimates` produced it. Shipped
+as **7.6.0** — the report overhaul and export v6 took 7.4.0 and 7.5.0 on
+`main` between W4 and this wave.
+
+**The plan was wrong about four things.** (1) `predicateForObjects(from:
+ownWorkout)` answers only for builder-attached samples, and a phone-only
+session has none — the interval query with a source filter (`com.apple.` or
+own) serves both shapes. (2) "Attach existing HR samples" to the phone's
+workout: `HKWorkoutBuilder.add` SAVES samples, so re-adding Health's would
+duplicate them; the phone writes energy only. (3) The finish sheet draws
+before `closeSession`, so a live session reads to `now` and nothing about it
+is cached; `sessionFinished`'s prefetch writes the row. (4) The watch's
+prefetch warms the WATCH's store — the phone's series arrives through
+Health's own sync, which is what the late window listens for.
+
+**Failed, and was caught.** `code-reviewer`: my multi-line patch matched the
+teardown in `cancelSession`, not `finish` — the wrist prefetched on discard;
+the phone's estimated kcal, written to Health, came back through
+`syncSessionMetrics` as a MEASUREMENT (`energyEstimated` now stops it); a
+double Finish tap wrote two workouts; the watch starts its `HKWorkoutSession`
+on `adopt` with no set ticked, so "an event from another device" was half the
+signal (`lastBpmAt` is the other half); `HKObserverQuery` fires once on
+execute. `invariant-auditor`: "Use Hevy" could replace a TYPED figure — it
+fills only what is not measured now. `ui-ux-designer`: five names on the
+plot's top edge collided (legend, numbered); the rest line failed 3:1; the
+Skip ramp duplicated Finish's. **An unsigned simulator build has NO HealthKit
+entitlement** — the first shot photographed nothing and nothing logged it;
+`SHOT_SIGN=1` signs ad hoc. `Logger.info` never reaches `log show`.
+
+**Left open.** (1) The Smart Stack / late-window refetch is proved by
+`ScriptedHealth`, not by a watch: the simulator has no heart. (2) Hevy's set
+count is a best-effort metadata read; "—" is the ordinary answer. (3) The
+harness re-evaluates its view builder, so `telemetry-detail` prefetches
+twice into two stores — cosmetic, pre-existing (memory: storeless-preview).
+(4) A phone-only session's row learns `avg_bpm` from the series only when the
+page or the finish opens on it; nothing back-fills history. (5) Gates:
+`swift:core` 673, `swift:data` 699, `npm run check` green, `check:watch`
+green, OnyxTests 11 issues / 10 names — the baseline.
