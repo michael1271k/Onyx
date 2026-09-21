@@ -44,6 +44,43 @@ _Nothing yet._
 
 ---
 
+## [7.6.0] — 2026-09-21 · The session knows whose heart rate it is
+
+Expansion W5. The post-workout summary shows the session's heart rate cut into
+its movements; a Hevy log of the same hour is compared, never adopted; a
+phone-only session leaves a workout in Health.
+
+### Added
+- **Heart-rate chart** on the finish sheet and the session page — one chart,
+  the average as its hero, the peak and the burn as its two captions. Each
+  movement's stretch is washed in that muscle's own colour and named at its
+  boundary; rests after the last set and every paused interval are the thin
+  grey line. Read from Apple Health at view time, cached locally after the
+  first non-empty read (`session_telemetry`, never synced), and re-read once
+  if the watch's samples land within ten minutes of a finish. At the
+  accessibility sizes the card keeps the three numbers only.
+- **"Hevy logged this too."** When a foreign strength workout overlaps a
+  session, one card compares average HR, calories, duration and sets — Onyx
+  vs Hevy — with **Skip** as the primary answer. "Use Hevy HR/kcal" adopts the
+  two figures as your own answer. Neither button touches Health, and the
+  answer is remembered so the summary page does not ask again.
+- **The phone writes an `HKWorkout`** for a session the watch did not run —
+  only when no own workout and no foreign strength workout already overlaps
+  it — carrying the session's active energy when Health holds none for the
+  interval (flagged estimated when `Estimates` produced it). iOS now asks for
+  workout and active-energy write access alongside the reads.
+- Harness: `telemetry-finish` and `telemetry-detail` seed the simulator's own
+  Health store (`--onyx-telemetry-seed`) so the chart is a real read;
+  `hevy-card` is the fixture-driven compare card.
+
+### Fixed
+- **A Hevy workout was adopted as the watch's measurement.** `SessionMetrics`
+  took the first lifting workout overlapping a session and stamped its heart
+  rate and energy MEASURED, whoever wrote it. Workouts now carry their source;
+  only Onyx's own (phone or watch) is a measurement, and a workout with no
+  source at all classifies as foreign, never own. Golden vectors:
+  `workout-origin`, `workout-pick`, `hr-segments`.
+
 ## [7.5.0] — 2026-09-20 · The export prints the instruction you are actually working to
 
 The coach's second audit, closed. The document stopped comparing this week's

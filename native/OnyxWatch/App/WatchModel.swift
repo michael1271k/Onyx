@@ -1251,6 +1251,14 @@ final class WatchModel {
         rest = nil
         arrangement = DeckArrangement()
         clearLiveSnapshot()
+        // ── THE WRIST WARMS ITS OWN CACHE (W5, decision 10) ─────────────────
+        // The `HKWorkout` just written holds the series, and this store is
+        // the wrist's own; the read is one query and it lands in the watch's
+        // `session_telemetry`. The PHONE's cache is the phone's — its samples
+        // arrive through Health's sync, which `sessionFinished` there listens
+        // for. Detached and unawaited: the finish is already over.
+        let telemetry = SessionTelemetry(database: store, reader: HealthKitReader())
+        Task.detached(priority: .utility) { await telemetry.prefetch(sessionId: sessionId) }
     }
 
     // MARK: - Inbound

@@ -1,4 +1,5 @@
 import Foundation
+import OnyxCore
 
 /// The device's Health database, as the ingest needs it.
 ///
@@ -84,6 +85,20 @@ public protocol HealthReading: Sendable {
     /// from. Overlap, not containment: the watch is started a minute after the
     /// first set and stopped a minute before the last.
     func workouts(start: Date, end: Date) async throws -> [WorkoutSample]
+
+    /// Heart-rate readings in `[start, end]`, oldest first, from sources the
+    /// app may cite: its own workouts and Apple's sensors. A foreign app's
+    /// samples (a Hevy that writes its own bpm) are left out — the same rule
+    /// `workouts` applies through `WorkoutProvenance`, one level down.
+    /// Expansion W5. Declared here, not only in an extension, for the reason
+    /// `quantityBySource` gives.
+    func heartRateSeries(start: Date, end: Date) async throws -> [HRSample]
+
+    /// Fires once per change to the heart-rate store until `until`, then
+    /// finishes. The late-sample window after a finish: the watch's samples
+    /// reach the phone's store minutes after the workout ends, and a view
+    /// that read too early would otherwise stay empty until the next open.
+    func heartRateChanges(until: Date) -> AsyncStream<Void>
 }
 
 public extension HealthReading {
@@ -97,6 +112,40 @@ public extension HealthReading {
     /// A store that records no workouts — every test double, and any device
     /// without a watch.
     func workouts(start: Date, end: Date) async throws -> [WorkoutSample] { [] }
+
+    /// No series — every test double, and any device without a sensor.
+    func heartRateSeries(start: Date, end: Date) async throws -> [HRSample] { [] }
+
+    /// Nothing ever changes; the stream finishes at once.
+    func heartRateChanges(until: Date) -> AsyncStream<Void> {
+        AsyncStream { $0.finish() }
+    }
+
+    /// The lifting workout that overlaps a session, classified.
+    ///
+    /// ONE read for three callers — `SessionMetrics`, the Hevy compare card
+    /// and the phone's `WorkoutWriter` guard — so they cannot disagree about
+    /// which workout is the session's. The window carries
+    /// `WorkoutProvenance.overlapSlack` on both ends, and `pick` applies the
+    /// same slack again, so a workout the query returns is one the rule
+    /// accepts. An extension-only method on purpose: it composes `workouts`
+    /// and nothing overrides it.
+    func liftingOverlap(start: Date, end: Date, ownBundleId: String) async -> WorkoutOverlap {
+        let slack = WorkoutProvenance.overlapSlack
+        let found = (try? await workouts(
+            start: start.addingTimeInterval(-slack), end: end.addingTimeInterval(slack)
+        )) ?? []
+        let candidates = found.map {
+            WorkoutProvenance.Candidate(
+                origin: $0.origin(ownBundleId: ownBundleId), isLifting: $0.isLifting, start: $0.start, end: $0.end
+            )
+        }
+        switch WorkoutProvenance.pick(candidates, sessionStart: start, sessionEnd: end) {
+        case .own(let i): return .own(found[i])
+        case .foreign(let i): return .foreign(found[i])
+        case .none: return .none
+        }
+    }
 
     /// `nil` — "this reader cannot answer", which leaves the statistics total
     /// standing. Not `[]`: an empty ARRAY is "the window holds no samples",
@@ -240,6 +289,25 @@ public struct WorkoutSample: Sendable, Equatable {
     /// what separates a hard walk from an easy one, and throwing it away meant
     /// the ledger could not tell them apart a month later.
     public var elevationM: Double?
+    /// `HKSource.bundleIdentifier` of the app that wrote it (Expansion W5).
+    ///
+    /// The provenance filter: `WorkoutProvenance.origin` reads this against the
+    /// app's own bundle id, and a workout whose source is not ours is never
+    /// adopted as the session's measurement. Nil only from a double that did
+    /// not fill it in — and nil classifies as FOREIGN, never own.
+    public var sourceBundleId: String?
+    /// `HKSource.name` — what Health shows for the writer ("Hevy").
+    public var sourceName: String?
+    /// A set count the WRITER stamped in the workout's metadata, if any. Only
+    /// a foreign app would (Onyx keeps its sets in `workout_sets`); best
+    /// effort, for the compare card's fourth row, and nil is the usual answer.
+    public var sets: Int?
+    /// The workout's energy was stamped `app.onyx.estimated` by the phone's
+    /// own writer — `Estimates`' number, put in Health so the rings have
+    /// something. `SessionMetrics` must not read it back as a measurement,
+    /// or an estimate launders itself into the sample that justifies the
+    /// next one.
+    public var energyEstimated: Bool
 
     public init(
         uuid: UUID = UUID(),
@@ -250,7 +318,11 @@ public struct WorkoutSample: Sendable, Equatable {
         distanceM: Double? = nil,
         activeKcal: Double? = nil,
         avgHr: Double? = nil,
-        elevationM: Double? = nil
+        elevationM: Double? = nil,
+        sourceBundleId: String? = nil,
+        sourceName: String? = nil,
+        sets: Int? = nil,
+        energyEstimated: Bool = false
     ) {
         self.uuid = uuid
         self.start = start
@@ -261,11 +333,32 @@ public struct WorkoutSample: Sendable, Equatable {
         self.activeKcal = activeKcal
         self.avgHr = avgHr
         self.elevationM = elevationM
+        self.sourceBundleId = sourceBundleId
+        self.sourceName = sourceName
+        self.sets = sets
+        self.energyEstimated = energyEstimated
+    }
+
+    /// Whose it is, against this app's bundle id.
+    public func origin(ownBundleId: String) -> WorkoutOrigin {
+        WorkoutProvenance.origin(sourceBundleId: sourceBundleId, sourceName: sourceName, ownBundleId: ownBundleId)
     }
 
     /// Wall-clock minutes. The bout's own duration, not its active time — the
     /// figure a person recognises when they compare it to what their watch said.
     public var durationMin: Double { end.timeIntervalSince(start) / 60 }
+}
+
+/// `HealthReading.liftingOverlap`'s answer.
+public enum WorkoutOverlap: Sendable, Equatable {
+    /// Our own record of the session — measured figures.
+    case own(WorkoutSample)
+    /// Somebody else's (Hevy). Offered on a card; never adopted silently.
+    case foreign(WorkoutSample)
+    case none
+
+    public var own: WorkoutSample? { if case .own(let w) = self { w } else { nil } }
+    public var foreign: WorkoutSample? { if case .foreign(let w) = self { w } else { nil } }
 }
 
 /// The four body figures Apple Health can offer a weigh-in form, as of now.

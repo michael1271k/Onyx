@@ -463,7 +463,9 @@ enum PreviewHarness {
         case "logger", "logger-stats", "logger-lifts", "logger-paused", "logger-finish", "logger-options", "logger-timer",
              // W10: the rest bar and the progression cue, on one card.
              "logger-rest",
-             "set-row", "set-row-split", "set-row-cardio", "set-row-records", "set-options", "effort-picker":
+             "set-row", "set-row-split", "set-row-cardio", "set-row-records", "set-options", "effort-picker",
+             // W5: the heart-rate chart (seeded Health) and the Hevy card (fixture).
+             "telemetry-finish", "telemetry-detail", "hevy-card":
             LoggerPreviews.view(screen)
         // ── THE CARDIO SHEET, IN BOTH OF ITS STATES ────────────────────────
         // It had never had a shot, which is most of how it got to look the way

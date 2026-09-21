@@ -81,6 +81,9 @@ struct SessionDetailView: View {
     /// on every rescore generation. The target carries everything the sheet
     /// needs, so nothing is re-read at presentation time either.
     @State private var prSheet: PrTarget?
+    /// Hevy's record of this session, if Health holds one and the athlete has
+    /// not answered the card yet (W5, decision 7).
+    @State private var foreign: WorkoutSample?
 
     /// One long-pressed trophy, frozen at the moment of the press.
     struct PrTarget: Identifiable {
@@ -118,6 +121,8 @@ struct SessionDetailView: View {
             if let page {
                 band(page).plainRow(edgeToEdge: true)
                 metrics(page).plainRow(edgeToEdge: true)
+                if let foreign { hevy(page, foreign).plainRow(edgeToEdge: true) }
+                telemetry(page).plainRow(edgeToEdge: true)
                 progression(page).plainRow(edgeToEdge: true)
                 if !page.report.muscles.isEmpty { muscles(page.report).plainRow(edgeToEdge: true) }
                 ForEach(page.report.exercises) { exercise in
@@ -230,6 +235,14 @@ struct SessionDetailView: View {
                 SessionAnalysis.page(database: database, sessionId: id)
             }.value
             missing = page == nil
+            if first, let session = page?.report.session {
+                // Once, on the first load: the card is a question, and a
+                // cascade re-running the task must not re-ask one that has
+                // been answered on this very screen.
+                if await environment.telemetry.hevyDecision(sessionId: id) == nil {
+                    foreign = await environment.foreignWorkout(for: session)
+                }
+            }
             #if DEBUG
             // `else if`, and only on the FIRST load: two modals from one source
             // view drops the second with an "already presenting" warning, and
@@ -456,6 +469,59 @@ struct SessionDetailView: View {
         // nothing — but putting it on screen at all would be a lie.
         guard model.sessionId != nil else { return }
         editing = model
+    }
+
+    // MARK: - Hevy logged this too, and the heart-rate chart (W5)
+
+    private func telemetry(_ page: SessionAnalysis.Page) -> some View {
+        TelemetryCard(
+            sessionId: sessionId,
+            storedAvgBpm: page.avgBpmEstimated ? nil : page.avgBpm.map { Int(jsRound($0)) },
+            kcal: page.calories.map { Int(jsRound($0)) }
+        )
+        .padding(.horizontal, OnyxSpace.m)
+    }
+
+    private func hevy(_ current: SessionAnalysis.Page, _ workout: WorkoutSample) -> some View {
+        let session = current.report.session
+        return HevyCompareCard(
+            onyx: .init(
+                avgBpm: current.avgBpm.map { Int(jsRound($0)) },
+                kcal: current.calories.map { Int(jsRound($0)) },
+                durationMin: session.durationMin.map { Int(jsRound($0)) },
+                sets: current.report.physicalSets,
+                bpmMeasured: current.avgBpm != nil && !current.avgBpmEstimated,
+                kcalMeasured: current.calories != nil && !current.caloriesEstimated
+            ),
+            hevy: workout,
+            onSkip: {
+                Task { await environment.telemetry.setHevyDecision(sessionId: sessionId, .skip) }
+                withAnimation(OnyxMotion.fade) { foreign = nil }
+            },
+            onUse: {
+                // The same write the finish sheet makes: adopted as the
+                // athlete's answer, stamped measured, Health untouched.
+                // Only what is not already measured — see the finish sheet.
+                let bpmMeasured = current.avgBpm != nil && !current.avgBpmEstimated
+                let kcalMeasured = current.calories != nil && !current.caloriesEstimated
+                let bpm = bpmMeasured ? nil : workout.avgHr.map { Int(jsRound($0)) }
+                let kcal = kcalMeasured ? nil : workout.activeKcal.map { Int(jsRound($0)) }
+                _ = try? environment.database.setSessionMetrics(
+                    id: sessionId, userId: session.userId, avgBpm: bpm, caloriesBurned: kcal
+                )
+                Task { await environment.telemetry.setHevyDecision(sessionId: sessionId, .use) }
+                withAnimation(OnyxMotion.fade) { foreign = nil }
+                // `avg_bpm` is outside the door's WHEN clause (W2), so no
+                // cascade will re-run the task: reload the page by hand.
+                let database = environment.database, id = sessionId
+                Task {
+                    page = await Task.detached(priority: .userInitiated) {
+                        SessionAnalysis.page(database: database, sessionId: id)
+                    }.value
+                }
+            }
+        )
+        .padding(.horizontal, OnyxSpace.m)
     }
 
     // MARK: - 1 · The title band

@@ -2,6 +2,7 @@
 import Foundation
 import HealthKit
 import OnyxCore
+import os
 
 /// `HealthReading` over a real `HKHealthStore`.
 ///
@@ -20,16 +21,35 @@ import OnyxCore
 public struct HealthKitReader: HealthReading {
 
     private let store = HKHealthStore()
+    /// This app's bundle id — what `heartRateSeries` and `WorkoutProvenance`
+    /// call "own". Defaulted from the running process; injectable so the
+    /// TelemetrySeed and a test can name it.
+    let ownBundleId: String
 
-    public init() {}
+    public init(ownBundleId: String = Bundle.main.bundleIdentifier ?? "") {
+        self.ownBundleId = ownBundleId
+    }
 
     public var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
+
+    /// The sample types the PHONE writes (Expansion W5): the `HKWorkout` a
+    /// phone-only session leaves behind, and the active-energy sample it
+    /// carries when Health held none. The watch asks for its own in
+    /// `WorkoutSessionController.requestAuthorization`. Empty on macOS,
+    /// where tests run and nothing is ever written.
+    static var shareTypes: Set<HKSampleType> {
+        #if os(iOS)
+        return [HKObjectType.workoutType(), HKQuantityType(.activeEnergyBurned)]
+        #else
+        return []
+        #endif
+    }
 
     public func requestAuthorization(read: [String]) async throws -> Bool {
         guard isAvailable else { return false }
         let types = Set(read.compactMap(Self.objectType))
         guard !types.isEmpty else { return false }
-        try await store.requestAuthorization(toShare: [], read: types)
+        try await store.requestAuthorization(toShare: Self.shareTypes, read: types)
         return true
     }
 
@@ -187,6 +207,78 @@ public struct HealthKitReader: HealthReading {
         }
     }
 
+    /// The series, from sources the app may cite (Expansion W5).
+    ///
+    /// ── WHY A SOURCE FILTER AND NOT `predicateForObjects(from: workout)` ────
+    /// The workout-scoped predicate answers only for samples the builder
+    /// attached, and a phone-only session has no builder collecting heart
+    /// rate at all — its samples are the watch's passive readings, which
+    /// Health files under the WATCH (`com.apple.health.<uuid>`), not under
+    /// any workout. One interval query with the source rule below serves
+    /// both shapes: Apple's sensors and this app's own targets are cited,
+    /// a foreign app's bpm is not.
+    public func heartRateSeries(start: Date, end: Date) async throws -> [HRSample] {
+        guard isAvailable, end > start else { return [] }
+        let type = HKQuantityType(.heartRate)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
+        let unit = HKUnit.count().unitDivided(by: .minute())
+        let own = ownBundleId
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit,
+                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
+            ) { _, samples, error in
+                if let error, (error as? HKError)?.code != .errorNoData {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let out = (samples as? [HKQuantitySample] ?? []).compactMap { sample -> HRSample? in
+                    let bundle = sample.sourceRevision.source.bundleIdentifier
+                    guard Self.mayCite(bundle, own: own) else { return nil }
+                    let bpm = sample.quantity.doubleValue(for: unit)
+                    guard bpm.isFinite, bpm > 0 else { return nil }
+                    return HRSample(at: sample.startDate, bpm: Int(bpm.rounded()))
+                }
+                continuation.resume(returning: out)
+            }
+            store.execute(query)
+        }
+    }
+
+    /// Apple's own sensors, or this app on either device.
+    static func mayCite(_ bundle: String, own: String) -> Bool {
+        bundle.hasPrefix("com.apple.") || WorkoutProvenance.origin(sourceBundleId: bundle, sourceName: nil, ownBundleId: own).isOwn
+    }
+
+    /// One tick per heart-rate change until `until`. An `HKObserverQuery`,
+    /// stopped by the deadline; the completion handler is always called, or
+    /// HealthKit stops delivering after three unanswered notifications.
+    public func heartRateChanges(until: Date) -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            guard isAvailable, until > Date() else { continuation.finish(); return }
+            // The first callback fires on `execute`, before anything could
+            // have landed; only the changes after it are changes.
+            let primed = OSAllocatedUnfairLock(initialState: false)
+            let query = HKObserverQuery(sampleType: HKQuantityType(.heartRate), predicate: nil) { _, completion, error in
+                let isChange = primed.withLock { state -> Bool in
+                    defer { state = true }
+                    return state
+                }
+                if error == nil, isChange { continuation.yield() }
+                completion()
+            }
+            store.execute(query)
+            let deadline = Task {
+                try? await Task.sleep(for: .seconds(max(0, until.timeIntervalSinceNow)))
+                continuation.finish()
+            }
+            continuation.onTermination = { [store] _ in
+                store.stop(query)
+                deadline.cancel()
+            }
+        }
+    }
+
     public func workouts(start: Date, end: Date) async throws -> [WorkoutSample] {
         guard isAvailable else { return [] }
         // No `.strictStartDate`: a workout that STARTED before the session and
@@ -297,8 +389,32 @@ public struct HealthKitReader: HealthReading {
             distanceM: distance,
             activeKcal: energy,
             avgHr: hr,
-            elevationM: ascent
+            elevationM: ascent,
+            sourceBundleId: workout.sourceRevision.source.bundleIdentifier,
+            sourceName: workout.sourceRevision.source.name,
+            sets: metadataSets(workout.metadata),
+            energyEstimated: (workout.metadata?[WorkoutWriter.estimatedKey] as? Bool) ?? false
         )
+    }
+
+    /// A set count a foreign writer stamped, under whatever key it chose.
+    ///
+    /// No app publishes its metadata keys, so this is the loosest honest
+    /// read: any key whose name says "set" and whose value is a whole number.
+    /// Nil is the ordinary answer and the compare card prints "—" for it.
+    static func metadataSets(_ metadata: [String: Any]?) -> Int? {
+        guard let metadata else { return nil }
+        // Sorted, so two matching keys answer the same way twice; booleans
+        // skipped, so `hasSupersets: true` does not read as one set.
+        for key in metadata.keys.sorted() where key.lowercased().contains("set") {
+            let value = metadata[key]
+            if let n = value as? NSNumber {
+                if CFGetTypeID(n) == CFBooleanGetTypeID() { continue }
+                if n.intValue >= 0 { return n.intValue }
+            }
+            if let text = value as? String, let n = Int(text), n >= 0 { return n }
+        }
+        return nil
     }
 
     // MARK: - Types and units

@@ -1,0 +1,19 @@
+{
+  "module": "sessions/workout-provenance",
+  "fn": "WorkoutProvenance.pick",
+  "note": "Expansion W5. Session [1000, 4600], slack 600. Lifting + overlapping only; own beats foreign; most session time covered wins; a tie keeps the earlier index. Foreign is offered, never adopted.",
+  "cases": [
+    { "name": "one own lifting workout inside the session", "input": { "session": { "start": 1000, "end": 4600 }, "slack": 600, "candidates": [ { "origin": "own", "isLifting": true, "start": 1100, "end": 4500 } ] }, "expected": { "kind": "own", "index": 0 } },
+    { "name": "only a foreign lifting workout overlaps", "input": { "session": { "start": 1000, "end": 4600 }, "slack": 600, "candidates": [ { "origin": "foreign:Hevy", "isLifting": true, "start": 900, "end": 4700 } ] }, "expected": { "kind": "foreign", "index": 0 } },
+    { "name": "own wins over a foreign one listed first", "input": { "session": { "start": 1000, "end": 4600 }, "slack": 600, "candidates": [ { "origin": "foreign:Hevy", "isLifting": true, "start": 900, "end": 4700 }, { "origin": "own", "isLifting": true, "start": 1200, "end": 4400 } ] }, "expected": { "kind": "own", "index": 1 } },
+    { "name": "an own cardio bout is not a candidate; the foreign lift is", "input": { "session": { "start": 1000, "end": 4600 }, "slack": 600, "candidates": [ { "origin": "own", "isLifting": false, "start": 1000, "end": 4600 }, { "origin": "foreign:Hevy", "isLifting": true, "start": 1000, "end": 4600 } ] }, "expected": { "kind": "foreign", "index": 1 } },
+    { "name": "an own workout that ended before the slack window is not a candidate", "input": { "session": { "start": 1000, "end": 4600 }, "slack": 600, "candidates": [ { "origin": "own", "isLifting": true, "start": 0, "end": 300 }, { "origin": "foreign:Hevy", "isLifting": true, "start": 900, "end": 4700 } ] }, "expected": { "kind": "foreign", "index": 1 } },
+    { "name": "ending exactly on the slack boundary still counts", "input": { "session": { "start": 1000, "end": 4600 }, "slack": 600, "candidates": [ { "origin": "own", "isLifting": true, "start": 0, "end": 400 } ] }, "expected": { "kind": "own", "index": 0 } },
+    { "name": "starting exactly on the slack boundary still counts", "input": { "session": { "start": 1000, "end": 4600 }, "slack": 600, "candidates": [ { "origin": "own", "isLifting": true, "start": 5200, "end": 6000 } ] }, "expected": { "kind": "own", "index": 0 } },
+    { "name": "one second past the slack does not", "input": { "session": { "start": 1000, "end": 4600 }, "slack": 600, "candidates": [ { "origin": "own", "isLifting": true, "start": 5201, "end": 6000 } ] }, "expected": { "kind": "none" } },
+    { "name": "two own workouts: the one covering more of the session", "input": { "session": { "start": 1000, "end": 4600 }, "slack": 600, "candidates": [ { "origin": "own", "isLifting": true, "start": 1000, "end": 2000 }, { "origin": "own", "isLifting": true, "start": 1500, "end": 4600 } ] }, "expected": { "kind": "own", "index": 1 } },
+    { "name": "two foreign workouts covering the same amount: the earlier index", "input": { "session": { "start": 1000, "end": 4600 }, "slack": 600, "candidates": [ { "origin": "foreign:Hevy", "isLifting": true, "start": 1000, "end": 2000 }, { "origin": "foreign:Strong", "isLifting": true, "start": 3600, "end": 4600 } ] }, "expected": { "kind": "foreign", "index": 0 } },
+    { "name": "nothing", "input": { "session": { "start": 1000, "end": 4600 }, "slack": 600, "candidates": [] }, "expected": { "kind": "none" } },
+    { "name": "an inverted workout interval overlaps nothing", "input": { "session": { "start": 1000, "end": 4600 }, "slack": 600, "candidates": [ { "origin": "own", "isLifting": true, "start": 4000, "end": 2000 } ] }, "expected": { "kind": "none" } }
+  ]
+}

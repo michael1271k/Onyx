@@ -19,6 +19,15 @@ import OnyxCore
 /// measurement the moment one exists. Sessions are revisited for
 /// `lookbackDays` so a workout that syncs from the watch a day late still
 /// lands.
+///
+/// ── AND ONLY OUR OWN WORKOUT IS A MEASUREMENT (Expansion W5) ────────────────
+/// The overlapping workout used to be whichever lifting `HKWorkout` came first,
+/// and Hevy writes one of the same type over the same hour — so a Hevy log was
+/// adopted as the watch's measurement of the session, silently, for as long as
+/// both apps were in use. `HealthReading.liftingOverlap` classifies by source:
+/// our own workout (phone or watch) is measured; a foreign one is `.foreign`
+/// and falls through to the estimate exactly as if no workout existed. The
+/// compare card is what offers its numbers, and only on a tap (decision 7).
 public extension HealthSync {
 
     /// Fill or upgrade the metrics of every session that ended in the window.
@@ -36,11 +45,16 @@ public extension HealthSync {
             var measuredBpm: Int?
             var measuredKcal: Int?
             if reader.isAvailable,
-               let workout = (try? await reader.workouts(start: start, end: end))?.first(where: \.isLifting) {
+               let workout = await reader.liftingOverlap(start: start, end: end, ownBundleId: ownBundleId).own {
                 let bpm = try? await reader.quantity(
                     "HKQuantityTypeIdentifierHeartRate", reduce: .average, start: workout.start, end: workout.end
                 )
-                let kcal = try? await reader.quantity(
+                // ── AN ESTIMATE IN HEALTH IS STILL AN ESTIMATE ──────────────
+                // The phone's writer puts `Estimates`' kcal on its own workout
+                // for the rings, flagged `energyEstimated`. Read back as a
+                // measurement it would stamp itself `calories_estimated =
+                // false` and become a sample the next estimate is drawn from.
+                let kcal: Double? = workout.energyEstimated ? nil : try? await reader.quantity(
                     "HKQuantityTypeIdentifierActiveEnergyBurned", reduce: .sum, start: workout.start, end: workout.end
                 )
                 measuredBpm = Self.whole(bpm)
