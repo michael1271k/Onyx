@@ -778,3 +778,73 @@ twice into two stores — cosmetic, pre-existing (memory: storeless-preview).
 page or the finish opens on it; nothing back-fills history. (5) Gates:
 `swift:core` 673, `swift:data` 699, `npm run check` green, `check:watch`
 green, OnyxTests 11 issues / 10 names — the baseline.
+
+---
+
+## Wave 6 Summary — 7.7.0
+
+**Worked.** Eight seams carry `os_signpost` intervals (`Perf`, OnyxCore,
+subsystem `app.onyx.perf`) and a DEBUG file sink, because a wave that cannot
+read its own before/after table has measured nothing. The four that are pure
+store work are timed OLD SHAPE AGAINST NEW IN ONE PROCESS over one seeded
+account (`SeamBenchmarkTests`): battery stack 770 → **250 ms**, stress series
+244 → **82 ms**, nutrition day 32 → **8 ms**, watch context 20,836 →
+**7,040 B**. Cold launch is 661–776 ms on the simulator. Gym mode learns the
+window from the median `started_at` ± 90 min and refuses to guess under eight
+starts; Leave is a refusal that does not re-arm until midnight, and the state
+is re-resolved on every foreground — which is what ends it for a session
+finished on the watch. Today's cards reorder by the clock and yield forever to
+the first drag. Three day-log sheets became one with three segments, which is
+also how soreness finally got a Quick Log entry.
+
+**The plan was wrong about four things.**
+(1) **There were no render-time store reads left.** Every hot spot §W6-A names
+— `RootView:147`, `LiveStatsView:107`, `EraWindowPicker:115`, `TodayTabView:275`
+— was already `nonisolated` or inside `Task.detached` by W5. The real defect
+was one level in: reads reached from a `.task` on a `@MainActor` view, which
+runs on the main actor. That is what the purge actually cut.
+(2) **`(updated_at, id)` keyset paging is not implementable here.** Eleven
+mirrored tables have no `id` column and twelve carry no `updated_at`; the
+cursor is each table's primary key, the one total order the schema indexes.
+(3) **`NutritionModel` had seven observations, not five**, plus two inline
+main-actor `stackCredit` reads from two of their callbacks.
+(4) **The export could not be built "on tap"** as written — `ShareLink` is a
+view and needs its item up front. A `Transferable` moves the cost instead: the
+exporter runs when the share is performed.
+
+**Failed, and was caught.** My own gate was the worst of it: the first
+`check-body-reads.mjs` excluded a leading `.` from its pattern, so it matched
+`database.` and walked past `environment.database.` — the spelling this
+codebase actually uses — and it was not wired into `npm run check` at all.
+`code-reviewer` found both, plus a `BodyTrendsView` race where a superseded
+`All` scan overwrote the window the reader had just picked, a `watchBuild`
+handle whose `cancel()` cancelled nothing (a `Task.detached` does not inherit
+cancellation, so three pushes ran three `.full` builds at once), gym mode
+re-arming itself after Leave on every theme pick, and a `TodayModel` that
+ranked an already-ranked layout so the same clock gave two different grids.
+`invariant-auditor` found three numbers that would have moved: a stale `today`
+frozen into the merged nutrition stream (doses undercounted across midnight), a
+watch swap tie-break that could install a different prescription for a name
+shared between two programs, and a `daily_logs` read that stopped reproducing
+`fetchOne`'s first-row-the-scan-finds rule. **And the AX5 screenshot caught the
+last one:** the new resolver lowered the flag the shot harness had seeded, so
+gym mode photographed the tab bar it exists to hide.
+
+**Two rows of my own compaction audit were wrong, and the code said so.**
+`VitalMetric.fixed` and `OnyxSnapshot.fixed` differ by rounding rule; the week
+report's "stress index" is the 1–5 self-report mean, not the 0–100 index.
+Both are recorded as non-duplicates in `docs/COMPACTION_AUDIT.md` with the
+reason, because the next reader will see the same similarity.
+
+**Left open.** (1) Six of the eight seams are instrumented and unmeasured: the
+simulator has no Supabase session, so there is no signed-in shell to switch
+tabs in, no deck to open, no sync to run. **The founder's device trace is the
+measurement.** (2) The full 113-screen shot set runs at ~1 shot/minute on this
+machine (~8 h); a 29-screen regression subset covering every surface the diff
+touches was shot instead, 12 differing and all explained. (3) Ten audit rows
+are open, the largest being one `SessionTotals.line(…)` across four surfaces
+and the three separate battery-ring implementations. (4) `Pagination.all` is
+dead but still has a test; `MirrorCoalescer.drain()` now fans out with
+`withTaskGroup` and relies on `SyncCoordinator.syncNow`'s own coalescing.
+(5) A channel that joins and drops in a loop retries at the floor forever,
+because every join resets the ladder — `ponytail:`-noted.
