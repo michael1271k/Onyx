@@ -44,6 +44,93 @@ _Nothing yet._
 
 ---
 
+## [7.11.0] — 2026-09-23 · Add a movement, see the heart rate when you ask
+
+Wave 3 of the App Store sprint (Lane B). Three briefs on the logger's screen
+family: a movement you did not plan can be added mid-session, the heart-rate
+chart waits until you ask for it, and Hevy's record of the same workout is one
+line instead of a question.
+
+### Added
+- **"Add a movement" at the bottom of the live deck** (phone). It opens the
+  same searchable picker the routine builder uses — `ExercisePickerSheet`, now
+  its own file, shared, not copied. The new card goes to the bottom, takes the
+  next `exercise_order` without renumbering any other card, opens with the
+  routine builder's default of 3 × 8–12, and joins the session's day, so
+  switching between cut and bulk mid-session keeps it. Picking a movement
+  that is already on the deck takes you to its card instead of adding a
+  second one.
+- **An added card opens with the movement's last working set from any split.**
+  Its sets are pre-filled from that set, and a new line under the header reads
+  `last 25kg × 11 · Sat 19 Sept`. Only added cards get this line; the cards
+  the day opened with are unchanged. The lookup is a separate, narrow one
+  (`AppDatabase.lastWorkingSet`). It matches the movement by name under every
+  id it has been logged as, skips warm-ups and drop sets, counts a
+  left/right pair once at its weaker side, and never looks at the session in
+  progress. The day's own seed is not widened, so no existing card's numbers
+  move.
+- **An added movement survives a relaunch.** After the app is killed and
+  reopened, the deck rebuilds from the routine, which does not list the added
+  movement. Its logged sets used to be left off the screen: still in the log,
+  still in the session totals, but not drawn. The card now comes back with
+  its logged sets and the rest of its planned sets.
+
+### Changed
+- **The heart-rate chart is hidden until you tap Avg HR.** This applies on
+  the finish sheet and on the session page. The chart slides up from the
+  bottom as a sheet over a dimmed background, using the sheet spring
+  (damping 0.8, response 0.3). It can be reversed mid-motion, closes the way
+  it came, and can be dragged down or tapped away. With Reduce Motion on, it
+  fades in and out instead of sliding.
+  - When the watch recorded a heart-rate trace, the Avg HR cell's icon
+    becomes a waveform.
+  - On the finish sheet, tapping Avg HR used to open its number editor. That
+    editor is now one tap further in, behind "Edit the average" inside the
+    chart.
+- **The chart is one colour.** Every movement uses `OnyxDomain.recover.accent`
+  (founder decision 3), told apart by three opacity steps rather than by
+  sixteen muscle colours that mean anatomy everywhere else in the app.
+  - The x axis shows each movement's number, matching the legend, instead of
+    clock times.
+  - The bpm scale is hidden until you tap the chart. It has its space
+    reserved, so the chart does not shift when the scale appears.
+  - The shaded area under the line now stops at the bottom of the chart.
+    Before, it ran down under the axis labels to the card's edge.
+- **Hevy is one line, not a question** (finish sheet and session page). The
+  line shows the source's initial, its name and `128 bpm · 356 kcal`. Tapping
+  it opens the four-row comparison with a single "Use Hevy HR & calories"
+  button.
+  - Skip is gone, and so is every write of `HevyDecision.skip`.
+  - The line disappears only once Hevy's figures have been used. An old
+    `.skip` still loads and no longer hides anything.
+  - The line still appears only when a lifting workout from another app
+    overlaps the session. That condition already held and is unchanged.
+
+### Fixed
+- The picker labelled Face Pull's muscle "Rear_Delts". It now reads
+  "Rear delts", the same name the deck's chip uses.
+- Opening the heart-rate chart ran the finish sheet's save step. That marked
+  the running clock's duration as "edited", turning a green dot blue.
+- After Hevy's figures were used, the finish sheet credited them to "the
+  watch's own workout". It now names Hevy.
+- The session page wrote to the store inside a view body. The `check:body`
+  test only let this through because of the Skip button's code nearby, and
+  deleting Skip exposed it. The write is now a method.
+
+### Notes
+- **`OnyxDomain.recover.accent` is lavender in the default theme (`#A79FD6`),
+  not red.** Founder decision 3 names this token and also calls it red. The
+  token was used as named. The app has no themed red to swap to:
+  `Color.onyx.danger` is a fixed hex. Changing it is a one-line edit to
+  `TelemetryCard.ink`, and the founder should make that call.
+- **A movement added on the phone is not on the watch's deck.**
+  `WatchModel.planDeck` ignores sets that match no planned movement. This is
+  left for W4 (session sync), which owns the watch deck.
+- Tests added: `LastWorkingSetTests` (6) and `AddExerciseTests` (2). The
+  `Onyx` scheme's failing tests are exactly W1's baseline list.
+
+---
+
 ## [7.10.0] — 2026-09-22 · The watch gets a front door
 
 Wave 2 of the App Store sprint (Lane A). The watch app opened on the word

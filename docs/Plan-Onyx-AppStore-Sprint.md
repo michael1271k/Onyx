@@ -955,3 +955,205 @@ outside one.
 - **The 49 mm pair is active again.** W2 activated `SE 3 40mm ↔ iPhone 15` to
   photograph 40 mm and restored `Ultra 2 ↔ iPhone 15` afterwards, so W4 finds
   the pair it needs. Only one pair is active at a time.
+
+---
+
+## W3 — Logger: Add Exercise, HR chart, Hevy (7.11.0, Lane B)
+
+### What shipped
+
+- **(a) Add a movement mid-session.**
+  - **The picker.** `ExercisePickerSheet` is now its own file
+    (`Features/Exercises/`). The routine builder and the live deck's new
+    "Add a movement" row (live decks only) both call it.
+  - **The card.** `LoggerModel.addExercise(named:exerciseId:)` places the new
+    card at the bottom, and its plan is added to `day`. Its sets take the next
+    `exercise_order`, and no other card is renumbered. It starts from
+    `RoutineExercise.starting`, which is now the one place both callers get the
+    3 × 8–12 / 120 s default from.
+  - **"Last time" comes from a second, narrow lookup.**
+    `AppDatabase.lastWorkingSet(named:userId:excludingSession:)` returns the
+    last non-drop working set of the movement across every session and day key.
+    It resolves the movement by canonical name under all of its ids, the way
+    `PrRecorder.baselines` gathers `siblings`. It reads through `historySets`,
+    folds pairs with the seed's own `collapsePairs`, and is limited to the
+    current user.
+  - **Only an added movement reads that lookup.** `LoggerModel.lastTimes` is
+    read only when the day's seed has **no** entry for the movement.
+  - **The seed is built from `programDay`**, the day as it was handed in, and
+    never from the enlarged `day`.
+  - **The added card gets a line of its own:** `last 25kg × 11 · Sat 19 Sept`.
+- **(b) The heart-rate chart.**
+  - **One colour.** `TelemetryCard` draws everything in
+    `OnyxDomain.recover.accent`, with three opacity steps (1 / .75 / .55).
+    `colour(for:)` and the `MuscleMap.movers` lookup behind it are deleted.
+  - **Axes.** The x axis shows each movement's number at the middle of its
+    first stretch. The y scale is hidden until the plot is tapped.
+  - **Where it opens.** The chart is gone from both pages. It lives in
+    `heartRatePanel`, a bottom sheet opened by tapping the Avg HR reading on
+    `FinishSheet` or on `SessionDetailView`.
+  - **Motion.** Spring 0.8 / 0.3 on an offset, so a tap mid-flight turns it
+    around. It enters and leaves along the same path. Dragging down dismisses
+    it, using the projected end point, and tapping the dimmed backdrop also
+    dismisses it. Under Reduce Motion it cross-fades.
+- **(c) Hevy.** The card is now one compact line: the source's initial, its
+  name, and `128 bpm · 356 kcal`. Tapping it opens a sheet with the four-row
+  comparison and a single "Use Hevy HR & calories". Skip and every `.skip`
+  write are gone. Both callers hide the line only on `.use`, and nothing else
+  reads `hevyDecision`.
+
+### What the code falsified about the brief
+
+1. **`OnyxDomain.recover.accent` is not red.**
+   - **What it is.** It is Lunar lavender, `#A79FD6`, in the default theme.
+     Founder decision 3 names the token *and* describes it as "red-family",
+     and those two statements conflict.
+   - **What was done.** The chart uses the token, because the decision names
+     it.
+   - **Why there is no red alternative.** There is no themed red:
+     `Color.onyx.danger` is a literal hex and does not follow Appearance
+     presets.
+   - **Status.** This is left to the founder. The swap is a one-line change to
+     `TelemetryCard.ink`.
+2. **The deck had no "last time" line to populate.**
+   - **What happened to it.** The founder removed it. The reason is still in
+     the `ExerciseCardView` header comment: it repeated the first row's two
+     numbers.
+   - **What the brief's "last time" actually is.** It is `SetRow.previous`,
+     which the Live Activity reads as `lastTime`.
+   - **What was done.** Only an added card got a line back, because its
+     numbers come from another split and the date is the one thing its rows
+     cannot show. The cards the day opened with are unchanged.
+3. **The picker was never parameterised on `ExerciseCatalogEntry`.**
+   - **Why that type does not fit.** It is the Library's "movements with
+     history" row. The picker lists every `Exercise` catalogue row and offers
+     to create new ones.
+   - **What the closure takes instead.** It hands back
+     `(name, picked: Exercise?)`, where `nil` means a new name. The routine
+     builder then creates the movement, and the logger records the picked
+     catalogue id.
+4. **Appending to `LoggerModel.exercises` is not enough.**
+   - **Phase switch.** `rebuildForPhase` rebuilds the deck from `day.exercises`,
+     so a card that lived only in the array disappeared on a phase switch.
+   - **Relaunch.** `restoreLoggedSets` ignored `DeckRestore`'s `unmatched`
+     rows, so an added movement's logged sets were not drawn after a relaunch.
+   - **What was done.** The card now joins `day`. A relaunch rebuilds it from
+     the `unmatched` rows, but only for ids the catalogue can name.
+5. **"`ExerciseDetailView`'s history path" is `historySets(exerciseIds: [id])`,
+   a single id.** For a lift logged on both clients that finds only half the
+   history. The new lookup gathers every id by name first.
+6. **The Avg HR cell on the finish sheet was already a tap target** that opened
+   its stepper. With a heart-rate series present, the tap now opens the chart,
+   and the stepper is reached through "Edit the average" inside the panel.
+   With no series, the tap behaves as before.
+7. **`.chartYAxis(.hidden)` shifts the plot.**
+   - **The problem.** Revealing the labels takes a column of width, so every
+     movement boundary moved sideways under the finger that tapped.
+   - **Why a style toggle alone fails.** The axis is now always laid out and
+     only its ink changes. But Swift Charts **caches axis labels**: a
+     state-driven `foregroundStyle` or `opacity` inside `AxisValueLabel` never
+     updated, even though the grid line did.
+   - **The fix.** `.id(showScale)` on the chart.
+   - **A second trap.** `value.as(Double.self)` is nil when a mark was plotted
+     with an `Int` y, so every mark now plots a `Double`.
+8. **"Only appears if detected" was verified, not rebuilt.** The chain is
+   `AppEnvironment.foreignWorkout` → `liftingOverlap` → `WorkoutProvenance.pick`,
+   which returns `.foreign` only for a lifting workout written by another
+   bundle.
+
+### Defects found and fixed that the brief did not name
+
+- **The seed-widening trap.** A phase switch rebuilt the seed from the enlarged
+  `day`. That gave the added movement a cold-start entry, which silently
+  switched off its "last time" (the gate is `seeded == nil`). Code review caught
+  it, and a test now pins it.
+- **"Last time" could be a drop set.** A session that ended on a 15 kg drop set
+  would have reported the drop as the last set. The lookup now takes the last
+  set that is not a drop set.
+- **Opening the chart stamped Duration as "edited".** The chart path now runs
+  no `commitMetrics`.
+- **Tapping "Use" cut the sheet's dismissal short.** It removed the view that
+  presents the sheet while the sheet was still leaving. `onUse` now runs from
+  `onDismiss`.
+- **After Hevy's figures were adopted,** the finish sheet's caption credited
+  "the watch's own workout". It now names Hevy.
+- **The picker's muscle label read "Rear_Delts".**
+- **The pinned Finish button drew through the panel.** On this SDK a
+  `.safeAreaInset` draws above an overlay placed on the `NavigationStack`.
+  The inset is now hidden while the panel is up, and opening the panel moves
+  the sheet to `.large` so its title is not clipped on a small phone.
+- **The shaded area under the chart filled from 0.** It ran below the plot to
+  the card's edge, and now starts at the plot floor.
+- **A `check:body` near-miss.** A store write in a `SessionDetailView` view
+  builder had only ever passed the scanner because the Skip closure's `Task {`
+  sat inside its six-line window. The write is now a method, `useHevy`.
+- **AX5 (largest text size).**
+  - The added card's `last` line truncated to `25kg… · Sat 1…`. At accessibility
+    sizes the date now goes on its own line.
+  - The Hevy line truncated its figures and squashed its monogram. The figures
+    now go on their own lines, and the monogram has a minimum size instead of a
+    fixed 24 pt.
+
+### Verification
+
+- `npm run check`: **PASSED** (exit 0). This includes `swift:ui` (42/42) and
+  `check:watch`.
+- `npm run swift:core`: **706/706**.
+- `npm run swift:data`: **733/733** (727 plus 6 new) when run alone.
+  - Under load it recorded one `SeamBenchmarkTests` timing issue. That is the
+    known W7 flake, and it passed when re-run alone.
+- **`Onyx` scheme tests.** No new failures.
+  - **OnyxTests.** The failing names are exactly W1's nine. The `64 tests /
+    11 issues` summary line comes from one parallel worker, and the new
+    `Add exercise mid-session` suite (2 tests) passed in run 1.
+  - **OnyxDataTests.** One issue: the Keychain `stores, retrieves and removes
+    a session blob` test, which is Gate 0.
+  - **OnyxCoreTests** 706/706, **OnyxUITests** 42/42.
+- **invariant-auditor** was run after the seed change. It found one risk: an
+  edit deck could draw a "last time" line through restore, because
+  `lastWorkingSet` has no date bound. Fixed with an `isEditing` gate. Its
+  other findings were OK.
+- **code-reviewer, architect-reviewer and ui-ux-designer** were run on the full
+  diff and on the screenshots. Every bug and risk they raised was fixed or is
+  listed below.
+- **Simulator, iPhone 15 on iOS 27.0, signed ad-hoc build.**
+  - **The add path** was driven by hand on the new `logger-add` harness screen:
+    Upper B deck, then "Add a movement", then Face Pull, which the store holds
+    only on an Upper A session. The card was added as "9 OF 9" with
+    `last 25kg × 11`, and its rows pre-filled with 25 × 11. Checked again at
+    AX5.
+  - **The finish sheet** was photographed with the chart hidden, then with it
+    opened from Avg HR. After that: the scale revealed with no shift, drag to
+    dismiss, tap on the dimmed backdrop to dismiss, and "Edit the average"
+    handing off to the stepper.
+  - **The session page** was photographed with the chart hidden and then open.
+  - **Hevy:** the compact line, its sheet, and the result of "Use" (128 bpm and
+    356 kcal adopted, the line gone, the caption naming Hevy). Also checked at
+    AX5.
+  - **Health permission.** Health read/write access was granted once, on the
+    simulator only, for the harness's synthetic heart-rate seed (Past 30 Days).
+
+### Left open
+
+- **The watch cannot see a phone-added movement (W4).**
+  - **Why.** `WatchModel.planDeck` drops sets that match no plan, so once a
+    movement is added the two decks and their `setsPlanned` / `plannedSets`
+    counts disagree.
+  - **Suggested fix (architect).** Move the rule "unmatched logged keys become
+    `RoutineExercise.starting` plans" into `DeckRestore` so both clients share
+    it.
+  - **A related gap.** A movement that was added but never logged is not kept
+    across a relaunch. It has nothing in the log to rebuild from.
+- **The colour decision above belongs to the founder.**
+- **The Avg HR cell can show "—" while the chart's headline shows the series
+  mean.** The cell reads the session row's stored average and the chart falls
+  back to the trace. This predates W3: the inline card showed the same
+  mismatch.
+- **Earlier-wave issues seen during review:**
+  - The open Avg HR stepper spills over its neighbouring cells, and its buttons
+    are 30 pt.
+  - At AX5 the logger's pinned header takes about 55 % of the screen.
+  - "INTENSITY" hyphenates at AX5.
+  - The "adopt only what is not measured" Hevy rule is written in three places.
+- **The session page's navigation bar stays live above the dimmed backdrop.**
+  The page is pushed and cannot overlay its parent's bar.
