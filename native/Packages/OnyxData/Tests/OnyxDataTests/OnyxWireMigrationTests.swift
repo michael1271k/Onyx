@@ -178,7 +178,7 @@ struct OnyxWireMigrationTests {
     }
 
     /// ── THE ONE THAT PINS TWO MACHINES TOGETHER ───────────────────────────
-    /// `docs/sql/w1-onyx-wire.sql` decides "is this a predecessor stamp?" with
+    /// `w1-onyx-wire.sql` decides "is this a predecessor stamp?" with
     /// `^[a-z]+[0-9]-`, and it runs against the same movement this function
     /// runs against. If the two disagree about one id, that movement is
     /// renamed on the phone and not on the server — one lift, two identities,

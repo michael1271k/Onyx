@@ -223,7 +223,7 @@ Never edit or commit `native/Onyx.xcodeproj` — XcodeGen owns it.
 | `native/` | The app. `project.yml` (XcodeGen), the `Onyx` target, `OnyxWidgets`, `OnyxWatch`, and the packages `OnyxCore` (domain) · `OnyxData` (store, sync, HealthKit) · `OnyxUI` (design system, atlas, tiles). See `native/README.md`. |
 | `scripts/` | The generators and the version SSoT. `scripts/src/` holds the TypeScript they read: the body atlas, the soreness vocabularies and the report renderer. |
 | `site/` | The static Netlify site — privacy, support, AASA. No build step. |
-| `docs/` | `CHANGELOG.md`, `APP_STORE.md`, the scoring models, the sprint plan. |
+| `docs/` | `CHANGELOG.md`, `APP_STORE.md`, `SIMULATORS.md`, the scoring models. Retired sprint plans, with their wave summaries, live in `docs/Done/`. |
 
 > **Code convention:** comments describe *what the code does* — never release or
 > development phases. No "Phase N" tags or temporary developmental labels in code

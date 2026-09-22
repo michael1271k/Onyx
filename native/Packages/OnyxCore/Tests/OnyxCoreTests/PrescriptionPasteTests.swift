@@ -5,6 +5,35 @@ import Testing
 @Suite("Prescriptions — the paste, the version, the window")
 struct PrescriptionPasteTests {
 
+    /// A coach's table is pasted, not typed, and the thing on the other end of
+    /// a paste may be a model. `Int.init(Double)` traps past `Int.max`, and
+    /// `parse` runs inside `PrescriptionsView.body` — so this was a crash on
+    /// the keystroke that pasted it, not a bad row.
+    @Test("a digit run past Int.max is refused, not a crash")
+    func oversizedIntegerIsRefused() {
+        #expect(PrescriptionPaste.firstInteger("99999999999999999999999") == nil)
+        #expect(PrescriptionPaste.firstInteger(String(repeating: "9", count: 400)) == nil)
+        #expect(PrescriptionPaste.firstInteger("3") == 3)
+        #expect(PrescriptionPaste.firstInteger("1000000") == 1_000_000)
+        #expect(PrescriptionPaste.firstInteger("1000001") == nil)
+
+        // Through the two call sites that reach it. The `Sets` cell leaves the
+        // default standing; the `50 kg x <huge>` line keeps the load and drops
+        // only the per-set count.
+        let table = """
+        | Exercise | Load (kg) | Sets | Rep range |
+        |---|---:|---:|---|
+        | Incline DB Press | 34 | 99999999999999999999999 | 8–12 |
+        """
+        let out = PrescriptionPaste.parse(table, effectiveFrom: "2026-09-15")
+        #expect(out.rows.count == 1)
+        #expect(out.rows[0].loadKg == 34)
+
+        let prose = PrescriptionPaste.parse(
+            "Bench Press — 50 kg x 99999999999999999999", effectiveFrom: "2026-09-15")
+        #expect(prose.rows.first?.loadKg == 50)
+    }
+
     /// The shape the coach's "W10 plan" table arrives in.
     @Test("a headed markdown table maps every column")
     func headedTable() {

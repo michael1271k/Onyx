@@ -1289,8 +1289,8 @@ public final class AppDatabase: Sendable {
         //
         // Guarded like v30 because `migrateMirrorV1` is generated from
         // `supabase.json` and a fresh install already has both columns. The
-        // Postgres half is `docs/sql/w3-sleep-onset.sql`, which the founder
-        // pastes BEFORE installing this build: the outbox upsert carries the
+        // Postgres half is `w3-sleep-onset.sql` (its text is in
+        // docs/CHANGELOG.md), which the founder pasted BEFORE this build: the outbox upsert carries the
         // columns from the first night synced, and PostgREST rejects a column
         // it cannot find.
         migrator.registerMigration("v31.sleepOnset") { db in
@@ -1326,8 +1326,8 @@ public final class AppDatabase: Sendable {
         // 2026-09-19: 81 rows, zero carrying the old brand). Renaming keys
         // there would invent a second history for every lift.
         //
-        // The server half is `docs/sql/w1-onyx-wire.sql`, pasted by the
-        // founder. It is NOT symmetrical with this one, because the server's
+        // The server half is `w1-onyx-wire.sql` — its text is in
+        // docs/CHANGELOG.md — pasted by the founder. It is NOT symmetrical with this one, because the server's
         // `workout_sets.exercise_id` is a `uuid` with a live foreign key and
         // structurally cannot hold a slug — the slug reaches Postgres only
         // inside `set_events.body`, and `ExerciseIndex` resolves it to a uuid

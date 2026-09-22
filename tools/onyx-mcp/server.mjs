@@ -71,7 +71,9 @@ async function select(table, params) {
     // is the one who has to say what to do about it.
     const hint =
       response.status === 404
-        ? ` — the table does not exist. Run docs/sql/w7-exports.sql in the Supabase SQL editor.`
+        ? ` — the table does not exist. Its DDL is in docs/CHANGELOG.md, ` +
+          `"Appendix — applied server migrations" § w7-exports.sql; ` +
+          `paste it into the Supabase SQL editor.`
         : response.status === 401 || response.status === 403
           ? ` — check SUPABASE_SERVICE_ROLE_KEY.`
           : "";

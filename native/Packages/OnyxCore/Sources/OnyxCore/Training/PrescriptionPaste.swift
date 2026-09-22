@@ -445,8 +445,22 @@ public enum PrescriptionPaste {
         return Double(digits)
     }
 
+    /// `firstDouble` accumulates an UNBOUNDED run of digits, and
+    /// `Int.init(Double)` TRAPS rather than returning nil once the value is
+    /// past `Int.max` — so `| Sets | 99999999999999999999999 |` crashed the
+    /// app instead of failing to parse. `PrescriptionsView` calls `parse`
+    /// inside its `body`, so the trap fired on the keystroke that pasted it.
+    /// Same trap `TargetsApply.whole` clamps for, and for the same reason:
+    /// this is model-authored input.
+    ///
+    /// It REFUSES rather than clamping. A clamp would turn a nonsense cell
+    /// into a prescription of a million sets; returning nil leaves the field
+    /// at its default and the row is reported as unread, which is what the
+    /// Optional is for.
     static func firstInteger(_ text: String) -> Int? {
-        firstDouble(text).map { Int($0) }
+        guard let d = firstDouble(text), d.isFinite, d >= 0, d <= 1_000_000
+        else { return nil }
+        return Int(d)
     }
 
     static func lastInteger(_ text: String) -> Int? {

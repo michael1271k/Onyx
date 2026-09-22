@@ -15,8 +15,9 @@ rows as Postgres holds them.
 
 ## Before it can answer
 
-1. **Run `docs/sql/w7-exports.sql`** in the Supabase SQL editor. Until the
-   `exports` table exists, `list_exports`, `get_export` and `get_latest_markdown`
+1. **Create the `exports` table.** Its DDL is `w7-exports.sql`, under
+   "Appendix — applied server migrations" in `docs/CHANGELOG.md`; paste it into
+   the Supabase SQL editor. Until the `exports` table exists, `list_exports`, `get_export` and `get_latest_markdown`
    report a 404 naming the missing table.
 2. **Export a week from the phone.** History → a week → Export → pick a range →
    complete the share sheet. The phone files a copy as it goes. A share sheet

@@ -112,6 +112,13 @@ that cannot rebuild **installs whatever is already there**, so the screenshots
 come out plausible and photograph the other worktree's code. A review then
 passes or fails on a build that does not contain the change.
 
+**Delete your `SHOT_DERIVED` directory when your wave closes.** Nothing else
+will. The Onyx Expansion close-out found thirty-nine directories under
+`~/Library/Caches/onyx-swift/` totalling 103 GB — one per wave that had ever
+shot a screen or run a test, largest 5.7 GB. Thirty-three were dead. Only six
+are load-bearing: `OnyxCore`, `OnyxData`, `OnyxUI-ios`, `OnyxUI-watchos`,
+`check-watch` and `onyxtests`, which are the paths the gates above name.
+
 `SHOT_OUT` moves the PNGs the same way. Neither set is committed — since 3.8.0
 `native/__screenshots__/` is gitignored, because 220 phone screens came to
 144 MiB that turned over on every layout edit and no gate ever read them. They

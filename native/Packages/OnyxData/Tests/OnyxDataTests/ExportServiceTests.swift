@@ -9,7 +9,7 @@ import Testing
 /// `ExportEnvelopeTests` in OnyxCore pins the wire and the range arithmetic.
 /// This is the store half: that the builder really does render a span that is
 /// not a week, that the marker advances only when a document is actually built,
-/// and that the row the drop-box receives is the shape `docs/sql/w7-exports.sql`
+/// and that the row the drop-box receives is the shape `w7-exports.sql`
 /// creates.
 @Suite("Export service — one envelope, three surfaces")
 struct ExportServiceTests {
@@ -147,7 +147,7 @@ struct ExportServiceTests {
     // MARK: - The drop-box
 
     /// What `upload` sends, captured. The four columns beside the JSON are what
-    /// `docs/sql/w7-exports.sql` indexes, so a rename here is a rename there.
+    /// `w7-exports.sql` indexes, so a rename here is a rename there.
     private final class Capture: MirrorPushRemote, @unchecked Sendable {
         var table: String?
         var conflict: String?

@@ -5,7 +5,8 @@ import OnyxCore
 // THE ONE PLACE AN EXPORT IS MADE (W7).
 //
 // Three surfaces ask for one: the chip on a week, the Shortcuts action, and —
-// once the founder has run `docs/sql/w7-exports.sql` — an MCP server reading
+// once the founder has run the `exports` DDL (docs/CHANGELOG.md, "Appendix —
+// applied server migrations" § w7-exports.sql) — an MCP server reading
 // what those two left behind. Each of them gets an `ExportEnvelope` from here
 // and none of them builds one itself, because the moment two do, a document
 // shared from the share sheet and a document a model read out of Supabase can
@@ -14,7 +15,8 @@ import OnyxCore
 
 public struct ExportService: Sendable {
 
-    /// The table the envelope is filed in. Created by `docs/sql/w7-exports.sql`.
+    /// The table the envelope is filed in. Created by the `w7-exports.sql`
+    /// entry in docs/CHANGELOG.md, "Appendix — applied server migrations".
     ///
     /// NOT in the local mirror, and deliberately: the app never reads this
     /// table. It is the drop-box a desktop model reads, and mirroring it would

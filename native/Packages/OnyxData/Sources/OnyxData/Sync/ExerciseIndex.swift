@@ -236,7 +236,7 @@ public enum ExerciseSlug {
     /// id — the projection, the event log, the catalogue's alias column and the
     /// shadow rows whose `id` IS a slug — in the release that changed this
     /// line, and the founder ran the matching server UPDATE
-    /// (`docs/sql/w1-onyx-wire.sql`) for the rows that had already reached
+    /// (`w1-onyx-wire.sql`) for the rows that had already reached
     /// Postgres. Change this string again and you owe the same four rewrites.
     ///
     /// NOT `personal_records`: its `exercise_key` is a canonical display name,
@@ -276,7 +276,8 @@ public enum ExerciseSlug {
     ///     slug with no hyphen at all has no prefix to replace).
     ///
     /// ── THIS PREDICATE IS SHARED WITH POSTGRES AND MUST STAY SHARED ────────
-    /// `docs/sql/w1-onyx-wire.sql` decides the same question with the regex
+    /// `w1-onyx-wire.sql` (docs/CHANGELOG.md) decides the same question
+    /// with the regex
     /// `^[a-z]+[0-9]-`, and the two run against the SAME movement on two
     /// machines. An earlier draft tested only "the character before the first
     /// hyphen is a digit", which is LOOSER: `5-bench-press`, `xx55-bench-press`

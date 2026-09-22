@@ -275,7 +275,16 @@ public extension AppDatabase {
     /// read side by side in a diff and 10000 next to 2100 is a column of digits
     /// rather than two numbers.
     static func figure(_ value: Double, _ unit: String, decimals: Int) -> String {
-        let number = value.formatted(.number.precision(.fractionLength(decimals)).grouping(.automatic))
+        // Round HERE, not in the formatter. `whole` above uses `.rounded()`,
+        // which is half-away-from-zero; the formatter's own rule is half-even.
+        // They agree everywhere except an exact `.5`, where the sheet said
+        // "2,100 kcal" and the write stored 2101 — and if no other field moved
+        // the diff line was suppressed as unchanged while the write still
+        // happened. The block above says these two are one conversion; this is
+        // what makes that true.
+        let scale = pow(10.0, Double(decimals))
+        let rounded = (value * scale).rounded() / scale
+        let number = rounded.formatted(.number.precision(.fractionLength(decimals)).grouping(.automatic))
         return unit.isEmpty ? number : "\(number) \(unit)"
     }
 }

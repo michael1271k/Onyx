@@ -44,6 +44,64 @@ _Nothing yet._
 
 ---
 
+## [7.8.1] — 2026-09-22 · The sprint leaves no residue
+
+Wave 8, the close-out of the Onyx Expansion sprint. No feature, no schema, no
+screen: this release is the eight waves' leftovers being taken out of the
+repository and off the disk, and the sprint's record being put somewhere a
+reader will find it.
+
+### Removed
+- **Ten merged branches** — `wave/3-watch-logger`, `wave/4-watch-dashboard`,
+  `wave/6-lean`, `wave/7-ai-export`, and the six `onyx/sprint-widgets-*`
+  branches that had outlived the widgets sprint. Every one was verified merged
+  into `main` before deletion; none existed on `origin`.
+- **`docs/sql/`** — `w1-onyx-wire.sql`, `w6-export-v6.sql` and `w7-exports.sql`,
+  all three applied to the live database. Their text is preserved verbatim in
+  this file under *Appendix — applied server migrations*, and the eleven places
+  in the Swift and the MCP server that cited them by path now cite the
+  appendix. That includes one reference to `w3-sleep-onset.sql`, a file the
+  previous sprint's close-out deleted and left pointing at nothing.
+- **95.8 GB of derived data** under `~/Library/Caches/onyx-swift/` — the
+  thirty-three per-wave `SHOT_DERIVED` and test-scratch directories that had
+  accumulated one per wave since the widgets sprint, largest 5.7 GB. The six
+  the gates actually use are kept, and the directory is 103 GB → 7.2 GB.
+- `native/__screenshots__/` (146 MB), `native/__store__/` (the App Store upload
+  set, which `scripts/store-shots.sh` rebuilds in minutes),
+  `native/graphify-out/` (108 MB, regrown since the last purge) and
+  `tools/onyx-mcp/node_modules/`. All four are gitignored and all four
+  regenerate.
+
+### Changed
+- **`docs/Plan-Onyx-Expansion-Done.md` moved to `docs/Done/`**, and its body is
+  now the eight wave summaries. Each wave section reads goal → tasks → what
+  actually happened; the eight prompts as they were handed to their agents are
+  collapsed into *Appendix B — prompts as run*, kept because a summary says what
+  happened and only the prompt says what was asked for.
+- The plan's wave map now prints the versions each wave **shipped**. The
+  "expected version" column had been wrong since W5 took 7.6.0.
+- `docs/SIMULATORS.md` now says to delete a wave's `SHOT_DERIVED` directory when
+  the wave closes. Thirty-three of them are what 95.8 GB looks like.
+
+### Fixed
+- **Pasting a coach's table with an absurdly long number no longer crashes the
+  app.** `Settings → Prescriptions` parses the box on every keystroke, and a
+  cell holding more than nineteen digits — the kind of thing a model emits when
+  it loses the plot — went through `Int.init(Double)`, which *traps* past
+  `Int.max` rather than failing. The app died on the keystroke that pasted it.
+  The number is now refused and the field keeps its default, so the row is
+  reported unread instead. The sprint had already fixed this exact trap in two
+  other files and missed this one.
+  (`OnyxCore/Training/PrescriptionPaste.swift`)
+- **The apply-targets sheet and the write now round the same way.** On a target
+  ending in an exact `.5` the preview rounded half-to-even and the write
+  rounded half-away-from-zero: the sheet said `2,100 kcal` and `2101` was
+  stored. Worse, when no other field had moved the diff row was suppressed as
+  unchanged *while the write still happened* — a change the athlete approved
+  without ever seeing it. (`OnyxData/Targets/TargetsApply.swift`)
+
+---
+
 ## [7.8.0] — 2026-09-22 · One export, three ways to ask for it
 
 Wave 7 of the Onyx Expansion sprint, and the one the app was originally for.
@@ -3840,3 +3898,573 @@ Omit any section with nothing in it. Then:
   2. npm run version:sync
   3. cd native && xcodegen generate
 -->
+
+---
+
+# Appendix — applied server migrations
+
+Three files under `docs/sql/` carried the Supabase half of this codebase's
+migrations. Every one of them was pasted into the SQL editor and run by the
+founder; none can be run again, and none is read by any build. They were
+deleted at the Onyx Expansion close-out and their text moved here, because the
+record of what the server's schema became — and why — is worth more than three
+files nothing executes.
+
+They are reproduced verbatim, newest first. Nothing below is meant to be run.
+
+
+## w7-exports.sql — the `exports` drop-box (Onyx Expansion W7, 7.8.0)
+
+```sql
+-- ════════════════════════════════════════════════════════════════════════════
+-- w7-exports.sql — the drop-box the Onyx MCP server reads (Onyx Expansion, W7)
+--
+-- Paste into the Supabase SQL editor and run the whole file.
+--
+-- ── RUN THIS BEFORE THE BUILD REACHES THE PHONE ────────────────────────────
+-- Same rule as `w1-onyx-wire.sql` and `w6-export-v6.sql`, and for w6's reason:
+-- nothing here rewrites history, so a late run costs no data — but the app
+-- POSTs an `exports` row the first time the export chip is tapped, and
+-- PostgREST rejects an insert into a table it cannot find. Unlike the outbox's
+-- rows this one is NOT retried (`ExportService.upload` is one best-effort
+-- request, documented as such in its own header), so a week exported before
+-- this file runs never reaches the server at all. The markdown still reaches
+-- you through the share sheet; only the MCP server's copy is lost.
+--
+-- ── WHAT IT DOES ───────────────────────────────────────────────────────────
+-- §1  creates `public.exports` — one row per (athlete, span), holding the
+--     whole `ExportEnvelope` as `jsonb`.
+-- §2  gives it RLS in the `(select auth.uid()) = user_id` INITPLAN form every
+--     other table here uses, `to authenticated` and never `to public`.
+-- §3  reports the result.
+--
+-- ── WHY THE DOCUMENT IS STORED AND NOT RE-DERIVED ──────────────────────────
+-- The MCP server is Node, it has a service key, and it could in principle read
+-- `workout_sets` and build a week itself. It must not. The extraction lives in
+-- ONE place (`WeeklyExportBuilder` → `WeeklyExport.build`), and a second
+-- implementation in a second language is how two surfaces come to disagree
+-- about the same week — which is the exact failure this sprint's W7 exists to
+-- prevent. So the phone builds the document and files it here, and the server
+-- serves what it finds. The server's other tools are raw rows and say so.
+--
+-- ── AND WHY THE THREE COLUMNS BESIDE THE JSON ──────────────────────────────
+-- `range_start`, `range_end` and `version` are copies of fields inside the
+-- envelope. Duplicated deliberately: they are the only things anything filters
+-- or orders on, and an index on a `date` column is a different conversation
+-- from an index on a `jsonb` path. The envelope remains the source of truth;
+-- if they ever disagree, the envelope is right.
+--
+-- ── THE KEY IS THE SPAN, SO A RE-EXPORT REPLACES ───────────────────────────
+-- `(user_id, range_start, range_end)`. Exporting the same span twice — sharing
+-- "last complete week" on Monday and again on Tuesday — must leave one row, not
+-- two documents differing only by their timestamp. `ExportService.conflict` is
+-- this same tuple, spelled in Swift.
+--
+-- ── WHAT THIS FILE COULD NOT VERIFY, AND YOU SHOULD ────────────────────────
+-- Introspected live on 2026-09-22 through PostgREST's OpenAPI document:
+-- `exports` does not exist (35 tables, none of them this one); every table
+-- that carries `user_id` declares it `uuid NOT NULL`; `created_at` is
+-- `timestamptz DEFAULT now()` on all 21 tables that have one; and both
+-- `gen_random_uuid()` and `extensions.uuid_generate_v4()` are live column
+-- defaults elsewhere in this schema. What could NOT be read from this machine
+-- is the BODY of any existing RLS policy — `pg_policies` is not reachable
+-- through PostgREST and there is no database password here. §2 below is
+-- therefore written to match `w6-export-v6.sql`, which you ran, rather than to
+-- match an introspection. §3 prints the policies it created; compare them with
+-- another table's before you trust them.
+--
+-- ── EXPECTED COUNTS ────────────────────────────────────────────────────────
+-- Before: `exports` does not exist. After: 0 rows. The first row arrives the
+-- first time the export chip's share sheet is actually completed.
+-- ════════════════════════════════════════════════════════════════════════════
+
+BEGIN;
+
+-- ── 0 · Before ──────────────────────────────────────────────────────────────
+-- If `exists` is already true the table is in place and §1 is a no-op.
+SELECT to_regclass('public.exports') IS NOT NULL AS exports_exists;
+
+-- ── 1 · The table ───────────────────────────────────────────────────────────
+-- NOT mirrored into the phone's GRDB store, and deliberately: the app never
+-- reads this table. Mirroring it would mean carrying every document ever
+-- exported in the local store, for no reader. So it is absent from
+-- `native/schema/supabase.json` on purpose, and `npm run check:mirror` is not
+-- wrong about it.
+--
+-- `gen_random_uuid()` and not `extensions.uuid_generate_v4()`: both are live in
+-- this schema, and the newer tables (`cardio_logs`, `stress_logs`, `plans`,
+-- `doms_logs`, …) all use the former.
+CREATE TABLE IF NOT EXISTS public.exports (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+    range_start date NOT NULL,
+    range_end   date NOT NULL,
+    version     integer NOT NULL,
+    envelope    jsonb NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- A span ends no earlier than it starts, and is no longer than the app's own
+-- cap. `ExportRange.maxDays` is 28 and `ExportRange.clamp` enforces it on the
+-- phone; the constraint is here so a client that forgot cannot file a document
+-- covering a year. 31 rather than 28 — the column should refuse an ABSURD span,
+-- not police a product decision that may be widened next week.
+ALTER TABLE public.exports DROP CONSTRAINT IF EXISTS exports_range_check;
+ALTER TABLE public.exports
+  ADD CONSTRAINT exports_range_check
+  CHECK (range_end >= range_start AND range_end - range_start <= 31);
+
+-- ONE DOCUMENT PER SPAN PER ATHLETE. This is what makes the phone's upsert an
+-- upsert: `ExportService.conflict` names this tuple, and without the unique
+-- index PostgREST's `on_conflict` has nothing to resolve against and the
+-- request fails.
+CREATE UNIQUE INDEX IF NOT EXISTS exports_user_range
+  ON public.exports (user_id, range_start, range_end);
+
+-- The read the MCP server's `list_exports` makes: this athlete's documents,
+-- newest span first.
+CREATE INDEX IF NOT EXISTS exports_user_recent
+  ON public.exports (user_id, range_end DESC);
+
+-- ── AND WHY THERE IS NO `updated_at` ───────────────────────────────────────
+-- Every other table here has one, and this one had one too until it was read
+-- properly: `DEFAULT now()` fires on INSERT only, and
+-- `PostgRESTMirrorRemote.upsertRow` STRIPS both timestamp columns from every
+-- body it sends. A re-export of the same span would therefore leave the column
+-- frozen at the first insert while the envelope beside it carried a newer
+-- `generatedAt` — a column that is permanently a lie. The envelope's own
+-- `generatedAt` is the freshness figure, and it is the one the writer actually
+-- sets.
+
+-- ── 2 · Row level security ──────────────────────────────────────────────────
+-- The `(select auth.uid()) = user_id` INITPLAN form, so the check is evaluated
+-- once per query rather than once per row, and `TO authenticated` — never
+-- `TO public`, which is the shape that leaked in W11.
+--
+-- The MCP server reads this table with the SERVICE key, which bypasses RLS by
+-- design. That is the founder's own key on the founder's own machine, reading
+-- the founder's own rows; it is never shipped and never given to a client.
+--
+-- Every statement re-runnable: `drop policy if exists` before each `create`.
+ALTER TABLE public.exports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS exports_select_own ON public.exports;
+CREATE POLICY exports_select_own ON public.exports
+  FOR SELECT TO authenticated
+  USING ((select auth.uid()) = user_id);
+
+DROP POLICY IF EXISTS exports_insert_own ON public.exports;
+CREATE POLICY exports_insert_own ON public.exports
+  FOR INSERT TO authenticated
+  WITH CHECK ((select auth.uid()) = user_id);
+
+DROP POLICY IF EXISTS exports_update_own ON public.exports;
+CREATE POLICY exports_update_own ON public.exports
+  FOR UPDATE TO authenticated
+  USING ((select auth.uid()) = user_id)
+  WITH CHECK ((select auth.uid()) = user_id);
+
+DROP POLICY IF EXISTS exports_delete_own ON public.exports;
+CREATE POLICY exports_delete_own ON public.exports
+  FOR DELETE TO authenticated
+  USING ((select auth.uid()) = user_id);
+
+-- ── 3 · After ───────────────────────────────────────────────────────────────
+-- `exports_exists` must be true, `rls_enabled` must be true, and there must be
+-- exactly FOUR policies, all of them `authenticated`. If any row below comes
+-- back wrong, ROLLBACK rather than COMMIT.
+SELECT to_regclass('public.exports') IS NOT NULL AS exports_exists;
+
+SELECT relrowsecurity AS rls_enabled
+  FROM pg_class WHERE oid = 'public.exports'::regclass;
+
+SELECT policyname, cmd, roles::text, qual, with_check
+  FROM pg_policies
+ WHERE schemaname = 'public' AND tablename = 'exports'
+ ORDER BY policyname;
+
+-- The columns, for comparison against `ExportService.Row` in
+-- `native/Packages/OnyxData/Sources/OnyxData/History/ExportService.swift`.
+SELECT column_name, data_type, is_nullable, column_default
+  FROM information_schema.columns
+ WHERE table_schema = 'public' AND table_name = 'exports'
+ ORDER BY ordinal_position;
+
+COMMIT;
+-- ROLLBACK;   -- swap for COMMIT above if anything in §3 came back wrong
+```
+
+## w6-export-v6.sql — `prescriptions` and the `hrv_overnight` audit (export v6, 7.5.0)
+
+```sql
+-- ════════════════════════════════════════════════════════════════════════════
+-- w6-export-v6.sql — the server half of `v33.prescriptions` (export v6)
+--
+-- Paste into the Supabase SQL editor and run the whole file.
+--
+-- ── RUN THIS *BEFORE* THE BUILD REACHES THE PHONE ──────────────────────────
+-- Same rule as `w1-onyx-wire.sql`, for a different reason. Nothing here
+-- rewrites history, so a late run costs no data — but the outbox pushes a
+-- `prescriptions` row the moment the first block is pasted, and PostgREST
+-- rejects an INSERT into a table it cannot find. The row would sit in the
+-- outbox retrying until the table existed. Run it first and there is no
+-- window.
+--
+-- ── WHAT IT DOES ───────────────────────────────────────────────────────────
+-- §1  creates `public.prescriptions` — the CURRENT instruction per movement,
+--     appended and never overwritten.
+-- §2  gives it RLS in the `(select auth.uid()) = user_id` INITPLAN form every
+--     other table here uses, `to authenticated` and never `to public`.
+-- §3  reports what `daily_logs.hrv_overnight` already is. It is NOT created:
+--     introspected live on 2026-09-20, the column exists and is `boolean`,
+--     nullable, no default. It has been there since readiness v9 and was
+--     missing from `native/schema/supabase.json`, which is why nothing on the
+--     phone could read or write it. §3 exists so a founder running this file
+--     against a database that somehow lacks it finds out here rather than from
+--     a rejected push.
+--
+-- ── WHY `prescriptions` IS ITS OWN TABLE AND NOT A COLUMN ──────────────────
+-- The export printed `ProgramExercise.wk1Kg` as `prescribed` — the load the
+-- program was COMPILED with in July — while the coach moved Incline DB Press
+-- 32 → 34, Lat Pulldown 45 → 50 and the RDL 30 → 40. Every `load Δ` in the
+-- document was drawn against a number nobody had worked to since the block
+-- began.
+--
+-- A prescription is an instruction with a DATE on it, and its history is the
+-- argument a progression review is made of: "the top set went 34 → 36 on the
+-- 14th" cannot be said by a row that is UPDATEd in place. So `version` is
+-- per-movement and append-only, and `effective_from` is what decides which
+-- version was in force on a given session's day.
+--
+-- ── AND WHY `exercise_key` IS A DISPLAY NAME ───────────────────────────────
+-- Because `personal_records.exercise_key` is (introspected 2026-09-19: 81
+-- rows, every one a canonical display name — "Seated Cable Row (V-Grip)",
+-- never a slug). One movement, one key, across both tables, and no second
+-- dictionary between them. `ExerciseAliases.canonicalName` is what produces
+-- it on the phone.
+--
+-- ── EXPECTED COUNTS ────────────────────────────────────────────────────────
+-- Before: `prescriptions` does not exist (introspected 2026-09-20 — 34 tables,
+-- none of them this one). After: 0 rows. The first row arrives when the
+-- founder pastes a block into You → Prescriptions.
+-- ════════════════════════════════════════════════════════════════════════════
+
+BEGIN;
+
+-- ── 0 · Before ──────────────────────────────────────────────────────────────
+-- If `exists` is already true the table is in place and §1 is a no-op.
+SELECT to_regclass('public.prescriptions') IS NOT NULL AS prescriptions_exists;
+
+-- ── 1 · The table ───────────────────────────────────────────────────────────
+-- Column for column with `native/schema/supabase.json`, which generates the
+-- GRDB mirror. The two must agree or `npm run check:mirror` is checking the
+-- wrong shape.
+--
+-- NULLABILITY IS THE CONTRACT. A prescription that states a load and leaves
+-- the count to the plan is a real prescription, and a fabricated `3` is a
+-- claim — so everything but the identity, the version, the day and the two
+-- enumerated words is nullable. `structure` and `lead_rule` are NOT NULL with
+-- defaults because they have a meaningful default (`STRAIGHT`, `NONE`) and an
+-- absent one would be indistinguishable from it.
+CREATE TABLE IF NOT EXISTS public.prescriptions (
+    id             uuid PRIMARY KEY,
+    user_id        uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+    exercise_key   text NOT NULL,
+    version        integer NOT NULL,
+    effective_from date NOT NULL,
+    load_kg        numeric,
+    sets           integer,
+    rep_range      text,
+    rpe_cap        numeric,
+    structure      text NOT NULL DEFAULT 'STRAIGHT',
+    set_loads      numeric[],
+    lead_rule      text NOT NULL DEFAULT 'NONE',
+    notes          text,
+    created_at     timestamptz NOT NULL DEFAULT now()
+);
+
+-- The two enumerated columns, as CHECKs. `Prescription.Structure` and
+-- `Prescription.LeadRule` are the Swift half; a value either side cannot
+-- encode is a value that survives a round trip as something else.
+ALTER TABLE public.prescriptions DROP CONSTRAINT IF EXISTS prescriptions_structure_check;
+ALTER TABLE public.prescriptions
+  ADD CONSTRAINT prescriptions_structure_check
+  CHECK (structure IN ('STRAIGHT', 'TOPSET_BACKOFF'));
+
+ALTER TABLE public.prescriptions DROP CONSTRAINT IF EXISTS prescriptions_lead_rule_check;
+ALTER TABLE public.prescriptions
+  ADD CONSTRAINT prescriptions_lead_rule_check
+  CHECK (lead_rule IN ('ALTERNATE', 'LEFT', 'RIGHT', 'NONE'));
+
+-- ONE VERSION PER MOVEMENT PER ATHLETE. This is what makes the append-only
+-- rule enforceable rather than merely intended: a second `v3` for one movement
+-- is refused by the database, so a client that lost track of the ladder cannot
+-- write a duplicate ordinal and make "which instruction was in force"
+-- ambiguous forever.
+CREATE UNIQUE INDEX IF NOT EXISTS prescriptions_user_exercise_version
+  ON public.prescriptions (user_id, exercise_key, version);
+
+-- The read the resolver makes: every version of one movement, newest first.
+CREATE INDEX IF NOT EXISTS prescriptions_user_exercise
+  ON public.prescriptions (user_id, exercise_key, effective_from DESC, version DESC);
+
+-- ── 2 · Row level security ──────────────────────────────────────────────────
+-- The `(select auth.uid()) = user_id` INITPLAN form, so the check is evaluated
+-- once per query rather than once per row, and `TO authenticated` — never
+-- `TO public`, which is the shape that leaked in W11 and is the reason this
+-- comment exists.
+--
+-- Every statement re-runnable: `drop policy if exists` before each `create`.
+ALTER TABLE public.prescriptions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS prescriptions_select_own ON public.prescriptions;
+CREATE POLICY prescriptions_select_own ON public.prescriptions
+  FOR SELECT TO authenticated
+  USING ((select auth.uid()) = user_id);
+
+DROP POLICY IF EXISTS prescriptions_insert_own ON public.prescriptions;
+CREATE POLICY prescriptions_insert_own ON public.prescriptions
+  FOR INSERT TO authenticated
+  WITH CHECK ((select auth.uid()) = user_id);
+
+DROP POLICY IF EXISTS prescriptions_update_own ON public.prescriptions;
+CREATE POLICY prescriptions_update_own ON public.prescriptions
+  FOR UPDATE TO authenticated
+  USING ((select auth.uid()) = user_id)
+  WITH CHECK ((select auth.uid()) = user_id);
+
+DROP POLICY IF EXISTS prescriptions_delete_own ON public.prescriptions;
+CREATE POLICY prescriptions_delete_own ON public.prescriptions
+  FOR DELETE TO authenticated
+  USING ((select auth.uid()) = user_id);
+
+-- ── 3 · `daily_logs.hrv_overnight` — REPORTED, not created ──────────────────
+-- Introspected live on 2026-09-20: it is already there, `boolean`, nullable,
+-- no default. `v33.prescriptions` adds the local half. If the row below comes
+-- back empty this database is not the one that was introspected — stop, and
+-- say so, before the phone starts writing a column that does not exist.
+SELECT column_name, data_type, is_nullable, column_default
+  FROM information_schema.columns
+ WHERE table_schema = 'public' AND table_name = 'daily_logs' AND column_name = 'hrv_overnight';
+
+-- ── 4 · After ───────────────────────────────────────────────────────────────
+-- `prescriptions_exists` must be true, `rls_enabled` must be true, and there
+-- must be exactly FOUR policies, all of them `authenticated`.
+SELECT to_regclass('public.prescriptions') IS NOT NULL AS prescriptions_exists;
+
+SELECT relrowsecurity AS rls_enabled
+  FROM pg_class WHERE oid = 'public.prescriptions'::regclass;
+
+SELECT policyname, cmd, roles::text, qual, with_check
+  FROM pg_policies
+ WHERE schemaname = 'public' AND tablename = 'prescriptions'
+ ORDER BY policyname;
+
+COMMIT;
+-- ROLLBACK;   -- swap for COMMIT above if anything in §3 or §4 came back wrong
+```
+
+## w1-onyx-wire.sql — the server half of `v32.onyxWire` (Onyx Expansion W1, 7.0.0)
+
+```sql
+-- ════════════════════════════════════════════════════════════════════════════
+-- w1-onyx-wire.sql — the server half of `v32.onyxWire` (Onyx Expansion, W1)
+--
+-- Paste into the Supabase SQL editor and run the whole file.
+--
+-- ── RUN THIS *BEFORE* 7.0.0 REACHES ANY DEVICE ─────────────────────────────
+-- Not "either order". `v32.onyxWire` is a GRDB migration: the migrator records
+-- it by name and NEVER runs it again. Nothing rewrites a row that arrives
+-- afterwards. So if 7.0.0 installs and syncs before this file has run, every
+-- `set_events` row pulled in that window keeps the old stamp permanently, and
+-- that movement's history splits in two — which is the whole failure this
+-- migration exists to prevent. (7.0.0 also strips an unrecognised stamp when
+-- it resolves a slug, so a straggler degrades instead of jamming the outbox;
+-- that is a safety net, not a substitute for running this first.)
+--
+-- ── v2 — WHAT CHANGED AFTER THE FIRST ATTEMPT ──────────────────────────────
+-- The founder ran v1 and Postgres refused it:
+--
+--   ERROR: 23514: new row for relation "plan_phases" violates check
+--   constraint "plan_phases_era_check"
+--
+-- `plan_phases.era` carries a CHECK constraint that allows `ppl` and the
+-- predecessor's value and nothing else. The UPDATE was correct; the column
+-- would not accept it. §1 now drops that constraint, rewrites the rows, and
+-- puts an equivalent constraint back naming the two values `PhaseEra`
+-- actually has. That is DDL, so §1 is the only part of this file that changes
+-- the schema, and it changes it back to the same SHAPE it had.
+--
+-- The seven stored reports (§5) are now part of the transaction too, at the
+-- founder's instruction: zero trace of the old name anywhere.
+--
+-- ── WHY NOTHING BELOW SPELLS THE OLD NAME ──────────────────────────────────
+-- The point of the wave is that the predecessor's name is gone from every byte
+-- of the repository, and this file lives in it. It does not need the name:
+--   · `plan_phases.era` has exactly TWO values in the domain (`PhaseEra`), so
+--     "not ppl" names the rows exactly.
+--   · an exercise slug was stamped `<word><digit>-<kebab-name>`, so
+--     `^[a-z]+[0-9]-` matches the old stamp, and a migrated slug already
+--     starts `onyx-`.
+--   · the reports' masthead is `⬢ <word> OS ·`, so the word between is
+--     replaced by position.
+-- The BODY after the first hyphen is never touched, so every movement keeps
+-- its identity and only the stamp in front of it changes.
+--
+-- ── AND WHY A uuid IS EXCLUDED BY NAME, NOT BY ARGUMENT ────────────────────
+-- A uuid's first hyphen is at position nine, so any uuid whose first seven hex
+-- characters are all letters a–f and whose eighth is a digit — `abcdefa1-…` —
+-- matches `^[a-z]+[0-9]-`. About one in 1,500, and `set_events.body` holds a
+-- MIX of resolved uuids and unresolved slugs, so it is not a theoretical
+-- column. Re-stamping one would point a synced set at a catalogue row that
+-- does not exist.
+--
+-- ── THE TWO HALVES MUST DECIDE IDENTICALLY ─────────────────────────────────
+-- `AppDatabase.onyxWireId` answers the same question on the phone. If these
+-- two predicates disagree about one id, that movement is renamed on one
+-- machine and not the other. Change one, change both;
+-- `OnyxWireMigrationTests.matchesThePostgresPredicate` pins the Swift side to
+-- the regex below, case for case.
+--
+-- ── WHAT IS DELIBERATELY NOT HERE ──────────────────────────────────────────
+-- Introspected from the live database on 2026-09-19, before a line was written:
+--
+--   workout_sets.exercise_id     uuid, 2500 rows, 0 matches — a uuid column
+--                                CANNOT hold a slug. The slug reaches the
+--                                server only inside `set_events.body`, and
+--                                `ExerciseIndex` resolves it to a uuid on push.
+--   personal_records.exercise_key  text, 81 rows, 0 matches — it holds a
+--                                canonical DISPLAY NAME ("Seated Cable Row
+--                                (V-Grip)"), never an id. Renaming keys here
+--                                would invent a second history per lift.
+--   plan_phases.era_tag          text, 8 rows, 0 matches — re-read live on
+--                                2026-09-19: already "Onyx Cut", "Onyx · Week
+--                                0", "PPL Bulk". The app renders THIS column,
+--                                not `era`, so it was worth checking twice.
+--                                It needs nothing.
+--
+-- Expected row counts, same introspection:
+--   plan_phases.era      4 of 8
+--   exercises.slug      46 of 46   (every row)
+--   set_events.body    116 of 787
+--   reports.content_md   7 of 17
+-- ════════════════════════════════════════════════════════════════════════════
+
+BEGIN;
+
+-- ── 0 · Before ──────────────────────────────────────────────────────────────
+-- Read these. If every "rows_to_change" is 0 the work is already done.
+SELECT 'plan_phases.era'  AS target, count(*) AS rows_to_change
+  FROM plan_phases WHERE era IS NOT NULL AND era NOT IN ('ppl', 'onyx')
+UNION ALL
+SELECT 'exercises.slug',   count(*)
+  FROM exercises   WHERE slug ~ '^[a-z]+[0-9]-'
+   AND slug !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+UNION ALL
+SELECT 'set_events.body',  count(*)
+  FROM set_events  WHERE body->'payload'->>'exercise_id' ~ '^[a-z]+[0-9]-'
+   AND body->'payload'->>'exercise_id' !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+UNION ALL
+SELECT 'reports.content_md', count(*)
+  FROM reports     WHERE content_md ~ '⬢\s*\w+\s+OS\s*·';
+
+-- Every CHECK constraint on the four tables, so a second refusal like the one
+-- that stopped v1 is visible here rather than as an aborted transaction.
+SELECT conrelid::regclass AS "table", conname, pg_get_constraintdef(oid) AS definition
+  FROM pg_constraint
+ WHERE contype = 'c'
+   AND conrelid IN ('public.plan_phases'::regclass, 'public.exercises'::regclass,
+                    'public.set_events'::regclass,  'public.reports'::regclass)
+ ORDER BY 1, 2;
+
+-- ── 1 · plan_phases.era — the constraint, then the rows, then the constraint ─
+-- THE ONLY DDL IN THIS FILE, and it is a replacement in kind: the column keeps
+-- a CHECK that admits exactly the values `PhaseEra` can encode. `era` is
+-- nullable and `PhaseDef.era` is Optional, so NULL stays admissible — absent
+-- is not the same as an era, and rows that never claimed one must keep saying
+-- so.
+--
+-- `IF EXISTS` so a re-run after a partial attempt does not fail on the drop.
+ALTER TABLE plan_phases DROP CONSTRAINT IF EXISTS plan_phases_era_check;
+
+UPDATE plan_phases
+   SET era = 'onyx'
+ WHERE era IS NOT NULL
+   AND era NOT IN ('ppl', 'onyx');
+
+ALTER TABLE plan_phases
+  ADD CONSTRAINT plan_phases_era_check
+  CHECK (era IS NULL OR era IN ('ppl', 'onyx'));
+
+-- ── 2 · exercises.slug ──────────────────────────────────────────────────────
+-- The catalogue's alias column — the map `ExerciseIndex.id(forSlug:)` resolves
+-- a phone-stamped set through. All 46 rows carry the old stamp. This must
+-- land, or a set logged on 7.0.0 finds no catalogue row.
+UPDATE exercises
+   SET slug = 'onyx-' || substring(slug from position('-' in slug) + 1)
+ WHERE slug ~ '^[a-z]+[0-9]-'
+   AND slug !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+-- ── 3 · set_events.body → payload → exercise_id ─────────────────────────────
+-- The append log. The id is nested at `body.payload.exercise_id`; there is no
+-- top-level `payload` column on this table (`routines.payload` and
+-- `routine_templates.payload` are different tables and are not touched).
+--
+-- This cannot be skipped if §2 ran: any edit to a session reprojects it FROM
+-- THIS LOG, so a log left on the old stamp would undo the projection and file
+-- half a session under each name.
+UPDATE set_events
+   SET body = jsonb_set(
+         body,
+         '{payload,exercise_id}',
+         to_jsonb('onyx-' || substring(
+             body->'payload'->>'exercise_id'
+             from position('-' in body->'payload'->>'exercise_id') + 1
+         ))
+       )
+ WHERE body->'payload'->>'exercise_id' ~ '^[a-z]+[0-9]-'
+   AND body->'payload'->>'exercise_id' !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+-- ── 4 · reports.content_md — the seven stored reports ───────────────────────
+-- Included at the founder's instruction (2026-09-19): zero trace anywhere.
+--
+-- These are DOCUMENTS, not identity values — nothing keys on them, and
+-- `fmtV2.parseHeader` takes a report's title by POSITION, so they rendered
+-- correctly either way. This is an archive decision, not a correctness fix,
+-- and it rewrites seven historical documents to say something they did not say
+-- when they were generated.
+--
+-- Structural, like everything above: it replaces the word between `⬢ ` and
+-- ` OS ·` on the masthead, whatever that word is, and touches nothing else in
+-- the body. `\w+` cannot cross the spaces around it, so a report body that
+-- happens to contain the word elsewhere is untouched — only the masthead
+-- matches the full `⬢ … OS ·` shape.
+UPDATE reports
+   SET content_md = regexp_replace(content_md, '(⬢\s*)\w+(\s+OS\s*·)', '\1ONYX\2', 'g')
+ WHERE content_md ~ '⬢\s*\w+\s+OS\s*·';
+
+-- ── 5 · AFTER ───────────────────────────────────────────────────────────────
+-- Every number must be 0. If one is not, do NOT commit — ROLLBACK and say so.
+SELECT 'plan_phases.era'  AS target, count(*) AS rows_left
+  FROM plan_phases WHERE era IS NOT NULL AND era NOT IN ('ppl', 'onyx')
+UNION ALL
+SELECT 'exercises.slug',   count(*)
+  FROM exercises   WHERE slug ~ '^[a-z]+[0-9]-'
+   AND slug !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+UNION ALL
+SELECT 'set_events.body',  count(*)
+  FROM set_events  WHERE body->'payload'->>'exercise_id' ~ '^[a-z]+[0-9]-'
+   AND body->'payload'->>'exercise_id' !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+UNION ALL
+SELECT 'reports.content_md', count(*)
+  FROM reports     WHERE content_md ~ '⬢\s*\w+\s+OS\s*·'
+   AND content_md !~ '⬢\s*ONYX\s+OS\s*·';
+
+-- And the constraint is back, admitting exactly the two values and NULL.
+SELECT conname, pg_get_constraintdef(oid) AS definition
+  FROM pg_constraint
+ WHERE conrelid = 'public.plan_phases'::regclass AND conname = 'plan_phases_era_check';
+
+COMMIT;
+-- ROLLBACK;   -- swap for COMMIT above if any "rows_left" came back non-zero
+```
