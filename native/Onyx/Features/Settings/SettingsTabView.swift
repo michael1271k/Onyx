@@ -158,18 +158,30 @@ private struct SettingsForm: View {
                     Text("Sunday").tag(0)
                     Text("Monday").tag(1)
                 }
-                Toggle("Reduce motion", isOn: reduceMotion)
             } header: {
                 OnyxSectionHeader("Units & display", .recover)
             } footer: {
-                // Says what each DOES, not what it ought to. Week start is now
+                // Says what each DOES, not what it ought to. Week start is
                 // load-bearing — one `WeekWindow` cuts History, the Workout
                 // tab's This-week panel and the weekly export, so changing it
-                // re-labels every week in the app. Reduce motion is still only
-                // stored: nothing in `Onyx` reads it, and neither does
-                // anything read the system setting, so claiming otherwise here
-                // would be a lie in a settings footer.
-                Text("A week runs \(weekSpanLabel) — History, this week's panel and the weekly export are all cut on it. Reduce motion is stored with your account and honoured by the web app; the native app does not read it yet.")
+                // re-labels every week in the app.
+                //
+                // ── AND WHY THERE IS NO "REDUCE MOTION" ROW (W1) ─────────────
+                // There was one. It wrote a value to the account, its own
+                // footer admitted "the native app does not read it yet", and
+                // the surface it named as honouring it — the web app — was
+                // retired at 3.0.0. A control that is not wired to anything is
+                // a rejection under 2.1 and a lie regardless.
+                //
+                // It is DELETED rather than wired, because the app already
+                // honours the SYSTEM setting: `accessibilityReduceMotion` is
+                // read in eight places (`TileFrame`, `DashboardGrid`,
+                // `SmartStackView`, `TodayCards`, `PulseSquares`,
+                // `PulseTabView`, `PulseDoms`, `CardioToast`). Settings →
+                // Accessibility → Motion is where iOS keeps this, and a second
+                // app-level copy of a system switch is a second answer to one
+                // question. The stored column is left alone; nothing reads it.
+                Text("A week runs \(weekSpanLabel) — History, this week's panel and the weekly export are all cut on it.")
             }
 
             Section {
@@ -433,10 +445,6 @@ private struct SettingsForm: View {
             get: { WeekWindow.startDay(from: model.goals) },
             set: { model.setWeekStartDay($0) }
         )
-    }
-
-    private var reduceMotion: Binding<Bool> {
-        Binding(get: { model.goals?.reduceMotion ?? false }, set: { model.setReduceMotion($0) })
     }
 
     private var trackRpe: Binding<Bool> {

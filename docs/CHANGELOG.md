@@ -44,6 +44,52 @@ _Nothing yet._
 
 ---
 
+## [7.9.0] — 2026-09-22 · The widgets draw again
+
+Wave 1 of the App Store sprint. It owns `native/project.yml` alone so the two
+later lanes can run in parallel worktrees without colliding on it, and it clears
+the two things a reviewer or a Home Screen would have hit first.
+
+### Fixed
+- **Home Screen widgets rendered Apple's "Please adopt containerBackground API"
+  placeholder instead of a tile.** Twelve of the twenty faces `OnyxTile.face`
+  dispatches to never called `containerBackground`, and four more
+  (`trajectory`, `consistency`, `deficit`, `fatigue`) carried it on a wrapper
+  view that `face` goes around — as did `daily`. One call now sits at
+  `TileFace`, the single widget root that draws a tile, rather than in twenty
+  files: "each face remembers" is the rule that produced the bug. Verified by
+  placing real medium and large widgets on a simulator Home Screen, not by
+  reading the diff.
+
+### Removed
+- **Settings → "Reduce motion".** It wrote a column nothing native reads, and
+  its own footer said so — while crediting "the web app", which was retired at
+  3.0.0. The app already honours the system setting
+  (`accessibilityReduceMotion`, read in eight places), and iOS keeps this switch
+  at Settings → Accessibility → Motion. The row, its binding and
+  `SettingsModel.setReduceMotion` are gone; the stored column is untouched.
+
+### Added
+- **Two parked entitlement blocks in `native/project.yml`** —
+  `com.apple.developer.applesignin` and
+  `com.apple.developer.healthkit.background-delivery`, commented in the same
+  shape as the `associated-domains` block beside them, each naming exactly what
+  to uncomment and what to enable in the developer portal. Both need the paid
+  Developer Program; neither changes this binary.
+- **An `Apple Watch SE 3 (40mm)` simulator**, paired to `iPhone 15`. 40 mm had
+  been asserted by `OnyxWatchLayoutTests` and never once photographed, because
+  no 40 mm device existed on this machine.
+
+### Notes
+- **The test baseline is now written down.** `OnyxTests` fails **11 issues
+  across 9 test names**; `OnyxDataTests` fails **1**, the Keychain session-blob
+  test, which is a free-team signing symptom (`-34018`) and passes on macOS via
+  `npm run swift:data`. `OnyxCoreTests` (706) and `OnyxUITests` (42) are clean.
+  Four documents in `docs/Done/` disagreed on this number; they should not be
+  cited again.
+
+---
+
 ## [7.8.1] — 2026-09-22 · The sprint leaves no residue
 
 Wave 8, the close-out of the Onyx Expansion sprint. No feature, no schema, no
