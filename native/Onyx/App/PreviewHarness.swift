@@ -502,7 +502,9 @@ enum PreviewHarness {
              "logger-rest",
              "set-row", "set-row-split", "set-row-cardio", "set-row-records", "set-options", "effort-picker",
              // W5: the heart-rate chart (seeded Health) and the Hevy card (fixture).
-             "telemetry-finish", "telemetry-detail", "hevy-card":
+             "telemetry-finish", "telemetry-detail", "hevy-card",
+             // W3: the mid-session add.
+             "logger-add":
             LoggerPreviews.view(screen)
         // ── THE CARDIO SHEET, IN BOTH OF ITS STATES ────────────────────────
         // It had never had a shot, which is most of how it got to look the way

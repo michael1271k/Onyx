@@ -55,6 +55,11 @@ struct LiveLoggerView: View {
     @State private var showPhase = false
     @State private var showFinish = false
     @State private var showTimer = false
+    /// The catalogue the "Add a movement" picker lists, read when it opens —
+    /// nil while it is closed (W3).
+    @State private var adding: [Exercise]?
+    /// Bumped to scroll the deck to `focus` — see the picker's handler.
+    @State private var scrollTick = 0
     /// The SET stopwatch, owned here and lent to `TimerSheet`.
     ///
     /// It cannot live in the sheet: a sheet's `@State` dies with the sheet, and
@@ -98,8 +103,9 @@ struct LiveLoggerView: View {
     /// check what is coming and scroll back, and neither of those is a
     /// statement about which set you are standing in front of.
     ///
-    /// So this is the logger's own cursor. Nothing writes it but `init`: the
-    /// opening position, and after that the reader's own scrolling. It used to
+    /// So this is the logger's own cursor. Nothing writes it but `init` — the
+    /// opening position — and a movement added mid-session, which you added
+    /// to do next (W3); after that the reader's own scrolling. It used to
     /// be advanced on completing a movement; that is gone (see the
     /// `completedSets` observer).
     @State private var focus: String?
@@ -218,6 +224,20 @@ struct LiveLoggerView: View {
         }
         .sheet(isPresented: $showFinish) {
             FinishSheet(model: model, onFinish: finish)
+        }
+        .sheet(isPresented: Binding(get: { adding != nil }, set: { if !$0 { adding = nil } })) {
+            ExercisePickerSheet(
+                catalogue: adding ?? [],
+                createNote: "Adds it to this session."
+            ) { name, picked in
+                // To the card — the new one, or the one already on the deck.
+                // The tick, not `focus` alone: picking the card that already
+                // HAS the focus changes nothing an `onChange(of: focus)` sees.
+                if let card = model.addExercise(named: name, exerciseId: picked?.id) {
+                    focus = card.id
+                    scrollTick += 1
+                }
+            }
         }
         // ── WHY A CONFIRMATION AND NOT AN UNDO ──────────────────────────────
         // §3.4 prefers undo to a prompt, and this is the exception the rule
@@ -677,6 +697,11 @@ struct LiveLoggerView: View {
                         .frame(maxWidth: .infinity)
                         .id(exercise.id)
                     }
+                    // A session is not a contract with the program: the
+                    // machine was taken, the shoulder asked for something
+                    // else. Live decks only — an edit deck already carries
+                    // every movement the session or its plan named.
+                    if !model.isEditing { addMovement }
                 }
                 // 12 rather than the 16 the rest of the app uses. The set row
                 // inside these cards is within a few points of the width of a
@@ -691,9 +716,9 @@ struct LiveLoggerView: View {
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: focus) { _, next in
-                guard let next else { return }
-                withAnimation(OnyxMotion.move) { proxy.scrollTo(next, anchor: .top) }
+            .onChange(of: scrollTick) {
+                guard let focus else { return }
+                withAnimation(OnyxMotion.move) { proxy.scrollTo(focus, anchor: .top) }
             }
             // Resuming mid-session opens on the set you stopped at, not at the
             // top of a workout that is half done. Unanimated on purpose: this is
@@ -712,6 +737,19 @@ struct LiveLoggerView: View {
         }
     }
 
+
+    /// The last thing on the deck, where the next movement would go (W3).
+    private var addMovement: some View {
+        Button { adding = model.catalogue() } label: {
+            Label("Add a movement", systemImage: "plus")
+                .onyxType(.body).fontWeight(.semibold)
+                .foregroundStyle(accent)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onyxGlass(.tile)
+    }
 
     // MARK: - Failures
 

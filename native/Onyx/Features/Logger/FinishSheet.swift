@@ -92,6 +92,13 @@ struct FinishSheet: View {
     /// it (W5, decision 7). Nil once answered, or when there is none.
     @State private var foreign: WorkoutSample?
     @FocusState private var editing: Metric?
+    /// The heart-rate chart's panel is up, and whether there is a series for
+    /// it to draw — see `heartRatePanel` (W3).
+    @State private var heartOpen = false
+    @State private var heartSeries = false
+    /// Whose figures the heart rate and calories are once Hevy's were adopted
+    /// — the source's name, so the provenance line stops crediting the watch.
+    @State private var adoptedFrom: String?
 
     private enum Metric: Hashable { case duration, bpm, calories }
 
@@ -112,13 +119,6 @@ struct FinishSheet: View {
                     dial
                     summary
                     if let foreign { hevy(foreign) }
-                    if let sessionId = model.sessionId, !model.isEditing {
-                        TelemetryCard(
-                            sessionId: sessionId,
-                            storedAvgBpm: bpmMeasured ? avgBpm : nil,
-                            kcal: calories
-                        )
-                    }
                     shape
                     if !topMovement.isEmpty { heaviest }
                     if let sessionId = model.sessionId { summaryLink(sessionId) }
@@ -135,6 +135,13 @@ struct FinishSheet: View {
                     .padding(.horizontal, OnyxSpace.l)
                     .padding(.vertical, OnyxSpace.m)
                     .background(.ultraThinMaterial)
+                    // Out of the way while the heart-rate panel is up: the
+                    // inset draws above an overlay on this SDK, so the panel
+                    // and the button were drawn through each other — and
+                    // Finish is not the action while a chart is being read.
+                    .opacity(heartOpen ? 0 : 1)
+                    .allowsHitTesting(!heartOpen)
+                    .animation(OnyxMotion.fade, value: heartOpen)
             }
             .onyxScreen(.train)
             .navigationTitle("Session")
@@ -158,6 +165,15 @@ struct FinishSheet: View {
                 await loadForeign()
             }
         }
+        // The chart the Avg HR reading opens (W3). On the STACK, not the scroll
+        // view: the pinned Finish button is the scroll view's inset, and a panel
+        // inside it was drawn through the button rather than over it.
+        .heartRatePanel(
+            isPresented: $heartOpen, available: $heartSeries,
+            sessionId: model.isEditing ? nil : model.sessionId,
+            storedAvgBpm: bpmMeasured ? avgBpm : nil, kcal: calories,
+            onEdit: { open = .bpm }
+        )
         .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         .presentationContentInteraction(.scrolls)
@@ -258,7 +274,8 @@ struct FinishSheet: View {
                         : (durationEdited ? .edited : .measured)
                 )
                 metricCell(
-                    "Avg HR", "heart", value: $avgBpm, unit: "bpm", step: 1,
+                    // The trace glyph once there is a trace behind the tap.
+                    "Avg HR", heartSeries ? "waveform.path.ecg" : "heart", value: $avgBpm, unit: "bpm", step: 1,
                     field: .bpm, provenance: provenance(avgBpm, measured: bpmMeasured)
                 )
                 metricCell(
@@ -298,12 +315,13 @@ struct FinishSheet: View {
 
     // MARK: - Hevy logged this too (W5)
 
-    /// Read once the sheet is up, after the store's own figures. A decision
-    /// already recorded for this session (the card was shown on a previous
-    /// open, or on the summary page) keeps the card down.
+    /// Read once the sheet is up, after the store's own figures. Hevy's
+    /// figures already adopted for this session (here on a previous open, or
+    /// on the summary page) keep the line down — it would restate them. Any
+    /// other decision is a legacy `.skip`, from when the line was a question.
     private func loadForeign() async {
         guard let session = model.sessionRow, !model.isEditing else { return }
-        if await environment.telemetry.hevyDecision(sessionId: session.id) != nil { return }
+        if await environment.telemetry.hevyDecision(sessionId: session.id) == .use { return }
         #if DEBUG
         if let foreignFixture { foreign = foreignFixture; return }
         #endif
@@ -317,15 +335,6 @@ struct FinishSheet: View {
                 bpmMeasured: bpmMeasured, kcalMeasured: caloriesMeasured
             ),
             hevy: workout,
-            onSkip: {
-                // Onyx's numbers stand. Nothing is written — not to the row,
-                // not to Health — and the answer is remembered on the local
-                // telemetry row so the summary page does not ask again.
-                if let id = model.sessionId {
-                    Task { await environment.telemetry.setHevyDecision(sessionId: id, .skip) }
-                }
-                withAnimation(OnyxMotion.fade) { foreign = nil }
-            },
             onUse: {
                 // The two figures the phone could not measure, adopted as the
                 // athlete's answer: `setMetrics` stamps them measured, the
@@ -339,6 +348,7 @@ struct FinishSheet: View {
                 model.setMetrics(avgBpm: bpm, calories: kcal)
                 if let bpm { avgBpm = bpm; bpmMeasured = true; prefilled.remove(.bpm) }
                 if let kcal { calories = kcal; caloriesMeasured = true; prefilled.remove(.calories) }
+                if bpm != nil || kcal != nil { adoptedFrom = workout.sourceName ?? "another app" }
                 if let id = model.sessionId {
                     Task { await environment.telemetry.setHevyDecision(sessionId: id, .use) }
                 }
@@ -496,7 +506,14 @@ struct FinishSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// Plus, once the Avg HR tap opens a trace rather than a stepper (W3), a
+    /// line that says so — "tap to set them" would otherwise be a promise the
+    /// heart rate's own tap no longer keeps directly.
     private var provenanceText: String {
+        heartSeries ? provenanceBase + " Avg HR opens the session's heart-rate trace." : provenanceBase
+    }
+
+    private var provenanceBase: String {
         if !prefilled.isEmpty {
             // Say whose number it is. A figure carried from the last session
             // reads exactly like one this session produced, and a default
@@ -505,6 +522,9 @@ struct FinishSheet: View {
         }
         if avgBpm == nil || calories == nil {
             return "Heart rate and calories fill in from Apple Health once the watch has synced — or tap to set them."
+        }
+        if let adoptedFrom {
+            return "Heart rate and calories from \(adoptedFrom)'s workout — tap either to correct it."
         }
         return bpmMeasured && caloriesMeasured
             ? "Heart rate and calories measured from the watch's own workout."
@@ -623,7 +643,7 @@ struct FinishSheet: View {
                 value.wrappedValue = next
             }
         )
-        return VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+        let face = VStack(alignment: .leading, spacing: OnyxSpace.xs) {
             HStack(spacing: OnyxSpace.xs) {
                 Label(label, systemImage: symbol)
                     .onyxMicro()
@@ -673,14 +693,42 @@ struct FinishSheet: View {
             RoundedRectangle(cornerRadius: OnyxCorner.row, style: .continuous)
                 .strokeBorder(cellTint(provenance).opacity(isOpen ? 0.45 : 0.20), lineWidth: 0.5)
         )
-        // The TARGET is the cell, not the text inside it. A field you have to
-        // hit exactly is a field nobody corrects — and the whole box being live
-        // is also the only affordance saying which three of the six you answer.
-        .contentShape(.rect)
-        .onTapGesture {
-            if isOpen { closeCell() } else {
-                commitMetrics()
-                open = field
+        return Group {
+            if field == .bpm, heartSeries, !isOpen {
+                // ── THE AVERAGE OPENS ITS OWN TRACE (W3) ────────────────────
+                // With a series behind it, the reading's tap is the chart —
+                // the only way to it, since it left the page. A Button, not
+                // the tap gesture below: `OnyxPressStyle` answers on touch-
+                // DOWN, and the panel is a thing that should feel grabbed.
+                // The stepper is one tap on, as the panel's "Edit the average".
+                // Nothing is committed on the way: opening a chart answers
+                // nothing, and `commitMetrics` would stamp the clock's running
+                // duration "edited". Only a stepper already open is closed
+                // (and committed) — the same as tapping to another cell.
+                //
+                // And to `.large`: the panel is taller than the sheet at its
+                // `.medium` detent on a small phone, and its title — the
+                // average being opened — would be the part cut off.
+                Button {
+                    if open != nil { closeCell() }
+                    detent = .large
+                    heartOpen = true
+                } label: { face }
+                .onyxPress(scale: 0.97)
+                .accessibilityHint("Opens the heart-rate chart")
+            } else {
+                // The TARGET is the cell, not the text inside it. A field you
+                // have to hit exactly is a field nobody corrects — and the whole
+                // box being live is also the only affordance saying which three
+                // of the six you answer.
+                face
+                    .contentShape(.rect)
+                    .onTapGesture {
+                        if isOpen { closeCell() } else {
+                            commitMetrics()
+                            open = field
+                        }
+                    }
             }
         }
         .accessibilityElement(children: .combine)

@@ -428,6 +428,9 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     // MARK: - State
 
     private(set) var day: ProgramDay
+    /// `day` as it was handed in — before any movement was added to it. The
+    /// seed is built from this and nothing else (see `phase`).
+    private let programDay: ProgramDay
     var phase: ProgramPhase {
         didSet {
             guard phase != oldValue else { return }
@@ -438,7 +441,12 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // without this they would open on `wk1Kg` with a blank Previous —
             // the July-number problem this wave exists to remove, for exactly
             // the subset of lifts a phase switch introduces.
-            let opened = Self.loadSeed(store: store, day: day, phase: phase, userId: userId)
+            // From the PROGRAM's day, not `day`: `appendCard` grows `day` with
+            // movements added mid-session, and a seed rebuilt over it would
+            // give each one a cold-start entry — which switches off the
+            // narrow "last time" the card opened on (`seeded == nil` is its
+            // gate) at the first phase switch.
+            let opened = Self.loadSeed(store: store, day: programDay, phase: phase, userId: userId)
             seed = opened.seed
             progressionAlerts = opened.alerts
             rebuildForPhase()
@@ -542,6 +550,24 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     // program's cold start, which is exactly the preview's behaviour, so there
     // is one path rather than two.
     private(set) var seed: SessionSeed
+
+    /// "Last time" for the movements the DAY's seed does not cover — the ones
+    /// added mid-session (W3), keyed by `canonicalKey`.
+    ///
+    /// ── A SECOND, NARROW LOOKUP, NOT A WIDER SEED ───────────────────────────
+    /// `seed` is scoped to this routine day on purpose (`SessionSeedBuilder
+    /// .sessionsForSeed` says why), so a movement today's program does not name
+    /// has no entry in it and its card opened on blanks. This holds the answer
+    /// to that card's one question — the last working set of it anywhere
+    /// (`AppDatabase.lastWorkingSet`) — and it is only ever filled by
+    /// `appendCard`, only for a movement the seed has no entry for. Every card
+    /// the day opened with reads the seed exactly as before.
+    private(set) var lastTimes: [String: LastWorkingSet] = [:]
+
+    /// What the card of a movement added mid-session was last lifted at, or nil.
+    func lastTime(for exercise: ExerciseState) -> LastWorkingSet? {
+        lastTimes[canonicalKey(exercise.name)]
+    }
 
     /// Lifts that have earned a load bump today, and those one session away.
     /// Published to `AppEnvironment.progressionAlerts` by whoever opens the
@@ -835,6 +861,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         warmupBout: WarmupCardio.Bout? = nil
     ) {
         self.day = day
+        self.programDay = day
         self.phase = phase
         self.store = store
         self.userId = userId
@@ -1150,6 +1177,17 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// asks for two more rows is asking for two more working sets.
     private func seedRows(_ plan: ProgramExercise, count: Int, warmups: Bool = true) -> [SetRow] {
         let seeded = seed.exercises.first { ExerciseAliases.canonicalName($0.name) == ExerciseAliases.canonicalName(plan.name) }
+        // ── A MOVEMENT ADDED MID-SESSION (W3) ───────────────────────────────
+        // No seed entry, and the narrow lookup found it lifted somewhere: every
+        // row opens on that set, the way the history tier repeats a set it has
+        // one of. `seeded == nil` is the gate — a card the day opened with
+        // never reads this, whatever `lastTimes` holds.
+        if seeded == nil, let last = lastTimes[canonicalKey(plan.name)] {
+            let rows = (0..<max(0, count)).map { _ in
+                SetRow(weightKg: last.weightKg, reps: last.reps, previous: last.label)
+            }
+            return Unilateral.isUnilateral(plan.name) ? Self.presplit(rows) : rows
+        }
         let rows = seeded?.rows ?? []
         let working = rows.filter { $0.kind == .normal }
         var out: [SetRow] = warmups ? rows.filter { $0.kind == .warmup }.map(Self.setRow) : []
@@ -1256,6 +1294,72 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         exercise.rows.append(contentsOf: ["left", "right"].map { side in
             SetRow(weightKg: weightKg, kind: kind, previous: previous, side: side, pairId: pairId)
         })
+    }
+
+    // MARK: - Adding a movement mid-session (W3)
+
+    /// The local exercise list, for the add picker. Empty for a storeless
+    /// preview, where the picker still offers to create.
+    func catalogue() -> [Exercise] { (try? store?.exercises()) ?? [] }
+
+    /// Put a movement on the deck that today's program does not name.
+    ///
+    /// Returns the card — the NEW one, or the one already on the deck for this
+    /// movement. Two cards for one movement is the defect `DeckRestore.fold`
+    /// and `ExerciseState.id` both exist to survive (the duplicated treadmill);
+    /// asking for a movement you are already doing takes you to it instead.
+    ///
+    /// `exerciseId` is the catalogue row the picker chose, when it chose one:
+    /// the card's sets are then filed under it rather than re-resolved by name,
+    /// which for a name two rows answer to would fall to the slug.
+    @discardableResult
+    func addExercise(named name: String, exerciseId: String? = nil) -> ExerciseState? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let key = canonicalKey(trimmed)
+        if let already = exercises.first(where: { canonicalKey($0.name) == key }) { return already }
+        return appendCard(named: trimmed, exerciseId: exerciseId)
+    }
+
+    /// One card, appended at the bottom of the deck.
+    ///
+    /// ── IT JOINS THE DAY, NOT JUST THE DECK ─────────────────────────────────
+    /// `rebuildForPhase` rebuilds `exercises` by walking `day.exercises`, so a
+    /// card that lived only in the array was gone at the next phase switch,
+    /// ticked sets and all. Appended to `day` it is rebuilt like any other,
+    /// and `plannedSets` counts it — you added it to do it.
+    ///
+    /// ── AND IT TAKES THE NEXT `exercise_order`, NOTHING RESTAMPS ────────────
+    /// `deckOrder(of:)` is the card's index, dense from 0, so the last card's
+    /// sets are written under `count − 1` and no other card's position moved.
+    ///
+    /// A plan the day already holds — a lift this phase drops, which is on no
+    /// card — is reused rather than listed twice: two plans with one `id` is
+    /// two cards for one movement on the next rebuild.
+    @discardableResult
+    private func appendCard(named name: String, exerciseId: String? = nil) -> ExerciseState {
+        let key = canonicalKey(name)
+        let plan: ProgramExercise
+        if let known = day.exercises.first(where: { canonicalKey($0.name) == key }) {
+            plan = known
+        } else {
+            var starting = RoutineExercise.starting(name)
+            starting.exerciseId = exerciseId
+            plan = starting.programExercise
+            day.exercises.append(plan)
+        }
+        // The narrow lookup, and only where the day's seed has nothing to say.
+        // Never on an edit deck: `lastWorkingSet` has no date bound, so on a
+        // three-week-old session it would answer with a workout that happened
+        // AFTER it — the reason `restoreLoggedSets` blanks every Previous there.
+        if !isEditing, !seed.exercises.contains(where: { canonicalKey($0.name) == key }),
+           let last = try? store?.lastWorkingSet(named: plan.name, userId: userId, excludingSession: sessionId) {
+            lastTimes[key] = last
+        }
+        let prescribed = plan.sets(for: phase)
+        let card = ExerciseState(plan: plan, rows: seedRows(plan, count: prescribed > 0 ? prescribed : plan.sets))
+        exercises.append(card)
+        return card
     }
 
     // MARK: - Warm-up rungs (W6)
@@ -1617,10 +1721,14 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     ///
     /// Past the prescription there is nothing to show: history does not contain
     /// a set number that has never been programmed.
+    ///
+    /// A movement the day's seed does not name at all — added mid-session —
+    /// answers with its one narrow "last time" on every set (see `lastTimes`).
     private func seededPrevious(_ plan: ProgramExercise, workingIndex: Int) -> String? {
-        let working = seed.exercises
-            .first { ExerciseAliases.canonicalName($0.name) == ExerciseAliases.canonicalName(plan.name) }?
-            .rows.filter { $0.kind == .normal } ?? []
+        guard let entry = seed.exercises
+            .first(where: { ExerciseAliases.canonicalName($0.name) == ExerciseAliases.canonicalName(plan.name) })
+        else { return lastTimes[canonicalKey(plan.name)]?.label }
+        let working = entry.rows.filter { $0.kind == .normal }
         guard workingIndex >= 0, workingIndex < working.count else { return nil }
         return working[workingIndex].previous
     }
@@ -2579,30 +2687,61 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         // a movement; a case-sensitive match here would reuse the program's
         // card and then fail to find its rows — a blank card, and a fresh
         // `onyx-` id on the first tick.
-        let restore = DeckRestore.fold(
-            cards: exercises.map {
-                DeckRestore.Card(
-                    key: ExerciseAliases.canonicalName($0.name).lowercased(),
-                    // SETS, which is the unit `blankSets` comes back in and the
-                    // unit `seedRows(count:)` has always taken. `rows.count` is
-                    // the number that was wrong.
-                    shownSets: Self.physical($0.rows)
-                )
-            },
-            logged: logged.map {
-                DeckRestore.LoggedSet(
-                    id: $0.id,
-                    key: canonical($0.exerciseId).lowercased(),
-                    pairId: $0.pairId,
-                    // The LOCAL spelling, for the reason the row below restores
-                    // in it: `L` reaching the fold would make one physical set
-                    // count as two and seed a phantom blank to make up the
-                    // difference.
-                    side: SyncTranslation.localSide($0.side)
-                )
-            }
-        )
+        let loggedSets = logged.map {
+            DeckRestore.LoggedSet(
+                id: $0.id,
+                key: canonical($0.exerciseId).lowercased(),
+                pairId: $0.pairId,
+                // The LOCAL spelling, for the reason the row below restores
+                // in it: `L` reaching the fold would make one physical set
+                // count as two and seed a phantom blank to make up the
+                // difference.
+                side: SyncTranslation.localSide($0.side)
+            )
+        }
+        func fold() -> DeckRestore.Plan {
+            DeckRestore.fold(
+                cards: exercises.map {
+                    DeckRestore.Card(
+                        key: ExerciseAliases.canonicalName($0.name).lowercased(),
+                        // SETS, which is the unit `blankSets` comes back in and the
+                        // unit `seedRows(count:)` has always taken. `rows.count` is
+                        // the number that was wrong.
+                        shownSets: Self.physical($0.rows)
+                    )
+                },
+                logged: loggedSets
+            )
+        }
+        var restore = fold()
         let loggedById = Dictionary(logged.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // ── A MOVEMENT ADDED MID-SESSION COMES BACK AS ITS CARD (W3) ────────
+        // The deck is rebuilt from the day's PROGRAM on a relaunch, and a
+        // movement added in the session is not in it — so its logged rows came
+        // back as `unmatched`, which this used to leave undrawn: sets in the
+        // log and in `closeSession`'s counts, and not on the screen. Each such
+        // movement gets its card back, the way it got it the first time, and
+        // the fold runs again over a deck that now has somewhere to put them.
+        if !restore.unmatched.isEmpty {
+            var seen = Set<String>()
+            for set in restore.unmatched where seen.insert(set.key).inserted {
+                // Only a movement the catalogue can NAME. An id it cannot
+                // resolve yet (a relaunch before the pull lands) would title
+                // the card with a raw slug or uuid; those rows stay off the
+                // deck, as they always did, until the catalogue can name them.
+                guard let row = loggedById[set.id],
+                      catalogue[row.exerciseId] != nil || bySlug[row.exerciseId] != nil
+                else { continue }
+                let card = appendCard(named: canonical(row.exerciseId))
+                // A bout the opener no longer names (the last `cardio_logs`
+                // row changed kind in between) comes back as the bout it was,
+                // with no lifting blanks proposed under it.
+                if WarmupCardio.isCardio(durationSec: row.durationSec, distanceKm: row.distanceKm, inclinePct: row.incline) {
+                    card.rows = []
+                }
+            }
+            restore = fold()
+        }
 
         for (exercise, owned) in zip(exercises, restore.cards) {
             let mine = owned.loggedIds.compactMap { loggedById[$0] }
