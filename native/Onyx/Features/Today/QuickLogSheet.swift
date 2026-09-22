@@ -38,7 +38,7 @@ struct QuickLogSheet: View {
     /// all five — five `isPresented` flags on one view is five ways for two
     /// sheets to try to present at once.
     private enum Destination: String, Identifiable {
-        case weighIn, fatigue, stress, cardio, note
+        case weighIn, fatigue, stress, soreness, water, cardio, note
         var id: String { rawValue }
     }
 
@@ -89,7 +89,12 @@ struct QuickLogSheet: View {
             switch destination {
             case .weighIn: InBodyEntryView(model: model)
             case .fatigue: FatigueSheet(model: model)
-            case .stress:  StressLogSheet(model: model)
+            // The three day answers are one sheet now (§W6-B.4). Soreness
+            // had no spoke at all before this — it was reachable from a Pulse
+            // square and a VoiceOver rotor action and nowhere else.
+            case .stress:   LogDaySheet(model: model, segment: .stress)
+            case .soreness: LogDaySheet(model: model, segment: .soreness)
+            case .water:    LogDaySheet(model: model, segment: .water)
             case .note:    DayNoteSheet(model: model)
             case .cardio:
                 CardioLogSheet(
@@ -116,6 +121,10 @@ struct QuickLogSheet: View {
             },
             Spoke(id: "stress", symbol: "brain.head.profile", title: "Stress", detail: stressDetail, domain: .recover) {
                 opening = .stress
+            },
+            Spoke(id: "soreness", symbol: "figure.strengthtraining.functional", title: "Soreness",
+                  detail: sorenessDetail, domain: .recover) {
+                opening = .soreness
             },
             Spoke(id: "cardio", symbol: "figure.run", title: "Cardio", detail: cardioDetail, domain: .train) {
                 opening = .cardio
@@ -167,6 +176,14 @@ struct QuickLogSheet: View {
     /// neither moment.
     private var stressDetail: String {
         model.stressLatest.flatMap { PsychStress.level($0.level)?.label } ?? "—"
+    }
+
+    /// How many muscles carry a rating today, in the same words the Pulse
+    /// square uses — `N sore`, counting the ratings and not the landmarks
+    /// (`docs/COMPACTION_AUDIT.md` row on soreness).
+    private var sorenessDetail: String {
+        let rated = model.doms.filter { $0.severity > 0 }.count
+        return rated == 0 ? "—" : "\(rated) sore"
     }
 
     private var cardioDetail: String {

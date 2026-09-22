@@ -34,6 +34,15 @@ struct ExerciseImportView: View {
     @State private var picking = false
     @State private var written: Int?
     @State private var failure: String?
+    /// The catalogue's names, read once — see `loadExistingNames`.
+    @State private var existingNames: [String] = []
+    /// Whether that read has landed.
+    ///
+    /// The dedupe is the whole safety of this screen: parsed against an EMPTY
+    /// list nothing looks like an existing movement, and a re-import of a list
+    /// already in the catalogue adds a second row for every line. The controls
+    /// that can reach `parse` are disabled until the names are in.
+    @State private var namesLoaded = false
 
     var body: some View {
         List {
@@ -82,6 +91,7 @@ struct ExerciseImportView: View {
             load(result)
         }
         .task {
+            await loadExistingNames()
             guard let seededPaste, parsed == nil else { return }
             text = seededPaste
             parse(seededPaste)
@@ -98,6 +108,7 @@ struct ExerciseImportView: View {
             } label: {
                 Label("Choose a file", systemImage: "doc.badge.plus")
             }
+            .disabled(!namesLoaded)
         } header: {
             OnyxSectionHeader("From a file", .train)
         } footer: {
@@ -128,7 +139,11 @@ struct ExerciseImportView: View {
 
         Section {
             Button("Read it") { parse(text) }
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                // Also on the catalogue read — see `namesLoaded`. A parse
+                // against an empty dedupe list re-adds every movement.
+                .disabled(
+                    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !namesLoaded
+                )
         }
     }
 
@@ -227,11 +242,23 @@ struct ExerciseImportView: View {
 
     // MARK: - Actions
 
+    /// Read ONCE, in `.task`, off the main actor — `parse` runs on every
+    /// change of a text field and used to read the whole catalogue each time
+    /// (W6). A movement added in another tab while this sheet is open is not
+    /// in the list, which is the same staleness the sheet already had between
+    /// two keystrokes.
+    private func loadExistingNames() async {
+        let database = database
+        existingNames = await Task.detached(priority: .userInitiated) {
+            (try? database.exercises().map(\.name)) ?? []
+        }.value
+        namesLoaded = true
+    }
+
     private func parse(_ raw: String) {
         failure = nil
         written = nil
-        let existing = (try? database.exercises().map(\.name)) ?? []
-        let out = ExerciseCSV.parse(raw, existingNames: existing)
+        let out = ExerciseCSV.parse(raw, existingNames: existingNames)
         guard !out.isEmpty else {
             failure = "Nothing in that looked like a list of movements. Onyx needs one movement per line, with an optional muscle column."
             return

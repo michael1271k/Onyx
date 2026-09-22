@@ -44,6 +44,96 @@ _Nothing yet._
 
 ---
 
+## [7.7.0] — 2026-09-22 · Measured, then cut
+
+Wave 6 of the Onyx Expansion sprint. Every hot path has a signpost and a
+number behind it; no view waits on the store; five tabs got denser rather than
+shorter; and the app now knows when it is standing in a gym.
+
+### The before/after table
+
+Eight seams carry `os_signpost` intervals under the subsystem `app.onyx.perf`
+(`Perf`, in OnyxCore) — `launch.firstFrame`, `tab.switch`, `logger.open`,
+`set.tick`, `session.finish`, `export.build`, `watch.push`, `sync.foreground`
+— joining `rescore.run`, which W2 left there.
+
+The four seams that are pure store work are measured by
+`SeamBenchmarkTests`, which runs the OLD shape and the NEW one in the same
+process over the same deterministic account (`DenseSeed`, 141 days), so the
+pair is one machine and one run rather than two branches. `ONYX_BENCH=1
+npm run swift:data` reproduces it.
+
+| Seam | Before | After | What changed |
+|---|---|---|---|
+| Battery stack (14 days) | 770 ms | **250 ms** | fourteen `ScoringWindow` loads, each reaching 48 days behind its own date, became one window over the whole span |
+| Stress series (14 days) | 244 ms | **82 ms** | fourteen 49-day readiness reads became one 62-day read, sliced per day |
+| Nutrition day (the Fuel tab's whole read) | 32 ms | **8 ms** | seven `ValueObservation`s plus two inline main-actor `stackCredit` reads became one observation, one transaction, one delivery |
+| Watch context payload | 20,836 B | **7,040 B** | the whole deck catalogue rode along on every push; now the active program plus a name-deduplicated swap pool |
+| `launch.firstFrame` | — | 661–776 ms | instrumented; measured cold on the iPhone 15 simulator, signed out (4 runs) |
+| `tab.switch`, `logger.open`, `set.tick`, `session.finish`, `export.build`, `sync.foreground` | — | — | instrumented and **not measured here**: the simulator has no Supabase session, so there is no signed-in shell to switch tabs in, no deck to open and no sync to run. A device trace is the measurement. |
+
+`export.build` has a second, larger number that is not a duration: the weekly
+export used to be built on **every appearance** of a week page and is now
+built when the share is actually performed — for most visits the cost went
+from one whole-week read and a file write to nothing at all.
+
+### Added
+- **Gym mode** (§W6-B, decision 26). A workout already running, or a session
+  due today with the clock inside the window this person usually trains in —
+  the median of `workout_sessions.started_at` ± 90 minutes, and no window at
+  all under eight logged starts — opens the app on Train with the tab bar out
+  of the way. A **Leave** capsule in the navigation bar brings the tabs back,
+  and finishing or cancelling ends it without anybody tapping anything.
+  Settings → **Gym mode** turns it off; it is on by default.
+- **Relevance ordering on Today** (§W6-B.3). The same cards, in the order the
+  clock asks for: mornings lead with sleep, recovery and the session; evenings
+  with fuel, water and tomorrow. Nothing is hidden, resized or removed — the
+  hero moves. The first drag, resize or hide retires the ranking for good:
+  a grid somebody arranged is never re-ordered again.
+- **One "Log day" sheet** with three segments — stress, soreness, water —
+  reached from Pulse and from Today's Quick Log. Soreness had no Quick Log
+  spoke at all before; water was behind a long-press on a row whose tap did
+  something else.
+- **`docs/COMPACTION_AUDIT.md`** — every fact this app draws twice, which
+  drawing is kept, and why. Ten rows resolved, ten recorded with their reason,
+  and two rows the audit itself got wrong with the reason they are not
+  duplicates.
+- Three new gates: `scripts/check-body-reads.mjs` (no synchronous store read
+  inside any SwiftUI view builder), `CardTextBudgetTests` (one hero and at most
+  two captions per card, with a reasoned allowlist for registers), and
+  `SeamBenchmarkTests`.
+
+### Changed
+- **Realtime survives a drop.** A failed channel join retries with exponential
+  backoff and equal jitter (1 s floor, 60 s ceiling), and while the socket is
+  down a 60 s poll delivers the same rows. The ladder resets on a successful
+  join. Nothing retried at all before.
+- **Keyset paging** replaces offset paging in `PostgRESTRemote`, keyed on each
+  table's primary key — the only total order this schema has an index for.
+  (`(updated_at, id)` as planned is not available: eleven of the mirrored
+  tables have no `id` column and twelve carry no `updated_at`.)
+- **The main-thread purge.** Reads that feed a view are off the main actor:
+  the launch-time live-workout check, the routine builder's catalogue, the
+  body-trends window and its ranged vitals read, the CSV importer's catalogue
+  (which was re-read on every keystroke), and the watch-context push, which
+  ran about thirty store reads on the main actor at sign-in, at midnight, on
+  a theme pick and once every thirty seconds.
+- Sleep durations print one way. `DayFormat.minutes` and `WeekDaysView.hours`
+  are gone; `Format.sleep` is the one prose formatter, so an exact seven hours
+  reads `7h` everywhere instead of `7h 0m` on one screen and `7h 00m` on
+  another. Fixed-width tile faces keep `OnyxSnapshot.formatSleep`.
+- Three duplicated helpers in OnyxUI collapsed to one each (the sessions
+  fraction, the week-volume delta in tonnes), Today stopped drawing steps on
+  two of its own sheets, and the Train tab's sections are `12` apart like
+  Today's and Fuel's rather than `16`.
+
+### Fixed
+- `scripts/native-shot.sh` died with `seed[@]: unbound variable` on every
+  screen that is not `telemetry-*`: bash 3.2, which is what macOS ships, reads
+  an empty array as unset under `set -u`.
+
+---
+
 ## [7.6.0] — 2026-09-21 · The session knows whose heart rate it is
 
 Expansion W5. The post-workout summary shows the session's heart rate cut into

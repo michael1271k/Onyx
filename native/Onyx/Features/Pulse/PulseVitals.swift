@@ -84,7 +84,7 @@ struct VitalsSection: View {
         let gap = minutes.map { $0 - goal }
         return VitalsGrid.Reading(
             id: "Sleep",
-            value: minutes.map { DayFormat.minutes($0) },
+            value: minutes.map { Format.sleep(Double($0)) },
             unit: "",
             delta: nil,
             decimals: 0,
@@ -93,7 +93,7 @@ struct VitalsSection: View {
             // 49 the hero rule reads.
             trend: window.series.sleepMinutes.suffix(7).compactMap { $0 },
             color: Color.onyx.accent(.recover),
-            detail: gap.map { abs($0) <= 5 ? "goal met" : "\($0 > 0 ? "+" : "−")\(DayFormat.minutes(abs($0)))" },
+            detail: gap.map { abs($0) <= 5 ? "goal met" : "\($0 > 0 ? "+" : "−")\(Format.sleep(Double(abs($0))))" },
             detailGood: (gap ?? 0) >= -5,
             action: onSleep
         )

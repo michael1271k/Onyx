@@ -247,7 +247,7 @@ struct SleepEditSheet: View {
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Slept \(DayFormat.minutes(minutes))")
+        .accessibilityLabel("Slept \(Format.sleep(Double(minutes)))")
         .accessibilityValue(goalText)
     }
 
@@ -255,7 +255,7 @@ struct SleepEditSheet: View {
         guard minutes > 0 else { return "no window" }
         let gap = minutes - goalMin
         if abs(gap) <= 5 { return "goal met" }
-        return "\(gap > 0 ? "+" : "−")\(DayFormat.minutes(abs(gap))) vs goal"
+        return "\(gap > 0 ? "+" : "−")\(Format.sleep(Double(abs(gap)))) vs goal"
     }
 
     /// What the save will do to the stages, in one line. Short on purpose: it
@@ -265,10 +265,10 @@ struct SleepEditSheet: View {
         let trimmed = preview
         if night == nil { return "No night stored yet — the whole window is filed as core sleep." }
         if trimmed.cutMin > 0 {
-            return "Estimated: \(DayFormat.minutes(Int(trimmed.cutMin))) off, awake first. Apple Health's own samples win where it has them."
+            return "Estimated: \(Format.sleep(trimmed.cutMin.rounded(.down))) off, awake first. Apple Health's own samples win where it has them."
         }
         if trimmed.addedMin > 0 {
-            return "Estimated: \(DayFormat.minutes(Int(trimmed.addedMin))) added as core. Apple Health's own samples win where it has them."
+            return "Estimated: \(Format.sleep(trimmed.addedMin.rounded(.down))) added as core. Apple Health's own samples win where it has them."
         }
         return "Same span moved — the stages are unchanged."
     }
@@ -366,7 +366,7 @@ struct SleepEditSheet: View {
         let from = start.formatted(date: .omitted, time: .shortened)
         let to = end.formatted(date: .omitted, time: .shortened)
         let span = "\(from) – \(to)"
-        return latencyMin > 0 ? "\(span) · \(DayFormat.minutes(latencyMin)) to sleep" : span
+        return latencyMin > 0 ? "\(span) · \(Format.sleep(Double(latencyMin))) to sleep" : span
     }
 
     /// ── 128 PT, NOT THE WHEEL'S OWN 216 ─────────────────────────────────────

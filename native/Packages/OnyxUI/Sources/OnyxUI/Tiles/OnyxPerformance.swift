@@ -361,10 +361,10 @@ struct RecordGridFace: View {
   private var weekStrip: some View {
     Register(title: "THIS WEEK", accent: tint(OnyxDomain.train.accent)) {
       HStack(spacing: 0) {
-        WeekCell(label: "SESSIONS", value: sessions,
+        WeekCell(label: "SESSIONS", value: sessionsText(s),
                  delta: delta(s?.week.sessions, s?.weekPrev?.sessions), decimals: 0, mono: mono)
         WeekCell(label: "VOLUME", value: OnyxSnapshot.tonnes(s?.week.volumeKg),
-                 delta: delta(tonnesThisWeek, tonnesLastWeek), decimals: 1, mono: mono)
+                 delta: volumeDeltaTonnes(s), decimals: 1, mono: mono)
         WeekCell(label: "SETS", value: s.map { "\($0.week.sets)" },
                  delta: delta(s?.week.sets, s?.weekPrev?.sets), decimals: 0, mono: mono)
         WeekCell(label: "RECORDS", value: s.map { "\($0.week.prs)" },
@@ -407,24 +407,16 @@ struct RecordGridFace: View {
     }
   }
 
-  private var sessions: String? {
-    guard let week = s?.week else { return nil }
-    if let target = week.sessionTarget, target > 0 { return "\(week.sessions)/\(target)" }
-    return "\(week.sessions)"
-  }
-
-  private var tonnesThisWeek: Double? { s?.week.volumeKg.map { $0 / 1000 } }
-  private var tonnesLastWeek: Double? { s?.weekPrev?.volumeKg.map { $0 / 1000 } }
-
   /// A delta only exists when BOTH weeks do. A first week compared against
   /// nothing is "new", not "+everything".
+  ///
+  /// The session count and the tonnage delta are no longer spelled out here —
+  /// they are `sessionsText` and `volumeDeltaTonnes` in OnyxTraining, which the
+  /// Volume faces already used. This strip and those faces are the same two
+  /// figures and had drifted into three statements of the same rule.
   private func delta(_ now: Int?, _ then: Int?) -> Double? {
     guard let now, let then else { return nil }
     return Double(now - then)
-  }
-  private func delta(_ now: Double?, _ then: Double?) -> Double? {
-    guard let now, let then else { return nil }
-    return now - then
   }
 }
 

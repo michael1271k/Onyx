@@ -12,14 +12,19 @@ import OnyxData
 /// is laid on top. This is the same chain the You tab performs for today, with
 /// the date as a parameter instead of a clock.
 ///
-/// ── FIVE STREAMS AND THE RESOLVER ───────────────────────────────────────────
+/// ── ONE STREAM AND THE RESOLVER ─────────────────────────────────────────────
 /// The goals row and the profiles come from `TargetResolver` — the one
 /// instance `AppEnvironment` holds, so a lever pulled in Settings ticks this
-/// tab through the same observation as every other reader (§6.2). Five streams
-/// are keyed on the date (the flat day row, the entries, the water ledger, the
-/// day target, the week) and are torn down and restarted when the day changes.
-/// The values in hand belong to the previous day until the new streams' first
-/// yield, so they are cleared rather than left standing across the gap.
+/// tab through the same observation as every other reader (§6.2). Everything
+/// keyed on the DATE — the flat day row, the entries, the water ledger, the day
+/// target, the week strip and the supplement credit — arrives as one
+/// `NutritionDaySnapshot` from one observation, torn down and restarted when
+/// the day changes. The values in hand belong to the previous day until the new
+/// stream's first yield, so they are cleared rather than left standing across
+/// the gap.
+///
+/// It was seven observations and two inline `stackCredit` reads on the main
+/// actor until W6; the reasoning for the collapse is on `nutritionDayStream`.
 @MainActor
 @Observable
 final class NutritionModel {
@@ -103,7 +108,19 @@ final class NutritionModel {
     /// Re-read the logical day; an app left open across midnight otherwise
     /// resolves the rung against yesterday.
     func refreshToday() {
-        today = LogicalDay.today()
+        let day = LogicalDay.today()
+        guard day != today else { return }
+        today = day
+        // ── AND THE STREAM HAS TO HEAR ABOUT IT ─────────────────────────────
+        // `today` is baked into `nutritionDayStream` at subscribe time, where
+        // the seven streams it replaced re-read `self.today` on every
+        // callback. It decides one thing and it matters: `stackCredit`'s clock
+        // is `.today(minutes:)` for the selected date and `.past` for a day
+        // that has happened, and a `.today` clock only credits doses whose
+        // slot time has passed. A tab left open across midnight would keep
+        // crediting yesterday against a clock that says it is still running,
+        // and undercount it, until the reader changed the date by hand.
+        restartDateStreams()
     }
 
     private func restartDateStreams() {
@@ -113,29 +130,35 @@ final class NutritionModel {
         water = []
         dailyTarget = nil
         week = []
-        // Before the guard: the credit is a READ, not a stream, so a model that
-        // is only rendered — a preview, the shot loop — still shows the right
-        // number rather than an empty stack.
-        reloadStack()
-        guard isObserving else { return }
-        let date = self.date
-        let weekStart = ISODate.addDays(date, -6) ?? date
+        guard isObserving else {
+            // The UNSUBSCRIBED path and only it — a preview, the shot loop.
+            // It was above this guard, which meant every day-arrow tap on the
+            // Fuel tab paid a synchronous `stackCredit` (a `writer.read` that
+            // resolves the whole plan catalogue) on the main actor, in the one
+            // wave that exists to stop doing that. A subscriber gets the same
+            // numbers from the stream's first yield a frame later.
+            reloadOnce()
+            return
+        }
         dateTasks = [
-            track(database.dailyLogStream(userId: userId, date: date)) { [weak self] in self?.dailyLog = $0 },
-            track(database.nutritionEntriesStream(userId: userId, date: date)) { [weak self] in self?.entries = $0 },
-            track(database.waterIntakeStream(userId: userId, date: date)) { [weak self] in self?.water = $0 },
-            track(database.dailyTargetStream(userId: userId, date: date)) { [weak self] in self?.dailyTarget = $0 },
-            track(database.nutritionWeekStream(userId: userId, from: weekStart, to: date)) { [weak self] in self?.week = $0 },
-            // The two tables that can move the stack's contribution within a
-            // day. The credit itself is re-read rather than derived here, so
-            // this tab and Pulse cannot disagree about the same date.
-            track(database.customSupplementsStream(userId: userId)) { [weak self] _ in self?.reloadStack() },
-            track(database.supplementLogStream(userId: userId, date: date)) { [weak self] _ in self?.reloadStack() },
+            track(database.nutritionDayStream(userId: userId, date: date, today: today)) {
+                [weak self] in self?.apply($0)
+            }
         ]
     }
 
-    /// Re-read the day's stack credit. Cheap: one pass over five small tables.
-    private func reloadStack() {
+    private func apply(_ snapshot: NutritionDaySnapshot) {
+        dailyLog = snapshot.dailyLog
+        entries = snapshot.entries
+        water = snapshot.water
+        dailyTarget = snapshot.dailyTarget
+        week = snapshot.week
+        stack = snapshot.stack
+    }
+
+    /// The unsubscribed path: previews and the screenshot loop. `entries` stays
+    /// `nil` on failure, which is the loading state and not an empty day.
+    private func reloadOnce() {
         stack = (try? database.stackCredit(userId: userId, date: date, today: today)) ?? .empty
     }
 

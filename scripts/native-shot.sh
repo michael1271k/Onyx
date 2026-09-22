@@ -130,12 +130,16 @@ shoot() {
   # `telemetry-*` read the simulator's REAL Health store, so they seed it
   # first (`TelemetrySeed`, W5). The first run shows a permission sheet that
   # has to be tapped once ("Turn On All"); after that the grant persists.
+  # `${seed[@]+…}` and not `${seed[@]+"${seed[@]}"}`: bash 3.2 — which is what macOS
+  # ships — treats an EMPTY array as unset under `set -u`, so every screen
+  # that is not `telemetry-*` died on "unbound variable" before it was
+  # photographed. The expansion below is the portable spelling.
   local seed=()
   case "$screen" in telemetry-*) seed=(--onyx-telemetry-seed) ;; esac
   if [ -n "${SHOT_THEME:-}" ]; then
-    xcrun simctl launch "$UDID" "$BUNDLE_ID" --onyx-screen "$screen" --onyx-theme "$SHOT_THEME" "${seed[@]}" >/dev/null
+    xcrun simctl launch "$UDID" "$BUNDLE_ID" --onyx-screen "$screen" --onyx-theme "$SHOT_THEME" ${seed[@]+"${seed[@]}"} >/dev/null
   else
-    xcrun simctl launch "$UDID" "$BUNDLE_ID" --onyx-screen "$screen" "${seed[@]}" >/dev/null
+    xcrun simctl launch "$UDID" "$BUNDLE_ID" --onyx-screen "$screen" ${seed[@]+"${seed[@]}"} >/dev/null
   fi
   # The launch returns as soon as the process exists; the first frame is a
   # few hundred ms later. Shooting too early photographs the launch screen —
@@ -153,7 +157,7 @@ read -ra SCREENS <<< "$SCREEN"
 if [ "$SCREEN" = "all" ]; then
   # Keep in step with `PreviewHarness.Screen` — the harness is the authority and
   # an unknown name there renders a visible error rather than failing silently.
-  SCREENS=(signin backfill today today-mega today-edit today-edit-still today-sheet today-sheet-vitals today-sheet-steps today-sheet-muscle today-sheet-records today-stack-linked today-weighin today-board train train-done train-pending train-cardio train-empty train-monday train-past train-past-open train-customize train-customized mini-player logger logger-stats logger-lifts logger-paused logger-finish logger-timer logger-rest telemetry-finish telemetry-detail hevy-card set-row set-row-split set-row-cardio set-row-records set-options effort-picker day day-rows day-past day-session day-two day-empty day-stress day-edit day-soreness day-hero pulse-squares pulse-squares-evening pulse-squares-empty sleep-edit stress stress-log stress-day fatigue quick-log scale scale-first day-swap doms stack stack-add fuel fuel-over fuel-empty fuel-calendar nutrients macro-edit you levers sync-status sync-doctor plan body volume library exercise reports report report-edit history history-week session session-ledger session-margin session-records session-pairs session-cardio exercise-history trends trends-empty body-trends body-trends-empty body-trends-stress appearance appearance-locked widgets)
+  SCREENS=(signin backfill today today-morning today-evening today-mega today-edit today-edit-still today-sheet today-sheet-vitals today-sheet-steps today-sheet-muscle today-sheet-records today-stack-linked today-weighin today-board train train-done train-pending train-cardio train-empty train-monday train-past train-past-open train-customize train-customized mini-player logger logger-stats logger-lifts logger-paused logger-finish logger-timer logger-rest telemetry-finish telemetry-detail hevy-card set-row set-row-split set-row-cardio set-row-records set-options effort-picker day day-rows day-past day-session day-two day-empty day-stress day-edit day-soreness day-hero pulse-squares pulse-squares-evening pulse-squares-empty sleep-edit stress stress-log stress-day fatigue quick-log log-day log-day-soreness log-day-water gym-mode scale scale-first day-swap doms stack stack-add fuel fuel-over fuel-empty fuel-calendar nutrients macro-edit you levers sync-status sync-doctor plan body volume library exercise reports report report-edit history history-week session session-ledger session-margin session-records session-pairs session-cardio exercise-history trends trends-empty body-trends body-trends-empty body-trends-stress appearance appearance-locked widgets)
 fi
 
 # `widgets` is a contact sheet of every tile; the harness pages it because a

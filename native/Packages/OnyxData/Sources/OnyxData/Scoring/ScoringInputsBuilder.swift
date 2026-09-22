@@ -87,6 +87,41 @@ public extension AppDatabase {
                 .inputs(for: date, hoursAwake: hoursAwake, isToday: isToday, isRestDay: isRestDay, supplements: supplements)
         }
     }
+
+    /// The same inputs for a RANGE, off ONE window read.
+    ///
+    /// ── WHY THIS EXISTS (W6) ────────────────────────────────────────────────
+    /// The battery stack asked for fourteen days by calling the singular
+    /// fourteen times, and each call opened its own transaction and loaded its
+    /// own `ScoringWindow` — which reaches 48 days behind its first date. That
+    /// is fourteen overlapping 49-day reads of five tables to draw a fortnight
+    /// of columns, on the widget extension's memory and time budget. One window
+    /// over the whole span answers every day in it, which is the same trade W2
+    /// made for the cascade (decision 17).
+    ///
+    /// `dates` is answered in the order given; a date the window cannot score
+    /// (the ghost guard) is present with a `nil` value, never dropped, because
+    /// the caller is drawing a fixed number of columns and a short array would
+    /// silently shift them.
+    func scoringInputs(
+        userId: String,
+        dates: [String],
+        todayISO: String,
+        hoursAwake: (String) -> Double,
+        isRestDay: (String) -> Bool,
+        supplements: (String) -> ScoringSupplements = { _ in ScoringSupplements() }
+    ) throws -> [(date: String, inputs: ScoringInputs?)] {
+        guard !dates.isEmpty else { return [] }
+        return try writer.read { db in
+            let window = try ScoringWindow.load(db, userId: userId, dates: dates, todayISO: todayISO)
+            return dates.map { date in
+                (date, window.inputs(
+                    for: date, hoursAwake: hoursAwake(date), isToday: date == todayISO,
+                    isRestDay: isRestDay(date), supplements: supplements(date)
+                ))
+            }
+        }
+    }
 }
 
 // MARK: - Set arithmetic

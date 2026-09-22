@@ -22,6 +22,14 @@ import OnyxCore
 /// enough to be a control at all. The dots say which side you are on.
 struct DomsTile: View {
     let model: DayModel
+    /// Whether the tile draws its own "Soreness" heading.
+    ///
+    /// On Pulse it must: the tile sits in a column of other tiles and the
+    /// heading is what tells them apart. In `SorenessSheet` it must not —
+    /// the sheet's navigation title already says Soreness 40 pt above it, and
+    /// inside `LogDaySheet` the segment under it says Soreness a third time.
+    /// Three labels for one control (`docs/COMPACTION_AUDIT.md` §2).
+    var showsTitle = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The body is the CONTROL on this tile, so it is sized as one: a quad has
@@ -80,7 +88,7 @@ struct DomsTile: View {
     }
 
     var body: some View {
-        DayTile("Soreness", .recover) {
+        DayTile(showsTitle ? "Soreness" : "", .recover) {
             figure
             HStack(spacing: OnyxSpace.s) {
                 sideDots
@@ -373,7 +381,7 @@ struct SorenessSheet: View {
     var body: some View {
         DaySheet("Soreness", domain: .recover, glass: false, detents: [.large]) {
             ScrollView {
-                DomsTile(model: model)
+                DomsTile(model: model, showsTitle: false)
                     .padding(OnyxSpace.l)
             }
             .scrollContentBackground(.hidden)

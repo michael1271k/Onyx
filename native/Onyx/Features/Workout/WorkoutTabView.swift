@@ -54,6 +54,9 @@ struct WorkoutTabView: View {
     /// The shelf of closed weeks (§W1 C). A sheet, and the only thing on this
     /// tab reached from a toolbar rather than from the page.
     @State private var libraryOpen = false
+    /// Whether the previous value of `session != nil` was true — see the
+    /// `onChange` that ends gym mode.
+    @State private var hadSession = false
     /// The session this tab is keeping, live or not. Survives the cover being
     /// dismissed — that is the whole reason it lives here.
     @State private var session: LoggerModel?
@@ -157,7 +160,12 @@ struct WorkoutTabView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: OnyxSpace.l) {
+            // `.m` and not `.l` (W6 density): Today and Fuel were already at 12
+            // between sections and this root was the one at 16, which put
+            // Train's fifth card a little further below the fold than the same
+            // card on either neighbour. The gutter stays at `.l` — that is the
+            // screen's 16 pt line and every tile in the app stands on it.
+            VStack(spacing: OnyxSpace.m) {
                 // ── WHAT CANNOT BE PUT AWAY (W6 §4) ─────────────────────────
                 // The week panel and the live/plan card carry no switch. They
                 // are what the tab IS — the state you are in and the work in
@@ -215,6 +223,36 @@ struct WorkoutTabView: View {
         // because its section became a button would be a setting that silently
         // does nothing.
         .toolbar {
+            // ── THE WAY OUT OF GYM MODE (§W6-B, decision 26) ────────────────
+            // Leading, where a back button would be: gym mode is a place the
+            // app was put and this is the way out of it, which is the same
+            // grammar. A capsule and not a glyph because it is the only
+            // control on the screen that changes what the WHOLE app is doing,
+            // and a bare chevron here would read as "back to the week".
+            if environment.gymMode {
+                ToolbarItem(placement: .topBarLeading) {
+                    // ── TEXT, AND NO GLYPH ──────────────────────────────────
+                    // A `Label` here renders as its ICON ALONE: the system
+                    // wraps a toolbar item in its own circular glass and
+                    // drops the title to fit, so the first shot of gym mode
+                    // had an unexplained chevron where the way out should be
+                    // — indistinguishable from a back button. A bare title
+                    // makes the system draw a pill and keep the word, and it
+                    // carries no second capsule of ours under the glass
+                    // (memory: `logger-ux-hotfix-sep10`).
+                    Button("Leave") {
+                        environment.gymMode = false
+                        // A REFUSAL and not a toggle: without this the next
+                        // foreground — or any theme pick, which re-ids the app
+                        // root — asks the clock again, gets the same yes, and
+                        // takes the bar away a second time.
+                        environment.gymModeDeclined = true
+                    }
+                    .tint(accent)
+                    .accessibilityLabel("Leave gym mode")
+                    .accessibilityHint("Shows the tab bar again")
+                }
+            }
             if shows(.pastWeeks) {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { libraryOpen = true } label: {
@@ -391,6 +429,13 @@ struct WorkoutTabView: View {
         // happened) lowers the flag rather than leaving the last value up.
         .onChange(of: session != nil, initial: true) { _, live in
             environment.publishSessionLive(live)
+            // Gym mode ends with the workout, finished or cancelled: both
+            // paths clear `session`, and neither of them is a tap on Leave.
+            // `initial: true` fires with `live == false` on a tab rebuilt with
+            // no model, which must NOT undo the launch door — hence the guard
+            // on a session having been there to lose.
+            if !live, hadSession { environment.gymMode = false }
+            hadSession = live
         }
         // §3.4: `.success` on session finished.
         .sensoryFeedback(.success, trigger: finishes)
@@ -1510,10 +1555,16 @@ struct WorkoutTabView: View {
             // for the life of the activity — so a new session feeding the old
             // activity would update a Lock Screen that still says yesterday.
             if session != nil { activity.end() }
-            let model = LoggerModel(
-                day: day, phase: phase,
-                store: environment.database, userId: environment.userIdString
-            )
+            // `logger.open` covers the seed: `LoggerModel.init` reads the
+            // day's sessions and sets SYNCHRONOUSLY on purpose (see
+            // `loadSeed`) — a deck that draws the plan first and the real
+            // loads a frame later moves under the reader's thumb.
+            let model = Perf.measure("logger.open") {
+                LoggerModel(
+                    day: day, phase: phase,
+                    store: environment.database, userId: environment.userIdString
+                )
+            }
             session = model
         }
         // The logger graded today's queue while building its seed, and it is

@@ -20,7 +20,16 @@ enum TodayPreviews {
         /// around it are the ones every other Today shot photographs.
         megaFirst: Bool = false,
         /// W7. A connected stack, for the sheet that says so.
-        linked: Bool = false
+        linked: Bool = false,
+        /// W6. The clock the relevance order is resolved against, in minutes
+        /// from local midnight — 420 is 07:00, 1200 is 20:00.
+        ///
+        /// Passed rather than read, because a seeded model never subscribes to
+        /// the layout stream and so never reaches `TodayModel.ranked`. The
+        /// same function is applied here, to the same layout, so the shot is
+        /// of `Dashboard.relevanceOrdered`'s real output and not of a
+        /// hand-written order that happens to look like it.
+        clockMinute: Int? = nil
     ) -> TodayModel {
         let database = try! AppDatabase.inMemory(deviceId: "shot")
         // The catalogue as rows (W2): decks, plans, phases, rungs.
@@ -37,6 +46,28 @@ enum TodayPreviews {
         if editing { layout = Dashboard.resizeSlot(layout, slotId: "sl-recovery") }
         if linked { layout = Dashboard.setLinked(layout, slotId: "sl-sleep", true) }
         if megaFirst { layout = Dashboard.moveSlot(layout, fromId: "sl-daily", toId: "sl-recovery") }
+        // ── THE EDITS ABOVE ARE NOT THIS READER'S EDITS ─────────────────────
+        // Every arrangement op ends in `Dashboard.touch`, which stamps
+        // `updatedAt` — and a stamped layout is one the reader arranged, which
+        // `relevanceOrdered` refuses to touch. That rule is right in the app
+        // and wrong here: the stack and the tray above are the shot's fixture,
+        // not a choice somebody made. Reset the stamp to what a fresh install
+        // carries, then rank. The first attempt did not, and photographed the
+        // stored order under both filenames.
+        if let clockMinute {
+            layout.updatedAt = 0
+            layout = Dashboard.relevanceOrdered(layout, minuteOfDay: clockMinute)
+            // ── AND THEN PINNED ─────────────────────────────────────────────
+            // `TodayModel.observe()` subscribes to the layout stream even for
+            // a seeded model, re-reads the row this function just wrote and
+            // re-ranks it against the WALL CLOCK — which on the machine taking
+            // the screenshot is whatever time it is, not 07:00. The first
+            // evening shot came back in the morning order for exactly that
+            // reason. Stamping `updatedAt` makes the order read as one
+            // somebody arranged, which `relevanceOrdered` then refuses to
+            // touch: the shot is of the clock's output, held still.
+            layout.updatedAt = Double(clockMinute)
+        }
         try? database.saveDashboardLayout(userId: userId, layout)
 
         let snapshot = OnyxSnapshot.sample
@@ -109,6 +140,16 @@ enum TodayPreviews {
         switch screen {
         case "today-edit":
             NavigationStack { TodayTabView(seeded: model(editing: true)) }.environment(AppEnvironment.preview)
+        // ── THE SAME GRID, TWICE, AT TWO HOURS (§W6-B.3) ────────────────────
+        // Nothing is added, removed or resized between these two shots — the
+        // only difference is which card you land on. That is the whole claim
+        // relevance ordering makes, and it is not provable from one frame.
+        case "today-morning":
+            NavigationStack { TodayTabView(seeded: model(clockMinute: 7 * 60)) }
+                .environment(AppEnvironment.preview)
+        case "today-evening":
+            NavigationStack { TodayTabView(seeded: model(clockMinute: 20 * 60)) }
+                .environment(AppEnvironment.preview)
         // ── W7 ──────────────────────────────────────────────────────────────
         // The Mega Widget at the top of the grid: three arcs, the battery in
         // the hole and the rule table's sentence under it. The AX5 twin is the

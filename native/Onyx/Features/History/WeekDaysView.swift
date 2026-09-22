@@ -1,4 +1,6 @@
 import SwiftUI
+import UniformTypeIdentifiers
+import os
 import OnyxUI
 import OnyxCore
 import OnyxData
@@ -24,15 +26,6 @@ struct WeekDaysView: View {
     /// re-reads exactly when a rescore cascade has finished rewriting what is
     /// under it — see `AppEnvironment.rescoreGeneration`.
     @State private var loadedAt = -1
-
-    /// The week as a `.md` FILE, written to the temporary directory.
-    ///
-    /// A `URL` and not a `String`: `ShareLink` hands a string to the sheet as
-    /// loose text, so Files offers no "Save to", Mail has nothing to attach and
-    /// the artefact reaches the other side with no name. A file arrives as
-    /// `onyx-week-07-2026-08-30.md`, which is what makes a weekly document
-    /// something you can keep rather than something you can paste once.
-    @State private var exportFile: URL?
 
     /// The week as a `WeeklyWrap.Summary`, when it closed as one (W1b).
     ///
@@ -262,11 +255,16 @@ struct WeekDaysView: View {
     /// far as a reader is concerned. Same slot, same place, one of two faces.
     @ViewBuilder
     private var exportChip: some View {
-        if weekIsComplete, let exportFile {
+        if weekIsComplete {
             ShareLink(
-                item: exportFile,
+                item: WeekExportDocument(
+                    database: environment.database,
+                    userId: environment.userIdString,
+                    weekStart: window.start,
+                    generation: environment.storeGeneration
+                ),
                 subject: Text("\(window.label(in: environment.targets?.schedule)) · \(window.rangeLabel)"),
-                preview: SharePreview(exportFile.lastPathComponent)
+                preview: SharePreview("onyx-week-\(window.start).md")
             ) {
                 OnyxChipRow.face(title: "Export", systemImage: "square.and.arrow.up")
             }
@@ -367,31 +365,30 @@ struct WeekDaysView: View {
             detail = seeded
             return
         }
-        /* ── THE LEDGER IS CACHED; THE EXPORT IS NOT ──────────────────────────
-           This guard used to cover the whole method, so the document was
-           rebuilt only when a rescore cascade had finished. `rescoreGeneration`
-           moves for a set edit and a scored day — it does NOT move for a
-           supplement tick, a joint flag, a cardio bout, a stress reading, or a
-           sync PULL bringing another device's edit down. Any of those left
-           `exportFile` pointing at the PREVIOUS `onyx-week-<date>.md` still
-           sitting in the temporary directory, so the share sheet handed over a
-           stale document that looked current.
+        /* ── THE EXPORT IS NOT BUILT HERE AT ALL ANY MORE (W6) ────────────────
+           It used to be rebuilt on EVERY appearance of this screen, because
+           the alternative on offer was worse: guarded on `rescoreGeneration`
+           it went stale — that generation moves for a set edit and a scored
+           day, and NOT for a supplement tick, a joint flag, a cardio bout, a
+           stress reading or a sync PULL — and the share sheet then handed over
+           the previous `onyx-week-<date>.md` still sitting in the temporary
+           directory, looking current.
 
-           The week's ledger is genuinely expensive and genuinely only changes
-           on a rescore, so it keeps the guard. The export is rebuilt on every
-           appearance: it is one read and one file write against a closed week,
-           and a wrong document is worse than a redundant render. */
+           Neither is necessary. `WeekExportDocument` is a `Transferable` whose
+           exporter runs when the share sheet asks for the bytes, so opening a
+           week costs nothing and the document is built at most once per tap —
+           and its cache is keyed on `storeGeneration`, which moves on every
+           commit, so it cannot be the stale one. The ledger keeps its guard:
+           it is genuinely expensive and genuinely only changes on a rescore. */
         let rebuildDetail = loadedAt != environment.rescoreGeneration
         loadedAt = environment.rescoreGeneration
         let database = environment.database
         let userId = environment.userIdString
         let window = self.window
         let current = detail
+        _ = userId
         let built = await Task.detached(priority: .userInitiated) { () -> Built in
             let detail = rebuildDetail ? HistoryWeeks.detail(database: database, window: window) : nil
-            let input = try? WeeklyExportBuilder(database: database, userId: userId)
-                .input(weekStart: window.start)
-            let text = input.map { WeeklyExport.build($0) }
             // ── THE WRAP RIDES WITH THE LEDGER, NOT WITH THE DOCUMENT ───────
             // Both of the others are already here and the guardrail is to add
             // no second read pass, so it folds into this task. It follows
@@ -410,10 +407,9 @@ struct WeekDaysView: View {
             let program = rebuildDetail
                 ? (try? database.scheduleContext(userId: database.localUserId(), today: window.start))?.activeProgram
                 : nil
-            return Built(detail: detail, export: text, wrap: wrap, program: program)
+            return Built(detail: detail, wrap: wrap, program: program)
         }.value
         if let fresh = built.detail { detail = fresh } else if current == nil { return }
-        exportFile = built.export.flatMap { Self.writeExport($0, weekStart: window.start) }
         // ── GATED ON WHETHER THE PASS RAN, NOT ON WHAT IT RETURNED ──────────
         // `detail` can use `if let` because `HistoryWeeks.detail` never returns
         // nil — nil there means only "the guard skipped it". For the wrap, nil
@@ -432,31 +428,8 @@ struct WeekDaysView: View {
     /// the call site reads as words instead of `built.0`.
     private struct Built: Sendable {
         var detail: HistoryWeeks.WeekDetail?
-        var export: String?
         var wrap: WeeklyWrap.Summary?
         var program: Program?
-    }
-
-    /// The document, on disk, under a name a reader can file.
-    ///
-    /// The temporary directory and not the App Group: this is a hand-off to the
-    /// share sheet and nothing else reads it. The file is REWRITTEN on every
-    /// load rather than appended to or suffixed, so re-exporting the same week
-    /// twice leaves one file rather than a drawer of near-identical ones.
-    private static func writeExport(_ markdown: String, weekStart: String) -> URL? {
-        // `2026-08-30` → `onyx-week-2026-08-30.md`. The date and not the week
-        // NUMBER: a number is only meaningful inside one programme, and a file
-        // outlives the programme it came from.
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("onyx-week-\(weekStart).md")
-        do {
-            try markdown.write(to: url, atomically: true, encoding: .utf8)
-            return url
-        } catch {
-            // A share that cannot be written is a button that does nothing, so
-            // the row disappears rather than presenting an empty sheet.
-            return nil
-        }
     }
 }
 
@@ -683,7 +656,7 @@ struct WeekVitalsRow: View {
             Entry(id: "Fat", value: delta(vitals.fatDeltaPct, unit: "%", places: 1), domain: .body),
             Entry(id: "Battery", value: vitals.batteryMean.map { jsIntegerString(jsRound($0)) }, domain: .recover),
             Entry(id: "Sleep score", value: vitals.sleepScoreMean.map { jsIntegerString(jsRound($0)) }, domain: .recover),
-            Entry(id: "Sleep", value: vitals.sleepMeanMinutes.map(Self.hours), domain: .recover),
+            Entry(id: "Sleep", value: vitals.sleepMeanMinutes.map { Format.sleep($0) }, domain: .recover),
             Entry(id: "Steps", value: vitals.stepsMean.map { jsIntegerString(jsRound($0)) }, domain: .body),
             Entry(id: "Tonnage", value: vitals.tonnageKg > 0 ? "\(Format.volume(vitals.tonnageKg)) kg" : nil, domain: .train),
             Entry(id: "Sessions", value: "\(vitals.sessions)", domain: .train),
@@ -755,10 +728,8 @@ struct WeekVitalsRow: View {
         return "\(sign)\(value.formatted(.number.precision(.fractionLength(places)))) \(unit)"
     }
 
-    private static func hours(_ minutes: Double) -> String {
-        let total = Int(jsRound(minutes))
-        return "\(total / 60)h \(String(format: "%02d", total % 60))m"
-    }
+    // Sleep is `Format.sleep` (OnyxCore) — the padded "7h 00m" this drew was a
+    // third spelling of a duration the rest of the app already agrees on.
 }
 
 // MARK: - A day
@@ -850,3 +821,74 @@ enum SessionRow {
 #if DEBUG
 #Preview("Week") { HistoryPreviews.view("history-week") }
 #endif
+
+// MARK: - The export
+
+/// The week's markdown, built when the share sheet asks for the bytes.
+///
+/// ── WHY A `Transferable` AND NOT A FILE ON DISK ─────────────────────────────
+/// `ShareLink` is a view, not an action: it needs its item up front, which is
+/// why this screen used to build the whole document — a `WeeklyExportBuilder`
+/// read over the week plus a write to the temporary directory — on every
+/// appearance, for a button most visits never touch. A `Transferable` keeps the
+/// `ShareLink` and moves the cost: SwiftUI calls the exporter only when the
+/// share is actually performed, and the explicit `SharePreview` above means not
+/// even the preview needs the content.
+///
+/// A `DataRepresentation` with a suggested file name, and not a `String`: a
+/// string reaches the other side as loose text, so Files offers no "Save to"
+/// and Mail has nothing to attach. `onyx-week-2026-08-30.md` is what makes a
+/// weekly document something you can keep rather than something you paste once.
+struct WeekExportDocument: Transferable, Sendable {
+    let database: AppDatabase
+    let userId: String
+    let weekStart: String
+    /// `AppEnvironment.storeGeneration` at the moment the chip was drawn — see
+    /// `cache`. Part of the value so a re-render after a commit produces a
+    /// DIFFERENT document, which is what stops a share handing over yesterday.
+    let generation: Int
+
+    /// One entry, not a dictionary: the only repeat this can serve is the same
+    /// user sharing the same week twice in a row, which is exactly what a
+    /// cancelled share sheet produces. Anything else is a different week or a
+    /// moved store, and both must miss.
+    private static let cache = OSAllocatedUnfairLock<(key: String, text: String)?>(initialState: nil)
+
+    private var key: String { "\(userId)·\(weekStart)·\(generation)" }
+
+    func markdown() throws -> String {
+        if let hit = Self.cache.withLock({ $0 }), hit.key == key { return hit.text }
+        let input = try WeeklyExportBuilder(database: database, userId: userId)
+            .input(weekStart: weekStart)
+        let text = WeeklyExport.build(input)
+        Self.cache.withLock { $0 = (key, text) }
+        return text
+    }
+
+    /// `onyx-week-2026-08-30.md`, in the temporary directory, written when
+    /// the share sheet asks and not before.
+    ///
+    /// A `FileRepresentation` and not a `DataRepresentation`: a suggested file
+    /// name over `.plainText` is a suggestion, and several share targets
+    /// append `.txt` to it or replace the extension outright — which is
+    /// exactly the "arrives with no name" failure the old temp file existed to
+    /// prevent. The file is rewritten rather than suffixed, so sharing the
+    /// same week twice leaves one file and not a drawer of near-identical
+    /// ones.
+    func writeFile() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("onyx-week-\(weekStart).md")
+        try markdown().write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .plainText) { document in
+            // Off the main actor: the share sheet awaits this, and the builder
+            // is a read over the whole week.
+            SentTransferredFile(
+                try await Task.detached(priority: .userInitiated) { try document.writeFile() }.value
+            )
+        }
+    }
+}

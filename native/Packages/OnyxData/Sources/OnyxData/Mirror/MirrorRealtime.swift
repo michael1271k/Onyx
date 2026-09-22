@@ -70,12 +70,30 @@ public actor MirrorCoalescer {
         // by cursor is what finds it — asking for `workout_sets` on its own
         // would be a query with no cursor to use.
         var wantsTraining = false
+        var wanted: [String] = []
         for table in tables {
             if MirrorRealtime.trainingTables.contains(table) { wantsTraining = true } else {
-                await refresher.refresh(table: table)
+                wanted.append(table)
             }
         }
-        if wantsTraining { await refresher.refresh(table: nil) }
+
+        // ── TOGETHER, NOT ONE AFTER ANOTHER ─────────────────────────────────
+        // Awaited in sequence, each refresh has finished before the next
+        // begins — so nothing downstream can fold them, and the refresher the
+        // app actually installs is `SyncCoordinator`, for which ONE refresh is
+        // a whole sync that pulls every table. A flush of thirty-one notes was
+        // therefore thirty-one syncs, each pulling all thirty-one tables, for
+        // one catch-up. Fired together they collapse into the one or two runs
+        // `syncNow` already knows how to merge: the same argument as the
+        // debounce above, one layer down.
+        await withTaskGroup(of: Void.self) { group in
+            for table in wanted {
+                group.addTask { [refresher] in await refresher.refresh(table: table) }
+            }
+            if wantsTraining {
+                group.addTask { [refresher] in await refresher.refresh(table: nil) }
+            }
+        }
     }
 
     /// Drop what is waiting and the timer that would flush it. Sign-out: a
@@ -93,17 +111,31 @@ public actor MirrorCoalescer {
 /// The Supabase channel, and the lifecycle around it.
 ///
 /// ── WHAT IS NOT PORTED, AND WHY ─────────────────────────────────────────────
-/// The web provider carried a retry loop with exponential backoff, a
-/// `socketHealthy` flag, a `joinedOnce` flag, a `visibilitychange` listener and
-/// an `online` listener — roughly half the file — because a backgrounded PWA's
-/// WebSocket is suspended by iOS and may never silently rejoin. `RealtimeClientV2`
-/// reconnects itself, and a native app gets real lifecycle callbacks instead of
-/// guessing from `document.visibilityState`. So what is left is: subscribe,
-/// forward, and re-pull on foreground.
+/// The web provider carried a `socketHealthy` flag, a `joinedOnce` flag, a
+/// `visibilitychange` listener and an `online` listener — roughly half the
+/// file — because a backgrounded PWA's WebSocket is suspended by iOS and may
+/// never silently rejoin. `RealtimeClientV2` redials the socket itself, and a
+/// native app gets real lifecycle callbacks instead of guessing from
+/// `document.visibilityState`. So what is left is: subscribe, forward, re-pull
+/// on foreground — and the one thing the library does NOT do for us, below.
 ///
 /// The `requestIdleCallback` deferral does not port either. It existed because
 /// opening a socket before first paint delayed first paint; a SwiftUI app starts
 /// this from a `.task`, which is already after the first frame.
+///
+/// ── THE RETRY IS OURS; THE RECONNECT IS THEIRS ──────────────────────────────
+/// `RealtimeClientV2` reconnects a dropped SOCKET with its own backoff and
+/// re-sends `phx_join` for every channel — but exactly once, through a `try?`.
+/// A JOIN that fails (a token mid-refresh, an RLS error, a server that times
+/// the join out) therefore leaves the channel `.unsubscribed` with nothing
+/// scheduled to try again, and the app goes quiet until it is next launched.
+/// That is the hole `supervise()` fills, and the only one: it never opens a
+/// socket, it re-asks for the join on the channel the library already owns.
+///
+/// While the channel is not joined the same data comes down on a 60 s poll —
+/// `foreground()`, which is the "note everything and drain" a burst of
+/// notifications would have produced. Push freshness degrades to pull
+/// freshness rather than to nothing.
 public actor MirrorRealtime {
 
     /// The three tables `TrainingPuller` owns. Named here rather than in the
@@ -119,19 +151,114 @@ public actor MirrorRealtime {
         MirrorCatalogue.tables.map(\.name) + trainingTables.sorted()
     }
 
+    /// Where the retry ladder starts, and where it stops growing.
+    ///
+    /// One second because the failure this exists for — a join attempted while
+    /// the access token is mid-refresh — is over by the time the first retry
+    /// lands, and a minute of silence for it would be absurd. Sixty seconds as
+    /// the ceiling because that is `pollInterval`: past that point the fallback
+    /// poll is already delivering the same rows, so a slower retry costs
+    /// nothing anyone can see, and a phone with no signal must not spend its
+    /// battery dialling.
+    static let retryFloor: Duration = .seconds(1)
+    static let retryCeiling: Duration = .seconds(60)
+
+    /// How often the fallback poll runs while the channel is not joined.
+    ///
+    /// A poll is `foreground()` — every table noted and drained as one fold,
+    /// which the refresher folds again into a single sync of delta queries
+    /// that mostly return nothing. Cheap, but not free: 60 s is slow enough to
+    /// be invisible on the battery and fast enough that a set logged on the
+    /// watch reaches the phone in about the time it takes to rack the bar.
+    static let pollInterval: Duration = .seconds(60)
+
     private let client: SupabaseClient
     private let coalescer: MirrorCoalescer
     private var channel: RealtimeChannelV2?
     private var listeners: [Task<Void, Never>] = []
+    /// The one retry loop. Non-nil means an attempt is in flight or waiting,
+    /// and is what makes a second `start()` a no-op — two of these would be two
+    /// joins racing to write `channel`.
+    private var supervisor: Task<Void, Never>?
+    /// The fallback poll, alive only while the channel is not joined.
+    private var poll: Task<Void, Never>?
 
     public init(client: SupabaseClient, coalescer: MirrorCoalescer) {
         self.client = client
         self.coalescer = coalescer
     }
 
-    /// Open the socket and start forwarding.
+    /// Open the socket and start forwarding. Returns as soon as the attempt is
+    /// scheduled; joining is the supervisor's problem, not the caller's.
     public func start() async {
-        guard channel == nil else { return }
+        guard supervisor == nil else { return }
+        supervisor = Task { [weak self] in await self?.supervise() }
+    }
+
+    /// Join, hold, re-join. The whole retry, in one place.
+    ///
+    /// The ladder is reset by a JOIN and not by a start, which is the only
+    /// reset that means anything: a channel that joins and immediately drops
+    /// has not recovered, and a channel that has been joined for an hour owes
+    /// nothing to the four failures before it.
+    ///
+    /// ponytail: a socket that joined and dropped in a loop would retry at the
+    /// floor for ever, because every join resets the ladder. Time the join and
+    /// only reset once it has held a poll interval, if a flapping server ever
+    /// turns up.
+    private func supervise() async {
+        var attempt = 0
+        while !Task.isCancelled {
+            if await join() {
+                attempt = 0
+                stopPolling()
+                await waitForDrop()
+            }
+            guard !Task.isCancelled else { return }
+            // Disconnected, one way or the other. The poll covers the gap
+            // until a join sticks, and the sleep is what keeps this from
+            // becoming the tight loop it is here to avoid.
+            startPolling()
+            try? await Task.sleep(for: Self.retryDelay(attempt: attempt))
+            attempt += 1
+        }
+    }
+
+    /// One join attempt against the channel, opening it the first time.
+    ///
+    /// The channel is REUSED across retries. Its bindings live on the channel
+    /// and survive an unsubscribe — supabase-swift only clears them in
+    /// `deinit` — and `subscribeWithError` rebuilds the join payload from the
+    /// same config every time, which is exactly what the library's own rejoin
+    /// does after a socket reconnect. Tearing the channel down and building a
+    /// new one would be a second `phx_join` racing the library's.
+    ///
+    /// It is also why a second attempt cannot double-join: an already-joined
+    /// channel returns immediately, and one already joining is awaited rather
+    /// than started again.
+    private func join() async -> Bool {
+        // Cancellation is re-read here, not just at the top of the loop: a
+        // sign-out that lands between the two would otherwise open a channel
+        // nobody is left to remove.
+        guard !Task.isCancelled else { return false }
+        if channel == nil { open() }
+        guard let channel else { return false }
+        do {
+            try await channel.subscribeWithError()
+            return true
+        } catch {
+            // Swallowed, as it always was: the socket is a latency
+            // optimisation, not a data path. `SyncCoordinator` pulls on launch
+            // and on every foreground, the poll below covers the rest, and
+            // there is no caller up the chain (`startRealtime` is `async`, not
+            // `throws`) that could do anything with it. What is new is that
+            // the failure is no longer terminal.
+            return false
+        }
+    }
+
+    /// Build the channel and its per-table streams.
+    private func open() {
         let channel = client.channel("onyx-mirror")
         self.channel = channel
 
@@ -152,37 +279,62 @@ public actor MirrorRealtime {
                 }
             })
         }
-        do {
-            try await channel.subscribeWithError()
-        } catch {
-            // ── A FAILED JOIN HAS TO UNDO ITSELF ────────────────────────────
-            // `subscribe()` — deprecated in favour of this — was `try? await
-            // subscribeWithError()`, so the failure was invisible AND the
-            // channel stayed on `self`. The `guard channel == nil` at the top
-            // then turned every later `start()` into a no-op: one bad join and
-            // the socket is dead for the lifetime of the process, with no way
-            // back short of sign-out. `stop()` cancels the listeners, drops the
-            // channel and stops the coalescer, which is exactly the state a
-            // retry needs.
-            //
-            // Swallowing the error itself is still right: the socket is a
-            // latency optimisation, not a data path. `SyncCoordinator` pulls on
-            // launch and on every foreground, so a dead socket costs push
-            // freshness between devices and nothing else — and there is no
-            // caller up the chain (`startRealtime` is `async`, not `throws`)
-            // that could do anything with it.
-            //
-            // ponytail: nothing retries after this. `SyncCoordinator`'s own
-            // `guard realtime == nil` still blocks a second attempt — if push
-            // silence after a dropped token becomes real, clear that there and
-            // call `startRealtime` again from the scene-phase handler.
-            await stop()
+    }
+
+    /// Suspend until the channel stops being joined — a socket drop, a server
+    /// close, or `stop()` taking the channel away.
+    ///
+    /// `statusChange` replays the CURRENT status to a new iterator, so the join
+    /// that just succeeded arrives here first and has to be stepped over;
+    /// returning on it would spin. The stream also finishes on cancellation,
+    /// which is how sign-out gets out of here.
+    private func waitForDrop() async {
+        guard let channel else { return }
+        for await status in channel.statusChange {
+            if case .subscribed = status { continue }
+            return
         }
     }
 
-    /// Close it. Cancels every listener first, so nothing is delivered into a
-    /// channel that is going away.
+    /// `~1 s, 2, 4 … 60`, each drawn from the top half of its step.
+    ///
+    /// Equal jitter rather than a fixed ladder: the phone, the watch and the
+    /// widget extension all lose the same Wi-Fi at the same instant and would
+    /// otherwise re-join in lockstep for ever. The shift is clamped because a
+    /// socket down overnight is a four-digit `attempt`, and `1 << 64` is not a
+    /// long wait, it is a crash.
+    static func retryDelay(attempt: Int) -> Duration {
+        min(retryFloor * (1 << min(attempt, 6)), retryCeiling) * Double.random(in: 0.5...1)
+    }
+
+    /// Ask the puller for what the socket is not delivering.
+    ///
+    /// The first poll is one interval away, not immediate: a drop is followed
+    /// within a second by a re-join attempt, and a full twenty-nine-table drain
+    /// fired at every flap would cost more than the silence it is covering.
+    private func startPolling() {
+        guard poll == nil else { return }
+        poll = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: MirrorRealtime.pollInterval)
+                guard !Task.isCancelled else { return }
+                await self?.foreground()
+            }
+        }
+    }
+
+    private func stopPolling() {
+        poll?.cancel()
+        poll = nil
+    }
+
+    /// Close it. Cancels the retry and the poll first, so neither can outlive
+    /// the sign-out that asked for this, then every listener, so nothing is
+    /// delivered into a channel that is going away.
     public func stop() async {
+        supervisor?.cancel()
+        supervisor = nil
+        stopPolling()
         for task in listeners { task.cancel() }
         listeners.removeAll()
         await coalescer.stop()
@@ -192,13 +344,17 @@ public actor MirrorRealtime {
         }
     }
 
-    /// Foregrounding.
+    /// Foregrounding — and, every 60 s, the fallback poll.
     ///
     /// A suspended socket misses events without reporting anything, so returning
     /// to the app is the one moment a full catch-up is worth its cost. Cheap
     /// here in a way it was not on the web: a delta pull asks for what changed
-    /// since a cursor, so "catch up on everything" is twenty-six small queries
+    /// since a cursor, so "catch up on everything" is a fold of small queries
     /// that mostly return nothing, rather than a refetch of the world.
+    ///
+    /// The poll uses this rather than a shape of its own because a poll IS a
+    /// foreground: neither knows which table moved, both have to ask about all
+    /// of them, and there is no second way to ask.
     ///
     /// It notes every table and drains immediately — the debounce exists to
     /// coalesce a burst, and there is no burst to wait for here.

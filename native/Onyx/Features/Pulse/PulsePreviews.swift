@@ -587,6 +587,19 @@ enum PulsePreviews {
         case "stress-log":
             Presenting(model: pinned(fullDay())) { StressLogSheet(model: $0) }
                 .environment(AppEnvironment.preview)
+        // ── THE THREE DAY ANSWERS, ONE SHEET (§W6-B.4) ──────────────────────
+        // One screen per segment: the picker at the bottom is the whole point
+        // of the merge and a shot of one segment does not show that the other
+        // two are one tap away.
+        case "log-day", "log-day-soreness", "log-day-water":
+            Presenting(model: pinned(fullDay())) { model in
+                LogDaySheet(
+                    model: model,
+                    segment: screen == "log-day-soreness" ? .soreness
+                        : (screen == "log-day-water" ? .water : .stress)
+                )
+            }
+            .environment(AppEnvironment.preview)
         // The whole day's events as rows, which is where the tags, the note and
         // the swipe-delete live — and the one shot in which both morning events
         // are visible with their tags.

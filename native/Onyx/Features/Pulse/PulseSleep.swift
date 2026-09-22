@@ -114,7 +114,7 @@ struct SleepStageList: View {
     /// column when the four rows share one; nil lets it sit at its own width.
     @ViewBuilder
     private func figures(_ minutes: Int?, shareWidth: CGFloat?) -> some View {
-        Text(minutes.map { DayFormat.minutes($0) } ?? "—")
+        Text(Format.sleep(minutes.map(Double.init)))
             .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
             .foregroundStyle(Color.onyx.textPrimary)
             .lineLimit(1)
@@ -184,7 +184,7 @@ struct SleepHeroCell: View {
         guard let minutes else { return nil }
         let gap = minutes - goalMin
         if abs(gap) <= 5 { return "goal met" }
-        return "\(gap > 0 ? "+" : "−")\(DayFormat.minutes(abs(gap)))"
+        return "\(gap > 0 ? "+" : "−")\(Format.sleep(Double(abs(gap))))"
     }
 
     private var goalMet: Bool { (minutes ?? goalMin) - goalMin >= -5 }
@@ -271,7 +271,7 @@ struct SleepHeroCell: View {
     }
 
     private var duration: some View {
-        Text(DayFormat.minutes(minutes))
+        Text(Format.sleep(minutes.map(Double.init)))
             .onyxDisplay().fontWeight(.semibold).onyxNumeral()
             .foregroundStyle(Color.onyx.textPrimary)
             .contentTransition(.numericText())
@@ -296,10 +296,10 @@ struct SleepHeroCell: View {
         }
     }
 
-    /// `DayFormat.minutes` prints an em dash for a night nobody recorded, and a
+    /// `Format.sleep` prints an em dash for a night nobody recorded, and a
     /// reader hears an em dash as silence — the rule the sleep chip stated.
     private var spoken: String {
         guard let minutes else { return "no reading" }
-        return "\(DayFormat.minutes(minutes))\(goalText.map { ", \($0)" } ?? "")"
+        return "\(Format.sleep(Double(minutes)))\(goalText.map { ", \($0)" } ?? "")"
     }
 }

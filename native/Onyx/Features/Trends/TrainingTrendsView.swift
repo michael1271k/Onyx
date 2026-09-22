@@ -102,12 +102,22 @@ struct TrainingTrendsView: View {
             // Sixteen small rows, re-read whenever any of those three move —
             // they are also the one input here the athlete can change without a
             // rescore, by editing weekly set volume in Settings.
+            // ── OFF THE MAIN ACTOR (W6) ─────────────────────────────────
+            // A `.task` on a `@MainActor` view runs on the main actor, and
+            // the read below it is the whole session history — ~5k sets on
+            // this account, and it grows. Both go to a detached task; the
+            // screen draws its previous answer until they land, which is what
+            // it did before while blocking the first frame to do it.
+            let database = environment.database
+            let userId = environment.userIdString
             if let schedule = environment.targets?.schedule {
-                volumeTargets = (try? environment.database.volumeTargets(
-                    userId: environment.database.localUserId(),
-                    planId: schedule.programId,
-                    phase: schedule.phase
-                )) ?? [:]
+                volumeTargets = await Task.detached(priority: .userInitiated) {
+                    (try? database.volumeTargets(
+                        userId: database.localUserId(),
+                        planId: schedule.programId,
+                        phase: schedule.phase
+                    )) ?? [:]
+                }.value
             } else {
                 // Cleared, not left behind: keeping the previous phase's numbers
                 // after a switch is the staleness this key exists to prevent.
@@ -117,19 +127,24 @@ struct TrainingTrendsView: View {
             loadedAt = environment.rescoreGeneration
             // ponytail: the whole history in one read (~5k sets today); page by
             // era/year when the table is ten times that.
-            let loaded = seeded ?? ((try? environment.database.trainingTrendSessions(
-                userId: environment.userIdString, from: "2000-01-01", to: today
-            )) ?? [])
+            let today = today
+            let read = await Task.detached(priority: .userInitiated) {
+                (
+                    sessions: (try? database.trainingTrendSessions(
+                        userId: userId, from: "2000-01-01", to: today
+                    )) ?? [],
+                    lens: MaintenanceLens.read(database: database, userId: userId, today: today)
+                )
+            }.value
+            let loaded = seeded ?? read.sessions
             sessions = loaded
-            lens = seededLens ?? MaintenanceLens.read(
-                database: environment.database, userId: environment.userIdString, today: today
-            )
+            lens = seededLens ?? read.lens
             // "All" means this screen's own oldest session, not a floor
             // invented for it — which is exactly what `firstDataISO` is for.
-            input = EraWindowSource.input(
-                database: environment.database, today: today,
-                firstDataISO: loaded.map(\.date).min()
-            )
+            let firstData = loaded.map(\.date).min()
+            input = await Task.detached(priority: .userInitiated) {
+                EraWindowSource.input(database: database, today: today, firstDataISO: firstData)
+            }.value
         }
     }
 }

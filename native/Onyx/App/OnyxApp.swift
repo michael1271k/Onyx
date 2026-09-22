@@ -5,6 +5,16 @@ import OnyxUI
 
 @main
 struct OnyxApp: App {
+    /// `launch.firstFrame` — opened as the process builds its scene, closed by
+    /// the first `RootView` that actually draws. It spans the database open,
+    /// the Keychain read and `AppEnvironment.live()`, which is what a cold
+    /// launch is; a warm one never runs this `init` again.
+    private static let launch = Perf.begin("launch.firstFrame")
+    private static let launchStarted: Void = { _ = launch }()
+    @State private var firstFrame = false
+
+    init() { _ = Self.launchStarted }
+
     @Environment(\.scenePhase) private var scenePhase
     @State private var environment: AppEnvironment?
     @State private var startupError: String?
@@ -47,7 +57,10 @@ struct OnyxApp: App {
                 } else if let environment {
                     RootView()
                         .environment(environment)
-                        .task { environment.start() }
+                        .task {
+                            environment.start()
+                            if !firstFrame { firstFrame = true; Perf.end(Self.launch) }
+                        }
                 } else if let startupError {
                     StartupErrorView(message: startupError)
                 } else {
@@ -57,7 +70,10 @@ struct OnyxApp: App {
                 if let environment {
                     RootView()
                         .environment(environment)
-                        .task { environment.start() }
+                        .task {
+                            environment.start()
+                            if !firstFrame { firstFrame = true; Perf.end(Self.launch) }
+                        }
                 } else if let startupError {
                     StartupErrorView(message: startupError)
                 } else {

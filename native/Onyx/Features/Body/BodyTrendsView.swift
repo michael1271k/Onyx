@@ -36,6 +36,8 @@ struct BodyTrendsView: View {
     @State private var input: EraWindowInput?
     /// The stress index over `StressSection.days`, oldest first (§U5.3).
     @State private var stress: [StressDay] = []
+    /// Which run of the read below is the current one — see the `.task`.
+    @State private var reads = 0
 
     var body: some View {
         Group {
@@ -53,8 +55,27 @@ struct BodyTrendsView: View {
         // but an edit that moves a day moves what the ledger card compares
         // against, and a screen that has been open since before the edit would
         // go on drawing the old series with no way to ask it not to.
+        // ── A SUPERSEDED RUN MUST NOT WIN ──────────────────────────────
+        // These reads are detached now, and `await Task.detached(…).value` on
+        // a non-throwing task is not a cancellation point: `.task(id:)`
+        // cancels the old run, but its child finishes anyway and its
+        // assignment lands. An `All` scan started before the reader picked
+        // `1 year` returns AFTER the small one and overwrites it, so the chart
+        // draws the whole account under a picker that says a year. One
+        // generation, checked before every write.
         .task(id: Reload(window: window, generation: environment.rescoreGeneration)) {
-            let resolved = EraWindowSource.input(database: environment.database)
+            reads &+= 1
+            let run = reads
+            // Detached: `EraWindowSource.input` is three reads and the slice
+            // below is a ranged scan of `body_composition` and `daily_logs`
+            // that `.all` lets run to the start of the account. Both used to
+            // happen on the main actor because a `.task` on a `@MainActor`
+            // view runs there (W6).
+            let database = environment.database
+            let resolved = await Task.detached(priority: .userInitiated) {
+                EraWindowSource.input(database: database)
+            }.value
+            guard run == reads else { return }
             input = resolved
             // A seeded slice is a fixed window by definition; re-reading it on
             // a window change would replace the harness's data with an empty
@@ -62,12 +83,22 @@ struct BodyTrendsView: View {
             if let seeded {
                 slice = seeded
             } else {
-                slice = (try? load(window.resolve(resolved))) ?? .empty
+                let userId = environment.userIdString
+                let range = window.resolve(resolved)
+                let read = await Task.detached(priority: .userInitiated) {
+                    (try? database.bodyVitals(userId: userId, from: range.startISO, to: range.endISO)) ?? .empty
+                }.value
+                guard run == reads else { return }
+                slice = read
             }
             if let seededStress {
                 stress = seededStress
             } else {
-                stress = await Self.readStress(database: environment.database, userId: environment.userIdString)
+                let series = await Self.readStress(
+                    database: environment.database, userId: environment.userIdString
+                )
+                guard run == reads else { return }
+                stress = series
             }
         }
     }
@@ -95,11 +126,6 @@ struct BodyTrendsView: View {
     /// phase covers — which is a real date from the phase table rather than a
     /// floor invented for this screen, and is a bound the account cannot have
     /// data before.
-    private func load(_ resolved: ResolvedEraWindow) throws -> BodyVitalsSlice {
-        try environment.database.bodyVitals(
-            userId: environment.userIdString, from: resolved.startISO, to: resolved.endISO
-        )
-    }
 }
 
 /// What re-reads the screen: the picked window, or a finished rescore.

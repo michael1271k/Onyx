@@ -853,9 +853,7 @@ final class WatchModel {
         guard !wanted.isEmpty else { return [] }
         let onDeck = Set(movements.map(\.plan.id))
         var seen: Set<String> = []
-        return context.schedule.programs
-            .flatMap(\.days)
-            .flatMap(\.exercises)
+        return Self.catalogue(context)
             .filter { candidate in
                 guard !onDeck.contains(candidate.id), !seen.contains(candidate.id) else { return false }
                 guard !Set(candidate.movers.primary).isDisjoint(with: wanted) else { return false }
@@ -877,14 +875,23 @@ final class WatchModel {
         let wanted = Set(movement.plan.movers.primary)
         guard !wanted.isEmpty else { return false }
         let onDeck = Set(movements.map(\.plan.id))
-        return context.schedule.programs.contains { program in
-            program.days.contains { day in
-                day.exercises.contains { candidate in
-                    !onDeck.contains(candidate.id)
-                        && !Set(candidate.movers.primary).isDisjoint(with: wanted)
-                }
-            }
+        return Self.catalogue(context).contains { candidate in
+            !onDeck.contains(candidate.id)
+                && !Set(candidate.movers.primary).isDisjoint(with: wanted)
         }
+    }
+
+    /// Every movement this wrist may offer as a swap.
+    ///
+    /// Since W6 the phone sends the ACTIVE program in `schedule.programs` and
+    /// the WHOLE catalogue, flat and in its original order, in `swapPool`. The
+    /// pool wins when it is there — it already holds today's deck, and
+    /// concatenating the two would put the active program's copy of a shared
+    /// name ahead of the one the phone's own order resolves to. A phone on an
+    /// older build sends no pool and every program, which is the fallback.
+    private static func catalogue(_ context: WatchContext) -> [ProgramExercise] {
+        if let pool = context.swapPool, !pool.isEmpty { return pool }
+        return context.schedule.programs.flatMap(\.days).flatMap(\.exercises)
     }
 
     /// Put another movement in this one's place for today.
