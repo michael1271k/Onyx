@@ -1,0 +1,161 @@
+{
+  "module": "reports/targetsBlock",
+  "fn": "TargetsBlockParser.parse",
+  "note": "W7. Hand-computed. `outcome` is one of none | malformed | parsed — three and not two, because \"this report proposed nothing\" and \"this report proposed something I could not read\" are different facts and a screen that collapses them lies to whoever mistyped a brace. When `outcome` is `malformed`, `reason` is the exact string the parser reports. The LAST block that parses wins: the export prints the schema as a worked example in §9, so a user who pastes the document instead of the report hands this parser a block, and a conversation may carry a draft the model then corrected. That example's `weekStart` is the literal YYYY-MM-DD, which is why the `the export pasted back into itself` case is malformed rather than applied. A `weekStart` is round-tripped through `ISODate.dayNumber`, so a day that does not exist in its month (2026-02-30, 2026-02-29) is refused rather than silently normalised into March — and 2028-02-29, which does exist, is not. Numbers are bounded above as well as below: the block is model-authored, and `Int.init(Double)` TRAPS rather than throwing. The literal `YYYY-MM-DD` is the SCHEMA announcing itself and reads as `none`, so pasting the export instead of the reply is quietly \"no targets in this report\" rather than a red banner saying the model answered badly; `2026-02-30` is still `malformed`, because that one is a mistake. An empty fence is `none` in both of its spellings — closed and unterminated — which they did not used to agree on. The trailing-comma case records what Foundation's decoder ACTUALLY does (it accepts one) rather than what JSON says; leniency is the right side to err on here, and a fixture that guessed the other way would have been a test of nothing.",
+  "cases": [
+    {
+      "name": "no block at all — the ordinary report",
+      "input": { "text": "# Weekly audit\n\nProtein was short on three days. Push it up.\n\n## Next week\nKeep the deficit." },
+      "expected": { "outcome": "none" }
+    },
+    {
+      "name": "a fenced block of something else is not this block",
+      "input": { "text": "Here is the plan:\n\n```json\n{ \"weekStart\": \"2026-09-21\" }\n```\n" },
+      "expected": { "outcome": "none" }
+    },
+    {
+      "name": "valid — every field",
+      "input": { "text": "Good week.\n\n```onyx-targets\n{\n  \"weekStart\": \"2026-09-21\",\n  \"levers\": [{ \"key\": \"lever-2\", \"value\": 1900, \"unit\": \"kcal\" }],\n  \"dailyTargets\": { \"kcal\": 2100, \"proteinG\": 170, \"carbsG\": 200, \"fatG\": 60, \"stepsGoal\": 10000, \"waterMl\": 3000, \"sleepHours\": 8 },\n  \"note\": \"Protein was short three days running.\"\n}\n```\n" },
+      "expected": {
+        "outcome": "parsed",
+        "weekStart": "2026-09-21",
+        "leverKeys": ["lever-2"],
+        "kcal": 2100, "proteinG": 170, "carbsG": 200, "fatG": 60,
+        "stepsGoal": 10000, "waterMl": 3000, "sleepHours": 8,
+        "note": "Protein was short three days running.",
+        "isEmpty": false
+      }
+    },
+    {
+      "name": "valid — only what changes",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"dailyTargets\": { \"proteinG\": 175 } }\n```" },
+      "expected": {
+        "outcome": "parsed",
+        "weekStart": "2026-09-21",
+        "leverKeys": [],
+        "proteinG": 175,
+        "isEmpty": false
+      }
+    },
+    {
+      "name": "valid — a rung and nothing else",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"levers\": [{ \"key\": \"maintenance\" }] }\n```" },
+      "expected": {
+        "outcome": "parsed",
+        "weekStart": "2026-09-21",
+        "leverKeys": ["maintenance"],
+        "isEmpty": false
+      }
+    },
+    {
+      "name": "valid but empty — a block that asks for no change",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\" }\n```" },
+      "expected": { "outcome": "parsed", "weekStart": "2026-09-21", "leverKeys": [], "isEmpty": true }
+    },
+    {
+      "name": "unknown keys are ignored, not refused",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"mesocycle\": \"hypertrophy\", \"dailyTargets\": { \"kcal\": 2000, \"vitaminD\": 4000 } }\n```" },
+      "expected": { "outcome": "parsed", "weekStart": "2026-09-21", "leverKeys": [], "kcal": 2000, "isEmpty": false }
+    },
+    {
+      "name": "zero is an instruction, not an absence",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"dailyTargets\": { \"stepsGoal\": 0 } }\n```" },
+      "expected": { "outcome": "parsed", "weekStart": "2026-09-21", "leverKeys": [], "stepsGoal": 0, "isEmpty": false }
+    },
+    {
+      "name": "a tilde fence is a fence",
+      "input": { "text": "~~~onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"dailyTargets\": { \"kcal\": 2000 } }\n~~~" },
+      "expected": { "outcome": "parsed", "weekStart": "2026-09-21", "leverKeys": [], "kcal": 2000, "isEmpty": false }
+    },
+    {
+      "name": "the info string is matched case-insensitively",
+      "input": { "text": "```ONYX-TARGETS\n{ \"weekStart\": \"2026-09-21\" }\n```" },
+      "expected": { "outcome": "parsed", "weekStart": "2026-09-21", "leverKeys": [], "isEmpty": true }
+    },
+    {
+      "name": "an unterminated fence still carries its body",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"dailyTargets\": { \"kcal\": 1800 } }\n" },
+      "expected": { "outcome": "parsed", "weekStart": "2026-09-21", "leverKeys": [], "kcal": 1800, "isEmpty": false }
+    },
+    {
+      "name": "the last block that parses wins",
+      "input": { "text": "First draft:\n\n```onyx-targets\n{ \"weekStart\": \"2026-09-14\", \"dailyTargets\": { \"kcal\": 1800 } }\n```\n\nOn reflection:\n\n```onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"dailyTargets\": { \"kcal\": 2000 } }\n```\n" },
+      "expected": { "outcome": "parsed", "weekStart": "2026-09-21", "leverKeys": [], "kcal": 2000, "isEmpty": false }
+    },
+    {
+      "name": "a trailing block that does NOT parse falls back to the one that does",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"dailyTargets\": { \"kcal\": 2000 } }\n```\n\nSchema, for reference:\n\n```onyx-targets\n{ \"weekStart\": \"YYYY-MM-DD\" }\n```\n" },
+      "expected": { "outcome": "parsed", "weekStart": "2026-09-21", "leverKeys": [], "kcal": 2000, "isEmpty": false }
+    },
+    {
+      "name": "the export pasted back into itself is NO block, not a broken one",
+      "input": { "text": "## 9 · PASTE-BACK\n\n```onyx-targets\n{\n  \"weekStart\": \"YYYY-MM-DD\",\n  \"dailyTargets\": { \"kcal\": 2100 }\n}\n```\n" },
+      "expected": { "outcome": "none" }
+    },
+    {
+      "name": "malformed — weekStart missing",
+      "input": { "text": "```onyx-targets\n{ \"dailyTargets\": { \"kcal\": 2000 } }\n```" },
+      "expected": { "outcome": "malformed", "reason": "\"weekStart\" is missing" }
+    },
+    {
+      "name": "malformed — not JSON",
+      "input": { "text": "```onyx-targets\nkcal: 2000\nprotein: 170\n```" },
+      "expected": { "outcome": "malformed", "reason": "the block is not valid JSON" }
+    },
+    {
+      "name": "a trailing comma is tolerated — Foundation's decoder accepts it",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\", }\n```" },
+      "expected": { "outcome": "parsed", "weekStart": "2026-09-21", "leverKeys": [], "isEmpty": true }
+    },
+    {
+      "name": "malformed — an unclosed brace",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\"\n```" },
+      "expected": { "outcome": "malformed", "reason": "the block is not valid JSON" }
+    },
+    {
+      "name": "an empty fence is nothing, not a mistake",
+      "input": { "text": "```onyx-targets\n```" },
+      "expected": { "outcome": "none" }
+    },
+    {
+      "name": "malformed — a number arrived as prose",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"dailyTargets\": { \"kcal\": \"about 2000\" } }\n```" },
+      "expected": { "outcome": "malformed", "reason": "\"dailyTargets.kcal\" is the wrong type" }
+    },
+    {
+      "name": "malformed — a negative target",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"dailyTargets\": { \"kcal\": -200 } }\n```" },
+      "expected": { "outcome": "malformed", "reason": "kcal is not a usable number" }
+    },
+    {
+      "name": "malformed — a day that does not exist",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-02-30\" }\n```" },
+      "expected": { "outcome": "malformed", "reason": "\"weekStart\" is not an ISO date (YYYY-MM-DD)" }
+    },
+    {
+      "name": "malformed — 29 February in a year that has none",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-02-29\" }\n```" },
+      "expected": { "outcome": "malformed", "reason": "\"weekStart\" is not an ISO date (YYYY-MM-DD)" }
+    },
+    {
+      "name": "valid — 29 February in a year that has one",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2028-02-29\" }\n```" },
+      "expected": { "outcome": "parsed", "weekStart": "2028-02-29", "leverKeys": [], "isEmpty": true }
+    },
+    {
+      "name": "malformed — a target no body could eat",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"dailyTargets\": { \"kcal\": 1e19 } }\n```" },
+      "expected": { "outcome": "malformed", "reason": "kcal is implausibly large" }
+    },
+    {
+      "name": "malformed — a lever with no key",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"levers\": [{ \"key\": \"  \" }] }\n```" },
+      "expected": { "outcome": "malformed", "reason": "a lever has no \"key\"" }
+    },
+    {
+      "name": "malformed — levers is not a list",
+      "input": { "text": "```onyx-targets\n{ \"weekStart\": \"2026-09-21\", \"levers\": \"lever-2\" }\n```" },
+      "expected": { "outcome": "malformed", "reason": "\"levers\" is the wrong type" }
+    }
+  ]
+}

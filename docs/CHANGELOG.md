@@ -44,6 +44,58 @@ _Nothing yet._
 
 ---
 
+## [7.8.0] — 2026-09-22 · One export, three ways to ask for it
+
+Wave 7 of the Onyx Expansion sprint, and the one the app was originally for.
+Getting a training week to an AI is one action from any surface; the extraction
+that builds it exists in exactly one place; and the model's answer can write
+next week's targets back.
+
+### Added
+- **History → a week → Export** now offers a RANGE, not a week: *Since last
+  export* (the default), *This week so far*, *Last complete week*, *Last 7
+  days*. Each carries the dates it resolves to, so you can see what you are
+  about to hand over before you hand it over. The phone remembers how far it
+  has exported, so "since last export" never shows a model the same days twice.
+- **Shortcuts and Siri.** "Export my Onyx week" builds the document without
+  opening the app and hands back two files — the Markdown for a chat window and
+  the JSON envelope for anything that parses. The range is a parameter, so a
+  Sunday-evening automation is four taps to set up.
+- **`## 9 · PASTE-BACK`**, a new last section on every export. It tells the
+  model how to answer in a form the app can read: a fenced `onyx-targets` block
+  of JSON naming a rung, or calories, protein, carbs, fat, steps, water and
+  sleep.
+- **Apply targets.** Paste a report into Reports → a week, and if it carries
+  that block, a button appears. It opens a diff — what each number is now, what
+  it would become, and what will NOT change and why — and writes nothing until
+  you confirm. A report dated to a week already past applies from today: days
+  you have already logged keep the targets they were graded against.
+- **`tools/onyx-mcp`** — a local MCP server for Claude Desktop and Claude Code.
+  Five read-only tools: the exports your phone has filed, one envelope, the
+  latest document, raw sets and raw daily scores. It serves what the app built
+  and derives nothing, so a week read on the desktop and a week shared from the
+  phone cannot disagree. Registration is two lines; see its README.
+- **`docs/sql/w7-exports.sql`** — the `exports` table and its four RLS
+  policies, for the founder to paste. Until it runs, the export still shares
+  and the MCP server says exactly which table is missing.
+
+### Changed
+- **The export's complete-week lock is gone.** It used to refuse a week with
+  days left in it. A span states its own two dates on the document's cover, so
+  it cannot be mistaken for a week that has not finished — and asking on
+  Thursday what Monday to Wednesday looked like is the ordinary use the lock
+  was costing.
+- **The weekly export is a SPAN, not a week.** Every figure is unchanged for a
+  whole week; a partial or off-week span now renders exactly its own days.
+
+### Fixed
+- **A day was named by its position, not by what day it was.** The export's
+  weekday column was the offset from the span's first day, so an athlete whose
+  week starts on Monday has had every Monday labelled "Sun" for as long as the
+  column has existed. It is read from the date now.
+
+---
+
 ## [7.7.0] — 2026-09-22 · Measured, then cut
 
 Wave 6 of the Onyx Expansion sprint. Every hot path has a signpost and a

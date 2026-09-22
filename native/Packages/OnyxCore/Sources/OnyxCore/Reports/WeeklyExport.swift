@@ -3,7 +3,7 @@ import Foundation
 // ─────────────────────────────────────────────────────────────────────────────
 // "Export Week" — one training week as DRY DATA, for a coaching audit to read.
 //
-// EXPORT v5, THE DOCUMENT. Seven fixed sections, in this order, and nothing
+// EXPORT v6, THE DOCUMENT. Nine fixed sections, in this order, and nothing
 // else between them:
 //
 //   1 · WEEK              the cover — dates, phase, the lever and its targets
@@ -13,6 +13,12 @@ import Foundation
 //   5 · SESSIONS          one block per session, in performed order
 //   6 · SETS BY MUSCLE    direct, indirect, total, target, status
 //   7 · ANOMALIES         everything the document corrected on the way out
+//   8 · LEGEND            the scales, which the rows cannot state for themselves
+//   9 · PASTE-BACK        how to answer in a form the app can read (W7)
+//
+// THE SPAN IS NOT ALWAYS A WEEK. It was, until the complete-week lock came off
+// (decision 21): `input.weekStart → weekEnd` is whatever range was asked for,
+// and `input.days` is however many days that is. Nothing below counts to seven.
 //
 // THE READER IS A MODEL, NOT A PERSON. v4 was written day-major for someone
 // pasting a week into a chat window, and it explained itself as it went: a
@@ -980,7 +986,7 @@ public enum WeeklyExport {
 
     // MARK: - The document
 
-    /// EXPORT v5 — seven fixed sections, in this order, and nothing else.
+    /// EXPORT v6 — nine fixed sections, in this order, and nothing else.
     ///
     /// The consumer is a model auditing the week, not a person reading it, so
     /// every line is data and no line is prose. A field with nothing behind it
@@ -1926,8 +1932,57 @@ public enum WeeklyExport {
                 + " · actual rest is withheld until the timer stores the extension it measured",
         ])
 
+        // ── 9 · PASTE-BACK ────────────────────────────────────────────────────
+        /* ── THE DOCUMENT NOW SAYS HOW TO ANSWER IT ───────────────────────────
+           Everything above is the week going out. This is the one paragraph
+           about the week coming back: the app can read a fenced `onyx-targets`
+           block out of a pasted report and write the numbers in it through the
+           same writers the You tab uses (`TargetsBlockParser`), and a schema
+           the reader has never seen is a schema the reader will not use.
+
+           It is printed LAST and it is short, because it is the only part of
+           this document that is an instruction rather than a row — and because
+           §7's rule still holds: every field earns the tokens it costs.
+
+           The example's `weekStart` is the literal `YYYY-MM-DD` and not a real
+           date, deliberately. A user who pastes this DOCUMENT into the report
+           editor instead of the report hands the parser this very block, and a
+           placeholder that cannot be read as a date is what stops the example
+           being applied as an instruction. */
+        L.append("")
+        L.append("## 9 · PASTE-BACK")
+        L.append(contentsOf: pasteBackSchema)
+
         return L.joined(separator: "\n")
     }
+
+    /// §9, fixed text. A `static let` rather than lines inside `build` so the
+    /// parser's own suite can assert that the schema the document advertises is
+    /// the schema `TargetsBlockParser` accepts — a key that moves in one and
+    /// not the other is a silent break with a write behind it.
+    public static let pasteBackSchema: [String] = [
+        "Optional. To change the week's targets, end the reply with one fenced block,",
+        "info string `onyx-targets`, body JSON:",
+        "",
+        "```onyx-targets",
+        "{",
+        "  \"weekStart\": \"YYYY-MM-DD\",",
+        "  \"levers\": [{ \"key\": \"<an existing rung key>\", \"value\": 1900, \"unit\": \"kcal\" }],",
+        "  \"dailyTargets\": { \"kcal\": 2100, \"proteinG\": 170, \"carbsG\": 200, \"fatG\": 60,",
+        "                     \"stepsGoal\": 10000, \"waterMl\": 3000, \"sleepHours\": 8 },",
+        "  \"note\": \"one short sentence\"",
+        "}",
+        "```",
+        "",
+        "weekStart is required — ISO date, the week these targets are meant for."
+            + " Whatever it says, they are applied from today: the past keeps the targets it"
+            + " was graded against.",
+        "Everything else is optional: send only what changes, and send no block at all if"
+            + " nothing should change.",
+        "levers names a rung that already exists; any number given in dailyTargets replaces"
+            + " the rung rather than adding one.",
+        "Only weekStart, levers, dailyTargets and note are read. Other keys are ignored.",
+    ]
 
     /// One line per bout, bouts divided by `|` — `·` already separates a bout's
     /// own fields and a document cannot use one separator for both.

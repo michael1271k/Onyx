@@ -1,5 +1,9 @@
 # dependencies
 /node_modules
+# The MCP server has its own package.json (tools/onyx-mcp). The rule above is
+# root-anchored, so this one is not covered by it. The lock file IS committed —
+# it pins the SDK version; only the tree it installs is disposable.
+tools/onyx-mcp/node_modules/
 /.pnp
 .pnp.js
 

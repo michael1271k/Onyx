@@ -4,6 +4,7 @@ import os
 import OnyxUI
 import OnyxCore
 import OnyxData
+import Supabase
 
 /// One week, day by day (§5.9).
 ///
@@ -61,6 +62,19 @@ struct WeekDaysView: View {
     @State private var openReport: ReportDoor?
     @State private var wrapDoor: WrapDoor?
     @State private var writingReport = false
+
+    // ── The export (W7) ─────────────────────────────────────────────────────
+    /// The range whose document is being built. Non-nil for the second or two
+    /// the builder takes; `.task(id:)` keys on it.
+    @State private var building: ExportRange?
+    /// The built document, waiting for the share sheet.
+    @State private var sharing: ExportShare?
+    /// Stated rather than silent: a week that cannot be read is a thing the
+    /// reader needs to know, and a menu that did nothing would read as a bug.
+    @State private var exportFailure: String?
+    /// Bumped when a share completes. `UserDefaults` does not publish, so
+    /// without this the menu's dates stay stale until something else redraws.
+    @State private var exportGeneration = 0
 
     var body: some View {
         List {
@@ -248,49 +262,154 @@ struct WeekDaysView: View {
 
     /// The export, in the row's pinned slot in BOTH states.
     ///
-    /// Pinned rather than in `chips` because when it works it is not a `Button`
-    /// at all — `ShareLink` is a view that needs its item up front — and pinned
-    /// in the LOCKED state too, because a control that moves from the middle of
-    /// a row to its end depending on whether it is available is two controls as
-    /// far as a reader is concerned. Same slot, same place, one of two faces.
+    /// Pinned rather than in `chips` because a control that moves from the
+    /// middle of a row to its end depending on its state is two controls as far
+    /// as a reader is concerned. Same slot, same place.
+    ///
+    /// ── THE LOCK CAME OFF (W7, decision 21) ────────────────────────────────
+    /// This chip used to wear a padlock until the week's last day had passed,
+    /// on the web's reasoning that a document built from a week with days left
+    /// in it is a partial record which then sits in the ledger looking final.
+    ///
+    /// That reasoning survives in the RANGE and not in a lock. A span that ends
+    /// today says so on the document's own cover — `## 1 · WEEK` prints its two
+    /// dates — so nothing can be mistaken for a closed week. What the lock
+    /// actually cost was the ordinary use: asking on Thursday what Monday to
+    /// Wednesday looked like.
+    ///
+    /// ── AND WHY THIS IS NOT A `ShareLink` ANY MORE ──────────────────────────
+    /// It was, first: four of them in a `Menu`, each carrying a `Transferable`
+    /// whose exporter ran when that one was chosen. `code-reviewer` killed it
+    /// on a question nothing in the API can answer — does the exporter run when
+    /// a share sheet is merely PRESENTED? `ShareLink` has no completion
+    /// callback, so "the document left" and "the document was built" were the
+    /// same event, and both the export marker and the upload to `exports` hung
+    /// off it. A cancelled share would then advance `sinceLastExport` past days
+    /// no model was ever shown — and the marker never moves backwards, so those
+    /// days would be silently unreachable. That is precisely the failure the
+    /// range exists to prevent.
+    ///
+    /// `UIActivityViewController` has the callback (`completionWithItemsHandler`),
+    /// so the marker and the upload now hang off a share that actually
+    /// completed. It also costs nothing the `Transferable` was buying: the
+    /// document is still built once, on the tap, and never on an appearance.
     @ViewBuilder
     private var exportChip: some View {
-        if weekIsComplete {
-            ShareLink(
-                item: WeekExportDocument(
-                    database: environment.database,
-                    userId: environment.userIdString,
-                    weekStart: window.start,
-                    generation: environment.storeGeneration
-                ),
-                subject: Text("\(window.label(in: environment.targets?.schedule)) · \(window.rangeLabel)"),
-                preview: SharePreview("onyx-week-\(window.start).md")
-            ) {
-                OnyxChipRow.face(title: "Export", systemImage: "square.and.arrow.up")
+        Menu {
+            // Rows whose spans have collapsed onto each other are one row. On a
+            // fresh install "Since last export" resolves to exactly this week,
+            // and two rows reading "Since last export · 13–16 Sep" and "This
+            // week so far · 13–16 Sep" are one choice wearing two names.
+            ForEach(exportRows, id: \.range) { row in
+                Button {
+                    building = row.range
+                } label: {
+                    // The range is the choice; the dates are what that choice
+                    // turns out to mean today. A row that said only "Since last
+                    // export" would make you tap to find out.
+                    Label("\(row.range.label) · \(Self.spanLabel(row.span))",
+                          systemImage: Self.glyph(row.range))
+                }
             }
-            .onyxPress()
-            // `face` is a label, not a `Button`, so it carries none of the
-            // accessibility `OnyxChipRow.button` applies for the chips.
-            .accessibilityLabel("Export week")
-        } else if !weekIsComplete {
-            // ── EXPORT IS A CLOSING RITUAL, NOT A LIVE ONE ─────────────────
-            // The web has refused this on a running week since the loop was
-            // built (`PathfinderTimeline`): an export of a week with days left
-            // to log is a partial record, and any report written from it then
-            // sits in the ledger looking final.
-            //
-            // The absence is STATED rather than silent, and it is stated by the
-            // control itself. A chip that vanished would read as a bug, and the
-            // answer to "where did the button go" is a date — so the chip stays,
-            // wears a lock, carries the date in its own title and refuses the
-            // tap. A real `Button` so VoiceOver announces it dimmed.
-            Button {} label: {
-                OnyxChipRow.face(
-                    title: "Export opens \(Swap.shortDayLabel(ISODate.addDays(window.start, 7) ?? window.start))",
-                    systemImage: "lock", isEnabled: false
-                )
+        } label: {
+            OnyxChipRow.face(title: "Export", systemImage: "square.and.arrow.up")
+                .onyxPress()
+        }
+        // `face` is a label, not a `Button`, so it carries none of the
+        // accessibility `OnyxChipRow.button` applies for the chips.
+        .accessibilityLabel("Export week")
+        .accessibilityHint("Choose a range, then share the document")
+        // Off the main actor: the builder is a read over the whole span.
+        .task(id: building) {
+            guard let range = building else { return }
+            let database = environment.database
+            let userId = environment.userIdString
+            let today = environment.today
+            let built = await Task.detached(priority: .userInitiated) { () -> ExportShare? in
+                let service = ExportService(database: database, userId: userId)
+                guard let envelope = try? service.envelope(
+                    range: range, today: today, recordingMarker: false),
+                    let url = try? envelope.writeFile()
+                else { return nil }
+                return ExportShare(url: url, envelope: envelope)
+            }.value
+            building = nil
+            guard let built else {
+                exportFailure = "That week could not be read on this device."
+                return
             }
-            .disabled(true)
+            sharing = built
+        }
+        .sheet(item: $sharing) { share in
+            ShareSheet(url: share.url) { completed in
+                sharing = nil
+                guard completed else { return }
+                shareCompleted(share.envelope)
+            }
+            .presentationDetents([.medium, .large])
+        }
+    }
+
+    /// The four ranges, deduplicated by the span they resolve to.
+    ///
+    /// Computed here rather than held: pure arithmetic over `environment.today`,
+    /// the resolver's week-start day and one `UserDefaults` read. None of those
+    /// is a store read, which is what the `check:body` gate is about.
+    ///
+    /// The marker is NOT observable — `UserDefaults` does not publish — so
+    /// after a share the dates here are stale until something else redraws this
+    /// screen. `shareCompleted` bumps `exportGeneration` for exactly that
+    /// reason.
+    private var exportRows: [(range: ExportRange, span: ExportSpan)] {
+        _ = exportGeneration
+        let defaults = AppDatabase.appGroupDefaults()
+        let through = ExportLog.exportedThrough(in: defaults)
+        let startDay = environment.targets?.weekStartDay ?? 0
+        var seen: Set<ExportSpan> = []
+        return ExportRange.allCases.compactMap { range in
+            let span = range.span(today: environment.today, weekStartDay: startDay, exportedThrough: through)
+            guard seen.insert(span).inserted else { return nil }
+            return (range, span)
+        }
+    }
+
+    /// The share actually happened: record how far this device has exported,
+    /// and file the copy the MCP server reads.
+    private func shareCompleted(_ envelope: ExportEnvelope) {
+        ExportLog.record(through: envelope.rangeEnd, in: AppDatabase.appGroupDefaults())
+        exportGeneration &+= 1
+        let remote = PostgRESTMirrorRemote(client: environment.supabase, userId: environment.userIdString)
+        let service = ExportService(database: environment.database, userId: environment.userIdString)
+        Task.detached(priority: .utility) {
+            do { try await service.upload(envelope, via: remote) }
+            catch {
+                // `.error` and not `.info`: W5 recorded that `.info` never
+                // reaches `log show`, and a copy that silently stopped reaching
+                // the server is exactly what needs to be findable.
+                Logger(subsystem: "app.onyx.health", category: "export")
+                    .error("export upload failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    /// `13–16 Sep`, or `16 Sep` for a single day.
+    static func spanLabel(_ span: ExportSpan) -> String {
+        guard let start = LogicalDay.date(fromISO: span.start),
+              let end = LogicalDay.date(fromISO: span.end) else { return span.start }
+        if span.start == span.end { return end.formatted(.dateTime.day().month(.abbreviated)) }
+        let sameMonth = span.start.prefix(7) == span.end.prefix(7)
+        let from = sameMonth
+            ? start.formatted(.dateTime.day())
+            : start.formatted(.dateTime.day().month(.abbreviated))
+        return "\(from)–\(end.formatted(.dateTime.day().month(.abbreviated)))"
+    }
+
+    private static func glyph(_ range: ExportRange) -> String {
+        switch range {
+        case .sinceLastExport: return "arrow.up.forward"
+        case .thisWeek: return "calendar.badge.clock"
+        case .lastWeek: return "calendar"
+        case .last7Days: return "clock.arrow.circlepath"
         }
     }
 
@@ -305,15 +424,12 @@ struct WeekDaysView: View {
     /// screen that just acquired its first. The wrap chip takes the train
     /// accent instead, which is one step of emphasis and no second hero.
     ///
-    /// ── AND WHY THE THREE GATES DISAGREE ON PURPOSE ─────────────────────────
+    /// ── AND WHY THE TWO GATES DISAGREE ON PURPOSE ───────────────────────────
     /// The report appears when one has been written and offers the editor when
-    /// one has not. The export opens strictly after the week's last calendar
-    /// day (`WeekReady.isComplete`). The wrap opens when the week WRAPPED —
-    /// every planned training day logged — which on a plan that rests Saturday
-    /// can be true on Friday evening. So there is a real two-day window where
-    /// the wrap is readable and the export is not, and both of those are right:
-    /// the wrap-up is about the training, and a document that claims to be the
-    /// week is about the week.
+    /// one has not. The wrap opens when the week WRAPPED — every planned
+    /// training day logged — which on a plan that rests Saturday can be true on
+    /// Friday evening. The export has no gate at all since W7: it names its own
+    /// span, so it cannot claim to be a week that has not finished.
     private func chips(_ detail: HistoryWeeks.WeekDetail) -> [OnyxChip] {
         var out: [OnyxChip] = []
         // Leftmost, because it is the reason someone opens a week that closed a
@@ -348,15 +464,6 @@ struct WeekDaysView: View {
         return out
     }
 
-
-    /// Strictly after this week's final day, in the device's own calendar —
-    /// the same rule the web's export gate reads.
-    private var weekIsComplete: Bool {
-        // `environment.today` and not a fresh clock read: it is the app's one
-        // answer to "what day is it", and it is observed — so a week that
-        // closes while this screen is open opens its export without a reload.
-        WeekReady.isComplete(weekStart: window.start, today: environment.today)
-    }
 
     // MARK: - Loading
 
@@ -824,71 +931,36 @@ enum SessionRow {
 
 // MARK: - The export
 
-/// The week's markdown, built when the share sheet asks for the bytes.
-///
-/// ── WHY A `Transferable` AND NOT A FILE ON DISK ─────────────────────────────
-/// `ShareLink` is a view, not an action: it needs its item up front, which is
-/// why this screen used to build the whole document — a `WeeklyExportBuilder`
-/// read over the week plus a write to the temporary directory — on every
-/// appearance, for a button most visits never touch. A `Transferable` keeps the
-/// `ShareLink` and moves the cost: SwiftUI calls the exporter only when the
-/// share is actually performed, and the explicit `SharePreview` above means not
-/// even the preview needs the content.
-///
-/// A `DataRepresentation` with a suggested file name, and not a `String`: a
-/// string reaches the other side as loose text, so Files offers no "Save to"
-/// and Mail has nothing to attach. `onyx-week-2026-08-30.md` is what makes a
-/// weekly document something you can keep rather than something you paste once.
-struct WeekExportDocument: Transferable, Sendable {
-    let database: AppDatabase
-    let userId: String
-    let weekStart: String
-    /// `AppEnvironment.storeGeneration` at the moment the chip was drawn — see
-    /// `cache`. Part of the value so a re-render after a commit produces a
-    /// DIFFERENT document, which is what stops a share handing over yesterday.
-    let generation: Int
-
-    /// One entry, not a dictionary: the only repeat this can serve is the same
-    /// user sharing the same week twice in a row, which is exactly what a
-    /// cancelled share sheet produces. Anything else is a different week or a
-    /// moved store, and both must miss.
-    private static let cache = OSAllocatedUnfairLock<(key: String, text: String)?>(initialState: nil)
-
-    private var key: String { "\(userId)·\(weekStart)·\(generation)" }
-
-    func markdown() throws -> String {
-        if let hit = Self.cache.withLock({ $0 }), hit.key == key { return hit.text }
-        let input = try WeeklyExportBuilder(database: database, userId: userId)
-            .input(weekStart: weekStart)
-        let text = WeeklyExport.build(input)
-        Self.cache.withLock { $0 = (key, text) }
-        return text
-    }
-
-    /// `onyx-week-2026-08-30.md`, in the temporary directory, written when
-    /// the share sheet asks and not before.
-    ///
-    /// A `FileRepresentation` and not a `DataRepresentation`: a suggested file
-    /// name over `.plainText` is a suggestion, and several share targets
-    /// append `.txt` to it or replace the extension outright — which is
-    /// exactly the "arrives with no name" failure the old temp file existed to
-    /// prevent. The file is rewritten rather than suffixed, so sharing the
-    /// same week twice leaves one file and not a drawer of near-identical
-    /// ones.
-    func writeFile() throws -> URL {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("onyx-week-\(weekStart).md")
-        try markdown().write(to: url, atomically: true, encoding: .utf8)
-        return url
-    }
-
-    static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .plainText) { document in
-            // Off the main actor: the share sheet awaits this, and the builder
-            // is a read over the whole week.
-            SentTransferredFile(
-                try await Task.detached(priority: .userInitiated) { try document.writeFile() }.value
-            )
-        }
-    }
+/// One built document, waiting for a share sheet.
+struct ExportShare: Identifiable, Sendable {
+    let url: URL
+    let envelope: ExportEnvelope
+    var id: String { url.lastPathComponent }
 }
+
+/// `UIActivityViewController`, for the one thing `ShareLink` cannot do: tell
+/// you whether the share happened.
+///
+/// That callback is the whole reason this type exists. The export marker and
+/// the upload to `exports` must hang off a share that COMPLETED — a cancelled
+/// one that advanced "since last export" would make the next default skip days
+/// no model was ever shown, and the marker never moves backwards.
+struct ShareSheet: UIViewControllerRepresentable {
+    let url: URL
+    let onFinish: (Bool) -> Void
+
+    func makeUIViewController(context: UIViewControllerRepresentableContext<ShareSheet>) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        let onFinish = onFinish
+        controller.completionWithItemsHandler = { _, completed, _, _ in
+            onFinish(completed)
+        }
+        return controller
+    }
+
+    func updateUIViewController(
+        _ controller: UIActivityViewController,
+        context: UIViewControllerRepresentableContext<ShareSheet>
+    ) {}
+}
+

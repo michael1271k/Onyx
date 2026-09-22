@@ -466,6 +466,24 @@ enum PreviewHarness {
                 seededBody: nil
             )
             .environment(AppEnvironment.preview)
+        // W7: the same screen with a report that CARRIES an `onyx-targets`
+        // block. The bar under the editor is the only thing that tells a
+        // reader the paste held targets, so it is the thing to photograph.
+        case "report-edit-targets":
+            ReportEditorSheet(
+                week: ReportWeek(start: "2026-09-13", end: "2026-09-19",
+                                 report: PreviewReport.rows[0], isCurrent: false),
+                seededBody: PreviewReport.bodyWithTargets
+            )
+            .environment(AppEnvironment.preview)
+        // W7: the diff a paste opens before anything is written. The plan is a
+        // VALUE here rather than a store read — `targetsPlan` needs a goals row
+        // and the harness has none, and a sheet photographed against an empty
+        // store would show every line as "not set → 2,100 kcal", which is the
+        // one state this screen exists to avoid drawing.
+        case "apply-targets":
+            ApplyTargetsSheet(plan: PreviewReport.plan)
+                .environment(AppEnvironment.preview)
         case "day", "day-rows", "day-past", "day-session", "day-two", "day-empty", "day-stress", "day-edit", "day-soreness", "day-hero",
              "scale", "scale-first", "day-swap", "doms", "doms-rate",
              "pulse-squares", "pulse-squares-evening", "pulse-squares-empty", "stack", "stack-add", "stack-edit",

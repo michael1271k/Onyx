@@ -1,0 +1,16 @@
+{
+  "name": "onyx-mcp",
+  "private": true,
+  "type": "module",
+  "description": "An MCP server that serves the Onyx weekly exports the phone has already built, plus thin raw-row reads. No extraction logic lives here.",
+  "scripts": {
+    "smoke": "node smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.0",
+    "zod": "^3.25.76"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

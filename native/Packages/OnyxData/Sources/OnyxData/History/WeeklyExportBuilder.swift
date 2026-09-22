@@ -54,15 +54,45 @@ public struct WeeklyExportBuilder: Sendable {
 
     // MARK: - Entry
 
+    /// One whole week from its first day — what every caller wanted until W7,
+    /// and still the shape of seven of the eight golden vectors.
     public func input(weekStart: String, today: String = LogicalDay.today()) throws -> WeeklyExportInput {
-        let weekEnd = ISODate.addDays(weekStart, 6) ?? weekStart
+        try input(
+            span: ExportSpan(start: weekStart, end: ISODate.addDays(weekStart, 6) ?? weekStart),
+            today: today)
+    }
+
+    /// Any span of dates.
+    ///
+    /// ── THE SPAN STOPPED BEING A WEEK (W7, decision 21) ─────────────────────
+    /// The export gate used to refuse a week with days left in it, so a span
+    /// was always exactly seven days starting on the athlete's week start. It
+    /// is now whatever the range picker asked for — "this week so far" ends
+    /// today, "since last export" starts on whatever day that was — and three
+    /// things in here counted to seven:
+    ///
+    ///   · the day list itself;
+    ///   · the weekday LABEL, which was `weekdayLabels[i]` — the offset from
+    ///     the span's first day. That is only "Sun" on a Sunday-start week, so
+    ///     it was already wrong for a Monday-start athlete and would have said
+    ///     "Sun" against a Wednesday for any span that did not start on one.
+    ///     It is derived from the date now, which is byte-identical on every
+    ///     Sunday-anchored week and correct on everything else;
+    ///   · the readiness signals, read per day.
+    ///
+    /// Every LOOKBACK below — the 13-day body window, the 42-day HRV history,
+    /// the 49-day insomnia window, the 180-day movement history — still counts
+    /// back from the span's FIRST day, which is what it always meant.
+    public func input(span: ExportSpan, today: String = LogicalDay.today()) throws -> WeeklyExportInput {
+        let weekStart = span.start
+        let weekEnd = span.end
         let rows = try fetch(weekStart: weekStart, weekEnd: weekEnd)
         let ctx = rows.schedule
         let phase = ctx.phase
         let program = Schedule.programForContext(ctx, weekStart).program
         let goals = rows.goals
 
-        let days = try withNutrients(try toDays(weekStart: weekStart, rows, ctx: ctx), rows)
+        let days = try withNutrients(try toDays(dates: span.dates, rows, ctx: ctx), rows)
         let sessions = try toSessions(rows, ctx: ctx, phase: phase)
 
         /* ── ONE PHYSICAL WALK IS ONE ROW ───────────────────────────────────
@@ -596,6 +626,10 @@ public struct WeeklyExportBuilder: Sendable {
         var prescriptions: [Prescription]
     }
 
+    /// `weekStart`/`weekEnd` are the SPAN's two ends — the names are kept
+    /// because every lookback below is written against them and renaming them
+    /// would be thirty lines of churn for no change in meaning. Since W7 the
+    /// span is not necessarily seven days and not necessarily week-aligned.
     func fetch(weekStart: String, weekEnd: String) throws -> Rows {
         let user = Column("user_id") == userId
         let inWeek = user && Column("date") >= weekStart && Column("date") <= weekEnd
@@ -764,9 +798,8 @@ public struct WeeklyExportBuilder: Sendable {
                 baselineLogs: try DailyLogRow
                     .filter(user && Column("date") >= (ISODate.addDays(weekStart, -8) ?? weekStart) && Column("date") <= weekEnd)
                     .order(Column("date")).fetchAll(db),
-                readinessByDate: Dictionary(uniqueKeysWithValues: try (0..<7).map { i in
-                    let date = ISODate.addDays(weekStart, i) ?? weekStart
-                    return (date, ExportReadiness(signals: Readiness.signals(try AppDatabase.readinessHistory(db, userId: userId, date: date))))
+                readinessByDate: Dictionary(uniqueKeysWithValues: try ExportSpan(start: weekStart, end: weekEnd).dates.map { date in
+                    (date, ExportReadiness(signals: Readiness.signals(try AppDatabase.readinessHistory(db, userId: userId, date: date))))
                 }),
                 customs: try CustomSupplementRow.filter(user).order(Column("created_at"), Column("id")).fetchAll(db).map(Self.custom),
                 volumeOverrides: volumeOverrides,
@@ -790,7 +823,20 @@ public struct WeeklyExportBuilder: Sendable {
 
     static let weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-    func toDays(weekStart: String, _ d: Rows, ctx: ScheduleContext) throws -> [ExportDay] {
+    /// The day's own name.
+    ///
+    /// This used to be `weekdayLabels[i]`, where `i` was the offset from the
+    /// span's first day — correct only if that day was a Sunday. A Monday-start
+    /// athlete's Monday has been printing "Sun" since the column existed, and
+    /// once a span can start on any weekday (W7) the offset stops meaning
+    /// anything at all. Every Sunday-anchored week renders the same bytes as
+    /// before; nothing else does, and nothing else was right.
+    static func weekdayLabel(_ date: String) -> String {
+        guard let weekday = ISODate.weekday(date), weekdayLabels.indices.contains(weekday) else { return "" }
+        return weekdayLabels[weekday]
+    }
+
+    func toDays(dates: [String], _ d: Rows, ctx: ScheduleContext) throws -> [ExportDay] {
         // `new Map(rows.map(r => [r.date, r]))` — a later duplicate wins.
         var logs: [String: DailyLogRow] = [:]
         for r in d.logs { logs[r.date] = r }
@@ -851,11 +897,10 @@ public struct WeeklyExportBuilder: Sendable {
             return VitalsGate.hrvArtifact(value, history: prior)
         }
 
-        return try (0..<7).map { i in
-            let date = ISODate.addDays(weekStart, i) ?? weekStart
+        return try dates.map { date in
             let l = logs[date], nt = nutri[date], sl = sleepByDate[date], shape = shapeByDate[date]
             var fields: [String: Any] = [
-                "date": date, "weekdayLabel": Self.weekdayLabels[i], "isTrainingDay": Schedule.isTrainingDayIn(ctx, date),
+                "date": date, "weekdayLabel": Self.weekdayLabel(date), "isTrainingDay": Schedule.isTrainingDayIn(ctx, date),
                 "weightKg": j(l?.weightKg), "calories": j(nt?.calories), "proteinG": j(nt?.proteinG),
                 "carbsG": j(nt?.carbsG), "fatG": j(nt?.fatG),
                 "steps": j(l?.steps.map(Double.init)), "distanceM": j(l?.distanceM),
@@ -1656,11 +1701,36 @@ public struct WeeklyExportBuilder: Sendable {
 
         var out: [LedgerWeek] = []
         var ws = ctx.weekZeroStart ?? weekStart
+        /* ── THE BOUND IS THE SPAN'S FIRST DAY, AND STAYS THAT WAY ───────────
+           W7 moved this to `ws <= weekEnd` so a span crossing a week boundary
+           would carry the whole trend line. `invariant-auditor` killed it:
+           `ctx.weekZeroStart` is ALWAYS Sunday-anchored (`Week.anchor` is
+           called with no `startDay`), while `weekStart`/`weekEnd` are anchored
+           to the athlete's own `week_end_day`. For a Monday-start athlete the
+           two grids are offset by a non-multiple of seven, so `<= weekEnd`
+           walks one grid step too far and appends a `LedgerWeek` for a week
+           that has barely begun — on an ORDINARY whole-week export, not on
+           some exotic span. The markdown's own delta line filters it out
+           (`Derived.previousWeek` takes `weekStart < input.weekStart`), which
+           is why nothing caught it; the envelope ships `input.ledger` verbatim
+           to a program that does not.
+
+           So the bound is the span's FIRST day, exactly as it was before W7 —
+           byte-identical to `main` for every caller. A multi-week span's trend
+           line therefore ends at the week its span opens in, which is a
+           limitation and not a wrong number. */
         while ws <= weekStart {
             let dates = (0..<7).map { ISODate.addDays(ws, $0) ?? ws }
             let days: [ExportDay] = try dates.enumerated().map { i, date in
                 try make([
-                    "date": date, "weekdayLabel": Self.weekdayLabels[i], "isTrainingDay": Schedule.isTrainingDayIn(ctx, date),
+                    // `weekdayLabel(date)` and not `weekdayLabels[i]`, for the
+                    // same reason `toDays` stopped: `ws` walks a Sunday-anchored
+                    // grid when the plan is dated and the athlete's own grid
+                    // when it is not, so the offset is only the weekday by
+                    // accident. Nothing reads these rows' labels today —
+                    // `trendTotals` is all they feed — but leaving the defect
+                    // one function away from its fix is how it comes back.
+                    "date": date, "weekdayLabel": Self.weekdayLabel(date), "isTrainingDay": Schedule.isTrainingDayIn(ctx, date),
                     "weightKg": j(logByDate[date]?.weightKg), "calories": j(kcalByDate[date]),
                     "steps": j(logByDate[date]?.steps.map(Double.init)),
                     "waterMl": j(waterByDate[date] ?? logByDate[date]?.waterMl),
