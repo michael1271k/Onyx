@@ -936,3 +936,85 @@ dead but still has a test; `MirrorCoalescer.drain()` now fans out with
 `withTaskGroup` and relies on `SyncCoordinator.syncNow`'s own coalescing.
 (5) A channel that joins and drops in a loop retries at the floor forever,
 because every join resets the ladder — `ponytail:`-noted.
+
+---
+
+## Wave 7 Summary — 7.8.0
+
+**Shipped as 7.8.0, not the plan's 7.6.0** — W5 took that number and W6 took
+7.7.0. The wave map's "expected version" column has been wrong since W5; read
+`package.json`.
+
+**Worked.** `ExportEnvelope` is the one wire — the `WeeklyExportInput` a
+document was built from plus the markdown it rendered to — and its six top-level
+keys are pinned by a test, because three of its four readers do not share a
+compiler. The complete-week lock is gone: the chip is a menu of four ranges,
+each showing the dates it resolves to and collapsing when two coincide (on a
+fresh install "Since last export" *is* "This week so far"). `WeeklyExportBuilder`
+takes a span. `## 9 · PASTE-BACK` prints the schema at the bottom of every
+document; `TargetsBlockParser` reads it back out of a pasted report and
+`TargetsApply` writes it through `editUserGoals` / `editPlanPhaseGoals` /
+`recordLeverChange` and nothing else, behind a diff sheet. `ExportForAIIntent`
++ the app's one `AppShortcutsProvider` returns the markdown and the envelope as
+two files. `tools/onyx-mcp` serves five read-only tools, verified against the
+live database. The founder ran `docs/sql/w7-exports.sql`; `list_exports` went
+from a 404 to `0 rows` in the same session.
+
+**Widening the span found a real bug the brief never named.** The export's
+weekday column was `weekdayLabels[i]` — the OFFSET from the span's first day —
+so an athlete whose week starts on Monday has had every Monday printed as "Sun"
+for as long as the column has existed. It reads the date now, which is
+byte-identical on every Sunday-anchored week and correct on everything else.
+
+**The plan was wrong about four things.** (1) **`ShareLink` cannot tell you
+whether a share happened.** It has no completion callback, so "built" and
+"handed over" were one event — and a cancelled share would have advanced
+"since last export" past days no model was ever shown, permanently, because
+the marker never moves backwards. It is a `UIActivityViewController` now.
+(2) **The server's column names are not the phone's.** `workout_sessions` has
+no `date` column at all (the day is `started_at`; `day_key` is the SPLIT), and
+`workout_sets` has `set_number`, not the mirror's `set_index` — the MCP
+server's first queries were written from `MirrorModels.swift` and 400'd live.
+(3) **`exports` cannot go through the outbox**, which pushes local rows and
+has none to read here; the upload is one best-effort request. (4) **`ExportRange`
+cannot be the App Intent parameter**: OnyxCore is Foundation-only and the
+metadata extractor demands a literal `caseDisplayRepresentations`, so there are
+two enums and a test pinning them.
+
+**Failed, and was caught.** `invariant-auditor`: the preview ROUNDED while the
+write TRUNCATED, so 2100.6 kcal showed "2,101" and stored 2100 — and a value
+that rounded to the current figure produced no diff line while still writing
+one less; the ledger's new `weekEnd` bound added a phantom week for every
+Monday-start athlete, because `ctx.weekZeroStart` is always Sunday-anchored;
+a future-dated paste made `recordLeverChange` pin the open stretch early;
+`ISODate.dayNumber` accepts `2026-02-30`; and an unbounded target reached
+`Int.init(Double)`, which traps rather than throwing — a crash on untrusted,
+model-authored input. `code-reviewer`: the marker and upload on a cancelled
+share (above); pasting the EXPORT into the editor drew a red "unreadable"
+banner, when the placeholder is the schema announcing itself and the answer is
+"no block"; `ExportRangeChoiceTests` was named in a comment and did not exist;
+`.onyxPress()` is a `ButtonStyle` and was leaking into menu content; the parser
+ran on every keystroke of a 40 kB document; the child sheet dismissed its
+parent; and `updated_at` could never move, because `PostgRESTMirrorRemote`
+strips both timestamps — the column is gone. `backend-architect`: `user_id` set
+before the spread could be overridden by a caller; `JSON.stringify(undefined)`
+returns the value `undefined` and fails the SDK's result schema; truncation was
+silent; ascending order plus a limit cut the NEWEST rows. My own screenshot
+caught the Apply-targets bar floating over the document with a line of markdown
+running through it.
+
+**Left open.** (1) The upload is best-effort with no retry — a week exported
+offline never reaches the server, and the marker still advances, because the
+share did complete. (2) The Shortcut is photographed reporting its "sign in
+first" refusal, not a file: the simulator has had no account since W2.
+(3) `tools/onyx-mcp` does not page; a result at the limit says it was truncated
+and stops. (4) Its `query_sets` day boundary is UTC, not the athlete's zone,
+because there is no date column to use instead. (5) `SeamBenchmarkTests` (W6)
+fails under machine load and is green 3/3 in isolation — do not chase it.
+(6) Appendix A leaves one question for the founder: should an in-app BYOK call
+also file its request in `exports`?
+
+**Gates.** `npm run check` green · `check:swift` green · `swift:core` 705 ·
+`swift:data` 727 · `check:watch` green · OnyxTests 8 failing names, all in
+`HistoryWeeksTests`, `PreviewCatalogueTests` and `SessionSummaryHotfixTests` —
+three files this wave never touched, and under the baseline of 10.
