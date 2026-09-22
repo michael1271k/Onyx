@@ -1157,3 +1157,19 @@ outside one.
   - The "adopt only what is not measured" Hevy rule is written in three places.
 - **The session page's navigation bar stays live above the dimmed backdrop.**
   The page is pushed and cannot overlay its parent's bar.
+
+### Close-out
+
+| | |
+|---|---|
+| Version | **7.11.0** (71100), `version:check` in sync on `main` |
+| Changelog | `docs/CHANGELOG.md` → `[7.11.0] — Add a movement, see the heart rate when you ask` |
+| Merged | `main` (W2, 7.10.0) merged into the branch first, `npm run check` + the app target re-run green on the merged tree, then `347609f0` → `main`, no-ff |
+| Branch | `wave/3-logger` deleted locally; it was never pushed, so there is no remote branch. Worktree removed |
+| Cache purged | **13.04 GB freed** (13 G onyx-swift + 280 M SwiftPM → 0; DerivedData was already empty) |
+
+**Cost the next wave inherits:** `~/Library/Caches/onyx-swift` is empty again,
+so the first `npm run check`, `swift:core` or `swift:data` in W4/W5 is a cold
+build. Note for anyone purging from zsh: an empty `DerivedData/*` glob aborts
+the whole `rm` line (`no matches found`) and deletes nothing — purge each
+directory on its own, or `setopt nullglob` first.
