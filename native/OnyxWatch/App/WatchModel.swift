@@ -194,7 +194,7 @@ final class WatchModel {
     /// `dashboard` is W4's, and it is the last name `watch-shot.sh` refused
     /// (W1 left it named as unreachable and said so by name rather than
     /// photographing `StartView` under its filename).
-    enum DebugScreen: String { case rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget }
+    enum DebugScreen: String { case start, restday, rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget }
     var debugScreen: DebugScreen?
     #endif
 
@@ -1481,7 +1481,12 @@ extension WatchModel {
     /// The day is pinned with an `overrides` entry rather than by the weekday
     /// layout: a shot that depends on which day of the week it ran on is a
     /// visual diff that fails on Tuesdays.
-    func seedDebugContext() {
+    /// - Parameter restDay: seeds the same plan with TODAY unscheduled, which
+    ///   is what `resolveDay` reads as a rest day. The one state the founder
+    ///   named by name — the old root was the word "Rest day" and nothing else
+    ///   — and it had no shot hook, so nobody had reviewed it since it was
+    ///   written. `watch-shot.sh restday` is that hook.
+    func seedDebugContext(restDay: Bool = false) {
         let today = LogicalDay.iso()
         let next = WatchContext(
             userId: "preview",
@@ -1489,14 +1494,21 @@ extension WatchModel {
             schedule: ScheduleContext(
                 programId: "onyx5",
                 phase: .cut,
-                overrides: [today: "cb_b"],
+                overrides: restDay ? [:] : [today: "cb_b"],
                 // Spelled out rather than read from `PlanTemplates`: that
                 // lives in the APP target and the watch cannot see it. Three
                 // real movements off the founder's Upper B — enough deck for
                 // the cursor to advance and for `lastTime` to have something
                 // to say, and the names are ones `MuscleMap` actually knows.
+                // ── AN EMPTY PROGRAM IS WHAT MAKES A REST DAY (W2) ──────
+                // Clearing `overrides` is NOT enough: `Schedule.scheduleDayIn`
+                // falls back to the day's own `weekday`, so the first rest-day
+                // shot came back as the training hero with "Upper B" on it —
+                // a real screen under the wrong filename. A program with no
+                // days is the only seed `resolveDay` reads as nothing
+                // scheduled.
                 programs: [
-                    Program(id: "onyx5", label: "Onyx 5", days: [
+                    Program(id: "onyx5", label: "Onyx 5", days: restDay ? [] : [
                         ProgramDay(
                             key: "cb_b", label: "Upper B", accent: 0, weekday: 2,
                             exercises: [
@@ -1515,8 +1527,9 @@ extension WatchModel {
             tiles: WatchTiles(
                 date: today, battery: 72, score: 81, sleepMin: 445, sleepScore: 58,
                 waterMl: 1_750, waterGoalMl: 3_000, steps: 8_412, stepsGoal: 10_000,
-                kcal: 1_640, kcalGoal: 2_150, todayLabel: "Upper B", todayLogged: false,
-                restDay: false, stressIndex: 41.5, sorenessCount: 3,
+                kcal: 1_640, kcalGoal: 2_150, todayLabel: restDay ? "Rest" : "Upper B",
+                todayLogged: false,
+                restDay: restDay, stressIndex: 41.5, sorenessCount: 3,
                 week: (0..<7).map { WatchTiles.WeekDay(trained: $0 % 2 == 0, fuelHit: $0 != 3, sleepHit: $0 > 1) },
                 medianBedtime: "23:12", lastBedtime: "00:16",
                 // W4's four. Without them the Train page photographs "No

@@ -80,9 +80,18 @@ struct DeckView: View {
         //
         // The deck is where a reference belongs anyway — it is already the
         // screen you reach from `SetView` when you want to look at something
-        // rather than do something — and this is the SAME glyph in the SAME
-        // corner `StartView` puts it in, so "chart, top right" is one thing to
-        // learn and not two.
+        // rather than do something.
+        //
+        // ── W2: THIS IS THE ONLY DISC LEFT ──────────────────────────────────
+        // `StartView` carried the same glyph in the same corner, and the note
+        // here used to say so — "chart, top right is one thing to learn and
+        // not two". That disc is gone, because the dashboard is the screen
+        // `StartView` is now a PAGE OF: a link from page one of a pager to the
+        // pager it is in is a button that does nothing. Here it still earns
+        // its corner, because a live session roots at `SetView` and the pages
+        // really are somewhere else from in here — and it pushes
+        // `DashboardView(showsStart: false)`, since "start today's split" has
+        // nothing to offer somebody who is thirty minutes into it.
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 // A dark disc with a light glyph — see `SetView`'s deck link

@@ -128,38 +128,67 @@ struct OnyxWatchLayoutTests {
     // is worse than no layout test: it is a green light with a number behind
     // it that nobody checked.
 
-    @Test("the bar is 64 pt, so the page is 133 at 40 mm and 187 at 49")
+    @Test("the 49 mm bar is 64 and the 40 mm bar is 47.5, so the pages are 187 and 149.5")
     func thePageHeight() {
         #expect(WatchCase.navBar == 64)
-        #expect(WatchCase.content40mmHeight == 133)
+        #expect(WatchCase.navBar40mm == 47.5)
+        #expect(WatchCase.content40mmHeight == 149.5)
         #expect(WatchCase.content49mmHeight == 187)
     }
 
-    @Test("two faces fit the 40 mm page without scrolling, and three do not")
+    @Test("two faces fit the 40 mm page on the conservative budget, and three miss by 4")
     func whatFitsTheFloor() {
         #expect(WatchDashboard.fits(rows: 2))
         #expect(WatchDashboard.fits(rows: 3) == false)
         #expect(WatchDashboard.rows() == 2)
-        // 48.5 × 2 + 4 = 101, of 133.
+        // 48.5 × 2 + 4 = 101, of 149.5.
         #expect(WatchDashboard.used(rows: 2) == 101)
         #expect(WatchDashboard.used(rows: 3) == 153.5)
     }
 
-    /// The design decision, and its price — both, because a suite that
-    /// asserted only the first would be claiming the pages fit.
-    @Test("the pages draw three faces anyway, and the third hangs 20.5 pt below the 40 mm fold")
+    /// The design decision, and the four points the proxy says it costs.
+    @Test("the pages draw three faces, and the 49 mm proxy puts the third 4 pt over")
     func threeFacesAndWhatItCosts() {
         #expect(WatchDashboard.facesPerPage == 3)
-        // One more than fits, on purpose — see `facesPerPage`.
+        // One more than the conservative budget allows — see `facesPerPage`.
         #expect(WatchDashboard.facesPerPage == WatchDashboard.rows() + 1)
-        #expect(WatchDashboard.overflow(rows: 3) == 20.5)
-        // And the Fuel page's button is a further 58 under that.
-        #expect(WatchDashboard.overflow(rows: 3, button: true) == 78.5)
+        #expect(WatchDashboard.overflow(rows: 3) == 4)
+        // It was 20.5 against the ESTIMATED 40 mm bar, which is the estimate
+        // `WatchCase.navBar40mm` replaced with a measurement.
+    }
+
+    /// What a 40 mm case ACTUALLY reports, read off the accessibility tree of
+    /// the running app on `Apple Watch SE 3 (40mm)` — the first time any
+    /// screen in this repository was measured on the floor it is laid out for.
+    ///
+    /// This is the test that stops the suite asserting a scroll the device
+    /// does not have. Every shipped page fits, with single-digit room.
+    @Test("measured at 40 mm, every dashboard page fits without scrolling")
+    func theRealFortyMillimetreCase() {
+        #expect(WatchDashboard.rowHeight40mm == 46)
+        #expect(WatchDashboard.buttonHeight40mm == 45)
+
+        // Today / Train: three faces. 46 × 3 + 4 × 2 = 146 of 149.5.
+        let threeFaces = WatchDashboard.rowHeight40mm * 3 + WatchDashboard.gap * 2
+        #expect(threeFaces == 146)
+        #expect(threeFaces <= WatchCase.content40mmHeight)
+        #expect(WatchCase.content40mmHeight - threeFaces == 3.5)
+
+        // Fuel: two faces and the button. 46 × 2 + 4 + 4 + 45 = 145.
+        let twoAndAButton = WatchDashboard.rowHeight40mm * 2 + WatchDashboard.gap
+            + WatchDashboard.gap + WatchDashboard.buttonHeight40mm
+        #expect(twoAndAButton == 145)
+        #expect(twoAndAButton <= WatchCase.content40mmHeight)
+
+        // And the shape of the old claim: three faces AND the button is over,
+        // which is why `.steps` moved to the Train page.
+        #expect(threeFaces + WatchDashboard.gap + WatchDashboard.buttonHeight40mm
+                > WatchCase.content40mmHeight)
     }
 
     /// What the 49 mm pair actually shows, which is what the screenshots in
     /// this wave are evidence of and no more.
-    @Test("three faces fit the pair with room, and the Fuel button is what hangs there")
+    @Test("three faces fit the pair with room, and a button beside them would not")
     func whatThePairShows() {
         #expect(WatchDashboard.fits(rows: 3, within: WatchCase.content49mmHeight))
         #expect(WatchDashboard.overflow(rows: 3, within: WatchCase.content49mmHeight) == 0)
@@ -171,6 +200,26 @@ struct OnyxWatchLayoutTests {
         // screenshot cannot be this gate.
         #expect(WatchDashboard.fits(rows: 4, within: WatchCase.content49mmHeight) == false)
         #expect(WatchDashboard.rows(within: WatchCase.content49mmHeight) == 3)
+    }
+
+    /// The Fuel page as W2 actually ships it, which is the arithmetic that
+    /// took "Add a glass" off the bottom of the 49 mm display.
+    ///
+    /// W4 put three faces AND the button on that page and the screenshot came
+    /// back with the button cut through the middle, 24.5 pt below the fold on
+    /// the very case this app is worn on. W2 moved `.steps` to the Train page
+    /// — the one reading on Fuel that is not fuel — and two faces plus a
+    /// button is 159 pt of the pair's 187.
+    @Test("the Fuel page is two faces and a button, and that fits the pair")
+    func theFuelPage() {
+        // 48.5 × 2 + 4 = 101, + 4 + 54 = 159.
+        #expect(WatchDashboard.used(rows: 2) + WatchDashboard.gap + WatchDashboard.buttonHeight == 159)
+        #expect(WatchDashboard.overflow(rows: 2, button: true, within: WatchCase.content49mmHeight) == 0)
+        #expect(WatchCase.content49mmHeight - 159 == 28)
+        // The conservative 49 mm proxy puts it 9.5 pt over the 40 mm page;
+        // the measured 40 mm numbers put it 4.5 pt UNDER — see
+        // `theRealFortyMillimetreCase`, and the screenshot that agrees with it.
+        #expect(WatchDashboard.overflow(rows: 2, button: true) == 9.5)
     }
 
     /// A case shorter than anything shipped still answers, and answers 1

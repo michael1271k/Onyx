@@ -810,3 +810,148 @@ Found by a destination probe, not assumed. **Later waves must respect it:**
 **Cost the next wave inherits:** `~/Library/Caches/onyx-swift` is empty, so the
 first `npm run check` in W2 or W3 is a full cold build of OnyxCore, OnyxData,
 OnyxUI and the watch target. Budget for it rather than assuming a hung build.
+
+---
+
+## W2 — Watch IA rebuilt (7.10.0, Lane A)
+
+### What shipped
+
+The watch app's idle root is a **four-page vertical dashboard**. A live session
+still roots at `SetView`, and W3's "it is the set, not a dashboard" comment is
+rewritten rather than deleted — it holds *during* a workout and was always wrong
+outside one.
+
+| Page | Accent | Draws |
+|---|---|---|
+| 1 · **Onyx** | the split's own `Color.onyx.dayLabel` | split at `WatchType.figure`, a chip row (movements · battery · readiness), one large Start |
+| 2 · **Today** | `OnyxDomain.recover` | `.recovery` (battery + readiness), `.sleep`, `.stress` |
+| 3 · **Train** | `OnyxDomain.train` | `.volume`, `.weekRings`, `.steps` |
+| 4 · **Fuel** | `OnyxDomain.fuel` | `.fuel`, `.water`, "+1 glass" |
+
+- **The rest-day dead end is gone.** It was the word "Rest day" and nothing
+  else. It is now "Rest day" in Lunar over the readiness score as the hero, with
+  battery and last night's sleep beside it — and three pages of readings behind
+  it, on a rest day like any other.
+- **The colour is card chrome, not a rewritten face.** `AccessoryFace` is shared
+  with the phone's Lock Screen and this watch's complications and must not
+  change, so `DashboardCard` carries the page's accent as a 14 % fill, a 45 %
+  hairline, and a two-style `foregroundStyle` hierarchy — which lands on the
+  face's glyph and headline precisely because `AccessoryFace.rectangular` sets
+  no style of its own and its caption sets `.secondary`. That is an environment
+  value, not an edit.
+- **`.train` came off the Train page**, because page one says the same thing at
+  four times the size. **`.steps` moved off Fuel onto Train**, because three
+  faces plus the water button hung 24.5 pt below even the 49 mm fold and the
+  screenshot showed "Add a glass" cut through the middle.
+- **`DashboardView(showsStart:)`** — `DeckView`'s in-session toolbar disc still
+  pushes the dashboard, without the Start page. The disc on `StartView` is gone:
+  a link from page one of a pager to the pager it is in does nothing.
+
+### What the code falsified about the brief
+
+1. **The re-root bought no height.** The whole plan for this wave assumed a root
+   screen would have a smaller navigation bar than a pushed one — no back
+   chevron, no toolbar item. The accessibility tree of the running root reads
+   `{{0, 0}, {205, 64}}`, the same 64 the pushed bar measured. There is no
+   `rootBar` constant because there is no second number.
+2. **A 40 mm case had never been measured in this repository.** Every constant in
+   `WatchPanel.swift` was read off the 49 mm Ultra 2 and used as a conservative
+   proxy, and W1 created the first 40 mm simulator. The device says the bar is
+   **47.5** and not 64, the page is **149.5** and not 133, a row is **46** and
+   not 48.5, and the water button is **45** and not 54. So the suite's standing
+   claim that "the third card hangs 20.5 pt below the 40 mm fold" was **false**:
+   three rows are 146 of 149.5 and nothing scrolls. `OnyxWatchLayoutTests` now
+   replays both the conservative budget and the measured device, and the 4 pt
+   gap between them is asserted rather than smoothed away.
+3. **watchOS does not tint an inline navigation title with `.tint`.** The page
+   model relied on it. The 49 mm screenshots came back with the same
+   `WatchInk.secondary` grey heading with and without the modifier.
+   `.foregroundStyle` does not reach a navigation title either, and `.principal`
+   is not a placement this app has ever proved on watchOS. The title stays grey,
+   the colour lives in the cards, and the finding is recorded in
+   `DashboardPages.swift` so the next wave does not re-spend the round.
+4. **Clearing the schedule override does not make a rest day.**
+   `Schedule.scheduleDayIn` falls back to a `ProgramDay`'s own `weekday`, so the
+   first `restday` shot came back as the training hero with "Upper B" on it — a
+   real screen under the wrong filename. A program with **no days** is the only
+   seed `resolveDay` reads as nothing scheduled.
+
+### Defects found and fixed that the brief did not name
+
+- **`MirrorView` and `FinishView` held a full-width `WatchInk.commit` capsule at
+  full brightness in the always-on state.** `SetView` applies
+  `dimmedWhenLuminanceReduced` to its logger page and to nothing else, so the
+  two live-session screens held longest were the two missing the burn-in call —
+  the exact case `WatchInk`'s own header names.
+- **The DEBUG widget harness grey-washed the face it exists to review.** The
+  first version of the tinted card was reused in `LiveWidgetPreview` with
+  `WatchInk.secondary` as its accent, which set a `foregroundStyle` that
+  `LiveWorkoutFace`'s un-styled movement name inherited — so `widget.png`
+  photographed it at white 0.62 while the real complication draws full ink.
+  `DashboardCard.accent` is `Color?` now; nil draws the plain row and sets no
+  style at all.
+- **The DEBUG page hook could select a page that does not exist.** It wrote
+  `page = .start` unconditionally, and `.start` is not in `pages` when
+  `showsStart` is false — a `TabView` selection matching no tag draws nothing,
+  silently and permanently. Clamped to `pages`, and the initial selection moved
+  into `init(showsStart:)` so there is no `onAppear` ordering to get wrong.
+- **The rest-day hero had no accessibility label.** VoiceOver read "81" then
+  "Readiness" as two elements, and "—" on a day with no score. One grouped
+  element now, with "not scored yet" as the value.
+
+### Constants — measured vs decided
+
+| Constant | Value | How |
+|---|---|---|
+| `WatchCase.navBar` | 64 | **measured**, 49 mm, root AND pushed |
+| `WatchCase.navBar40mm` | 47.5 | **measured**, 40 mm root — new this wave |
+| `WatchCase.content40mmHeight` | 149.5 | derived from the above (was 133, an estimate) |
+| `WatchDashboard.rowHeight40mm` | 46 | **measured** — cards at y = 51.5 / 101.5 / 151.5 |
+| `WatchDashboard.buttonHeight40mm` | 45 | **measured** — `{{9.5, 147.5}, {143, 45}}` |
+| Hero chip row width | 121 pt of 146 | **measured**, 40 mm — x = 3.5 → 124.5 |
+| `WatchDashboard.facesPerPage` | 3 | **decided** (unchanged) — and now it fits |
+| Card fill `0.14` / hairline `0.45` | — | **decided**, with arithmetic: 0.14 × `LuminanceDim`'s 0.76 = 0.106, i.e. the dimmed card weighs what `WatchInk.fill` weighed. The always-on state costs the colour, not the layout |
+| Page accents | `recover` / `train` / `fuel` / `dayLabel` | **decided** — existing tokens, no new palette |
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| `npm run check` (incl. `check:watch`, `swift:ui`) | **PASSED**, exit 0 |
+| `npm run swift:core` | **PASSED** — 708 tests, 136 suites (was 706; +2 this wave) |
+| `npm run swift:data` | **PASSED** — 727 tests, 89 suites |
+| Full `Onyx` scheme suite | **NOT RUN** — see below |
+
+- **Screenshots on BOTH cases**, which is what this wave was asked for: five
+  screens on `Apple Watch Ultra 2 (49mm)` and six on `Apple Watch SE 3 (40mm)`,
+  the first watch screens ever photographed at 40 mm in this project. Every page
+  fits both cases with no card and no button below the fold.
+- **The in-session push was driven, not assumed** — `axe tap` on `DeckView`'s
+  toolbar disc during a live session, photographed opening on Today with a back
+  chevron and no Start page.
+- **`OnyxDataTests` failed once and passes alone.** `W6 seam benchmarks` →
+  "the nutrition day is one read, and it holds what seven held" is a **timing**
+  test; it failed while a watch build was compiling on the same machine and
+  passed on a clean re-run. **Do not run `swift:data` concurrently with a
+  build** — it reads as a data defect and is not one.
+- **The `Onyx` scheme suite was not run.** This wave changed no iOS app-target
+  source; the one shared module it touched is `OnyxCore`, whose own 708 tests
+  pass. W1's baseline (11 issues / 9 names) is therefore unchallenged rather
+  than re-measured, and this is reported as *not run*, not as *passed*.
+
+### Left open
+
+- **`watch-shot.sh nophone` is only honest as the first screen of a run**, after
+  an uninstall. It carries no launch environment, so it draws whatever
+  `WatchContextCache` holds — and every other screen in the list seeds one. The
+  script says so at the hook; `all` no longer includes it.
+- **`WeekMarks` missed-day dots now resolve `.secondary` to `WatchInk.secondary`**
+  rather than the system's, because the card sets a two-style hierarchy. Same
+  family, visually correct in the Train screenshot on both cases, noted rather
+  than worked around.
+- **The page indicator dots sit slightly over the navigation heading** at both
+  case sizes. System chrome on both counts; nothing in this app draws either.
+- **The 49 mm pair is active again.** W2 activated `SE 3 40mm ↔ iPhone 15` to
+  photograph 40 mm and restored `Ultra 2 ↔ iPhone 15` afterwards, so W4 finds
+  the pair it needs. Only one pair is active at a time.
