@@ -237,7 +237,12 @@ struct WeeklyExportOverhaulTests {
     func theLegendIsLast() throws {
         let md = try build(payload())
         let headings = md.components(separatedBy: "\n").filter { $0.hasPrefix("## ") }
-        #expect(headings.last == "## 8 · LEGEND")
+        // Eighth of NINE since W7 — §9 · PASTE-BACK is now the last thing in
+        // the document, and it is last on purpose: everything before it is the
+        // week going out, and it is the one paragraph about the week coming
+        // back.
+        #expect(headings.dropLast().last == "## 8 · LEGEND")
+        #expect(headings.last == "## 9 · PASTE-BACK")
         // `DomsMuscles.levels` is four words and `maxSeverity` is 3. The legend
         // said 0–5 for as long as it has existed.
         #expect(md.contains("DOMS 0–3"))

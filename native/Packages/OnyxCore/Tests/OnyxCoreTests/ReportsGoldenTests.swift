@@ -94,6 +94,11 @@ struct WeeklyExportGoldenTests {
             // the one section that cannot contradict a figure, because it
             // holds none.
             "## 8 · LEGEND",
+            // §9 says how to ANSWER this document — the fenced `onyx-targets`
+            // block `TargetsBlockParser` reads back out of a pasted report
+            // (W7). Fixed text, like the legend: nothing in it is computed, so
+            // nothing in it can disagree with a row above it.
+            "## 9 · PASTE-BACK",
         ]
         // `Score` and `Battery` are this app's OPINION of a week. The audit
         // reading this document is here to form its own, and a number it cannot

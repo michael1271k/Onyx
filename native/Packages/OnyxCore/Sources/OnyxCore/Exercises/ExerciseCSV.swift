@@ -317,5 +317,7 @@ public enum ExerciseCSV {
 }
 
 private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
+    /// `public` since W7: `TargetsApply` wanted the same one line and wrote a
+    /// second copy of it in OnyxData before `code-reviewer` found the first.
+    public var nilIfEmpty: String? { isEmpty ? nil : self }
 }

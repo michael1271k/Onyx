@@ -263,6 +263,15 @@ struct ReportEditorSheet: View {
     @State private var failure: String?
     @FocusState private var typing: Bool
 
+    /// What the pasted text turned out to hold (W7). Held rather than computed
+    /// in `body`: the parser is a linear scan of a 40 kB document and `body`
+    /// runs far more often than a paste does.
+    @State private var found: TargetsBlockResult = .none
+    /// The diff, once the store has been asked what it would change.
+    @State private var previewing: TargetsPlan?
+    /// The sheet applied its plan. Read in `onDismiss` — see there.
+    @State private var applied = false
+
     private var hasBody: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     private var hadBody: Bool { week.hasReport }
 
@@ -276,6 +285,7 @@ struct ReportEditorSheet: View {
                 editor
             }
             .onyxScreen(.recover)
+            .safeAreaInset(edge: .bottom) { targetsBar }
             .navigationTitle(ReportsListView.shortWeekLabel(week))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -300,6 +310,84 @@ struct ReportEditorSheet: View {
         .presentationBackground(Color.onyx.base)
         .preferredColorScheme(.dark)
         .onAppear(perform: load)
+        // ── DEBOUNCED, BECAUSE THIS IS A 40 kB SCAN ─────────────────────
+        // `onChange(of: text)` fires on every keystroke, and the parser
+        // normalises, splits and walks the whole document — which is strictly
+        // worse than the `body` evaluation the `@State` above exists to avoid.
+        // `task(id:)` cancels the previous one on the next character, so a
+        // paste scans once and typing scans when typing stops.
+        .task(id: text) {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            let text = text
+            found = await Task.detached(priority: .userInitiated) {
+                TargetsBlockParser.parse(text)
+            }.value
+        }
+        .sheet(item: $previewing, onDismiss: {
+            // ── THE PARENT SAVES, AND ONLY AFTER THE CHILD IS GONE ──────────
+            // `save()` used to be called from inside `ApplyTargetsSheet`, which
+            // dismisses the editor while the sheet presenting it is still up —
+            // a long-standing SwiftUI failure where one of the two dismissals
+            // is dropped. The child sets a flag; this runs when it has actually
+            // closed.
+            guard applied else { return }
+            applied = false
+            save()
+        }) { plan in
+            ApplyTargetsSheet(plan: plan) { applied = true }
+        }
+    }
+
+    // MARK: - The targets in the paste
+
+    /// ── THE BLOCK ANNOUNCES ITSELF, AND SO DOES A BROKEN ONE ────────────────
+    /// Three outcomes, three faces. A report with no block shows nothing at all
+    /// — that is the ordinary report and it must not grow a bar explaining what
+    /// it does not have. A block that parsed offers the diff. A block that did
+    /// NOT parse says why, in the model's own terms, because the fix is to ask
+    /// the model again and the reason is what you would ask it about.
+    @ViewBuilder
+    private var targetsBar: some View {
+        switch found {
+        case .none:
+            EmptyView()
+        case .malformed(let reason):
+            OnyxBanner(
+                tone: .failure,
+                title: "Targets block not readable",
+                message: "\(reason). The report can still be saved.")
+                .padding(OnyxSpace.l)
+        case .parsed(let block):
+            Button { preview(block) } label: {
+                Label("Apply targets", systemImage: "target")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(OnyxDomain.recover.accent)
+            .padding(OnyxSpace.l)
+            // ── A BAR, NOT A CAPSULE FLOATING OVER THE TEXT ────────────────
+            // `safeAreaInset` insets the editor's scroll area, so the document
+            // keeps scrolling UNDER this — which without a surface reads as a
+            // button colliding with the report. The first shot showed a line of
+            // the pasted markdown running straight through it. The material and
+            // the hairline are what make "under" legible as under; the whole
+            // app already uses `.ultraThinMaterial` for exactly this.
+            .background(.ultraThinMaterial)
+            .overlay(alignment: .top) {
+                Rectangle().fill(Color.onyx.hairline).frame(height: 0.5)
+            }
+            .accessibilityHint("Show what this report would change, before anything is written")
+        }
+    }
+
+    private func preview(_ block: TargetsBlock) {
+        do {
+            previewing = try environment.database.targetsPlan(
+                for: block, userId: environment.userIdString, today: environment.today)
+        } catch {
+            failure = "Those targets could not be read against this device's goals."
+        }
     }
 
     private var editor: some View {
@@ -411,6 +499,51 @@ enum PreviewReport {
     ## Adherence notes
     Two sessions moved by a day; nothing dropped.
     """
+
+    /// The same document with the block §9 asks for. Two `onyx-targets`
+    /// fences on purpose — the model's first draft and its correction — so the
+    /// shot exercises the "last block that parses wins" rule rather than the
+    /// easy case.
+    static let bodyWithTargets = body + """
+
+
+    ## 🎯 TARGETS FOR NEXT WEEK
+    Calories up 100, protein up 15. Steps stay.
+
+    ```onyx-targets
+    { "weekStart": "2026-09-14", "dailyTargets": { "kcal": 2050 } }
+    ```
+
+    On reflection, the deficit has another week in it:
+
+    ```onyx-targets
+    {
+      "weekStart": "2026-09-21",
+      "dailyTargets": { "kcal": 2100, "proteinG": 175, "stepsGoal": 12000 },
+      "note": "Protein was short three days running; calories are fine."
+    }
+    ```
+    """
+
+    /// What that block comes to, against goals of 2,000 kcal / 160 P / 10,000
+    /// steps and "my own numbers". Hand-written to match, because the harness
+    /// has no store to derive it from.
+    static let plan = TargetsPlan(
+        // Written for the week of the 21st, applied on the 22nd — the case the
+        // footer exists for, so the shot photographs the rule rather than the
+        // easy path.
+        weekStart: "2026-09-21",
+        effectiveFrom: "2026-09-22",
+        note: "Protein was short three days running; calories are fine.",
+        changes: [
+            .init(field: "Calories", current: "2,000 kcal", proposed: "2,100 kcal"),
+            .init(field: "Protein", current: "160 g", proposed: "175 g"),
+            .init(field: "Steps", current: "10,000", proposed: "12,000"),
+            .init(field: "Lever", current: "My own numbers", proposed: "Lever 1",
+                  applies: false,
+                  reason: "the numbers above replace it — typing a figure is choosing your own"),
+        ],
+        goals: .init(kcal: 2100, proteinG: 175, stepsGoal: 12000))
 
     static let rows: [ReportRow] = [
         ReportRow(

@@ -476,11 +476,99 @@ After approval: commit with a message ending in `[skip ci]`, `git push origin ma
 
 ## Appendix A — BYOK in-app AI call (planned, not built)
 
-Later sprint. Keychain-stored user key, model id `claude-opus-5` default,
-`ExportEnvelope` as the message body, streamed response into the Reports paste
-sheet with "Apply targets" pre-filled, per-call cost estimate shown before send,
-App Store note that the key is the user's and never leaves the device except to
-Anthropic. Depends on W7's envelope and parser.
+**Status: a plan only.** Nothing below shipped in W7. It is written here at
+W7's close because W7 built both of its dependencies — the `ExportEnvelope`
+that would be the message body, and the `TargetsBlockParser` that would read
+the answer — and the decisions are cheapest to record while the seams are still
+in front of us.
+
+**The gap it closes.** After W7, getting a week to a model takes one tap and a
+share sheet, and getting the answer back takes a paste. BYOK removes both: the
+app calls Anthropic itself, streams the report into the Reports sheet, and the
+"Apply targets" button W7 built is already sitting under it. The loop closes
+without the athlete leaving the app.
+
+**Why it is the user's key and not ours.** A subscription means a server, a
+server means our keys and our bill, and a bill that scales with how much
+someone trains is a business this app is not. BYOK also means there is nothing
+of ours between the athlete's data and the model.
+
+### A.1 · The key
+
+- `AnthropicKeyStore` beside `KeychainAuthStorage` in `OnyxData/Auth/`. Same
+  Keychain, same target-private access group — the free-team constraint in
+  `native/README.md` applies here too, so the widget and the watch cannot see
+  it, and neither needs to.
+- `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`. A training key has no reason
+  to reach an iCloud backup or a restored device.
+- Entered in Settings → You → "AI coach". Validated on save with one cheap
+  `POST /v1/messages` of `max_tokens: 1`; a key that does not authenticate is
+  refused at the door rather than at the first real call.
+- Never logged, never in a crash report, never in an `ExportEnvelope`.
+
+### A.2 · The call
+
+- `claude-opus-5` by default, in a picker with `claude-sonnet-5` beside it for
+  a cheaper weekly pass. The id lives in ONE constant; the picker's other
+  entries are data.
+- `anthropic-version: 2023-06-01`, `x-api-key: <the user's key>`, direct to
+  `api.anthropic.com`. No proxy of ours exists, and adding one would be the
+  thing this whole design avoids.
+- Body: the envelope's `markdown`, not its `input`. The document is what the
+  export was written for and it already ends with §9 telling the model how to
+  answer; the `input` is thirty times the tokens for a reader that does not
+  need the rows.
+- Streamed (`stream: true`) into the paste sheet's `TextEditor`, so a long
+  report is readable as it arrives rather than after forty seconds of nothing.
+  The existing `ReportEditorSheet` is the destination — no new screen.
+- `URLSession` and `AsyncThrowingStream` over the SSE body. No SDK: the call is
+  one POST and a line parser, and a dependency here would be a dependency in
+  the app's signature for one endpoint.
+
+### A.3 · The cost
+
+- Shown BEFORE send, not after: model, estimated input tokens (the document's
+  own character count ÷ 3.6, stated as an estimate), and the current per-model
+  price from a hand-maintained table with the date it was checked. A number the
+  app cannot verify is labelled as a number the app cannot verify.
+- After the call, the actual `usage.input_tokens` / `usage.output_tokens` from
+  the response, and a running total per month in Settings. Local only —
+  a spend figure is not a training fact and does not belong in the outbox.
+- A hard stop at a user-set monthly ceiling, default £10, because the failure
+  mode of a bad automation is a bill.
+
+### A.4 · App Store review notes
+
+- The key is the user's own and is stored in the Keychain on device. It leaves
+  the device only in the `x-api-key` header of a request to `api.anthropic.com`
+  made at the user's explicit tap. Say this in the review notes AND in the
+  Settings screen, in the same words.
+- Guideline 3.1.1 (in-app purchase) does not apply: nothing is sold, and the
+  user's relationship is with Anthropic. There is no purchase flow, no unlock,
+  and no link to buy anything — the key field is accompanied by prose, not by a
+  button that opens a store.
+- `NSPrivacyTrackingDomains` is untouched: `api.anthropic.com` is not tracking.
+  The privacy manifest gains no new required-reason API.
+- Health data crosses a network boundary here for the first time. `docs/APP_STORE.md`'s
+  data-collection answers change: "Health & Fitness — used for App Functionality,
+  not linked to the user, not used for tracking" becomes a disclosure that the
+  report request carries the week's figures to a third-party model at the user's
+  instruction. That is a listing change, not a code change, and it must ship in
+  the same submission.
+- A reviewer with no key must be able to use the whole app. The feature is a
+  Settings row that says what it needs; nothing else is gated on it.
+
+### A.5 · What it depends on, and what it does not
+
+Depends on W7's `ExportEnvelope` (the body) and `TargetsBlockParser` (the
+answer). Depends on nothing in the MCP server — that path is for a desktop
+model and stays. Does **not** depend on the `exports` table: an in-app call has
+the document in memory and has no reason to fetch its own copy back.
+
+**One open question for the founder:** whether the in-app call should also file
+its request in `exports`. It would make the MCP server and the in-app history
+agree; it would also mean a document the athlete never shared is on the server.
+Left open deliberately.
 
 ## Verification summary (whole sprint)
 
