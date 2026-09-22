@@ -68,7 +68,12 @@ struct RoutineDayEditor: View {
         }
         .toolbar { OnyxKeyboardDone { focus = nil } }
         .sheet(isPresented: $picking) {
-            ExercisePickerSheet(model: model, dayKey: dayKey)
+            ExercisePickerSheet(
+                catalogue: model.catalogue,
+                createNote: "Creates it in your exercise list and puts it in this day."
+            ) { name, picked in
+                if picked == nil { model.createAndAdd(name, to: dayKey) } else { model.addExercise(name, to: dayKey) }
+            }
         }
     }
 
@@ -238,96 +243,5 @@ struct RoutineDayEditor: View {
             }
         }
         .accessibilityValue(value == nil ? "Not set" : "\(shown)")
-    }
-}
-
-/// Pick a movement, or make one.
-///
-/// ── SEARCH THAT OFFERS TO CREATE IS THE WHOLE SCREEN ────────────────────────
-/// A picker that can only pick is a dead end the first time someone's gym has a
-/// machine this catalogue has never heard of, and the answer to a dead end in a
-/// routine builder is that people stop using the routine builder. So the search
-/// field doubles as the new-movement field, and the create goes through
-/// `createExercise`, which refuses to make a second row for a name that already
-/// exists — a SPLIT is the silent failure `ExerciseIndex` exists to prevent.
-private struct ExercisePickerSheet: View {
-    let model: RoutinesModel
-    let dayKey: String
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var query = ""
-
-    private var matches: [Exercise] {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return model.catalogue }
-        return model.catalogue.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
-    }
-
-    /// The typed name is not already a movement, so offer to make it one.
-    private var creatable: String? {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return nil }
-        let key = trimmed.lowercased()
-        return model.catalogue.contains { $0.name.lowercased() == key } ? nil : trimmed
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if let creatable {
-                    Section {
-                        Button {
-                            model.createAndAdd(creatable, to: dayKey)
-                            dismiss()
-                        } label: {
-                            Label("Add “\(creatable)”", systemImage: "plus.circle")
-                        }
-                    } footer: {
-                        Text("Creates it in your exercise list and puts it in this day.")
-                    }
-                }
-                Section {
-                    ForEach(matches, id: \.id) { exercise in
-                        Button {
-                            model.addExercise(exercise.name, to: dayKey)
-                            dismiss()
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(exercise.name)
-                                    .foregroundStyle(Color.onyx.textPrimary)
-                                // What it trains, resolved the way every reader
-                                // resolves it — so the picker and the muscle
-                                // sheet cannot disagree.
-                                if let muscles = MuscleMap.muscleGroups(exercise.name),
-                                   let first = muscles.first {
-                                    Text(first.capitalized)
-                                        .onyxType(.caption)
-                                        .foregroundStyle(Color.onyx.textSecondary)
-                                }
-                            }
-                            .frame(minHeight: 44, alignment: .leading)
-                        }
-                    }
-                } header: {
-                    OnyxSectionHeader(model.catalogue.isEmpty ? "Your exercises" : "\(matches.count) movements", .train)
-                } footer: {
-                    if model.catalogue.isEmpty {
-                        Text("Your exercise list is empty. Type a name above to add your first movement, or import a CSV from Settings.")
-                    }
-                }
-            }
-            .onyxFormBackground(.train)
-            .searchable(text: $query, prompt: "Search or type a new movement")
-            .navigationTitle("Add a movement")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-        }
-        .tint(OnyxDomain.train.accent)
-        .presentationBackground(Color.onyx.base)
-        .preferredColorScheme(.dark)
     }
 }

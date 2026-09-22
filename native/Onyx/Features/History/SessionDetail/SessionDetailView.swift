@@ -84,6 +84,10 @@ struct SessionDetailView: View {
     /// Hevy's record of this session, if Health holds one and the athlete has
     /// not answered the card yet (W5, decision 7).
     @State private var foreign: WorkoutSample?
+    /// The heart-rate chart's panel is up, and whether there is a series for
+    /// it (W3).
+    @State private var heartOpen = false
+    @State private var heartSeries = false
 
     /// One long-pressed trophy, frozen at the moment of the press.
     struct PrTarget: Identifiable {
@@ -114,6 +118,12 @@ struct SessionDetailView: View {
         ScrollViewReader { proxy in
             list(scroller: proxy)
         }
+        // The chart the Avg HR reading opens (W3) — see `heartRatePanel`.
+        .heartRatePanel(
+            isPresented: $heartOpen, available: $heartSeries, sessionId: sessionId,
+            storedAvgBpm: page.flatMap { $0.avgBpmEstimated ? nil : $0.avgBpm.map { Int(jsRound($0)) } },
+            kcal: page?.calories.map { Int(jsRound($0)) }
+        )
     }
 
     private func list(scroller: ScrollViewProxy) -> some View {
@@ -122,7 +132,6 @@ struct SessionDetailView: View {
                 band(page).plainRow(edgeToEdge: true)
                 metrics(page).plainRow(edgeToEdge: true)
                 if let foreign { hevy(page, foreign).plainRow(edgeToEdge: true) }
-                telemetry(page).plainRow(edgeToEdge: true)
                 progression(page).plainRow(edgeToEdge: true)
                 if !page.report.muscles.isEmpty { muscles(page.report).plainRow(edgeToEdge: true) }
                 ForEach(page.report.exercises) { exercise in
@@ -236,10 +245,11 @@ struct SessionDetailView: View {
             }.value
             missing = page == nil
             if first, let session = page?.report.session {
-                // Once, on the first load: the card is a question, and a
-                // cascade re-running the task must not re-ask one that has
-                // been answered on this very screen.
-                if await environment.telemetry.hevyDecision(sessionId: id) == nil {
+                // Once, on the first load: a cascade re-running the task must
+                // not bring back a line whose figures were adopted on this very
+                // screen. Down only once they are (`.use`) — the line is a fact,
+                // not a question, so a legacy `.skip` no longer hides it.
+                if await environment.telemetry.hevyDecision(sessionId: id) != .use {
                     foreign = await environment.foreignWorkout(for: session)
                 }
             }
@@ -471,16 +481,7 @@ struct SessionDetailView: View {
         editing = model
     }
 
-    // MARK: - Hevy logged this too, and the heart-rate chart (W5)
-
-    private func telemetry(_ page: SessionAnalysis.Page) -> some View {
-        TelemetryCard(
-            sessionId: sessionId,
-            storedAvgBpm: page.avgBpmEstimated ? nil : page.avgBpm.map { Int(jsRound($0)) },
-            kcal: page.calories.map { Int(jsRound($0)) }
-        )
-        .padding(.horizontal, OnyxSpace.m)
-    }
+    // MARK: - Hevy logged this too (W5; one line since W3)
 
     private func hevy(_ current: SessionAnalysis.Page, _ workout: WorkoutSample) -> some View {
         let session = current.report.session
@@ -494,34 +495,37 @@ struct SessionDetailView: View {
                 kcalMeasured: current.calories != nil && !current.caloriesEstimated
             ),
             hevy: workout,
-            onSkip: {
-                Task { await environment.telemetry.setHevyDecision(sessionId: sessionId, .skip) }
-                withAnimation(OnyxMotion.fade) { foreign = nil }
-            },
-            onUse: {
-                // The same write the finish sheet makes: adopted as the
-                // athlete's answer, stamped measured, Health untouched.
-                // Only what is not already measured — see the finish sheet.
-                let bpmMeasured = current.avgBpm != nil && !current.avgBpmEstimated
-                let kcalMeasured = current.calories != nil && !current.caloriesEstimated
-                let bpm = bpmMeasured ? nil : workout.avgHr.map { Int(jsRound($0)) }
-                let kcal = kcalMeasured ? nil : workout.activeKcal.map { Int(jsRound($0)) }
-                _ = try? environment.database.setSessionMetrics(
-                    id: sessionId, userId: session.userId, avgBpm: bpm, caloriesBurned: kcal
-                )
-                Task { await environment.telemetry.setHevyDecision(sessionId: sessionId, .use) }
-                withAnimation(OnyxMotion.fade) { foreign = nil }
-                // `avg_bpm` is outside the door's WHEN clause (W2), so no
-                // cascade will re-run the task: reload the page by hand.
-                let database = environment.database, id = sessionId
-                Task {
-                    page = await Task.detached(priority: .userInitiated) {
-                        SessionAnalysis.page(database: database, sessionId: id)
-                    }.value
-                }
-            }
+            onUse: { useHevy(current, workout) }
         )
         .padding(.horizontal, OnyxSpace.m)
+    }
+
+    /// The same write the finish sheet makes: adopted as the athlete's answer,
+    /// stamped measured, Health untouched. Only what is not already measured —
+    /// see the finish sheet.
+    ///
+    /// A method rather than the closure's body: `check:body` reads a store call
+    /// lexically inside a `some View` builder as a read in `body`, and this was
+    /// only ever let through by the `Task {` of the Skip closure above it,
+    /// which went with the button (W3).
+    private func useHevy(_ current: SessionAnalysis.Page, _ workout: WorkoutSample) {
+        let bpmMeasured = current.avgBpm != nil && !current.avgBpmEstimated
+        let kcalMeasured = current.calories != nil && !current.caloriesEstimated
+        let bpm = bpmMeasured ? nil : workout.avgHr.map { Int(jsRound($0)) }
+        let kcal = kcalMeasured ? nil : workout.activeKcal.map { Int(jsRound($0)) }
+        _ = try? environment.database.setSessionMetrics(
+            id: sessionId, userId: current.report.session.userId, avgBpm: bpm, caloriesBurned: kcal
+        )
+        Task { await environment.telemetry.setHevyDecision(sessionId: sessionId, .use) }
+        withAnimation(OnyxMotion.fade) { foreign = nil }
+        // `avg_bpm` is outside the door's WHEN clause (W2), so no
+        // cascade will re-run the task: reload the page by hand.
+        let database = environment.database, id = sessionId
+        Task {
+            page = await Task.detached(priority: .userInitiated) {
+                SessionAnalysis.page(database: database, sessionId: id)
+            }.value
+        }
     }
 
     // MARK: - 1 · The title band
@@ -657,12 +661,7 @@ struct SessionDetailView: View {
                 // `sub: nil` on both of these, and the provenance moved into
                 // `detail` — see the type header. "measured" is not a
                 // comparison, and it was taking the line a comparison lives on.
-                OnyxStatCell(
-                    "Avg HR", page.avgBpm.map { jsIntegerString($0) } ?? "—",
-                    unit: page.avgBpm == nil ? nil : "bpm",
-                    tint: page.avgBpm == nil ? nil : Color.onyx.danger, symbol: "heart.fill",
-                    spark: page.trail { $0.avgBpm }, detail: bpmBasis(page)
-                )
+                avgHr(page)
                 OnyxStatCell(
                     "Calories", page.calories.map { jsIntegerString($0) } ?? "—",
                     unit: page.calories == nil ? nil : "kcal",
@@ -671,6 +670,28 @@ struct SessionDetailView: View {
                 )
             }
             IntensityBar(values: report.intensity)
+        }
+    }
+
+    /// The Avg HR reading — and, once the session has a series, the way to its
+    /// chart (W3). A Button for the touch-DOWN response `OnyxPressStyle`
+    /// gives; a session with no watch on the wrist has nothing to open, and
+    /// its cell is the plain reading it always was.
+    @ViewBuilder
+    private func avgHr(_ page: SessionAnalysis.Page) -> some View {
+        let cell = OnyxStatCell(
+            "Avg HR", page.avgBpm.map { jsIntegerString($0) } ?? "—",
+            unit: page.avgBpm == nil ? nil : "bpm",
+            tint: page.avgBpm == nil ? nil : Color.onyx.danger,
+            symbol: heartSeries ? "waveform.path.ecg" : "heart.fill",
+            spark: page.trail { $0.avgBpm }, detail: bpmBasis(page)
+        )
+        if heartSeries {
+            Button { heartOpen = true } label: { cell }
+                .onyxPress(scale: 0.97)
+                .accessibilityHint("Opens the heart-rate chart")
+        } else {
+            cell
         }
     }
 

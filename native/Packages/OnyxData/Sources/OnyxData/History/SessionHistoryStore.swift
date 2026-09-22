@@ -219,6 +219,25 @@ public struct SeededDeck: Sendable, Equatable {
     }
 }
 
+/// What a movement added mid-session was last lifted at — see
+/// `AppDatabase.lastWorkingSet(named:userId:excludingSession:)`.
+public struct LastWorkingSet: Sendable, Equatable {
+    public var weightKg: Double
+    public var reps: Int
+    /// The session's logical day, ISO.
+    public var date: String
+
+    public init(weightKg: Double, reps: Int, date: String) {
+        self.weightKg = weightKg
+        self.reps = reps
+        self.date = date
+    }
+
+    /// `"47kg × 12"` — the Previous column's own spelling, from the one
+    /// function that spells it.
+    public var label: String { SessionSeedBuilder.previousLabel(weightKg: weightKg, reps: reps) }
+}
+
 public struct SeedHistory: Sendable, Equatable {
     public var sessions: [SeedSession]
     public var sets: [SeedSet]
@@ -350,6 +369,70 @@ public extension AppDatabase {
             planOwning: { Schedule.planId(owning: $0, in: ctx) }
         )
         return SeededDeck(seed: seed, alerts: alerts)
+    }
+
+    /// The most recent WORKING set of one movement — any session, any day key.
+    ///
+    /// ── WHY THIS IS NOT THE SEED, AND MUST NOT BECOME IT (W3) ───────────────
+    /// `sessionSeed` is scoped to one routine day on purpose: the rep window
+    /// and the set count belong to the DAY, and Leg Press is 8–12 on Legs A and
+    /// 12–15 on Legs B. So a movement added mid-session that today's program
+    /// does not name has no seed entry at all, and its card opened blank. This
+    /// answers only that card's question — "what did I last do on this?" — and
+    /// widening `sessionsForSeed` to answer it instead would move the numbers
+    /// on every card the day already has.
+    ///
+    /// Matched by canonical NAME over every id the movement has been logged
+    /// under, exactly as `PrRecorder.baselines` gathers its `siblings`: a lift
+    /// logged on the web carries the catalogue uuid, one logged here may carry
+    /// the slug, and an id match alone finds half a history.
+    ///
+    /// Newest session first; within it the LAST working set performed that
+    /// was not a drop set, a genuine L/R pair folded at its weaker side by the
+    /// seed's own `collapsePairs`. A session holding only warm-ups of it is not evidence,
+    /// the same rule `SessionSeedBuilder.seed` walks back past.
+    ///
+    /// `excludingSession` is the session being logged: once a set of this
+    /// movement is ticked, a relaunch must not find it as its own "last time".
+    func lastWorkingSet(named name: String, userId: String, excludingSession sessionId: String? = nil) throws -> LastWorkingSet? {
+        let target = ExerciseAliases.canonicalName(name).lowercased()
+        let ids = try read { db in
+            let resolve = try PrRecorder.nameResolver(db)
+            return try String.fetchAll(
+                db,
+                sql: "SELECT DISTINCT exercise_id FROM workout_sets WHERE session_id IN (SELECT id FROM workout_sessions WHERE user_id = ?)",
+                arguments: [userId]
+            ).filter { resolve($0).lowercased() == target }
+        }
+        // `setSelect`'s reader, so the columns a pair fold needs cannot be the
+        // ones this forgot. Ledger order is oldest first; walk it backwards.
+        let rows = try historySets(exerciseIds: ids, userId: userId).filter { $0.sessionId != sessionId }
+        var order: [String] = []
+        var bySession: [String: [HistorySetRow]] = [:]
+        for row in rows {
+            if bySession[row.sessionId] == nil { order.append(row.sessionId) }
+            bySession[row.sessionId, default: []].append(row)
+        }
+        for id in order.reversed() {
+            let sets = bySession[id] ?? []
+            let working = SessionSeedBuilder.collapsePairs(sets.enumerated().map { index, r in
+                SeedSet(
+                    sessionId: id, exerciseName: name,
+                    // The read order is the tiebreak for a legacy 0, as in
+                    // `sessionsForSeed`.
+                    order: r.setIndex > 0 ? r.setIndex : index + 1,
+                    weightKg: r.weightKg, reps: r.reps, rpe: r.rpe, setType: r.setType,
+                    side: r.lr, pairId: r.pairId
+                )
+            }).filter { SetTags.isWorkingSet($0.setType) }
+            // The last set that was not a DROP: a back-off at half the load
+            // closing out the session is not what you walk up to next time.
+            // A session of nothing but drops still answers with its last.
+            if let last = working.last(where: { $0.setType != "dropset" }) ?? working.last {
+                return LastWorkingSet(weightKg: last.weightKg, reps: last.reps, date: sets[0].date)
+            }
+        }
+        return nil
     }
 
     /// The stored `routine_templates` payload, as much of it as the seed reads.

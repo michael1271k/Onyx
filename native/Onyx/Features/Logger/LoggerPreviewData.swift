@@ -169,6 +169,30 @@ extension LoggerModel {
         return (model, store)
     }
 
+    /// Upper B's deck, with a Face Pull session on UPPER A three days back —
+    /// the movement today's program does not name, and the only history the
+    /// mid-session add's "last time" can find for it (W3). The day-scoped seed
+    /// cannot see this session; `lastWorkingSet` must.
+    static func previewAddExercise() -> (model: LoggerModel, store: AppDatabase) {
+        let upperB = previewUpperBWithHistory()
+        let date = LogicalDay.iso(Date().addingTimeInterval(-3 * 24 * 3600))
+        try? upperB.store.seedRows { db in
+            try Exercise(id: "pv-face", name: "Face Pull").insert(db)
+            let start = LogicalDay.date(fromISO: date)!.addingTimeInterval(17 * 3600)
+            try WorkoutSession(
+                id: "pv-upper-a", userId: PreviewCatalogue.userId, dayKey: "cb_a", date: date,
+                startedAt: start, endedAt: start.addingTimeInterval(55 * 60), durationMin: 55
+            ).insert(db)
+            for (i, set) in [(22.5, 15), (25.0, 12), (25.0, 11)].enumerated() {
+                try WorkoutSet(
+                    id: "pv-upper-a-\(i)", sessionId: "pv-upper-a", exerciseId: "pv-face",
+                    setIndex: i + 1, weightKg: set.0, reps: set.1, foldOrder: i
+                ).insert(db)
+            }
+        }
+        return upperB
+    }
+
     /// The finish-sheet fixture, re-timed for the heart-rate chart (W5).
     ///
     /// `previewUpperBWithHistory` logs its nine sets in one instant, which is

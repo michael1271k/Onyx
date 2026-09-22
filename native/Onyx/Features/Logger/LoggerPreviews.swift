@@ -356,6 +356,17 @@ enum LoggerPreviews {
             }
             .environment(environment)
             .preferredColorScheme(.dark)
+        // ── W3: the mid-session add, driven by hand on the simulator ────────
+        // A live Upper B deck over a store that holds a Face Pull session on
+        // Upper A. Nothing is pre-added: the shot is taken after tapping "Add
+        // a movement" and picking it, which is the path being reviewed.
+        case "logger-add":
+            let adding = LoggerModel.previewAddExercise()
+            NavigationStack {
+                LiveLoggerView(model: adding.model)
+            }
+            .environment(LoggerPreviews.environment(over: adding.store))
+            .preferredColorScheme(.dark)
         case "hevy-card":
             let compared = LoggerModel.previewUpperBWithHistory()
             NavigationStack {

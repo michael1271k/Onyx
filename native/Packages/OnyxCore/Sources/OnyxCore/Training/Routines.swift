@@ -38,6 +38,20 @@ public struct RoutineExercise: Codable, Equatable, Sendable {
         self.reps = reps; self.restSec = restSec; self.wk1Kg = wk1Kg; self.compound = compound; self.note = note
     }
 
+    /// A movement just picked, with a starting prescription rather than blanks:
+    /// three sets of 8–12 with two minutes' rest is what most people would have
+    /// typed, and a row of empty fields is a row of decisions.
+    ///
+    /// One definition, two callers: the routine builder's "Add a movement" and
+    /// the logger's mid-session add (W3). Two copies of "what a new movement
+    /// opens with" is how the builder and the deck come to disagree about it.
+    public static func starting(_ name: String) -> RoutineExercise {
+        RoutineExercise(
+            name: name, sets: 3, reps: "8–12", restSec: 120,
+            compound: MuscleMap.resolveMovers(name).secondary.isEmpty == false
+        )
+    }
+
     public var programExercise: ProgramExercise {
         ProgramExercise(
             name, exerciseId: exerciseId, sets: sets, cutSets: cutSets, wk1Kg: wk1Kg, reps: reps,

@@ -10,11 +10,35 @@ import OnyxData
 /// ── ONE CHART, ONE HERO, TWO CAPTIONS ───────────────────────────────────────
 /// The average is the hero — it is the number the session row stores and the
 /// one the finish sheet's cell already shows — and the peak and the burn are
-/// its two captions. The chart under them is the series with each movement's
-/// stretch washed in that movement's own muscle colour (the sixteen the atlas
-/// uses, so a chest press is the same coral here as on the body) and a
-/// `RuleMark` at each boundary naming it. Rests after the last set, and every
-/// paused interval, are the thin tertiary line with no wash: the gaps.
+/// its two captions. The chart under them is the series, each movement's
+/// stretch washed and a dashed `RuleMark` at each boundary. Rests after the
+/// last set, and every paused interval, are the thin tertiary line with no
+/// wash: the gaps.
+///
+/// ── ONE COLOUR, AND THE MOVEMENTS ON THE AXIS (W3, founder decision 3) ─────
+/// It washed each stretch in its movement's MUSCLE colour, from
+/// `MuscleMap.movers`. That drew a heart rate in sixteen hues that mean
+/// "chest", "lats" and "quads" everywhere else in the app — a claim about
+/// anatomy on a chart about a pulse. It is now `OnyxDomain.recover.accent`
+/// alone, red under the default theme and whatever each Appearance preset
+/// makes it, and neighbouring movements are told apart by OPACITY steps of
+/// that one ink (`step`). The number is still the signal colour cannot be.
+///
+/// The x axis stopped being the wall clock. "18:40" answered a question
+/// nobody asks of a heart rate after a workout; "which movement was that
+/// spike" is the one they do. Each movement's number sits under the middle
+/// of its first stretch and the legend names it — numbers in full ink, since
+/// they are the names and the faintest step is not legible as text. Names on the axis were tried in W5 and collided into one line — the
+/// reason the legend exists.
+///
+/// The y axis is hidden until the plot is tapped. The SHAPE is the reading
+/// here; the average and the peak are already the hero and its caption, so
+/// a bpm scale is a detail you ask for, not one the card wears.
+///
+/// ── AND IT IS NOT ON THE PAGE UNTIL ASKED FOR (W3) ──────────────────────────
+/// Both surfaces that drew it inline — the finish sheet and the session page
+/// — now draw it in `heartRatePanel`, which slides it up from the bottom when
+/// the Avg HR reading is tapped. See that modifier.
 ///
 /// ── IT NEVER HOLDS THE SCREEN ───────────────────────────────────────────────
 /// A skeleton until the actor answers, then either the card or nothing at all:
@@ -33,6 +57,9 @@ struct TelemetryCard: View {
     /// the stored figure is what the rest of the app prints.
     let storedAvgBpm: Int?
     let kcal: Int?
+    /// Told, once the actor answers, whether there is a series to draw — the
+    /// Avg HR reading only opens the panel when there is one (W3).
+    var onLoad: ((Bool) -> Void)? = nil
 
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -40,6 +67,8 @@ struct TelemetryCard: View {
     @State private var reading: SessionTelemetry.Reading?
     @State private var names: [String: String] = [:]
     @State private var loaded = false
+    /// The bpm scale, shown on a tap of the plot.
+    @State private var showScale = false
 
     var body: some View {
         Group {
@@ -68,6 +97,7 @@ struct TelemetryCard: View {
             }
             reading = next
             loaded = true
+            onLoad?(!(next?.isEmpty ?? true))
         }
     }
 
@@ -135,7 +165,7 @@ struct TelemetryCard: View {
 
     private func card(_ reading: SessionTelemetry.Reading) -> some View {
         OnyxChartCard(
-            "Heart rate", domain: .train, headline: headline(reading), caption: caption(reading),
+            "Heart rate", domain: .recover, headline: headline(reading), caption: caption(reading),
             legend: AnyView(legend(reading))
         ) {
             chart(reading)
@@ -148,63 +178,90 @@ struct TelemetryCard: View {
     private func chart(_ reading: SessionTelemetry.Reading) -> some View {
         let samples = Self.bucketed(reading.samples)
         let domain = yDomain(samples)
-        let numbers = Dictionary(labelled(reading).map { ($0.segment.id, $0.number) }, uniquingKeysWith: { a, _ in a })
+        let numbers = numbered(reading)
         // The gaps: every bucket no segment claims — rests after the last
         // set, paused minutes — as one tertiary line. The washed stretches
         // draw their own line, so nothing is drawn twice.
         let gaps = samples.filter { s in !reading.segments.contains { s.at >= $0.start && s.at < $0.end } }
+        // One tick per movement, under the middle of its first stretch.
+        let ticks = Dictionary(
+            labelled(reading).map { ($0.segment.start.addingTimeInterval($0.segment.end.timeIntervalSince($0.segment.start) / 2), $0.number) },
+            uniquingKeysWith: { first, _ in first }
+        )
         return Chart {
             ForEach(gaps, id: \.at) { s in
-                LineMark(x: .value("Time", s.at), y: .value("bpm", s.bpm), series: .value("Series", "gaps"))
+                LineMark(x: .value("Time", s.at), y: .value("bpm", Double(s.bpm)), series: .value("Series", "gaps"))
                     .foregroundStyle(Color.onyx.textTertiary)
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
                     .interpolationMethod(.monotone)
             }
             ForEach(reading.segments) { segment in
-                let tint = colour(for: segment.exerciseId)
+                let tint = ink.opacity(Self.step(numbers[segment.id] ?? 1))
                 let inside = samples.filter { $0.at >= segment.start && $0.at < segment.end }
                 ForEach(inside, id: \.at) { s in
-                    AreaMark(x: .value("Time", s.at), y: .value("bpm", s.bpm), series: .value("Series", segment.id))
+                    // From the plot's floor, not from 0: the domain starts
+                    // near 80 bpm, and a wash filled from zero ran out under
+                    // the axis numbers to the card's edge.
+                    AreaMark(
+                        x: .value("Time", s.at),
+                        yStart: .value("floor", domain.lowerBound), yEnd: .value("bpm", Double(s.bpm)),
+                        series: .value("Series", segment.id)
+                    )
                         .foregroundStyle(
                             LinearGradient(colors: [tint.opacity(0.30), tint.opacity(0.02)], startPoint: .top, endPoint: .bottom)
                         )
                         .interpolationMethod(.monotone)
-                    LineMark(x: .value("Time", s.at), y: .value("bpm", s.bpm), series: .value("Series", segment.id))
+                    LineMark(x: .value("Time", s.at), y: .value("bpm", Double(s.bpm)), series: .value("Series", segment.id))
                         .foregroundStyle(tint)
                         .lineStyle(StrokeStyle(lineWidth: 2))
                         .interpolationMethod(.monotone)
                 }
                 // One rule per movement, at the start of its FIRST piece. A
                 // second piece after a pause continues the same movement.
-                // The NAMES are the legend above the plot: five of them on
-                // the plot's top edge collided into one line, and a chart
-                // whose labels cannot be read is a chart with no labels.
                 if !segment.continues {
                     RuleMark(x: .value("Start", segment.start))
                         .foregroundStyle(Color.onyx.hairline)
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        // One digit, matched to the legend: a character cannot
-                        // collide the way five names did.
-                        .annotation(position: .top, alignment: .leading, spacing: 2) {
-                            Text("\(numbers[segment.id] ?? 0)")
-                                .font(.caption2.weight(.semibold).monospacedDigit())
-                                .foregroundStyle(tint)
-                                .padding(.horizontal, 3)
-                        }
                 }
             }
         }
         .chartYScale(domain: domain)
         .chartXAxis {
-            AxisMarks(values: .stride(by: .minute, count: axisStride(samples))) { _ in
-                AxisGridLine().foregroundStyle(Color.onyx.hairline)
-                AxisValueLabel(format: .dateTime.hour().minute())
+            AxisMarks(values: ticks.keys.sorted()) { value in
+                // Full ink: the number is what NAMES the movement, and the
+                // faint step read under 3:1 as text.
+                AxisValueLabel {
+                    Text("\(value.as(Date.self).flatMap { ticks[$0] } ?? 0)")
+                        .font(OnyxChart.axisFont.weight(.bold))
+                        .foregroundStyle(ink)
+                }
+            }
+        }
+        // Before `onyxChart`, whose own `chartYAxis` would otherwise win —
+        // its header says why the axis closest to the `Chart` is the one read.
+        //
+        // ── ALWAYS LAID OUT, SHOWN ON A TAP ─────────────────────────────────
+        // `.chartYAxis(.hidden)` was the obvious spelling and it moved the
+        // plot: revealing the labels took a column from it, so every movement
+        // boundary slid left under the finger that asked for a scale. The axis
+        // keeps its room and the ink comes and goes instead.
+        .chartYAxis {
+            AxisMarks(position: .trailing) { _ in
+                AxisGridLine().foregroundStyle(showScale ? Color.onyx.hairline : .clear)
+                AxisValueLabel()
                     .font(OnyxChart.axisFont)
-                    .foregroundStyle(Color.onyx.textTertiary)
+                    .foregroundStyle(showScale ? Color.onyx.textTertiary : .clear)
             }
         }
         .chartLegend(.hidden)
-        .onyxChart(.train)
+        .onyxChart(.recover)
+        // Charts renders the axis LABELS once and keeps them: the grid
+        // answered the tap and the numbers stayed clear. A new identity per
+        // state rebuilds the axis; the room it takes never changes, so
+        // nothing moves.
+        .id(showScale)
+        .contentShape(.rect)
+        .onTapGesture { withAnimation(OnyxMotion.fade) { showScale.toggle() } }
     }
 
     /// The movements in the order they were under the bar, each in its wash.
@@ -214,12 +271,11 @@ struct TelemetryCard: View {
         FlowRow(spacing: OnyxSpace.s) {
             ForEach(labelled(reading), id: \.segment.id) { entry in
                 HStack(spacing: 4) {
-                    // The number is the signal the colour alone is not: two
-                    // chest movements share a hue by design, and the lat and
-                    // upper-back teals are one teal at seven points.
+                    // The number is the signal: the movements share one ink by
+                    // decision, and an opacity step alone is not a name.
                     Text("\(entry.number)")
                         .font(.caption2.weight(.bold).monospacedDigit())
-                        .foregroundStyle(colour(for: entry.segment.exerciseId))
+                        .foregroundStyle(ink)
                     Text(shortName(for: entry.segment.exerciseId))
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(Color.onyx.textSecondary)
@@ -241,10 +297,16 @@ struct TelemetryCard: View {
         return max(30, floor)...max(ceiling, floor + 30)
     }
 
-    /// Ten-minute marks on an hour, five on a short session.
-    private func axisStride(_ samples: [HRSample]) -> Int {
-        guard let first = samples.first?.at, let last = samples.last?.at else { return 10 }
-        return last.timeIntervalSince(first) > 35 * 60 ? 10 : 5
+    /// Every segment's movement number, the continuing pieces included — a
+    /// stretch after a pause is the same movement in the same step of ink.
+    private func numbered(_ reading: SessionTelemetry.Reading) -> [String: Int] {
+        var out: [String: Int] = [:]
+        var n = 0
+        for segment in reading.segments {
+            if !segment.continues { n += 1 }
+            out[segment.id] = max(1, n)
+        }
+        return out
     }
 
     // MARK: - AX5: the numbers only
@@ -254,7 +316,7 @@ struct TelemetryCard: View {
             Text("HEART RATE")
                 .font(.caption.weight(.semibold))
                 .tracking(0.6)
-                .foregroundStyle(OnyxDomain.train.accent)
+                .foregroundStyle(ink)
             Text(headline(reading))
                 .font(.system(.title3, design: .rounded).weight(.semibold))
                 .monospacedDigit()
@@ -279,7 +341,7 @@ struct TelemetryCard: View {
     /// Three bars in tertiary ink, the card's own shape, until the actor
     /// answers. Gone — not replaced — when the answer is "no samples".
     private var skeleton: some View {
-        OnyxChartCard("Heart rate", domain: .train, headline: "—") {
+        OnyxChartCard("Heart rate", domain: .recover, headline: "—") {
             HStack(alignment: .bottom, spacing: OnyxSpace.s) {
                 ForEach([0.45, 0.7, 0.55], id: \.self) { fraction in
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -306,14 +368,169 @@ struct TelemetryCard: View {
         return full.components(separatedBy: " (").first ?? full
     }
 
-    /// The movement's PRIMARY mover, in the atlas's own colour. A movement the
-    /// map cannot place — a treadmill bout, an unknown name — takes the train
-    /// accent rather than a colour that means a muscle.
-    private func colour(for exerciseId: String) -> Color {
-        let name = name(for: exerciseId)
-        guard let token = MuscleMap.movers(name)?.primary.first,
-              let muscle = LandmarkMuscle.from(token: token)
-        else { return OnyxDomain.train.accent }
-        return Color.onyx.muscle(muscle)
+    /// The chart's one colour (decision 3). Computed, not stored: the token
+    /// follows the Appearance preset, and a `static let` would keep the first.
+    private var ink: Color { OnyxDomain.recover.accent }
+
+    /// Movement `n`'s opacity step of `ink`. Three steps, so neighbours always
+    /// differ; the faintest was 0.45 and measured under 3:1 as a line on the
+    /// card, so the floor is 0.55.
+    static func step(_ n: Int) -> Double {
+        [1.0, 0.75, 0.55][(max(1, n) - 1) % 3]
+    }
+}
+
+// MARK: - The panel (W3)
+
+extension View {
+    /// The heart-rate chart, off the page until the Avg HR reading asks for it,
+    /// then slid up from the bottom edge over a scrim.
+    ///
+    /// ── WHY A PANEL AND NOT A ROW ON THE PAGE ───────────────────────────────
+    /// It was a full-width card on both surfaces, under the metric grid,
+    /// 280 pt tall on a finish sheet whose job is to be put down in thirty
+    /// seconds. The founder's rule is that it is there only when asked for,
+    /// and the reading that asks is the one it explains: the average. One
+    /// modifier, two callers, so the finish sheet and the session page open
+    /// the same chart the same way.
+    ///
+    /// ── THE MOTION, AND WHY IT IS AN OFFSET AND NOT A TRANSITION ────────────
+    /// `OnyxMotion.drawer` — Apple's sheet spring, damping 0.8 / response 0.3.
+    /// The panel stays in the tree and its OFFSET is what animates, because an
+    /// offset is a value a spring can retarget mid-flight: tap the scrim while
+    /// it is still rising and it turns round from where it is, carrying its
+    /// speed. An insert/remove transition cannot — a removal already in flight
+    /// is a different view from the one a second tap inserts. It leaves by the
+    /// edge it came from, it follows the finger 1:1 when dragged, and a drag
+    /// that is heading down — `predictedEndTranslation`, the projected landing
+    /// point rather than where the finger let go — sends it back there.
+    ///
+    /// Under Reduce Motion nothing slides: it cross-fades in place
+    /// (`OnyxMotion.fade`, the 200 ms the motion vocabulary already names).
+    ///
+    /// Staying in the tree is also what lets the card's `.task` answer
+    /// `available` before anybody taps — the Avg HR reading opens a panel only
+    /// when there is a series to show in it.
+    ///
+    /// `onEdit` is the finish sheet's: its average is also an answer you can
+    /// correct, and the tap that used to open that stepper now opens this.
+    func heartRatePanel(
+        isPresented: Binding<Bool>, available: Binding<Bool>,
+        sessionId: String?, storedAvgBpm: Int?, kcal: Int?,
+        onEdit: (() -> Void)? = nil
+    ) -> some View {
+        modifier(HeartRatePanel(
+            isPresented: isPresented, available: available,
+            sessionId: sessionId, storedAvgBpm: storedAvgBpm, kcal: kcal, onEdit: onEdit
+        ))
+    }
+}
+
+// ponytail: a general bottom panel (scrim, drag, spring offset, Reduce Motion)
+// with one caller's parameters. Lift it into OnyxUI as `onyxPanel` when a
+// second surface needs one — not before.
+private struct HeartRatePanel: ViewModifier {
+    @Binding var isPresented: Bool
+    @Binding var available: Bool
+    let sessionId: String?
+    let storedAvgBpm: Int?
+    let kcal: Int?
+    let onEdit: (() -> Void)?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The finger's pull, in points below the resting position.
+    @State private var drag: CGFloat = 0
+
+    private var motion: Animation { reduceMotion ? OnyxMotion.fade : OnyxMotion.drawer }
+
+    func body(content: Content) -> some View {
+        content
+            // What is behind the scrim is behind it for VoiceOver too.
+            .accessibilityHidden(isPresented)
+            .overlay {
+                Color.black
+                    .opacity(isPresented ? 0.45 : 0)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(isPresented)
+                    .onTapGesture { close() }
+                    .accessibilityHidden(true)
+                    .animation(motion, value: isPresented)
+            }
+            .overlay(alignment: .bottom) {
+                if let sessionId { panel(sessionId) }
+            }
+    }
+
+    private func panel(_ sessionId: String) -> some View {
+        // Copied out: `visualEffect`'s closure runs off the main actor.
+        let shown = isPresented, slides = !reduceMotion, pull = drag
+        return VStack(spacing: OnyxSpace.s) {
+            Capsule()
+                .fill(Color.onyx.textTertiary)
+                .frame(width: 36, height: 5)
+                .accessibilityHidden(true)
+            TelemetryCard(
+                sessionId: sessionId, storedAvgBpm: storedAvgBpm, kcal: kcal,
+                onLoad: { available = $0 }
+            )
+            if let onEdit {
+                Button {
+                    close()
+                    onEdit()
+                } label: {
+                    Text("Edit the average")
+                        .onyxType(.body).fontWeight(.semibold)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.onyx.textSecondary)
+            }
+        }
+        // ONE surface under the handle, the card and the action, anchored to
+        // the bottom edge the way a sheet is: a floating card let the page
+        // show beneath it, and its top edge — base on a dimmed base — read as
+        // the page cut along a line. The hairline is that edge, stated.
+        .padding(.top, OnyxSpace.s)
+        .padding(.horizontal, OnyxSpace.m)
+        .padding(.bottom, OnyxSpace.m)
+        .frame(maxWidth: .infinity)
+        .background {
+            let shape = UnevenRoundedRectangle(
+                topLeadingRadius: OnyxCorner.sheet, topTrailingRadius: OnyxCorner.sheet, style: .continuous
+            )
+            shape.fill(Color.onyx.base)
+                .overlay(shape.stroke(Color.onyx.hairline, lineWidth: 1))
+                .ignoresSafeArea(edges: .bottom)
+        }
+        .visualEffect { content, proxy in
+            content.offset(y: shown ? pull : (slides ? proxy.size.height + 80 : 0))
+        }
+        .opacity(shown ? 1 : 0)
+        .animation(motion, value: isPresented)
+        .gesture(
+            DragGesture(minimumDistance: 6)
+                .onChanged { value in
+                    let dy = value.translation.height
+                    // Upward is resisted, not refused: a hard stop reads as a
+                    // frozen panel, a quarter of the pull reads as the top.
+                    drag = dy > 0 ? dy : dy / 4
+                }
+                .onEnded { value in
+                    let dismiss = value.predictedEndTranslation.height > 160
+                    withAnimation(motion) {
+                        drag = 0
+                        if dismiss { isPresented = false }
+                    }
+                }
+        )
+        .allowsHitTesting(shown)
+        .accessibilityElement(children: .contain)
+        .accessibilityHidden(!shown)
+        .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape) { close() }
+    }
+
+    private func close() {
+        withAnimation(motion) { isPresented = false }
     }
 }

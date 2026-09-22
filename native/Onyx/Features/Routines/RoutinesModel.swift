@@ -201,19 +201,7 @@ final class RoutinesModel {
     // MARK: - Exercises inside a day
 
     func addExercise(_ name: String, to dayKey: String) {
-        mutate(dayKey) { day in
-            day.payload.exercises.append(
-            RoutineExercise(
-                    name: name,
-                    // A starting prescription rather than blanks: three sets of
-                    // 8–12 with two minutes' rest is what most people would
-                    // have typed, and a row of empty fields is a row of
-                    // decisions.
-                    sets: 3, reps: "8–12", restSec: 120,
-                    compound: MuscleMap.resolveMovers(name).secondary.isEmpty == false
-                )
-            )
-        }
+        mutate(dayKey) { $0.payload.exercises.append(.starting(name)) }
     }
 
     func updateExercise(_ exercise: RoutineExercise, at index: Int, in dayKey: String) {

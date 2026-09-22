@@ -5,6 +5,7 @@ import SwiftUI
 import UIKit
 import OnyxUI
 import OnyxCore
+import OnyxData
 
 /// One movement, and the sets you are logging into it — a single page of the
 /// deck.
@@ -294,10 +295,9 @@ struct ExerciseCardView: View {
     /// says the load goes up today. That is the whole of what you need before
     /// the first rep, and it is 56 pt.
     ///
-    /// The third line is the seed's own "last time" and exists only when the
-    /// seed HAS one — a new movement gets a two-line header rather than a line
-    /// reading "—", which is a row of nothing occupying the height of
-    /// something.
+    /// A THIRD line exists only on a movement added mid-session (W3): what it
+    /// was last lifted at, and when. See `lastTime` for why that card, and
+    /// only that card, earns the line the seeded cards gave up.
     ///
     /// ── WHY THE MUSCLE IS A CHIP AND NOT JUST THE RAIL ──────────────────────
     /// The rail has been coloured by muscle family since Wave 2.4 and has never
@@ -346,6 +346,7 @@ struct ExerciseCardView: View {
             // its own home: the seed's provenance is on the card's source chip,
             // and the full history is one tap away in the exercise sheet.
             // Founder asked for the line gone; it was restating the table.
+            if let last = model.lastTime(for: exercise) { lastTime(last) }
 
             if !exercise.note.isEmpty {
                 Text(exercise.note)
@@ -443,6 +444,41 @@ struct ExerciseCardView: View {
                     }
                 }
             }
+    }
+
+    /// `last · 52.5kg × 6 · Mon 1 Sept` — on a movement added mid-session only.
+    ///
+    /// ── WHY THIS CARD GETS BACK THE LINE THE OTHERS LOST ────────────────────
+    /// The seeded cards dropped it because their rows already open on the
+    /// seed's numbers and the provenance is the day itself: last time you did
+    /// THIS split. An added movement's numbers come from anywhere — another
+    /// split, another month — and the rows cannot say which. The DATE is the
+    /// part only this line carries, and without it 52.5 kg from March reads
+    /// exactly like 52.5 kg from Tuesday.
+    ///
+    /// At an accessibility size the date takes its own line: on one line at
+    /// AX5 it and the figure truncated each other to `25kg… · Sat 1…`.
+    private func lastTime(_ last: LastWorkingSet) -> some View {
+        let stacked = typeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(spacing: OnyxSpace.xs))
+        return layout {
+            HStack(spacing: OnyxSpace.xs) {
+                Text("last").onyxMicro()
+                Text(last.label)
+                    .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
+                    .foregroundStyle(Color.onyx.textSecondary)
+            }
+            Text(stacked ? Swap.shortDayLabel(last.date) : "· \(Swap.shortDayLabel(last.date))")
+                .onyxType(.caption)
+                .foregroundStyle(Color.onyx.textTertiary)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Last time, \(last.label), on \(Swap.shortDayLabel(last.date))")
     }
 
     /// The drag handle — what the web deck puts in the same corner.
