@@ -415,13 +415,13 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Settings/SettingsModel.swift": {
-    "mtime": 1789126176.4061675,
-    "ast_hash": "6d7efaee8b0b1fb42b844a7f7c4df82e",
+    "mtime": 1790106780.8476994,
+    "ast_hash": "472c104f47c9bfba0efe52c720e5d7e8",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Settings/SettingsTabView.swift": {
-    "mtime": 1790077624.477671,
-    "ast_hash": "9d3b6145eff1af2c90f13c13d8f0d2b8",
+    "mtime": 1790106780.847857,
+    "ast_hash": "2ca4ede5d650c4207b31e051948529e0",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Settings/SyncStatusView.swift": {
@@ -680,8 +680,8 @@
     "semantic_hash": ""
   },
   "native/OnyxWidgets/OnyxWidgets.swift": {
-    "mtime": 1789896656.6724858,
-    "ast_hash": "d96a730cc7821240aaf094eeeef25142",
+    "mtime": 1790106780.8480186,
+    "ast_hash": "a6068e8b2ace71e34b5119c00223760a",
     "semantic_hash": ""
   },
   "native/Packages/OnyxCore/Package.swift": {
@@ -3390,8 +3390,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790090833.5293891,
-    "ast_hash": "f6fc3641307211084e020789798c4fdd",
+    "mtime": 1790106780.8482902,
+    "ast_hash": "670b787bc7d6217acbc435026567eddf",
     "semantic_hash": ""
   },
   "scripts/check-swift.sh": {
@@ -3455,8 +3455,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1790091182.2619443,
-    "ast_hash": "c50af276caa9f6dc13b47f113cf46b85",
+    "mtime": 1790106780.8289685,
+    "ast_hash": "83d9d1e2fd28e676841a23ec0dc57661",
     "semantic_hash": ""
   },
   "docs/GIT.md": {
@@ -3485,8 +3485,8 @@
     "semantic_hash": ""
   },
   "native/project.yml": {
-    "mtime": 1790090833.6337566,
-    "ast_hash": "b5c566f4cea5df01c4875b3c1c5649d3",
+    "mtime": 1790106780.848175,
+    "ast_hash": "93cfa99e20b4440c8d1055cf7bbcb623",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png": {
@@ -4430,8 +4430,8 @@
     "semantic_hash": ""
   },
   "docs/Plan-Onyx-AppStore-Sprint.md": {
-    "mtime": 1790102515.573499,
-    "ast_hash": "ae0a2e222244a61ea539aa8e1ff7f9d1",
+    "mtime": 1790106780.8291695,
+    "ast_hash": "d252183c43b8f8cb77ced72275588d8a",
     "semantic_hash": ""
   }
 }

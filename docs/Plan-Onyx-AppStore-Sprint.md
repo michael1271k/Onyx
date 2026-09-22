@@ -765,3 +765,48 @@ Found by a destination probe, not assumed. **Later waves must respect it:**
   "each face remembers" is the rule that already failed.
 - `native/Onyx/Features/Settings/SettingsTabView.swift`,
   `SettingsModel.swift` — the Reduce Motion row and its two dead members.
+
+### Verification — what was proved, and how
+
+- **`npm run check` — PASSED** (exit 0), including `check:watch`.
+- **The widget fix was proved by placing real widgets**, not by reading the
+  diff. A **medium** and a **large** Onyx widget were added to the iPhone 15
+  Home Screen: both draw on the obsidian `Color.onyx.base` container with the
+  real empty state ("Nothing to show yet / Open Onyx once and the tiles fill
+  from its database"), and the string "Please adopt containerBackground API"
+  appears nowhere.
+- **One false alarm, recorded so the next wave does not repeat it.** The first
+  attempt built with `CODE_SIGNING_ALLOWED=NO` and every widget rendered
+  **solid white**. That is not a rendering defect: stripping signing strips the
+  entitlements, and the log says so plainly —
+  `No AppIntent in timeline(for:with:)` followed by
+  `CHSErrorDomain Code=1101 "Returned view collection was either nil or empty."`
+  **Never verify a widget from a `CODE_SIGNING_ALLOWED=NO` build.** Build it
+  signed (the free team signs a simulator build fine) or you are photographing
+  your own build flags.
+
+### Left open
+
+- **Widgets cannot show DATA on this machine** — only the empty state. The App
+  Group is what lets the extension read the app's database, and a free personal
+  team cannot sign it (Gate 0). The empty state rendering correctly is the whole
+  of what is provable here, and it is enough for this wave's claim.
+- **The four inner `containerBackground` calls were left in place**
+  (`OnyxTraining:61`, `OnyxVitals:62`, `OnyxLifestyle:116`, `:189`). They are
+  redundant now and harmless — the screenshots show no double-application
+  artefact. Removing them is cleanup with a regression risk and no user-visible
+  gain; a later wave can do it if it is touching those files anyway.
+
+### Close-out
+
+| | |
+|---|---|
+| Version | **7.9.0** (70900), `version:check` in sync |
+| Changelog | `docs/CHANGELOG.md` → `[7.9.0] — The widgets draw again` |
+| Merged | `c1b3908e` → `main`, no-ff |
+| Branch | `wave/1-foundations` deleted; `git branch -a` shows only `main` and `origin/main` |
+| Cache purged | **24.58 GB freed** (4.7 G DerivedData + 20 G onyx-swift + 324 M SwiftPM → 0) |
+
+**Cost the next wave inherits:** `~/Library/Caches/onyx-swift` is empty, so the
+first `npm run check` in W2 or W3 is a full cold build of OnyxCore, OnyxData,
+OnyxUI and the watch target. Budget for it rather than assuming a hung build.
