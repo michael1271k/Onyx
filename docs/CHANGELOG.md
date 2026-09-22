@@ -44,6 +44,71 @@ _Nothing yet._
 
 ---
 
+## [7.10.0] — 2026-09-22 · The watch gets a front door
+
+Wave 2 of the App Store sprint (Lane A). The watch app opened on the word
+"Rest day" over an empty screen, with everything the phone knows about you
+hidden behind a toolbar disc. It opens on a four-page dashboard now, and the
+pages have colour.
+
+### Changed
+- **The idle root is the dashboard, not `StartView`.** A live session still
+  roots at `SetView` — W3's "it is the set, not a dashboard" argument holds
+  *during* a workout and was always wrong outside one, and that comment is
+  rewritten rather than deleted. Founder decision 2.
+- **Four vertical pages, driven by the Crown as before.** Page one is the hero:
+  today's split at `WatchType.figure` in the split's own colour, a chip row
+  (movements · battery · readiness) and the one large Start button. Then
+  **Today** (battery/readiness, sleep, stress), **Train** (week tonnage, week
+  rings, steps) and **Fuel** (calories left, water, +1 glass).
+- **A rest day is no longer a dead end.** It was the word "Rest day" and
+  nothing else. It is now "Rest day" in Lunar over the readiness score as the
+  hero, with battery and last night's sleep beside it — and the other three
+  pages are there on a rest day like any other.
+- **The pages have colour, from tokens that already existed.** Each page takes
+  one `OnyxDomain` accent — Today → `recover`, Train → `train`, Fuel → `fuel`,
+  page one → the split's `Color.onyx.dayLabel` — and the card carries it as a
+  14 % fill, a 45 % hairline and the glyph and headline of the face inside it.
+  No palette was invented and no hex is spelled in the watch app.
+- **`.train` came off the Train page and `.steps` took its slot.** The `.train`
+  face says "Upper B / due", which is what page one now says at four times the
+  size. `.steps` moved off Fuel because three faces *and* the "+1 glass" button
+  hung 24.5 pt below even the 49 mm fold — the button was photographed cut in
+  half. Both are still complications.
+
+### Fixed
+- **`MirrorView` and `FinishView` held a full-width green capsule at full
+  brightness in the always-on state.** `SetView` applies
+  `dimmedWhenLuminanceReduced` to its logger page and to nothing else, so the
+  two live-session screens that are held longest were the two missing the
+  burn-in call. Both have it now.
+
+### Added
+- **`watch-shot.sh restday`** — the state the founder complained about by name
+  had no shot hook, which is why nobody had looked at it. `seedDebugContext`
+  gained a `restDay:` seed, and clearing the schedule override alone is *not*
+  enough: `Schedule.scheduleDayIn` falls back to a day's own weekday, so the
+  first rest-day shot came back as the training hero.
+- **`watch-shot.sh nophone`** — the "Open Onyx on your iPhone" empty state,
+  which `start` used to draw by accident. It is only honest as the first screen
+  of a run after an uninstall, and the script says so.
+
+### Notes
+- **watchOS does not tint an inline navigation title with `.tint`.** The first
+  version of the page model relied on it; the 49 mm screenshots came back with
+  the same grey heading with and without the modifier. The title stays the
+  system's grey, the colour lives in the cards, and the finding is recorded in
+  `DashboardPages.swift` so the next wave does not re-spend the round.
+- **A root navigation bar measures the same 64 pt as a pushed one.** Moving the
+  dashboard up a level was expected to buy height back — no back chevron, no
+  toolbar item. The accessibility tree of the running root says
+  `{{0, 0}, {205, 64}}`, identical to the pushed bar `WatchCase.navBar` was
+  measured against, so no budget in `WatchDashboard` changed and there is no
+  second constant.
+- Reviewed on **both** an Apple Watch Ultra 2 (49 mm) and an Apple Watch SE 3
+  (40 mm), which is the first time any watch screen in this repository has been
+  photographed at 40 mm.
+
 ## [7.9.0] — 2026-09-22 · The widgets draw again
 
 Wave 1 of the App Store sprint. It owns `native/project.yml` alone so the two

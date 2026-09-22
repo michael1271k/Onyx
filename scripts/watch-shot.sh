@@ -54,7 +54,21 @@ mkdir -p "$OUT"
 # refused.
 screen_env() {
   case "$1" in
-    start)   echo "" ;;
+    # ── W2: `start` NEEDS THE CONTEXT NOW ──────────────────────────────────
+    # The Start screen became page one of the dashboard, which is the app's
+    # idle root. With no environment at all it draws the honest "Open Onyx on
+    # your iPhone" empty state — a real screen under the right filename, and
+    # not the one anybody asked to review. `nophone` is that state, by its own
+    # name; `start` seeds the context and shows the hero.
+    start)   echo "ONYX_WATCH_SCREEN=start" ;;
+    # The state the founder complained about by name. It had no hook before
+    # W2, which is why nobody had looked at it.
+    restday) echo "ONYX_WATCH_SCREEN=restday" ;;
+    # ⚠️ ONLY HONEST AS THE FIRST SCREEN OF A RUN, AFTER AN UNINSTALL. It has
+    # no environment, so it draws whatever `WatchContextCache` is holding — and
+    # every other screen in this list seeds one. Shot after `start` it comes
+    # back as the hero, under this filename.
+    nophone) echo "" ;;
     set)     echo "ONYX_WATCH_AUTOSTART=1" ;;
     rest)    echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=rest" ;;
     quality|qualitytags) echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=quality" ;;
@@ -62,16 +76,15 @@ screen_env() {
     pause)   echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=pause" ;;
     cancel)  echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=cancel" ;;
     finish)  echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=finish" ;;
-    # ── W4's four ──────────────────────────────────────────────────────────
-    # `dashboard` was the last name this script refused. It is a pushed screen
-    # now, reached the way a finger reaches it, and `train`/`fuel` are the same
-    # screen with a different page selected — `DashboardView` reads the value
-    # and moves its own `TabView`, because a NavigationPath can name a
-    # destination and not a tab within one.
+    # ── W4's four, re-pointed by W2 ────────────────────────────────────────
+    # `dashboard` was the last name this script refused. W4 made it a pushed
+    # screen; W2 made it the ROOT, so these three no longer push anything —
+    # `DashboardView` reads the value and moves its own `TabView`. `dashboard`
+    # is the Today page, which is page two now that Start is page one.
     #
-    # NO autostart on the three: the dashboard is the screen you open BEFORE a
-    # session (`StartView`'s toolbar), and a live session behind it would
-    # photograph the in-session entry point instead.
+    # NO autostart on the three: the dashboard is the screen you see when no
+    # session is live, and a live session would root at `SetView` instead and
+    # photograph the workout.
     dashboard) echo "ONYX_WATCH_SCREEN=dashboard" ;;
     train)     echo "ONYX_WATCH_SCREEN=train" ;;
     fuel)      echo "ONYX_WATCH_SCREEN=fuel" ;;
@@ -186,7 +199,7 @@ shoot() {
 
   case "$env" in
     UNKNOWN)
-      echo "  unknown screen '$screen' — known: start set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget" >&2; return 1 ;;
+      echo "  unknown screen '$screen' — known: start restday nophone set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget" >&2; return 1 ;;
     NOT_REACHABLE)
       echo "  '$screen' has no launch hook yet: it is presented by navigation" >&2
       echo "  inside a live session. Add a case to WatchModel.DebugScreen and a" >&2
@@ -264,7 +277,7 @@ shoot() {
 }
 
 read -ra SCREENS <<< "$SCREEN"
-[ "$SCREEN" = "all" ] && SCREENS=(start set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget)
+[ "$SCREEN" = "all" ] && SCREENS=(start restday set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget)
 
 status=0
 for s in ${SCREENS[@]+"${SCREENS[@]}"}; do
