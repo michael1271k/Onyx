@@ -233,6 +233,36 @@ public final class AppEnvironment {
     /// per day and History would re-read the whole ledger forty-nine times for
     /// one correction.
     private(set) var rescoreGeneration = 0
+    /// Moves on EVERY committed write, cascade or not.
+    ///
+    /// `rescoreGeneration` is the cascade's word and deliberately narrow — it
+    /// does not move for a supplement tick, a joint flag, a cardio bout, a
+    /// stress reading or a sync PULL. That is right for a ledger that only a
+    /// rescore changes and wrong for anything that has to be REBUILT whenever
+    /// the store moved at all, which is what the week export's cache key needs
+    /// (`WeekDaysView`). One integer off the observer that already reloads the
+    /// widgets, so it costs nothing that was not already being paid.
+    private(set) var storeGeneration = 0
+
+    /// Gym mode (§W6-B, decision 26): the shell has hidden the tab bar and the
+    /// app is standing in the logger.
+    ///
+    /// ── WHY IT LIVES HERE AND NOT IN THE SHELL'S `@State` ───────────────────
+    /// Three surfaces set it and two of them are not the shell: the launch
+    /// door in `RootView`, the Leave capsule in `WorkoutTabView`'s navigation
+    /// bar, and `sessionFinished`/`sessionCancelled`, which end it without
+    /// anybody tapping anything. `@State` on the root is also thrown away by
+    /// the theme rebuild, which is how a colour change used to evict the
+    /// selected tab (see `selectedTab`).
+    var gymMode = false
+    /// The reader tapped Leave. Gym mode does not re-arm itself for the rest
+    /// of the day, whatever the clock and the median say.
+    ///
+    /// Without it the theme `.id` on the app root — which any Appearance pick
+    /// or block roll changes — gives `SignedInTabs` a new identity, re-runs
+    /// its `.task`, finds the window still open and hides the bar again.
+    /// Cleared at midnight with everything else the day owns.
+    var gymModeDeclined = false
     /// A run is going. A thin hint (a hairline, a caption) and nothing more —
     /// no screen blocks on it, because the numbers on display are the OLD
     /// consistent ones until the generation moves.
@@ -380,6 +410,18 @@ public final class AppEnvironment {
     private var widgetReload: Task<Void, Never>?
     /// The pending throttled watch push, if any. See `scheduleWatchPush`.
     private var watchPush: Task<Void, Never>?
+    /// The build itself, off the main actor — see `pushWatchContext`.
+    ///
+    /// A second push while one is in flight does NOT cancel it: the expensive
+    /// half is a `Task.detached`, which does not inherit cancellation, so
+    /// cancelling the handle would suppress the delivery and leave the ~30
+    /// reads running anyway — three pushes in quick succession (a sign-in, a
+    /// midnight roll, a theme pick) would run three `.full` snapshot builds
+    /// at once on the same pool the launch path is using. It is COALESCED
+    /// instead: the second push sets the flag below and the first re-runs
+    /// when it lands, with whatever the store holds then.
+    private var watchBuild: Task<Void, Never>?
+    private var watchPushPending = false
 
     /// The post-workout heart-rate reader (Expansion W5, decision 10): Health
     /// at view time, a local cache row after the first non-empty read, and a
@@ -477,7 +519,10 @@ public final class AppEnvironment {
         // widgets, debounced: a pull commits per table and a session logs a
         // set every minute, and each reload is a full snapshot build.
         commitObserver = database.onCommit { [weak self] in
-            Task { @MainActor in self?.scheduleWidgetReload() }
+            Task { @MainActor in
+                self?.storeGeneration &+= 1
+                self?.scheduleWidgetReload()
+            }
         }
         // The watch link. It takes its own `onCommit` rather than sharing this
         // one: this observer is debounced for the widget reload (a full snapshot
@@ -612,6 +657,8 @@ public final class AppEnvironment {
     /// fine — `SyncStatus` counts them.
     func syncNow(reason: SyncReason) async {
         guard case .signedIn = auth, let coordinator else { return }
+        let span = Perf.begin("sync.foreground")
+        defer { Perf.end(span) }
         sync.begin()
         var failure: String?
         do { try await coordinator.syncNow(reason: reason) } catch { failure = String(describing: error) }
@@ -1065,6 +1112,12 @@ public final class AppEnvironment {
         // the session by definition, and `publishPhase` declines while one is
         // up — which would leave the previous account's block behind.
         isSessionLive = false
+        // The next account is not standing in this one's gym. `selectedTab`
+        // goes with it: left at "train", the new user's first screen is the
+        // Train tab with the bar hidden, before they have logged anything.
+        gymMode = false
+        gymModeDeclined = false
+        selectedTab = ""
         publishPhase(nil)
         weighInTask?.cancel()
         weighInTask = nil
@@ -1186,28 +1239,57 @@ public final class AppEnvironment {
     /// exactly one slot, so a second call before the first is delivered simply
     /// replaces it — which is the correct behaviour for a value where only the
     /// newest has ever been wanted.
+    /// ── THE BUILD IS OFF THE MAIN ACTOR SINCE W6 ────────────────────────────
+    /// A `.full` snapshot build is ~30 store reads, and this used to run all
+    /// of them on the main actor — at sign-in, at midnight, on a theme pick
+    /// and once every thirty seconds through the throttle below. The reads are
+    /// detached now; what comes back to the main actor is one value, and the
+    /// two things that genuinely belong here (`publishPhase`, which writes the
+    /// App Group defaults and repaints this process, and the send, which
+    /// reads `OnyxTheme.current`) happen in the same order they always did.
     private func pushWatchContext(userID: UUID) {
         watchPush?.cancel()
         watchPush = nil
+        guard watchBuild == nil else {
+            watchPushPending = true
+            return
+        }
         let userId = OnyxJSON.canonicalUserID(userID)
-        guard let schedule = try? database.scheduleContext(userId: userId, today: today) else { return }
-        // BEFORE the send, not after: the bridge attaches
-        // `OnyxTheme.current.spec`, which is the pick plus the block's mood
-        // offset. Publishing afterwards would hand the watch one phase's
-        // palette every time the block rolled, and only correct it on the next
-        // push — which on a quiet day is the following midnight.
-        publishPhase(schedule)
-        // The complications' numbers (W7): the SAME builder the Home Screen
-        // widgets read, at `.full` because the ten wearable faces span every
-        // scope. A failed build sends the context without tiles — the watch
-        // keeps its schedule and its faces say "—" — rather than no context.
-        //
-        // ponytail: a `.full` build is ~30 store reads on the main actor,
-        // which is why the commit path below throttles to one every 30 s;
-        // move it off-main if it ever shows in a trace.
-        let tiles = (try? WidgetSnapshotBuilder(database: database, userId: userId).build(scope: .full))
-            .map(WatchTiles.init)
-        watchBridge.send(userId: userId, today: today, schedule: schedule, tiles: tiles)
+        let database = database
+        let today = today
+        watchBuild = Task { [weak self] in
+            let span = Perf.begin("watch.push")
+            let built = await Task.detached(priority: .utility) { () -> (ScheduleContext, WatchTiles?)? in
+                guard let schedule = try? database.scheduleContext(userId: userId, today: today) else {
+                    return nil
+                }
+                // The complications' numbers (W7): the SAME builder the Home
+                // Screen widgets read, at `.full` because the ten wearable
+                // faces span every scope. A failed build sends the context
+                // without tiles — the watch keeps its schedule and its faces
+                // say "—" — rather than no context.
+                let tiles = (try? WidgetSnapshotBuilder(database: database, userId: userId).build(scope: .full))
+                    .map(WatchTiles.init)
+                return (schedule, tiles)
+            }.value
+            Perf.end(span)
+            guard let self else { return }
+            self.watchBuild = nil
+            defer {
+                if self.watchPushPending {
+                    self.watchPushPending = false
+                    self.pushWatchContext(userID: userID)
+                }
+            }
+            guard let (schedule, tiles) = built else { return }
+            // BEFORE the send, not after: the bridge attaches
+            // `OnyxTheme.current.spec`, which is the pick plus the block's mood
+            // offset. Publishing afterwards would hand the watch one phase's
+            // palette every time the block rolled, and only correct it on the
+            // next push — which on a quiet day is the following midnight.
+            self.publishPhase(schedule)
+            self.watchBridge.send(userId: userId, today: today, schedule: schedule, tiles: tiles)
+        }
     }
 
     /// The commit path's push (W7): a 30 s TRAILING throttle. The first
@@ -1275,6 +1357,8 @@ public final class AppEnvironment {
         dayTick += 1
         // Yesterday's queue is about yesterday's routine day.
         publishProgression([], for: nil)
+        // A refusal is about a day, not about the app.
+        gymModeDeclined = false
         startWeighInWatch()
         // The watch resolves its split against the date the PHONE believes it
         // is, not against its own clock — the two can disagree across midnight,

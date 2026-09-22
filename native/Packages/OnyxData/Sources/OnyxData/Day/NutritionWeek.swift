@@ -55,52 +55,63 @@ public extension AppDatabase {
             return AsyncThrowingStream { $0.finish() }
         }
         return stream(ValueObservation.tracking { db in
-            var byDate: [String: NutritionDay] = [:]
-            let totals = try Row.fetchAll(
-                db,
-                sql: """
-                SELECT date,
-                       SUM(calories) AS kcal,
-                       SUM(protein_g) AS protein,
-                       SUM(carbs_g) AS carbs,
-                       SUM(fat_g) AS fat
-                  FROM nutrition_entries
-                 WHERE user_id = ? AND date >= ? AND date <= ?
-                 GROUP BY date
-                """,
-                arguments: [userId, from, to]
-            )
-            for row in totals {
-                let date: String = row["date"]
-                byDate[date] = NutritionDay(
-                    date: date, kcal: row["kcal"], proteinG: row["protein"],
-                    carbsG: row["carbs"], fatG: row["fat"]
-                )
-            }
-            let flags = try Row.fetchAll(
-                db,
-                sql: """
-                SELECT date, nutrition_exception, nutrition_estimated
-                  FROM daily_logs
-                 WHERE user_id = ? AND date >= ? AND date <= ?
-                """,
-                arguments: [userId, from, to]
-            )
-            for row in flags {
-                let date: String = row["date"]
-                var day = byDate[date] ?? NutritionDay(date: date)
-                day.exception = row["nutrition_exception"]
-                day.estimated = row["nutrition_estimated"] ?? false
-                byDate[date] = day
-            }
-            var out: [NutritionDay] = []
-            var cursor = from
-            while cursor <= to {
-                out.append(byDate[cursor] ?? NutritionDay(date: cursor))
-                guard let next = ISODate.addDays(cursor, 1) else { break }
-                cursor = next
-            }
-            return out
+            try Self.nutritionWeek(db, userId: userId, from: from, to: to)
         })
+    }
+
+    /// The same rows, inside a transaction the caller already holds.
+    /// A malformed range answers `[]`, as the stream answers nothing.
+    static func nutritionWeek(
+        _ db: Database, userId: String, from: String, to: String
+    ) throws -> [NutritionDay] {
+        guard from <= to, ISODate.addDays(from, 0) != nil, ISODate.addDays(to, 0) != nil else {
+            return []
+        }
+        var byDate: [String: NutritionDay] = [:]
+        let totals = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT date,
+                   SUM(calories) AS kcal,
+                   SUM(protein_g) AS protein,
+                   SUM(carbs_g) AS carbs,
+                   SUM(fat_g) AS fat
+              FROM nutrition_entries
+             WHERE user_id = ? AND date >= ? AND date <= ?
+             GROUP BY date
+            """,
+            arguments: [userId, from, to]
+        )
+        for row in totals {
+            let date: String = row["date"]
+            byDate[date] = NutritionDay(
+                date: date, kcal: row["kcal"], proteinG: row["protein"],
+                carbsG: row["carbs"], fatG: row["fat"]
+            )
+        }
+        let flags = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT date, nutrition_exception, nutrition_estimated
+              FROM daily_logs
+             WHERE user_id = ? AND date >= ? AND date <= ?
+            """,
+            arguments: [userId, from, to]
+        )
+        for row in flags {
+            let date: String = row["date"]
+            var day = byDate[date] ?? NutritionDay(date: date)
+            day.exception = row["nutrition_exception"]
+            day.estimated = row["nutrition_estimated"] ?? false
+            byDate[date] = day
+        }
+        var out: [NutritionDay] = []
+        var cursor = from
+        while cursor <= to {
+            out.append(byDate[cursor] ?? NutritionDay(date: cursor))
+            guard let next = ISODate.addDays(cursor, 1) else { break }
+            cursor = next
+        }
+        return out
     }
 }

@@ -282,6 +282,14 @@ enum PreviewHarness {
         return environment
     }
 
+    /// The shell standing in a gym: Train selected, the bar hidden, Leave up.
+    @MainActor static func gymModeEnvironment() -> AppEnvironment {
+        let environment = AppEnvironment.preview
+        environment.selectedTab = "train"
+        environment.gymMode = true
+        return environment
+    }
+
     @MainActor @ViewBuilder
     static func view(_ screen: String) -> some View {
         let _ = applyRequestedTheme()
@@ -382,6 +390,15 @@ enum PreviewHarness {
         // A `TabView` mounts only the selected tab's content, so this is one
         // screen plus five icons, not five screens. Pair it with `SHOT_THEME`:
         // the point of the shot is that the icon moves when the palette does.
+        // ── GYM MODE, WHICH IS A STATE OF THE SHELL (§W6-B) ─────────────────
+        // `SignedInTabs` and not `WorkoutTabView`: the thing to photograph is
+        // the TAB BAR being gone, and a shot of the Train screen on its own
+        // cannot show the absence of something that was never in the frame.
+        // The flag is published directly, for the same reason
+        // `appearance-locked` publishes `isSessionLive` — the shot is of the
+        // state, not of the clock and the median that reach it.
+        case "gym-mode":
+            SignedInTabs().environment(gymModeEnvironment())
         case let s where s.hasPrefix("tabs"):
             SignedInTabs().environment(tabsEnvironment(s))
         case "you":
@@ -452,7 +469,9 @@ enum PreviewHarness {
         case "day", "day-rows", "day-past", "day-session", "day-two", "day-empty", "day-stress", "day-edit", "day-soreness", "day-hero",
              "scale", "scale-first", "day-swap", "doms", "doms-rate",
              "pulse-squares", "pulse-squares-evening", "pulse-squares-empty", "stack", "stack-add", "stack-edit",
-             "sleep-edit", "stress", "fatigue", "stress-log", "stress-day", "quick-log":
+             "sleep-edit", "stress", "fatigue", "stress-log", "stress-day", "quick-log",
+             // W6: the three day answers merged onto one sheet.
+             "log-day", "log-day-soreness", "log-day-water":
             PulsePreviews.view(screen)
         case "fuel", "fuel-over", "fuel-empty", "nutrients", "macro-edit", "fuel-calendar":
             NutritionPreviews.view(screen)
@@ -493,7 +512,9 @@ enum PreviewHarness {
              "today-weighin", "today-board",
              // W7: the Mega Widget, a connected stack, and the jiggle as a
              // reader who has turned motion off sees it.
-             "today-mega", "today-stack-linked", "today-edit-still":
+             "today-mega", "today-stack-linked", "today-edit-still",
+             // W6: the relevance order, at 07:00 and at 20:00.
+             "today-morning", "today-evening":
             TodayPreviews.view(screen)
         case "history", "history-week", "history-week-live", "history-week-wrapped",
              "history-week-wrap-open", "session", "session-ledger", "exercise-history",

@@ -989,6 +989,8 @@ public enum WeeklyExport {
     /// no Score and no Battery figures anywhere: both are this app's opinion of
     /// the week, and the audit is here to form its own.
     public static func build(_ input: WeeklyExportInput) -> String {
+        let span = Perf.begin("export.build")
+        defer { Perf.end(span) }
         let days = input.days
         let sessions = input.sessions
         let cardio = input.cardio ?? []

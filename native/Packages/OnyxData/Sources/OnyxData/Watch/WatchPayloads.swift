@@ -26,8 +26,15 @@ import OnyxCore
 /// the watch can name today's workout, list its movements and their prescribed
 /// loads and rests, with no request to anything.
 ///
-/// ponytail: every program rides along (~25 KB); send only the active deck
-/// when the watch transfer ever gets slow.
+/// ── THE CATALOGUE IS ON A DIET (W6) ─────────────────────────────────────────
+/// Every program used to ride along — three decks × six days × seven
+/// movements, each with its resolved movers, on every push, for a wrist that
+/// renders ONE of those days. `WatchContext.init` now keeps the active program
+/// in `schedule.programs` and moves everything else into `swapPool`: a flat,
+/// name-deduplicated list of the movements the swap sheet may offer, with no
+/// program and no day wrapped around them. The watch is the only reader of
+/// the rest of the catalogue and the swap sheet is the only thing it does with
+/// it (`WatchModel.swapCandidates`), so nothing else notices.
 ///
 /// The two extra fields are the ones a schedule cannot answer: whose data this
 /// is, and what the phone believes today is. `today` travels rather than being
@@ -57,13 +64,58 @@ public struct WatchContext: Codable, Sendable, Equatable {
     /// channel is ONE slot, and a second kind would overwrite the schedule
     /// every time the numbers moved.
     public var tiles: WatchTiles?
+    /// EVERY movement in the catalogue, flat and deduplicated by name — the
+    /// swap sheet's whole input, without the decks around it.
+    ///
+    /// ── WHY IT INCLUDES THE ACTIVE PROGRAM'S OWN MOVEMENTS ──────────────
+    /// A first draft seeded the dedupe with today's deck and carried only the
+    /// other programs, on the reasoning that the active program is already on
+    /// the wire. It is — but the watch then read the two lists in the order
+    /// `[active] + pool`, and a movement whose NAME appears in both the active
+    /// program and an earlier one resolved to the active program's copy where
+    /// the old code resolved to whichever came first in `schedule.programs`.
+    /// Those two copies can carry different set counts, seed loads and rest
+    /// targets, and `swap` installs whichever it is handed — so the diet would
+    /// have quietly changed a prescription. Built off the whole list in its
+    /// original order, first occurrence winning, it is the same list the watch
+    /// always had, minus the `Program`/`ProgramDay` shells.
+    ///
+    /// OPTIONAL AND LAST, the third time this file tells that story. An old
+    /// phone sends no key, and a new watch falls back to `schedule.programs`,
+    /// which that phone still fills. A new phone's key is ignored by an old
+    /// watch, which then offers swaps only from the active program — fewer
+    /// candidates, never a wrong one, and never a decode failure.
+    public var swapPool: [ProgramExercise]?
 
+    /// Trims the schedule on the way in: nothing outside this initialiser has
+    /// to remember the diet, and nothing can send the full catalogue by
+    /// accident.
     public init(userId: String, today: String, schedule: ScheduleContext, theme: OnyxThemeSpec? = nil, tiles: WatchTiles? = nil) {
         self.userId = userId
         self.today = today
-        self.schedule = schedule
+        var trimmed = schedule
+        let active = schedule.activeProgram
+        // `activeProgram` synthesises an EMPTY program when the id matches
+        // nothing. Keeping the list as it was in that case is the safe read:
+        // trimming to that empty one would leave the watch with no deck.
+        if schedule.programs.contains(where: { $0.id == active.id }) {
+            trimmed.programs = [active]
+        }
+        self.schedule = trimmed
         self.theme = theme
         self.tiles = tiles
+        // Deduplicated on `ProgramExercise.id`, which IS the name (see its
+        // header) — the same key the swap sheet already dedupes on, so a
+        // movement that appears in four days crosses the wire once. The order
+        // is `schedule.programs`' own, unsorted, because that order IS the
+        // tie-break the watch has always resolved duplicate names by.
+        var seen = Set<String>()
+        var pool: [ProgramExercise] = []
+        for exercise in schedule.programs.flatMap(\.days).flatMap(\.exercises)
+        where seen.insert(exercise.id).inserted {
+            pool.append(exercise)
+        }
+        self.swapPool = pool.isEmpty ? nil : pool
     }
 }
 

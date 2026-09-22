@@ -50,7 +50,7 @@ public struct MirrorTable: Sendable {
     public let conflict: String
     /// The primary key, in column order — the ORDER BY of every paged pull.
     ///
-    /// Offset pagination is only deterministic over a total order; without one
+    /// Keyset pagination needs a total order, and this is it; without one
     /// Postgres may hand back a row on two pages and another on none. The
     /// primary key is the one order every table is guaranteed to have.
     public let order: [String]

@@ -52,38 +52,48 @@ public extension AppDatabase {
     /// `now` decides which doses have come due; a date that is not `today` is
     /// read as a day that has already happened, which is what a past day is.
     func stackCredit(userId: String, date: String, today: String, now: Date = Date(), calendar: Calendar = .current) throws -> StackCredit {
-        let user = Column("user_id") == userId
-        return try writer.read { db in
-            let schedule = try AppDatabase.scheduleContext(db, userId: userId)
-            let isTraining = Schedule.isTrainingDayIn(schedule, date)
-
-            let customs = try CustomSupplementRow.filter(user).order(Column("time")).fetchAll(db).map(AppDatabase.custom)
-            let active = Supplements.active(customs, on: date)
-            let weekday = ISODate.weekday(date) ?? 0
-            let slots = Supplements.stackForDate(
-                Supplements.customSlotsForDate(active, weekday: weekday, isTraining: isTraining),
-                isTraining: isTraining, weekday: weekday
-            )
-
-            let log = try SupplementLogRow
-                .filter(user && Column("date") == date)
-                .fetchAll(db)
-                .map { DoseLogEntry(itemKey: $0.itemKey, taken: $0.taken) }
-
-            let clock: DayClock = date == today
-                ? .today(minutes: Self.minutesOfDay(now, calendar: calendar))
-                : (date < today ? .past : .future)
-            let doses = Supplements.doses(slots: slots, log: log, clock: clock)
-            // One payload table, read twice: the grid's micronutrients and the
-            // ring's macros come off the same rows with the same credit rule.
-            let payloads = SupplementNutrients.payloads(active)
-            return StackCredit(
-                doses: doses,
-                nutrients: SupplementNutrients.credit(doses, payloads: payloads),
-                macros: SupplementNutrients.macros(doses, payloads: payloads),
-                isTraining: isTraining
-            )
+        try writer.read { db in
+            try Self.stackCredit(db, userId: userId, date: date, today: today, now: now, calendar: calendar)
         }
+    }
+
+    /// The same read, inside a transaction the caller already holds — which is
+    /// what lets `nutritionDayStream` fold the stack into ONE observation
+    /// instead of re-reading it from two stream callbacks.
+    static func stackCredit(
+        _ db: Database, userId: String, date: String, today: String,
+        now: Date = Date(), calendar: Calendar = .current
+    ) throws -> StackCredit {
+        let user = Column("user_id") == userId
+        let schedule = try AppDatabase.scheduleContext(db, userId: userId)
+        let isTraining = Schedule.isTrainingDayIn(schedule, date)
+
+        let customs = try CustomSupplementRow.filter(user).order(Column("time")).fetchAll(db).map(AppDatabase.custom)
+        let active = Supplements.active(customs, on: date)
+        let weekday = ISODate.weekday(date) ?? 0
+        let slots = Supplements.stackForDate(
+            Supplements.customSlotsForDate(active, weekday: weekday, isTraining: isTraining),
+            isTraining: isTraining, weekday: weekday
+        )
+
+        let log = try SupplementLogRow
+            .filter(user && Column("date") == date)
+            .fetchAll(db)
+            .map { DoseLogEntry(itemKey: $0.itemKey, taken: $0.taken) }
+
+        let clock: DayClock = date == today
+            ? .today(minutes: Self.minutesOfDay(now, calendar: calendar))
+            : (date < today ? .past : .future)
+        let doses = Supplements.doses(slots: slots, log: log, clock: clock)
+        // One payload table, read twice: the grid's micronutrients and the
+        // ring's macros come off the same rows with the same credit rule.
+        let payloads = SupplementNutrients.payloads(active)
+        return StackCredit(
+            doses: doses,
+            nutrients: SupplementNutrients.credit(doses, payloads: payloads),
+            macros: SupplementNutrients.macros(doses, payloads: payloads),
+            isTraining: isTraining
+        )
     }
 
     private static func minutesOfDay(_ date: Date, calendar: Calendar) -> Int {

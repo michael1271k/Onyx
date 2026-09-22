@@ -86,7 +86,7 @@ struct RoutineBuilderView: View {
         .navigationTitle(model.programLabel)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { EditButton() }
-        .task { model.load() }
+        .task { await model.reload() }
         // A day carries every session ever logged against it through
         // `workout_sessions.day_key`; deleting it does not delete those, but it
         // does take them out of the schedule, so it asks.

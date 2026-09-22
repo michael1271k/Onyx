@@ -375,9 +375,14 @@ struct DayScreen: View {
         // far enough, mid-typing. So the squares take closures and the screen
         // owns the presentation.
         .sheet(isPresented: $ratingFatigue) { FatigueSheet(model: model) }
-        .sheet(isPresented: $loggingStress) { StressLogSheet(model: model) }
+        // ── ONE SHEET, THREE SEGMENTS (§W6-B.4) ─────────────────────────
+        // Both squares open the SAME sheet on their own segment, so the other
+        // two answers about this day are one tap away instead of on another
+        // tab behind a long-press. `LogDaySheet` explains why the three are
+        // not one form.
+        .sheet(isPresented: $loggingStress) { LogDaySheet(model: model, segment: .stress) }
         .sheet(isPresented: $browsingStress) { StressLogListSheet(model: model) }
-        .sheet(isPresented: $showSoreness) { SorenessSheet(model: model) }
+        .sheet(isPresented: $showSoreness) { LogDaySheet(model: model, segment: .soreness) }
         .sheet(isPresented: $showingStress) { StressBreakdownSheet(model: model) }
         .sheet(isPresented: $editingSleep) { SleepEditSheet(model: model) }
         .navigationDestination(item: $openSession) { SessionDetailView(sessionId: $0.id) }
@@ -615,17 +620,25 @@ struct DayTile<Content: View, Trailing: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: OnyxSpace.m) {
-            // At AX5 the title and its trailing word are each half a line wide
-            // and ran into each other ("Soreness FRONT" with no gap).
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline) {
-                    OnyxSectionHeader(title, domain)
-                    Spacer(minLength: OnyxSpace.s)
-                    trailing()
-                }
-                VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                    OnyxSectionHeader(title, domain)
-                    trailing()
+            // An EMPTY title means the surface above has already said it —
+            // a sheet whose navigation bar carries the same word
+            // (`docs/COMPACTION_AUDIT.md` §2). The trailing word stays: on the
+            // soreness atlas it is Front/Back, which is state and not a label.
+            if title.isEmpty {
+                HStack { Spacer(minLength: 0); trailing() }
+            } else {
+                // At AX5 the title and its trailing word are each half a line
+                // wide and ran into each other ("Soreness FRONT" with no gap).
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline) {
+                        OnyxSectionHeader(title, domain)
+                        Spacer(minLength: OnyxSpace.s)
+                        trailing()
+                    }
+                    VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+                        OnyxSectionHeader(title, domain)
+                        trailing()
+                    }
                 }
             }
             content()
@@ -828,10 +841,10 @@ enum DayFormat {
         return unit.map { "\(text) \($0)" } ?? text
     }
 
-    static func minutes(_ total: Int?) -> String {
-        guard let total, total > 0 else { return "—" }
-        return total >= 60 ? "\(total / 60)h \(total % 60)m" : "\(total)m"
-    }
+    // Sleep durations are `Format.sleep` (OnyxCore), not a second rule here:
+    // the same night is printed by the widget and the export, and a copy that
+    // said "7h 0m" where they said "7h" was two apps disagreeing about one
+    // reading.
 
     /// The device's minute of the day, for the slot clock.
     static var nowMinutes: Int {

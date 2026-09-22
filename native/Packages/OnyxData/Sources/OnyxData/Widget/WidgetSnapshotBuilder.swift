@@ -770,23 +770,41 @@ public struct WidgetSnapshotBuilder: Sendable {
     /// scored as a finished day (`hoursAwake` pinned to `maxAwake`), so a
     /// fortnight of bands does not shift under the wall clock.
     ///
-    /// ponytail: fourteen `scoringInputs` reads per snapshot. If the extension
-    /// ever runs short of its memory or time budget, the fix is a
+    /// ONE window read for the whole fortnight since W6 — it was fourteen
+    /// `scoringInputs` calls, each opening its own transaction and loading its
+    /// own 49-day window. The remaining documented upgrade is a
     /// `battery_breakdown` jsonb column written by `DailyScoreWriter`, not a
     /// cache here.
     func batteryStackSlice(_ rows: Rows, date: String, now: Date, calendar: Calendar) throws -> [BatteryStackDay] {
-        var days: [BatteryStackDayIn] = []
-        var d = ISODate.addDays(date, -(Self.batteryStackDays - 1)) ?? date
-        while d <= date {
-            let plan = DayPlan.resolve(
+        var dates: [String] = []
+        var cursor = ISODate.addDays(date, -(Self.batteryStackDays - 1)) ?? date
+        while cursor <= date {
+            dates.append(cursor)
+            guard let next = ISODate.addDays(cursor, 1) else { break }
+            cursor = next
+        }
+        // Resolved once per date up front: the plan decides both the rest-day
+        // flag and the supplements, and the window's read must not re-resolve
+        // it per day.
+        let plans = Dictionary(uniqueKeysWithValues: dates.map { d in
+            (d, DayPlan.resolve(
                 goals: rows.goals, schedule: rows.schedule, profiles: rows.profiles, periods: rows.periods,
                 dayTarget: d == date ? rows.dayTarget : nil, date: d, todayISO: date
-            )
-            let hoursAwake = d == date ? Battery.hoursAwake(at: now, calendar: calendar) : Battery.defaults.maxAwake
-            let inputs = try database.scoringInputs(
-                userId: userId, date: d, hoursAwake: hoursAwake, isRestDay: !plan.isTraining,
-                todayISO: date, isToday: d == date, supplements: plan.supplements
-            )
+            ))
+        })
+        let liveHours = Battery.hoursAwake(at: now, calendar: calendar)
+        let scoredDays = try database.scoringInputs(
+            userId: userId, dates: dates, todayISO: date,
+            // A FINISHED day is scored as finished (`hoursAwake` pinned to
+            // `maxAwake`), so a fortnight of bands does not shift under the
+            // wall clock.
+            hoursAwake: { $0 == date ? liveHours : Battery.defaults.maxAwake },
+            isRestDay: { !(plans[$0]?.isTraining ?? false) },
+            supplements: { plans[$0]?.supplements ?? ScoringSupplements() }
+        )
+        var days: [BatteryStackDayIn] = []
+        for (d, inputs) in scoredDays {
+            let hoursAwake = d == date ? liveHours : Battery.defaults.maxAwake
             // ── AN UNSCORED DAY DRAWS NOTHING, NOT A NEUTRAL BATTERY ──────
             // `Battery.breakdown` degrades every missing term to its NEUTRAL
             // value rather than to nil, so empty inputs still return a morning
@@ -806,8 +824,6 @@ public struct WidgetSnapshotBuilder: Sendable {
                 batteryPct: breakdown.map { jsRound($0.currentPct) },
                 breakdown: breakdown
             ))
-            guard let next = ISODate.addDays(d, 1) else { break }
-            d = next
         }
         return BatteryStackSeries.build(days, endingOn: date, limit: Self.batteryStackDays)
     }

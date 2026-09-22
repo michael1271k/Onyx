@@ -10,7 +10,9 @@ import OnyxCore
 /// `readinessHistory` read (five narrow table scans on a local SQLite file)
 /// plus the day's own fatigue rows and flat row. Fourteen of those is a few
 /// milliseconds on device, which is why nothing is cached or stored yet.
-/// ponytail: 14 × readinessHistory per series read; the documented upgrade is
+/// Since W6 `stressSeries` reads its fortnight as ONE window and slices it per
+/// day, so the fourteen are one pass over five tables rather than fourteen.
+/// ponytail: still computed on read, never stored; the documented upgrade is
 /// `daily_scores.stress_index` + `stress_breakdown` written by the scorer.
 ///
 /// ── THE SAME SCALARS THE BATTERY READS, BY DESIGN ───────────────────────────
@@ -72,7 +74,6 @@ public extension AppDatabase {
         let isTraining = try Self.isTrainingDay(
             db, userId: userId, date: date, schedule: try schedule ?? Self.scheduleContext(db, userId: userId)
         )
-        let fatigueDayMean = Fatigue.dayMean(Fatigue.foldRows(fatigueRows, isTraining: isTraining))
 
         // ── THE SECOND SELF-REPORT (D6) ─────────────────────────────────────
         // `stress_logs` has no slot vocabulary to fold: every row of the day
@@ -83,8 +84,30 @@ public extension AppDatabase {
             .filter(Column("user_id") == userId && Column("date") == date)
             .fetchAll(db)
             .map { Double($0.level) }
-        let stressDayMean: Double? = stressLevels.isEmpty ? nil : stressLevels.reduce(0, +) / Double(stressLevels.count)
 
+        return Self.stressInputs(
+            history: history, log: log, fatigueRows: fatigueRows,
+            isTraining: isTraining, stressLevels: stressLevels
+        )
+    }
+
+    /// The assembly, off rows already in hand — the same two-variant shape
+    /// `readinessHistory` has, and for the same reason: `stressSeries` reads
+    /// its fortnight as one window and needs to fold each day without going
+    /// back to the database.
+    static func stressInputs(
+        history: ReadinessHistory,
+        log: DailyLogRow?,
+        fatigueRows: [FatigueRow],
+        isTraining: Bool,
+        stressLevels: [Double]
+    ) -> StressInputs {
+        let signals = Readiness.signals(history)
+        let frag = Stress.fragmentationZ(awakeMin: history.awakeMin ?? [], asleepMin: history.asleepMin ?? [])
+        let fatigueDayMean = Fatigue.dayMean(Fatigue.foldRows(fatigueRows, isTraining: isTraining))
+        let stressDayMean: Double? = stressLevels.isEmpty
+            ? nil
+            : stressLevels.reduce(0, +) / Double(stressLevels.count)
         return StressInputs(
             hrvZ: signals.hrv.z,
             rhrZ: signals.rhr.z,
@@ -109,18 +132,74 @@ public extension AppDatabase {
     /// empty, never as a 50.
     func stressSeries(userId: String, endingOn: String, limit: Int = 14) throws -> [StressDay] {
         guard limit > 0 else { return [] }
+        let dates = (0..<limit).map { ISODate.addDays(endingOn, -$0) ?? endingOn }.reversed().map { $0 }
         let days = try writer.read { db in
-            // Resolved once for the whole fortnight. It does not vary by date —
-            // the overrides and the layout ARE the per-date rules — so asking
-            // fourteen times would be fourteen identical reads.
+            // ── ONE WINDOW, NOT FOURTEEN (W6) ───────────────────────────────
+            // Every day of the fortnight needs the 49-day readiness series
+            // behind it, and those fourteen series overlap by 48 days each.
+            // Read the union once — `[endingOn − 13 − 48, endingOn]` — and hand
+            // each date the same rows; `readinessHistory(dates:…)` already
+            // ignores rows outside the dates it was given, which is the seam
+            // that makes this free. The per-day tables (`fatigue_log`,
+            // `stress_logs`, `daily_logs`) are read as one range each and
+            // grouped, rather than three narrow queries per day.
+            //
+            // The schedule does not vary by date — the overrides and the
+            // layout ARE the per-date rules — so it is resolved once.
             let schedule = try Self.scheduleContext(db, userId: userId)
-            return try (0..<limit).map { i -> StressDayIn in
-                let date = ISODate.addDays(endingOn, -i) ?? endingOn
+            let first = dates.first ?? endingOn
+            let user = Column("user_id") == userId
+            let span = user && Column("date") >= first && Column("date") <= endingOn
+            let historyStart = Self.readinessHistoryStart(first)
+            let historySpan = user && Column("date") >= historyStart && Column("date") <= endingOn
+
+            // `.order(Column.rowID)` for the reason `ScoringWindow.load`
+            // gives about its own metrics read: the per-day path this replaces
+            // was `fetchOne` on a (user, date) filter, which is THE FIRST ROW
+            // THE SCAN FINDS, and keeping the first per date is what
+            // reproduces it. `daily_logs` has no local unique index on
+            // (user_id, date) — the constraint is server-side — and this
+            // codebase has already met a device holding two rows for one day.
+            let logs = try DailyLogRow.filter(historySpan).order(Column.rowID).fetchAll(db)
+            let metrics = try DailyMetricRow.filter(historySpan).fetchAll(db)
+            let sessions = try WorkoutSession.filter(historySpan).fetchAll(db)
+            let cardio = try CardioLogRow.filter(historySpan).fetchAll(db)
+            // The union of every night window the fortnight's histories reach.
+            var nights: [SleepSessionRow] = []
+            if let from = NightWindow.range(historyStart), let to = NightWindow.range(endingOn) {
+                nights = try SleepSessionRow
+                    .filter(user && Column("start_time") >= from.from && Column("start_time") < to.to)
+                    .fetchAll(db)
+            }
+            let logByDate = Dictionary(logs.map { ($0.date, $0) }, uniquingKeysWith: { first, _ in first })
+            var fatigueByDate: [String: [FatigueRow]] = [:]
+            for row in try FatigueLogRow.filter(span).fetchAll(db) {
+                fatigueByDate[row.date, default: []].append(FatigueRow(slot: row.slot, level: row.level))
+            }
+            var stressByDate: [String: [Double]] = [:]
+            for row in try StressLogRow.filter(span).fetchAll(db) {
+                stressByDate[row.date, default: []].append(Double(row.level))
+            }
+            // A day with a session is a training day whatever the calendar
+            // promised (`isTrainingDay`) — answered off the rows already read.
+            let trained = Set(sessions.map(\.date))
+
+            return dates.map { date -> StressDayIn in
+                let history = Self.readinessHistory(
+                    dates: Self.readinessHistoryDates(date),
+                    logs: logs, metrics: metrics, sessions: sessions, cardio: cardio, nights: nights
+                )
+                let isTraining = Schedule.isTrainingDayIn(schedule, date) || trained.contains(date)
+                let levels = stressByDate[date] ?? []
                 return StressDayIn(
                     date: date,
-                    breakdown: Stress.breakdown(
-                        try Self.stressInputs(db, userId: userId, date: date, schedule: schedule)
-                    )
+                    breakdown: Stress.breakdown(Self.stressInputs(
+                        history: history,
+                        log: logByDate[date],
+                        fatigueRows: fatigueByDate[date] ?? [],
+                        isTraining: isTraining,
+                        stressLevels: levels
+                    ))
                 )
             }
         }

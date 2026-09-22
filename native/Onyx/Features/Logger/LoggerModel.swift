@@ -1515,6 +1515,8 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// Unticking appends a tombstone rather than deleting anything.
     @discardableResult
     func toggleDone(_ row: SetRow, in exercise: ExerciseState) -> Bool {
+        let tick = Perf.begin("set.tick")
+        defer { Perf.end(tick) }
         if row.isDone {
             row.isDone = false
             row.isRecord = false
@@ -1873,6 +1875,8 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// happened because a screen was opened.
     @discardableResult
     func finish(sessionRpe: Double? = nil) -> Bool {
+        let span = Perf.begin("session.finish")
+        defer { Perf.end(span) }
         guard let store, let sessionId, completedSets > 0 else {
             // Not an error when there is no store (previews) — but a session
             // with nothing in it, or one whose row was never created, must not

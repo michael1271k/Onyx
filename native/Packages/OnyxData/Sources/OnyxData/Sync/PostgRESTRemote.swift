@@ -171,14 +171,23 @@ public struct PostgRESTMirrorRemote: MirrorRemote, MirrorPushRemote {
     public func select<T: Decodable & Sendable>(
         _ type: T.Type, request: MirrorRequest
     ) async throws -> [T] {
-        try await Pagination.all { from, to in
+        try await Pagination.keyset(order: request.order) { after, limit in
             var query = client.from(request.table).select().eq("user_id", value: userId)
             if let since = request.since {
                 // `gte`, not `gt`: the boundary row is re-read and upserted, which
                 // is a no-op, and two rows sharing a millisecond cannot lose one.
                 query = query.gte(since.column, value: since.value)
             }
-            return try await Self.ordered(query, by: request.order).range(from: from, to: to).execute().value
+            // The page boundary is a SECOND filter, ANDed with the delta one
+            // above. They answer different questions — `since` is which rows
+            // are worth asking for, `after` is where the last page stopped —
+            // and conflating them is what made `updated_at` look like a cursor
+            // it cannot be (it is not unique, so it cannot end a page).
+            if let after { query = query.or(after) }
+            let response: PostgrestResponse<[T]> = try await Self.ordered(query, by: request.order)
+                .limit(limit)
+                .execute()
+            return (response.value, response.data)
         }
     }
 
@@ -186,13 +195,17 @@ public struct PostgRESTMirrorRemote: MirrorRemote, MirrorPushRemote {
         _ type: T.Type, table: String, column: String, values: [String]
     ) async throws -> [T] {
         var out: [T] = []
-        // Ordered by `id`: the one caller is `workout_sets`, keyed on it. A
-        // composite-key table would need the order passed through.
+        // Keyed on `id`: the one caller is `workout_sets`, whose primary key it
+        // is. A composite-key table would need the order passed through.
         // A URL has a length; 2,000 uuids in one `in.(…)` do not fit in it.
         for chunk in Pagination.chunks(values, size: Pagination.inListLimit) {
-            out += try await Pagination.all { from, to in
-                let query = client.from(table).select().eq("user_id", value: userId).in(column, values: chunk)
-                return try await Self.ordered(query, by: ["id"]).range(from: from, to: to).execute().value
+            out += try await Pagination.keyset(order: ["id"]) { after, limit in
+                var query = client.from(table).select().eq("user_id", value: userId).in(column, values: chunk)
+                if let after { query = query.or(after) }
+                let response: PostgrestResponse<[T]> = try await Self.ordered(query, by: ["id"])
+                    .limit(limit)
+                    .execute()
+                return (response.value, response.data)
             }
         }
         return out
@@ -228,20 +241,42 @@ public struct PostgRESTMirrorRemote: MirrorRemote, MirrorPushRemote {
     }
 }
 
-/// Offset paging over PostgREST, until a short page.
+/// Keyset paging over PostgREST, until a short page.
 ///
-/// ── OFFSET, NOT KEYSET, AND WHY THAT IS FINE HERE ───────────────────────────
-/// Keyset pagination is the right answer for a feed; the Supabase guide says
-/// so and it is correct. It is not expressible for a composite primary key
-/// through PostgREST's filter grammar without an `or=(and(…),and(…))` per
-/// column, and this athlete's largest table is 2,277 rows — three pages. So:
-/// `range` over a total order (the primary key), and every page is asked for
-/// until one comes back short. `db-max-rows` truncates a page silently; asking
-/// for exactly the page size means a truncated page and a short page cannot be
-/// told apart, which is why the loop stops on `< pageSize` and not on empty.
+/// ── WHAT THE KEY IS, AND WHY IT IS NOT `(updated_at, id)` ───────────────────
+/// The key is `MirrorTable.order`: the table's PRIMARY KEY in column order,
+/// which the catalogue already declares and every page is already sorted by.
+/// It is the only total order all 33 mirrored tables are guaranteed to have,
+/// it is UNIQUE by definition, and it is the one order the server holds an
+/// index for — so each page is an index seek instead of a sort.
 ///
-/// ponytail: offset paging, O(pages²) server work; keyset on `id` when a table
-/// passes ~20 pages.
+/// `(updated_at, id)` — the shape the Supabase guide reaches for — cannot be
+/// spelled against this schema. Eleven of the mirrored tables have no `id`
+/// column at all (`daily_targets` is keyed `user_id,date`; `plan_phase_volume`
+/// on four columns) and twelve carry no `updated_at`, so either half of that
+/// pair is a 400 on a third of the catalogue. Where both DO exist it is still
+/// the worse order: there is no `(updated_at, id)` index to seek on, and a row
+/// edited mid-pull bumps its own `updated_at` forward past the cursor and is
+/// read a second time. `updated_at` stays what it already was here — the DELTA
+/// filter (`MirrorRequest.since`), which is a different question from where a
+/// page ended.
+///
+/// ── WHAT REPLACED WHAT ──────────────────────────────────────────────────────
+/// `range` made the server walk and discard every row it had already sent:
+/// page N pays an `OFFSET` of N×1000, so a backfill is O(pages²) server work.
+/// It is also only stable while nothing is written mid-pull — one insert
+/// landing on page 1 while page 2 is in flight slides EVERY later row back by
+/// one, and the row that crosses the boundary is never read. A cursor has no
+/// such shift: a page is defined by the key it starts after, not by how many
+/// rows came before it.
+///
+/// What a cursor does NOT fix, and this is worth being exact about: most of
+/// these tables are keyed on a random v4 uuid, so a row inserted mid-pull
+/// lands at a uniformly random position and lands BEFORE the cursor about
+/// half the time. Such a row is missed by this pull exactly as it was under
+/// `range` — the delta filter catches it on the next one. The win here is the
+/// O(pages²) server work and the shifting boundary, not at-most-once delivery,
+/// which this sync has never claimed.
 enum Pagination {
     /// PostgREST's default `db-max-rows`. Asking for more than the server will
     /// give is how a page looks full when it was cut.
@@ -250,7 +285,102 @@ enum Pagination {
     /// them is ~7 KB of URL, under every proxy's limit.
     static let inListLimit = 200
 
-    /// Every row, page by page. `fetch(from, to)` asks for the inclusive range.
+    /// Every row, page by page.
+    ///
+    /// `fetch(after, limit)` runs the query with `after` — a PostgREST `or=(…)`
+    /// body meaning "strictly past the last row you gave me", `nil` on the
+    /// first page — and hands back the decoded rows AND the bytes they were
+    /// decoded from, which is where the next cursor comes from.
+    ///
+    /// `db-max-rows` truncates a page silently, so a truncated page and a short
+    /// page cannot be told apart; the loop stops on `< pageSize` and not on
+    /// empty, which is why `pageSize` must stay at the server's own limit.
+    static func keyset<T>(
+        order: [String],
+        pageSize: Int = pageSize,
+        fetch: (_ after: String?, _ limit: Int) async throws -> (rows: [T], body: Data)
+    ) async throws -> [T] {
+        var out: [T] = []
+        var after: String?
+        while true {
+            let page = try await fetch(after, pageSize)
+            out += page.rows
+            guard page.rows.count == pageSize else { return out }
+            // Termination: the key is UNIQUE, every row of the next page is
+            // strictly past this cursor, and the table is finite — so the
+            // cursor can only move forward and the pages can only run out. Two
+            // rows sharing an `updated_at` cannot stall it because
+            // `updated_at` is not part of the key.
+            //
+            // The `next != after` guard is for the server disagreeing — a
+            // filter it ignored, a row handed back twice. Stopping one page
+            // early loses rows the next sync re-reads; asking for the same
+            // page for ever does not stop at all.
+            guard let next = try cursor(after: page.body, order: order), next != after else { return out }
+            after = next
+        }
+    }
+
+    /// The `or=(…)` body for "strictly after the last row of this page", in the
+    /// lexicographic order of `order`:
+    ///
+    ///     one column   id.gt."9f3…"
+    ///     two columns  user_id.gt."u",and(user_id.eq."u",date.gt."2026-09-05")
+    ///
+    /// `nil` when the body held no rows to page past.
+    ///
+    /// ── WHY THE PAGE IS PARSED A SECOND TIME ────────────────────────────────
+    /// The rows left as an opaque `T`: the catalogue is 33 row types behind one
+    /// generic call, so there is no property here to read a key off, and a
+    /// protocol to expose one would have to be threaded through every
+    /// generated type. A second pass over the SAME bytes costs no request and
+    /// only runs on a FULL page — the page about to be followed by another. A
+    /// table that comes down in one page, which is every table but the three
+    /// big ones, never pays it.
+    static func cursor(after body: Data, order: [String]) throws -> String? {
+        guard !order.isEmpty,
+              let last = try JSONDecoder().decode([[String: AnyJSON]].self, from: body).last
+        else { return nil }
+
+        // Every key column in this schema is a `uuid`, a `date` or `text`, so
+        // the value is always a JSON string. A key column that is absent or
+        // is not one THROWS rather than ending the pull: a half-read table
+        // reported as a success is the failure mode this whole file is
+        // written against, and `MirrorPuller` already turns a throw into one
+        // named line in the Sync Doctor.
+        let values = try order.map { column -> String in
+            guard let value = last[column]?.stringValue else {
+                throw PagingError.unkeyed(column: column)
+            }
+            return quoted(value)
+        }
+
+        // `(k0 > v0) OR (k0 = v0 AND k1 > v1) OR …` — the lexicographic "after
+        // this row", one term per key column. Four columns is the widest key
+        // in the catalogue (`plan_phase_volume`).
+        let terms = order.indices.map { index -> String in
+            let equal = zip(order, values).prefix(index).map { "\($0).eq.\($1)" }
+            let greater = "\(order[index]).gt.\(values[index])"
+            return equal.isEmpty ? greater : "and(\((equal + [greater]).joined(separator: ",")))"
+        }
+        return terms.joined(separator: ",")
+    }
+
+    /// Always quoted, never bare. A comma is what separates the terms of an
+    /// `or=(…)`, and `item_key`, `plan_id` and `exercise_key` are free text
+    /// that can contain one: unquoted, an `item_key` of `omega,3` is read as
+    /// two filter terms and 400s the whole pull. Quoting every value rather
+    /// than only the ones that need it keeps the rule one line long.
+    private static func quoted(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
+    }
+
+    /// The offset pager keyset replaced. Nothing in the app calls it any more;
+    /// `PaginationTests` still does, and this stays only until that suite goes
+    /// with it.
     static func all<T>(
         pageSize: Int = pageSize, fetch: (Int, Int) async throws -> [T]
     ) async throws -> [T] {
@@ -267,5 +397,21 @@ enum Pagination {
     static func chunks<T>(_ values: [T], size: Int) -> [[T]] {
         guard !values.isEmpty else { return [] }
         return stride(from: 0, to: values.count, by: size).map { Array(values[$0..<min($0 + size, values.count)]) }
+    }
+}
+
+/// A page that cannot say where it ended.
+///
+/// Its own error rather than a `MirrorError` case because it is a CATALOGUE
+/// bug, not a network one: the only way to reach it is an `order` naming a
+/// column the table does not return.
+enum PagingError: Error, CustomStringConvertible {
+    case unkeyed(column: String)
+
+    var description: String {
+        switch self {
+        case .unkeyed(let column):
+            return "Cannot page: the last row carries no string `\(column)` to key on."
+        }
     }
 }

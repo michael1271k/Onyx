@@ -288,10 +288,12 @@ struct TodayFace: View {
     return "not logged yet"
   }
 
+  /// The same "3/5" every other training face prints, with the period named.
+  /// It used to spell the target branch out a second time, which is one place
+  /// too many for a rule about whether a denominator exists.
   private var weekText: String {
-    guard let week = s?.week else { return "—" }
-    if let target = week.sessionTarget, target > 0 { return "\(week.sessions)/\(target) this week" }
-    return "\(week.sessions) this week"
+    guard let count = sessionsText(s) else { return "—" }
+    return "\(count) this week"
   }
 
   private var sessionProgress: Double? {
@@ -990,10 +992,6 @@ struct VolumeFocusFace: View {
   let mono: Bool
 
   private var s: OnyxSnapshot? { entry.snapshot }
-  private var deltaTonnes: Double? {
-    guard let now = s?.week.volumeKg, let then = s?.weekPrev?.volumeKg else { return nil }
-    return (now - then) / 1000
-  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 5) {
@@ -1005,7 +1003,7 @@ struct VolumeFocusFace: View {
       BigValue(value: OnyxSnapshot.tonnes(s?.week.volumeKg), size: 28, color: Color.onyx.textPrimary)
       HStack(spacing: 5) {
         Text("this week").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
-        DeltaChip(delta: deltaTonnes, decimals: 1, suffix: " t", monochrome: mono)
+        DeltaChip(delta: volumeDeltaTonnes(s), decimals: 1, suffix: " t", monochrome: mono)
       }
       Spacer(minLength: 0)
       let strip = HeatStrip(muscles: s?.muscleFocus ?? [], monochrome: mono, height: 22)
@@ -1140,14 +1138,22 @@ struct VolumeLargeFace: View {
 
 /// This week against last, in tonnes. Nil when either week is missing — a first
 /// week compared against nothing is "new", not "+everything".
-private func volumeDeltaTonnes(_ s: OnyxSnapshot?) -> Double? {
+///
+/// Module-wide, not file-private: the Volume faces here and the Performance
+/// week strip were each carrying their own copy, and three tiles disagreeing
+/// about what a missing previous week means is a bug waiting for a first week.
+func volumeDeltaTonnes(_ s: OnyxSnapshot?) -> Double? {
   guard let now = s?.week.volumeKg, let then = s?.weekPrev?.volumeKg else { return nil }
   return (now - then) / 1000
 }
 
 /// "3/5" when the plan states a target, "3" when it does not. A session count
 /// with no denominator is not a fact you can act on at a glance.
-private func sessionsText(_ s: OnyxSnapshot?) -> String? {
+///
+/// Module-wide, not file-private: the Performance week strip printed the same
+/// rule from its own copy. One rule, so a target that appears mid-week appears
+/// on every face at once.
+func sessionsText(_ s: OnyxSnapshot?) -> String? {
   guard let week = s?.week else { return nil }
   if let target = week.sessionTarget, target > 0 { return "\(week.sessions)/\(target)" }
   return "\(week.sessions)"

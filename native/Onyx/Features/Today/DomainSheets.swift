@@ -483,14 +483,9 @@ private struct VitalsSheetBody: View {
                 }
             }
             Section("Activity") {
-                MetricRow(
-                    name: "Steps",
-                    value: snapshot?.steps.count.map { "\($0)" },
-                    unit: snapshot?.steps.goal.map { "of \($0)" } ?? "",
-                    delta: nil, decimals: 0, upIsGood: true,
-                    trend: snapshot?.steps.trend?.map(\.v) ?? [],
-                    color: OnyxDomain.body.accent
-                )
+                // Steps are the hero of their own sheet (`StepsSheetBody`), with
+                // the goal ring and the trailing days; a second, smaller copy
+                // here only made the reader ask which one was the real count.
                 MetricRow(
                     name: "Active energy",
                     value: snapshot?.steps.activeKcal.map { "\(Int($0.rounded()))" },

@@ -54,18 +54,58 @@ final class RoutinesModel {
         self.programLabel = programLabel
     }
 
-    func load() {
-        do {
-            days = try database.routineDays(userId: userId, programId: programId)
-            catalogue = try database.exercises()
-            let index = ExerciseIndex(
-                catalogue.map { RemoteExercise(id: $0.id, name: $0.name, slug: $0.slug) }
-            )
-            unresolved = Array(Set(days.flatMap { $0.payload.resolving(index).unresolved })).sorted()
-            failure = nil
-        } catch {
-            failure = "Could not read your routine. \(error.localizedDescription)"
+    /// Re-read, off the main actor.
+    ///
+    /// The routine rows, the whole exercise catalogue and the index built over
+    /// it are a screen's worth of work that used to run on the main actor
+    /// every time the builder opened and after every edit (W6).
+    func reload() async {
+        // The newest read wins. Three write paths call `load()` and none of
+        // them waits: delete A, delete B, and a read started before B's write
+        // can land after B's read and put A back on screen.
+        reads &+= 1
+        let run = reads
+        let database = database, userId = userId, programId = programId
+        let loaded = await Task.detached(priority: .userInitiated) { () -> Loaded in
+            do {
+                let days = try database.routineDays(userId: userId, programId: programId)
+                let catalogue = try database.exercises()
+                let index = ExerciseIndex(
+                    catalogue.map { RemoteExercise(id: $0.id, name: $0.name, slug: $0.slug) }
+                )
+                return Loaded(
+                    days: days, catalogue: catalogue,
+                    unresolved: Array(Set(days.flatMap { $0.payload.resolving(index).unresolved })).sorted()
+                )
+            } catch {
+                return Loaded(failure: "Could not read your routine. \(error.localizedDescription)")
+            }
+        }.value
+        guard run == reads else { return }
+        if let message = loaded.failure {
+            failure = message
+            return
         }
+        days = loaded.days
+        catalogue = loaded.catalogue
+        unresolved = loaded.unresolved
+        failure = nil
+    }
+
+    /// The write paths' spelling: they finish their transaction and then ask
+    /// for a re-read that they do not wait on.
+    func load() {
+        Task { await reload() }
+    }
+
+    /// Which reload is the current one — see `reload`.
+    private var reads = 0
+
+    private struct Loaded: Sendable {
+        var days: [RoutineDay] = []
+        var catalogue: [Exercise] = []
+        var unresolved: [String] = []
+        var failure: String?
     }
 
     // MARK: - Days

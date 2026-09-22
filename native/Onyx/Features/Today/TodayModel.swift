@@ -49,7 +49,14 @@ final class TodayModel {
     /// Jiggle mode. Stacks stop rotating, taps stop opening sheets.
     var editing = false
     /// Whether the scene is in the foreground — the other reason a stack stops.
-    var isActive = true
+    ///
+    /// Coming back to the foreground is also when the clock is re-read for the
+    /// relevance order (§W6-B.3): a phone left on the Today tab from 11:00 to
+    /// 18:00 crossed a band without a single yield from the layout stream, and
+    /// this is the event that says the reader is looking again.
+    var isActive = true {
+        didSet { if isActive, !oldValue { layout = ranked(stored) } }
+    }
     var sheet: TodaySheet?
 
     /// A preview hands in a feed and skips the builder — no mirror to read.
@@ -63,6 +70,44 @@ final class TodayModel {
         // A seeded layout is a load: the shot harness and the previews hand one
         // in and then arrange it, and there is no stream behind them to yield.
         if let layout { self.layout = layout; hasLoaded = true }
+    }
+
+    /// The clock's order, applied on top — and only for a grid nobody has
+    /// arranged. `Dashboard.relevanceOrdered` is where the rule lives and why;
+    /// this is the one place the app tells it what time it is.
+    ///
+    /// Ranking on the way IN rather than on the way out to the grid, so a drag
+    /// operates on the cards the reader is actually looking at: the drag writes
+    /// a real `updatedAt`, which retires the ranking from that moment on, and
+    /// what gets saved is the arrangement they made from what they saw.
+    /// The layout as the STORE holds it, before any ranking.
+    ///
+    /// Ranking is not idempotent: the cards it does not name keep their
+    /// CURRENT relative order, so ranking an already-ranked grid at a new hour
+    /// gives a different answer from ranking the stored one. A phone left open
+    /// from 11:00 to 18:00 and one relaunched at 18:00 would land on two
+    /// different grids for the same row and the same clock.
+    private var stored = Dashboard.defaultLayout(.phone)
+
+    private func ranked(_ layout: DashboardLayout) -> DashboardLayout {
+        Dashboard.relevanceOrdered(layout, minuteOfDay: Self.minuteOfDay)
+    }
+
+    /// The clock, with a DEBUG door.
+    ///
+    /// `ONYX_CLOCK_MINUTE=420` in the launch environment pins it to 07:00.
+    /// The morning and evening orders are the whole of §W6-B.3 and they are
+    /// proved by two screenshots, which means the shot loop has to be able to
+    /// ask for a band — and `simctl status_bar` moves the CLOCK IN THE BAR
+    /// and not the one `Date()` answers. A launch variable and not a deep
+    /// link, for the reason `ONYX_START_TAB` gives.
+    static var minuteOfDay: Int {
+        #if DEBUG
+        if let raw = ProcessInfo.processInfo.environment["ONYX_CLOCK_MINUTE"], let minute = Int(raw) {
+            return minute
+        }
+        #endif
+        return GymMode.minuteOfDay(Date())
     }
 
     // MARK: - Reading
@@ -79,8 +124,9 @@ final class TodayModel {
         }
         defer { commitObserver = nil; rebuild?.cancel() }
         do {
-            for try await stored in database.dashboardLayoutStream(userId: userId) {
-                layout = stored?.layout ?? Dashboard.defaultLayout(.phone)
+            for try await row in database.dashboardLayoutStream(userId: userId) {
+                stored = row?.layout ?? Dashboard.defaultLayout(.phone)
+                layout = ranked(stored)
                 // A device with no row yields `nil` — which is a LOAD. The
                 // athlete's first drag on a fresh install has to be savable,
                 // and "the stream answered" is the fact the gate needs, not
