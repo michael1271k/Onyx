@@ -47,8 +47,8 @@ packages:
 # $(CURRENT_PROJECT_VERSION) rather than restating them.
 settings:
   base:
-    MARKETING_VERSION: "7.8.1"
-    CURRENT_PROJECT_VERSION: "70801"
+    MARKETING_VERSION: "7.9.0"
+    CURRENT_PROJECT_VERSION: "70900"
 
 targets:
   Onyx:
@@ -115,6 +115,30 @@ targets:
         # and Xcode refuses the profile for the target as a whole — so on-device
         # Health still waits on Gate 0 (buy the Developer Program).
         com.apple.developer.healthkit: true
+        # ── Sign in with Apple — PARKED until Gate 0 ─────────────────────────
+        # `com.apple.developer.applesignin: [Default]` belongs here, and is out
+        # for exactly the reason `associated-domains` below is: a free Personal
+        # Development Team cannot sign it and Xcode refuses the profile for the
+        # target as a whole. W7 writes the Swift side against it; uncommenting
+        # this one key and ticking "Sign In with Apple" on the App ID in the
+        # portal is the entire remaining change.
+        #
+        # It becomes MANDATORY under 4.8 the moment Google sign-in ships — an
+        # app offering a third-party login must offer Sign in with Apple beside
+        # it. Both, or neither; never Google alone.
+        # com.apple.developer.applesignin:
+        #   - Default
+        # ── HealthKit background delivery — PARKED until Gate 0 ──────────────
+        # `enableBackgroundDelivery` needs this key, and the key needs the
+        # HealthKit capability CONFIGURED on an explicit App ID in the portal,
+        # which a personal team cannot do. Until then Health is pulled on
+        # foreground (`HealthSync`) — correct, but not continuous.
+        #
+        # No `UIBackgroundModes` entry accompanies it. HealthKit background
+        # delivery wakes the app through this entitlement alone; adding a
+        # background mode here would be an unused capability and its own
+        # rejection.
+        # com.apple.developer.healthkit.background-delivery: true
         # ── Associated Domains — PARKED ──────────────────────────────────────
         # `com.apple.developer.associated-domains: [webcredentials:
         # <the OnyxLinks host>]` lived here and is temporarily out:

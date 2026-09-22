@@ -327,12 +327,6 @@ final class SettingsModel {
         }
     }
 
-    func setReduceMotion(_ value: Bool) {
-        write(patch: { $0.reduceMotion = value }) { [database, userId] in
-            try database.editUserGoals(userId: userId) { $0.reduceMotion = value }
-        }
-    }
-
     func setTrackRpe(_ value: Bool) {
         write(patch: { $0.trackRpe = value }) { [database, userId] in
             try database.editUserGoals(userId: userId) { $0.trackRpe = value }

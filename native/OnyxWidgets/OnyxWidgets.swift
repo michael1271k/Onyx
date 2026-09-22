@@ -101,6 +101,20 @@ private struct TileFace: View {
             // not, and a conditional keyed on `tileId` would be a second list
             // of which tiles are water tiles.
             .environment(\.onyxWaterButton, OnyxWaterButton { AnyView(AddWaterButton()) })
+            // ── THE CONTAINER BACKGROUND, AT THE ONE WIDGET ROOT ─────────────
+            // WidgetKit draws "Please adopt containerBackground API" over any
+            // Home Screen widget whose content never calls this, and twelve of
+            // the twenty faces `OnyxTile.face` dispatches to never did: the four
+            // that look like they do (`trajectory`, `consistency`, `deficit`,
+            // `fatigue`) carry it on a WRAPPER view that `face` goes around, and
+            // `daily` the same. Four faces have their own and are harmless —
+            // this is the outer container and they are drawing inside it.
+            //
+            // Here and not in each face, because "each face remembers" is the
+            // rule that already failed. This is the only widget root that draws
+            // a tile; the Lock Screen accessory and the Live Activity have their
+            // own roots and their own (deliberately `.clear`) backgrounds.
+            .containerBackground(Color.onyx.base, for: .widget)
     }
 }
 
