@@ -22,17 +22,29 @@ enum WatchRoute: Hashable {
 
 /// What the app opens on.
 ///
-/// ── IT IS THE SET, NOT A DASHBOARD ──────────────────────────────────────────
-/// The first design made a dashboard the root, and that is the phone's
-/// information architecture rotated onto a wrist. Nobody raises a wrist mid-gym
-/// to read "week so far", and every screen that is not the set in front of you
-/// is a tap on the way to the set in front of you. So: a live session opens
-/// straight into `SetView`; no live session opens a card that starts today's
-/// split in one tap.
+/// ── THE SET DURING A WORKOUT, THE DASHBOARD OUTSIDE ONE (W2) ────────────────
+/// This header used to read "IT IS THE SET, NOT A DASHBOARD", and it argued
+/// that "every screen that is not the set in front of you is a tap on the way
+/// to the set in front of you". Half of that is still true and the half that
+/// was wrong cost the app its front door.
 ///
-/// The dashboard is still here — it is one swipe away, in `DashboardView` —
-/// because a glance at readiness before you start is a real thing to want. It
-/// simply does not stand between you and a barbell.
+/// DURING a session it holds completely: a wrist raised between two sets wants
+/// the set, and a live session still opens straight into `SetView`. OUTSIDE
+/// one there is no set in front of you, and what this app actually opened on
+/// was the word "Rest day" in the middle of an empty screen, with everything
+/// the phone knows about you hidden behind a toolbar disc. That is not a lean
+/// root; it is a dead end.
+///
+/// So the dashboard moved up a level and is the idle root (founder decision 2,
+/// and a deliberate reversal of W3's decision rather than a drift away from
+/// it). Its first page is the Start screen, so the one tap that used to be the
+/// whole root is still the first thing under a thumb — and readiness, sleep,
+/// stress, the week and the day's fuel are a Crown turn away instead of a tap
+/// and a push away.
+///
+/// The pushed `.dashboard` route survives for exactly one caller now:
+/// `DeckView`'s toolbar, during a session, where the Start page has nothing to
+/// offer and is left out.
 struct RootView: View {
 
     @Environment(WatchModel.self) private var model
@@ -53,13 +65,15 @@ struct RootView: View {
                 } else if model.sessionId != nil {
                     SetView()
                 } else {
-                    StartView()
+                    DashboardView()
                 }
             }
             .navigationDestination(for: WatchRoute.self) { route in
                 switch route {
                 case .deck: DeckView()
-                case .dashboard: DashboardView()
+                // Pushed only from `DeckView`, mid-session — so without the
+                // Start page, which cannot start anything from in here.
+                case .dashboard: DashboardView(showsStart: false)
                 #if DEBUG
                 case .widgetPreview: LiveWidgetPreview()
                 #endif
@@ -75,12 +89,11 @@ struct RootView: View {
         // the one failure `watch-shot.sh` exists to refuse.
         .onChange(of: model.debugScreen, initial: true) { _, screen in
             if screen == .deck, path.isEmpty { path = [.deck] }
-            // W4's three, which are one screen with a page selection — the
-            // page itself is picked inside `DashboardView`, because the path
-            // can name a destination and not a tab within one.
-            if screen == .dashboard || screen == .train || screen == .fuel, path.isEmpty {
-                path = [.dashboard]
-            }
+            // W4's `dashboard`/`train`/`fuel` used to push `.dashboard` here.
+            // They do not any more: the dashboard IS this root, so a push
+            // would photograph a second copy of it ON TOP of itself, complete
+            // with a back chevron no shipping state has. `DashboardView`
+            // reads the same value and moves its own `TabView`.
             if screen == .widget, path.isEmpty { path = [.widgetPreview] }
         }
         #endif
@@ -167,26 +180,49 @@ struct WatchSessionTimer: View {
     }
 }
 
-/// No session yet.
+/// Page one of the dashboard: today's split, and the one button that starts it.
 ///
-/// One tap starts today's split. The "Change" row exists because a swap is
-/// real — the plan moves days — but it is deliberately the second thing on the
-/// screen and not a picker you have to get through first.
+/// ── IT IS A PAGE NOW, NOT THE ROOT ──────────────────────────────────────────
+/// Everything this screen used to own that was CHROME — the container
+/// background, the navigation title, the toolbar disc that led to the
+/// dashboard — belongs to `DashboardView` now, because a page inside a
+/// `TabView` that set its own title would fight the pager for it. What is left
+/// is what this screen was always about: what today is, and starting it.
+///
+/// ── THE HERO, AND WHY THE SPLIT IS THE BIG THING ────────────────────────────
+/// It was `WatchType.value` (`.title3`) over a caption, which on a 49 mm case
+/// is a line of text floating in the top third of a black rectangle — the
+/// founder's "tiny icon and nothing else". The split is the one thing this page
+/// is about, so it takes `WatchType.figure` and the day's own colour, the same
+/// tint that session wears on the phone, in the deck and in the session timer.
+///
+/// ── AND A REST DAY IS NO LONGER A DEAD END ──────────────────────────────────
+/// "Rest day" on its own was the whole screen, and it answered a question
+/// nobody asks a watch. A rest day is exactly when readiness is worth reading,
+/// so the score becomes the hero and the stat row carries battery and sleep
+/// beneath it. The three pages behind this one carry the rest, on a rest day
+/// like any other.
 struct StartView: View {
 
     @Environment(WatchModel.self) private var model
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: OnyxSpace.s) {
+            VStack(alignment: .leading, spacing: OnyxSpace.xs) {
                 if let day = model.day {
                     Text(day.label)
-                        .font(WatchType.value)
-                        .foregroundStyle(WatchInk.primary)
+                        .font(WatchType.figure)
+                        .foregroundStyle(WatchInk.day(day.key))
                         .lineLimit(2)
-                    Text("\(day.exercises(for: model.phase).count) movements")
-                        .font(WatchType.label)
-                        .foregroundStyle(WatchInk.secondary)
+                        // The longest split this plan has ever named is
+                        // "Delts & Arms"; `minimumScaleFactor` is for the one
+                        // a later block invents, because a truncated split is
+                        // a split you cannot identify.
+                        .minimumScaleFactor(0.8)
+                    HeroStats(
+                        tiles: model.dashboardTiles,
+                        movements: day.exercises(for: model.phase).count
+                    )
                 } else if model.context == nil {
                     // The honest empty state. The watch cannot sign in — by
                     // design, Wave 10 — so the only way it learns who you are
@@ -201,12 +237,35 @@ struct StartView: View {
                         .lineLimit(2)
                 } else {
                     Text("Rest day")
-                        .font(WatchType.value)
-                        .foregroundStyle(WatchInk.primary)
+                        .font(WatchType.name)
+                        .foregroundStyle(OnyxDomain.recover.accent)
+                    // The score is the hero on a day with nothing to lift, so
+                    // the stat row below drops it rather than printing it
+                    // twice.
+                    let score = model.dashboardTiles?.score
+                    // ── THE HERO AND ITS CAPTION ARE ONE READING ────────────
+                    // Drawn as two `Text`s and spoken as one. VoiceOver read
+                    // them separately — "81", then "Readiness" — which is a
+                    // bare number, or a bare "—", ahead of the word that says
+                    // what it scores. Every other figure on this page is a
+                    // labelled `stat()`; the group makes the hero one too.
+                    VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+                        Text(score.map { "\($0)" } ?? "—")
+                            .font(WatchType.hero)
+                            .foregroundStyle(WatchInk.primary)
+                            .monospacedDigit()
+                        Text("Readiness")
+                            .font(WatchType.label)
+                            .foregroundStyle(WatchInk.secondary)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Readiness")
+                    .accessibilityValue(score.map { "\($0)" } ?? "not scored yet")
+                    HeroStats(tiles: model.dashboardTiles, showsScore: false, showsSleep: true)
                 }
-
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, OnyxSpace.xs)
         }
         .safeAreaInset(edge: .bottom) {
             if model.day != nil {
@@ -223,26 +282,89 @@ struct StartView: View {
                 .handGestureShortcut(.primaryAction)
             }
         }
-        .containerBackground(WatchInk.ground, for: .navigation)
-        .navigationTitle("Onyx")
-        // ── THE DASHBOARD IS A TOOLBAR ITEM, NOT A SECOND BUTTON ────────────
-        // It was a filled `NavigationLink` under the copy, and the first 40 mm
-        // screenshot showed exactly why that was wrong: the pinned Start button
-        // sits in the bottom safe-area inset and drew straight over it. Even
-        // scrolled clear it was a second capsule competing with the one action
-        // this screen exists for.
-        //
-        // Same treatment as the deck list on `SetView`: a reference lives in the
-        // toolbar, and the screen keeps one button.
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                // A dark disc with a light glyph — see `SetView`'s deck link
-                // for why `tint` alone made these near-white.
-                NavigationLink(value: WatchRoute.dashboard) { Image(systemName: "chart.bar.fill") }
-                    .tint(WatchInk.fill)
-                    .foregroundStyle(WatchInk.secondary)
+        .dimmedWhenLuminanceReduced()
+    }
+}
+
+/// The three readings that answer "should I train today", in one row.
+///
+/// ── GLYPH AND NUMBER, NO WORDS ──────────────────────────────────────────────
+/// "3 movements · Battery 72% · Readiness 81" is 40 characters, and 40
+/// characters of `caption2` is about 260 pt against the 146 this page has at
+/// 40 mm. A glyph carries the word for a third of the width, and every glyph
+/// here is the one the face one Crown turn away already uses for the same
+/// reading — `bolt.fill` is Battery on the Today page and on the complication,
+/// `dumbbell.fill` is the split on the Train page and on the watch face.
+///
+/// ── WHY THE MOVEMENT COUNT IS A CHIP AND NOT ITS OWN LINE ───────────────────
+/// Measured, not preferred. As a `Text` row it was 21 pt tall with a 4 pt gap
+/// above it, and the 49 mm accessibility tree put the stat row at y=145.5–166.5
+/// against a scroll viewport that ends at y=158 where the Start capsule begins:
+/// the row overlapped the button by 8.5 pt, and at 40 mm it would have been
+/// worse. Folding the count into this row buys back 25 pt and the page fits
+/// both cases with room. A `ScrollView` would have "fixed" it by hiding the
+/// readings below a fold on the screen the app opens on.
+///
+/// ── AND WHY SLEEP IS NOT ON A TRAINING DAY ──────────────────────────────────
+/// Width, measured on both cases. Battery + readiness + SLEEP was 160.5 pt at
+/// 49 mm, against the 146 a 40 mm case has (`WatchCase.content40mm`) — so the
+/// sleep chip was the one that could not stay once the movement count joined
+/// the row. What ships measures **121 pt of 146** on the 40 mm case itself
+/// (movements at x=3.5, readiness ending at x=124.5), with 25 pt spare and no
+/// figure tightened.
+///
+/// On a training day sleep is one Crown turn away on the Today page; on a REST
+/// day the readiness score is the hero, so the score chip goes and sleep takes
+/// its place — which is the reading a rest day is actually read for.
+///
+/// ── THE COLOUR IS ON THE GLYPH, NOT THE NUMBER ──────────────────────────────
+/// `Color.onyx.battery` is a reading, not a decoration: it goes red as the
+/// charge goes. Putting it on the number would make the number harder to read
+/// at the exact moment it matters most, so the glyph carries the colour and the
+/// figure stays full-contrast ink.
+private struct HeroStats: View {
+
+    let tiles: WatchTiles?
+    /// Today's movement count, when there is a deck. Leads the row.
+    var movements: Int?
+    var showsScore = true
+    var showsSleep = false
+
+    var body: some View {
+        HStack(spacing: OnyxSpace.s) {
+            if let movements {
+                stat("dumbbell.fill", "\(movements)", WatchInk.secondary, "Movements")
+            }
+            if let battery = tiles?.battery {
+                stat("bolt.fill", "\(battery)%", Color.onyx.battery(battery), "Battery")
+            }
+            if showsScore, let score = tiles?.score {
+                stat("gauge.medium", "\(score)", OnyxDomain.recover.accent, "Readiness")
+            }
+            if showsSleep, let minutes = tiles?.sleepMin {
+                stat(
+                    "moon.fill", OnyxSnapshot.formatSleep(minutes),
+                    OnyxDomain.recover.accent, "Slept"
+                )
             }
         }
+        .padding(.top, 2)
+    }
+
+    private func stat(_ glyph: String, _ value: String, _ tint: Color, _ label: String) -> some View {
+        HStack(spacing: 2) {
+            Image(systemName: glyph)
+                .font(WatchType.label)
+                .foregroundStyle(tint)
+            Text(value)
+                .font(WatchType.label)
+                .foregroundStyle(WatchInk.primary)
+                .monospacedDigit()
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
     }
 }
 
@@ -282,6 +404,15 @@ struct MirrorView: View {
                 .tint(WatchInk.commit)
                 .foregroundStyle(WatchInk.onCommit)
         }
+        // ── THE BURN-IN CALL THIS SCREEN NEVER MADE (W2) ────────────────────
+        // `SetView` applies `dimmedWhenLuminanceReduced` to `logger(_:model:)`
+        // and to nothing else, so this screen and `FinishView` beside it held
+        // a full-width `WatchInk.commit` capsule at FULL brightness for as
+        // long as a wrist was down — the exact case `WatchInk`'s own header
+        // names ("any large area of accent"), on the two live-session screens
+        // that are held longest. Applied after the inset so it reaches the
+        // button, which is the part that was lit.
+        .dimmedWhenLuminanceReduced()
     }
 }
 
@@ -334,6 +465,8 @@ struct FinishView: View {
             .foregroundStyle(WatchInk.onCommit)
             .disabled(isFinishing)
         }
+        // See `MirrorView` — the same call, for the same lit capsule.
+        .dimmedWhenLuminanceReduced()
     }
 }
 

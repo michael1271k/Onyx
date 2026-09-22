@@ -59,18 +59,44 @@ public enum WatchCase {
     /// is deliberate and it is the conservative direction: a 40 mm bar is no
     /// TALLER than this, so every "it fits" this constant produces is an
     /// answer that also holds on the case nothing here can photograph.
+    ///
+    /// ── AND IT IS 64 ON A ROOT SCREEN TOO (W2) ──────────────────────────────
+    /// W2 moved the dashboard from a pushed screen to the app's idle root and
+    /// expected to buy height back: no back chevron, no toolbar item, so a
+    /// smaller bar. The accessibility tree of the running root says otherwise —
+    /// the `Nav bar` group is `{{0, 0}, {205, 64}}` with nothing in it but the
+    /// clock and a 21.5 pt heading at y=37, which is the same 64 the pushed
+    /// bar measured. There is no `rootBar` constant because there is no second
+    /// number, and a later wave that assumes a root screen is taller should
+    /// read this paragraph instead of spending the round again.
     public static let navBar: Double = 64
+
+    /// The same bar on a 40 mm case — **47.5**, and MEASURED on one.
+    ///
+    /// ── THE FIRST 40 mm MEASUREMENT IN THIS REPOSITORY (W2) ─────────────────
+    /// Every number in this file was taken off the 49 mm pair, because until
+    /// W1 created `Apple Watch SE 3 (40mm)` there was no 40 mm simulator here
+    /// at all — the floor this whole file exists to guard had been asserted for
+    /// six waves and never once looked at. The tree of the running app on that
+    /// case reads `{{0, 0}, {162, 47.5}}`: a 20.5 pt heading at y=25 and the
+    /// clock above it, with no room spent on a back chevron the root does not
+    /// have.
+    ///
+    /// So the 40 mm page is 149.5 pt and not the 133 this file assumed. The
+    /// assumption was conservative in the right direction and it cost a claim:
+    /// the tests said the dashboard's third card hung 20.5 pt below the fold,
+    /// and on the device it does not hang at all.
+    public static let navBar40mm: Double = 47.5
 
     /// 187 — the page a pushed screen actually has on the 49 mm pair.
     public static let content49mmHeight: Double = height49mm - navBar
 
-    /// 133 — the same, at 40 mm, against the measured 49 mm bar.
-    ///
-    /// Conservative by construction: the real 40 mm bar is smaller, so the
-    /// true page is a little taller than this. A layout that fits 133 fits
-    /// the device; one that does not may still fit, and this file will not
-    /// claim it does.
-    public static let content40mmHeight: Double = height40mm - navBar
+    /// 149.5 — the page a 40 mm screen actually has, against the 40 mm bar
+    /// W2 measured. It was 133 until then, taken against the 49 mm bar on the
+    /// stated understanding that "the real 40 mm bar is smaller, so the true
+    /// page is a little taller than this". It is 16.5 pt taller, and the
+    /// estimate's cost is recorded on `navBar40mm`.
+    public static let content40mmHeight: Double = height40mm - navBar40mm
 }
 
 /// The wrist's dashboard pages (W4, founder decision 2).
@@ -106,9 +132,26 @@ public enum WatchDashboard {
     /// over-counting is the only direction a budget may be wrong in.
     public static let rowHeight: Double = 48.5
 
-    /// The Fuel page's "+1 glass" button, which is a fourth element under
-    /// three faces. 54 pt measured, on the same tree.
+    /// The Fuel page's "+1 glass" button. 54 pt measured, on the same tree.
     public static let buttonHeight: Double = 54
+
+    // ── THE SAME TWO, MEASURED ON A 40 mm CASE (W2) ─────────────────────────
+    //
+    // The budget above is the 49 mm reading used as a conservative proxy, and
+    // `rows`/`fits`/`overflow` still work in it — an answer of "fits" from a
+    // proxy that over-counts holds on the device. These two are what the
+    // device actually reports, so the gap between the budget and the hardware
+    // is a number here rather than a hope in a header. `OnyxWatchLayoutTests`
+    // replays the shipped pages against BOTH.
+
+    /// One accessory row at 40 mm — **46**. The Today page's three cards sit
+    /// at y = 51.5, 101.5 and 151.5, so the pitch is 50 and the row is that
+    /// less the 4 pt gap. 2.5 pt shorter than the 49 mm row.
+    public static let rowHeight40mm: Double = 46
+
+    /// The "+1 glass" button at 40 mm — **45**, from `{{9.5, 147.5}, {143, 45}}`
+    /// on the Fuel page. 9 pt shorter than the 49 mm one.
+    public static let buttonHeight40mm: Double = 45
 
     /// How many rows fit a page WITHOUT it having to scroll.
     ///
@@ -134,20 +177,20 @@ public enum WatchDashboard {
     /// THREE faces a page — the design decision, which is not the same number
     /// as `rows()` and deliberately so.
     ///
-    /// ── WHAT THIS COSTS, STATED RATHER THAN HIDDEN ──────────────────────────
-    /// Three faces fit the 49 mm pair with 33 pt to spare, and do NOT fit the
-    /// 40 mm case: 153.5 pt of rows against a 133 pt page, so the third card
-    /// hangs about 20 pt below the fold and the Fuel page's button a further
-    /// 58. The page is a `ScrollView` and the Crown reaches both — which is
-    /// the same gesture that turns the page, on a screen whose whole
-    /// interaction is the Crown.
+    /// ── IT USED TO COST A SCROLL AT 40 mm. IT DOES NOT (W2) ────────────────
+    /// This note said three faces "do NOT fit the 40 mm case: 153.5 pt of rows
+    /// against a 133 pt page, so the third card hangs about 20 pt below the
+    /// fold". That was arithmetic on an ESTIMATED 40 mm bar, and W2 put the
+    /// app on a 40 mm case and read the tree: the bar is 47.5, the page is
+    /// 149.5, the row is 46, and three rows are 146. The third card does not
+    /// hang. Nothing scrolls.
     ///
-    /// It is three and not two because the pages were specified as three
-    /// readings each and the alternative is deleting a reading from every
-    /// page to buy a scroll nobody has to make on the case this app is worn
-    /// on. `OnyxWatchLayoutTests` asserts BOTH halves of that — what fits and
-    /// what hangs — so the cost is a number in the repository and a decision
-    /// a later wave can reverse by changing this one constant.
+    /// The conservative budget below still says otherwise — `used(rows: 3)` is
+    /// 153.5 against 149.5, four points over — and that is left alone on
+    /// purpose. A proxy that over-counts can only ever refuse a layout that
+    /// would have fitted, which is the safe direction; a proxy corrected to
+    /// the exact device would start passing layouts by two points. The tests
+    /// assert both, so the four points are visible rather than smoothed away.
     public static let facesPerPage = 3
 
     /// How far a page of `facesPerPage` faces hangs below a given page, or 0.

@@ -142,7 +142,12 @@ struct OnyxWatchApp: App {
                             // input is a face whose truncation nobody has
                             // reviewed.
                             model.seedDebugSets(3)
-                        case .dashboard, .train, .fuel:
+                        case .restday:
+                            // The same seed with today unscheduled — see
+                            // `seedDebugContext(restDay:)`. It falls through to
+                            // page one, which is where the rest-day hero is.
+                            model.seedDebugContext(restDay: true)
+                        case .start, .dashboard, .train, .fuel:
                             // ── THE CONTEXT, WHICH AUTOSTART USUALLY SEEDS ──
                             // These three are the only screens reached with
                             // `ONYX_WATCH_AUTOSTART` OFF, and the seed above
@@ -157,6 +162,16 @@ struct OnyxWatchApp: App {
                             // failure `seedDebugContext`'s own header records
                             // having shipped once already.
                             model.seedDebugContext()
+                            // ── AND WHY `start` JOINED THEM (W2) ───────────
+                            // The Start screen is page one of the dashboard
+                            // now, so it needs the same context the other
+                            // three pages do. Without it the shot came back
+                            // as the honest "Open Onyx on your iPhone" empty
+                            // state under the filename `start.png` — a real
+                            // screen, correctly named, and not the one the
+                            // wave changed. `nophone` is that state's own
+                            // name in `watch-shot.sh`.
+                            //
                             // ── THE LAST NAME `watch-shot.sh` REFUSED (W4) ──
                             // W1 left `dashboard` unreachable and said so by
                             // name rather than photographing `StartView`
