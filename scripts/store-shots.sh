@@ -28,8 +28,18 @@ for spec in '6.9in:iPhone 17 Pro Max' '6.3in:iPhone 17 Pro'; do
   size="${spec%%:*}"
   device="${spec#*:}"
   echo "── $size · $device ───────────────────────────────"
+  # The device TYPES ship with Xcode; a simulator of them does not exist until
+  # someone creates one (8.0.0 found only `iPhone 15` here). Create it rather
+  # than fail — `simctl create` takes the newest runtime when none is named.
+  xcrun simctl list devices available | grep -qE "^ +$device \(" ||
+    xcrun simctl create "$device" "com.apple.CoreSimulator.SimDeviceType.${device// /-}" >/dev/null
   SHOT_OUT="$ROOT/native/__store__/$size" SHOT_AX=0 \
     "$ROOT/scripts/native-shot.sh" "$SCREENS" "$device"
+  # One phone booted at a time. Two fresh iOS 27 simulators running their
+  # first-boot daemons side by side drove the load average past 300 at 8.0.0,
+  # and nine of twelve shots came back black at the 8 s wait. Shot alone,
+  # after the load fell, all twelve drew.
+  xcrun simctl shutdown "$device" 2>/dev/null || true
 done
 
 echo

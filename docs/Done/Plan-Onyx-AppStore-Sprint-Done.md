@@ -2003,3 +2003,98 @@ founder re-runs the file.**
 `t · t · f · t · f · t · 36 · 0 · 0 · 1` — exactly as expected. Live
 `delete_my_account()` is the hardened body.
 
+---
+
+## W8 — Final integration (8.0.0, solo)
+
+### What shipped
+
+- **Version 8.0.0** (80000) — `package.json`, then `version:sync` and
+  `xcodegen generate`; `version:check` in sync. The build number rises from
+  71600, as App Store Connect requires.
+- **`docs/CHANGELOG.md` → `[8.0.0] — Ready for the App Store`**, the sprint read
+  surface by surface: iPhone app, Apple Watch app, Home Screen widgets, Lock
+  Screen and complications, weekly export, server, App Store submission — and
+  what still needs the founder.
+- **`scripts/store-shots.sh` creates its own simulators.** It shoots on
+  `iPhone 17 Pro Max` (6.9") and `iPhone 17 Pro` (6.3"); this machine had the
+  device TYPES (they ship with Xcode) but no simulator of either. The script now
+  runs `simctl create` for a missing one, newest runtime, instead of failing,
+  and shuts each phone down after its set so two fresh simulators never run
+  their first-boot daemons side by side. Both new simulators are kept, shut
+  down, so the next run starts warm.
+- **`docs/APP_STORE.md`** — the account-deletion row and §8 step 2 now read
+  **Closed / done 2026-09-23** (the founder ran the hardened file after W7's
+  merge); the version row reads `8.0.0` → `80000`.
+- **This file** moved to `docs/Done/Plan-Onyx-AppStore-Sprint-Done.md`.
+
+### What the code falsified about the brief
+
+1. **"Its default devices are not installed" — the device types were.**
+   `xcrun simctl list devicetypes` lists `iPhone 17 Pro` and
+   `iPhone 17 Pro Max`; only the simulators were missing. Creating them is one
+   `simctl create` each, so the script does it rather than being pointed at
+   `iPhone 15`, whose 1179 × 2556 is not a size App Store Connect asks for.
+2. **"Every `wave/*` branch deleted … on `origin`" — none was ever pushed.**
+   `git ls-remote --heads origin` lists only `main`, still at `cbac4221` (the
+   commit W1 measured its baseline on). All seven wave branches were deleted
+   locally at their own close-outs; W8's own `wave/8-final` is the only one
+   this wave had to delete. `origin/main` was 42 commits behind before the push.
+3. **W1's baseline table put two names in the wrong suite.** "a credible
+   previous session still gets its delta" and "a previous session's impossible
+   clock…" are `SessionSummaryHotfixTests`; "the seeded previous session
+   reaches TopLifts.previousBests" is `PreviewCatalogueTests` (suite "Live
+   Stats fixture"). The nine NAMES are right, and they are the gate.
+4. **W1's "11 issues" is one parallel worker's summary line**, as W3 already
+   noted. The full run's `OnyxTests` line reads 203 tests in 28 suites, 21
+   issues — on the same nine names. Compare names, never the issue count.
+
+### Defects found, not fixed
+
+- **The `SeamBenchmarkTests` nutrition case is not a timing flake — it
+  measures noise.** Its "before" is seven reads in one transaction plus
+  `stackCredit` in a second; its "after" is the same reads in one. The
+  difference is one transaction's overhead, ~0 ms against 7–15 ms. It failed in
+  the full `swift:data` run and then **alone, one run in two**. A best-of-five
+  `time` helper was tried and still failed two of six (6.9 vs 11.6 ms), so it
+  was reverted rather than shipped as a fix that is not one. The file's own
+  header says the suite "is not a gate". The fix — drop that one `after <=
+  before`, keep the row check — is spun off as its own task rather than
+  changing a test's meaning inside a close-out.
+- **History titles every past week "Week 0"** — in the store screenshot, and
+  in the app. `HistoryWeeks.capsules` builds `WeekWindow(containing:startDay:)`
+  with no `weekZero` (`HistoryWeeks.swift:165`), and `Week.number` returns 0
+  with no anchor. The anchor became a parameter (`plans.started_on`) in the
+  Epic sprint's W2 and this call site never got it. Two of the nine baseline
+  `OnyxTests` names are this defect. Spun off; **do not upload `history.png`
+  until it is fixed.**
+- **Trends → Steps: the "Goal 10,000" label is drawn over the bars** at both
+  store sizes. Cosmetic, pre-existing, noted for whoever next touches the
+  chart.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| `npm run check` (incl. `swift:ui`, `check:watch`), cold | **PASSED**, exit 0 — `swift:ui` 42/42, watch build succeeded, `version:check` 8.0.0 |
+| `npm run swift:core` | **PASSED** — 736/736, 138 suites (W1: 706) |
+| `npm run swift:data` | **767/768** — the one issue is the nutrition seam case above (W1: 727/727). Alone: pass, fail |
+| Full `Onyx` scheme (iPhone 15, iOS 27) | **No new failures against W1.** `OnyxTests` 203 tests: exactly W1's nine names, no crash. `OnyxDataTests` 768: only the Gate-0 Keychain test (the seam case passed in this run). `OnyxCoreTests` 736/736. `OnyxUITests` 42/42. 1749 tests, the same total W7 ran |
+| App Store screenshots | **12/12 on the third run**, six screens at 6.9" (1320 × 2868) and 6.3" (1206 × 2622), reviewed. Run 1, on the two freshly created phones: four black, five caught mid-load. Run 2: nine of twelve black — six simulators booted, load average above 300. Run 3, every other simulator shut down: all twelve drew real screens. `history.png` carries the Week 0 defect below |
+
+**Not run — the sprint-level end-to-end.** "Install a fresh build, create an
+account, log a session on each device, …, delete the account" cannot run on
+this machine: live `disable_signup` is true, so no account can be created;
+deleting the founder's real account is not a test; widgets show no data before
+the App Group is signed (Gate 0); and phone↔watch sync only works on the 26.5
+pair, where queued transfers never arrive (W4). Every part of it was proved
+piecewise by the wave that built it — W3, W4, W5, W7 above — and is reported
+here as *not run*, not as passed.
+
+### Left open
+
+Everything each wave left open still stands; nothing in W8 closed a product
+item. The founder's list is `docs/APP_STORE.md` §8 and the changelog's
+"Still needs the founder": Gate 0, allowing sign-ups, the Apple and Google
+providers, token revocation on deletion, the recover-accent colour call,
+`HKHealthStore.startWatchApp`, and a phone-added movement on the watch's deck.

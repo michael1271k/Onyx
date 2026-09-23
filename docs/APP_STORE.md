@@ -16,7 +16,7 @@ Live facts carry the date they were read.
 | # | What | Guideline | State |
 |---|---|---|---|
 | 1 | **Gate 0 — the Apple Developer Program.** A free personal team cannot sign the App Group, `applesignin` or `associated-domains`, cannot upload, and cannot run Instruments on a device. | — | **Open.** A purchase, not a commit. |
-| 2 | **Account deletion may be failing live.** The only body git has ever held for `delete_my_account()` (Phase 3 E6) deletes from four tables that were dropped on 2026-09-10; PL/pgSQL fails on the first of them at run time. `docs/sql/w7-delete-my-account.sql` replaces it with a body that reads the table list from the catalog. | 5.1.1(v) | **Founder gate** — paste the file (§8 step 2). |
+| 2 | **Account deletion may be failing live.** The only body git has ever held for `delete_my_account()` (Phase 3 E6) deletes from four tables that were dropped on 2026-09-10; PL/pgSQL fails on the first of them at run time. `docs/sql/w7-delete-my-account.sql` replaces it with a body that reads the table list from the catalog. | 5.1.1(v) | **Closed 2026-09-23.** The founder ran the hardened file; § 4 read `t · t · f · t · f · t · 36 · 0 · 0 · 1`, so the live function is the new body. |
 | 3 | **New accounts cannot be created live.** `GET /auth/v1/settings` (2026-09-23) reads `disable_signup: true`. "Create an account" fails, and so will the FIRST Apple or Google sign-in of anyone who is not already a user — which is every reviewer who does not use the demo account. | 2.1 | **Founder setting** (§8 step 3). |
 | 4 | **Apple and Google are off in the live project.** The same endpoint lists `email` as the only enabled provider. The app's buttons are written and compile; they cannot succeed until both providers are configured. | 4.8 | **Founder setting, after Gate 0** (§8 steps 4–6). |
 | 5 | **Sign in with Apple token revocation on deletion is not built.** Apple asks apps that offer Sign in with Apple to revoke the user's tokens through its REST API when the account is deleted. That needs the team's Sign in with Apple key and a server-side call (an Edge Function) — neither exists before Gate 0. | 5.1.1(v) | **Open — founder decision.** |
@@ -51,7 +51,7 @@ Two standing rules, not defects:
 | Home Screen widgets | `app.onyx.health.michael.native.widgets` (`:283`) |
 | Watch app | `app.onyx.health.michael.native.watchkitapp` (`:384`) |
 | Watch complications | `app.onyx.health.michael.native.watchkitapp.widgets` (`:442`) |
-| Version | `package.json` → `"version"` is the one source; `npm run version:sync` writes `MARKETING_VERSION` (`:50`) and the derived `CURRENT_PROJECT_VERSION` (`:51`, `7.16.0` → `71600`). The submission ships whatever it reads at upload — **8.0.0** when this sprint closes. |
+| Version | `package.json` → `"version"` is the one source; `npm run version:sync` writes `MARKETING_VERSION` (`:50`) and the derived `CURRENT_PROJECT_VERSION` (`:51`, `8.0.0` → `80000`). The submission ships whatever it reads at upload — **8.0.0**, the version the App Store sprint closed on. |
 | Team | `W9UMPV973P` (`:229`, `:285`, `:387`) |
 | Deployment target | iOS 18.0 (`:22`), watchOS 11.0 (`:26`) |
 | Devices | iPhone, portrait only (`:163`); Apple Watch. Dark appearance only (`:162`). |
@@ -292,7 +292,8 @@ launch. The < 1 s cold-launch number needs Instruments on a device — Gate 0.
 ## 8. The founder's checklist, in order
 
 1. **Buy the Apple Developer Program** (Gate 0).
-2. **Run `docs/sql/w7-delete-my-account.sql`** in the Supabase SQL editor. The
+2. ~~**Run `docs/sql/w7-delete-my-account.sql`**~~ — **done 2026-09-23**, § 4
+   read as expected. Kept for the record: run it in the Supabase SQL editor. The
    editor shows only a run's last result, so first select and run § 1a–§ 1d
    and § 2 one at a time (read-only): 36 tables, zero missed references,
    `uuid` everywhere, one DELETE trigger (`nutrition_entries.trg_sync_daily_macros`,
