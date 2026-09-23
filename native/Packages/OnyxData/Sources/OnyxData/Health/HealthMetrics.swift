@@ -67,6 +67,18 @@ public enum HealthKey: String, Sendable, Hashable, CaseIterable {
     case vitaminC
     case vitaminD
     case satFat
+    // App Store W6 — authorised since the web era and never read. Each one
+    // now lands in the micros bundle and has a row in the Nutrients grid;
+    // a read scope with a type no screen shows is a review rejection.
+    case zinc
+    case iodine
+    case vitaminA
+    case vitaminB6
+    case vitaminB12
+    case vitaminE
+    case vitaminK
+    case biotin
+    case cholesterol
 }
 
 /// One quantity type, and what to do with it.
@@ -128,6 +140,15 @@ public enum HealthCatalogue {
         .init("HKQuantityTypeIdentifierDietaryVitaminC", .vitaminC, .sum),
         .init("HKQuantityTypeIdentifierDietaryVitaminD", .vitaminD, .sum),
         .init("HKQuantityTypeIdentifierDietaryFatSaturated", .satFat, .sum),
+        .init("HKQuantityTypeIdentifierDietaryZinc", .zinc, .sum),
+        .init("HKQuantityTypeIdentifierDietaryIodine", .iodine, .sum),
+        .init("HKQuantityTypeIdentifierDietaryVitaminA", .vitaminA, .sum),
+        .init("HKQuantityTypeIdentifierDietaryVitaminB6", .vitaminB6, .sum),
+        .init("HKQuantityTypeIdentifierDietaryVitaminB12", .vitaminB12, .sum),
+        .init("HKQuantityTypeIdentifierDietaryVitaminE", .vitaminE, .sum),
+        .init("HKQuantityTypeIdentifierDietaryVitaminK", .vitaminK, .sum),
+        .init("HKQuantityTypeIdentifierDietaryBiotin", .biotin, .sum),
+        .init("HKQuantityTypeIdentifierDietaryCholesterol", .cholesterol, .sum),
     ]
 
     /// The dietary micros — the only metrics whose SOURCE is worth recording.
@@ -138,6 +159,7 @@ public enum HealthCatalogue {
     /// of the body, where "which app wrote it" is not a useful question.
     public static let microKeys: Set<HealthKey> = [
         .sugar, .sodium, .potassium, .calcium, .iron, .magnesium, .vitaminC, .vitaminD, .satFat,
+        .zinc, .iodine, .vitaminA, .vitaminB6, .vitaminB12, .vitaminE, .vitaminK, .biotin, .cholesterol,
     ]
 
     /// A food type. The prefix IS the classification — every dietary quantity
@@ -150,9 +172,6 @@ public enum HealthCatalogue {
     /// Read a second time, over the night's bed window, for readiness v9.
     public static let hrvIdentifier = "HKQuantityTypeIdentifierHeartRateVariabilitySDNN"
 
-    /// Types authorised but not pulled into the daily row. Asking for them keeps
-    /// the app's entry under Health → Apps complete, and several of them are
-    /// read by other surfaces.
     /// `HKObjectType.workoutType()` has no quantity or category identifier;
     /// this is the one name the reader maps to it.
     public static let workoutTypeIdentifier = "HKWorkoutTypeIdentifier"
@@ -163,26 +182,30 @@ public enum HealthCatalogue {
     /// double-count the day against itself.
     public static let restingEnergyIdentifier = "HKQuantityTypeIdentifierBasalEnergyBurned"
 
+    /// Apple's one-minute heart-rate recovery — the drop from the peak rate to
+    /// the rate a minute after a workout ended. Read per session, at view
+    /// time, by `SessionTelemetry`; never stored.
+    public static let heartRateRecoveryIdentifier = "HKQuantityTypeIdentifierHeartRateRecoveryOneMinute"
+
+    /// Types read, but not into the daily row. Each has ONE reader, named.
+    ///
+    /// ── EVERY TYPE HERE HAS A SCREEN (App Store W6) ─────────────────────────
+    /// This list used to carry sixteen types "to keep the app's entry under
+    /// Health → Apps complete". Nothing read them. `privacy/unnecessary_data`
+    /// reads it the other way round: a read scope wider than what the app
+    /// shows is a rejection. The nine dietary ones moved into `metrics` and
+    /// the Nutrients grid; flights, move time, walking heart rate, height,
+    /// UV exposure and mono/polyunsaturated fat had no figure to feed and
+    /// came out. `HealthScopeTests` pins the list to its readers.
     static let extraReadTypes = [
-        "HKCategoryTypeIdentifierSleepAnalysis",
+        // `sleepSamples` → `daily_logs.sleep_minutes`, the Sleep card, readiness.
+        sleepIdentifier,
+        // `workouts` → the cardio import, the Hevy line, `WorkoutWriter.decide`.
         workoutTypeIdentifier,
-        "HKQuantityTypeIdentifierFlightsClimbed",
+        // The cardio sheet's TOTAL energy (active + resting) for one bout.
         restingEnergyIdentifier,
-        "HKQuantityTypeIdentifierAppleMoveTime",
-        "HKQuantityTypeIdentifierWalkingHeartRateAverage",
-        "HKQuantityTypeIdentifierHeight",
-        "HKQuantityTypeIdentifierUVExposure",
-        "HKQuantityTypeIdentifierDietaryCholesterol",
-        "HKQuantityTypeIdentifierDietaryFatMonounsaturated",
-        "HKQuantityTypeIdentifierDietaryFatPolyunsaturated",
-        "HKQuantityTypeIdentifierDietaryIodine",
-        "HKQuantityTypeIdentifierDietaryVitaminA",
-        "HKQuantityTypeIdentifierDietaryVitaminB6",
-        "HKQuantityTypeIdentifierDietaryVitaminB12",
-        "HKQuantityTypeIdentifierDietaryVitaminE",
-        "HKQuantityTypeIdentifierDietaryVitaminK",
-        "HKQuantityTypeIdentifierDietaryZinc",
-        "HKQuantityTypeIdentifierDietaryBiotin",
+        // The session heart-rate panel's "1-min recovery".
+        heartRateRecoveryIdentifier,
     ]
 
     /// The exact `requestAuthorization` argument: every metric read, deduped,
@@ -207,9 +230,9 @@ public extension HealthCatalogue {
     /// a weight, a resting heart rate, a VO₂max and a blood-oxygen percent all
     /// want. `nil` in is `nil` out — a metric this device does not record is
     /// absent, not zero, and the difference survives all the way to the column.
-    static func round(_ raw: Double?, reduce: HealthReduce, scale: Double = 1) -> Double? {
+    static func round(_ raw: Double?, reduce: HealthReduce, scale: Double = 1, precise: Bool = false) -> Double? {
         guard let raw, raw.isFinite else { return nil }
         let v = raw * scale
-        return reduce == .sum ? (v).rounded() : ((v * 100).rounded() / 100)
+        return reduce == .sum && !precise ? (v).rounded() : ((v * 100).rounded() / 100)
     }
 }

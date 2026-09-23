@@ -65,6 +65,9 @@ struct ScoringWindow {
     let fatigue: [String: [FatigueRow]]
     let doms: [String: [DomsLogRow]]
     let cardio: [CardioLogRow]
+    /// Off-wrist minutes of each day's night window (App Store W6). Local
+    /// only, and absent for every day before W6 — absent is v9, unchanged.
+    let offWrist: [String: Double]
 
     /// Read everything `dates` can need, in the caller's read transaction.
     static func load(_ db: Database, userId: String, dates: [String], todayISO: String) throws -> ScoringWindow {
@@ -150,6 +153,7 @@ struct ScoringWindow {
             doms[row.date, default: []].append(row)
         }
         let cardio = try CardioLogRow.filter(span).order(Column.rowID).fetchAll(db)
+        let offWrist = try AppDatabase.offWristByDate(db, userId: userId, from: start, to: last)
 
         return ScoringWindow(
             userId: userId, todayISO: todayISO,
@@ -158,7 +162,7 @@ struct ScoringWindow {
             metrics: metrics, logs: logs, nights: nights, nutrition: nutrition,
             waterMl: waterMl, waterRows: waterRows, supplementCount: supplementCount,
             sessions: sessions, setsBySession: setsBySession, prCount: prCount,
-            fatigue: fatigue, doms: doms, cardio: cardio
+            fatigue: fatigue, doms: doms, cardio: cardio, offWrist: offWrist
         )
     }
 
@@ -294,6 +298,9 @@ struct ScoringWindow {
         inputs.acwr = signals.load.acwr
         inputs.strainZ = signals.load.strainZ
         inputs.domsSeverity = domsSeverity
+        // A raw fact (App Store W6); `WristCoverage` decides what it means.
+        // No row keeps nil, and nil scores exactly as v9.
+        inputs.offWristMin = offWrist[date]
 
         inputs.contextMode = Context.scoringContext(for: effectiveMode).rawValue
         inputs.isCurrentDay = isToday || date == todayISO

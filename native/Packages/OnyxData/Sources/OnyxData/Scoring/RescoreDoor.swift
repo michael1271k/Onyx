@@ -62,6 +62,9 @@ public enum RescoreDoor {
         ("lever_periods", "starts_on", "day"),
         ("personal_records", "achieved_on", "day"),
         ("sleep_sessions", "start_time", "night"),
+        // A night the watch never saw is scored differently from a night of
+        // zero hours (App Store W6), so the coverage row is a scorer input.
+        ("wrist_coverage", "date", "day"),
         ("workout_sessions", "date", "session"),
     ]
     /// One more, whose date lives on the parent session. Not `workout_sets`:

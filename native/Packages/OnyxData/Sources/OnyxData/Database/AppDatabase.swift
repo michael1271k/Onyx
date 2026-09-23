@@ -1439,6 +1439,27 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // ── v37 ── How long the watch was off the wrist (App Store W6).
+        //
+        // LOCAL ONLY. Derived on this phone from the presence of heart-rate
+        // samples in Health (`WristCoverage`) and meaningless on a device that
+        // cannot read the same Health store — so no outbox kind names it and
+        // no DDL was needed. One row per day: the off-wrist minutes of that
+        // day's night window. `eraseLocalData` sweeps it through
+        // `sqlite_master` like every other table.
+        // ponytail: only today and yesterday are re-derived (`syncRecent`).
+        // An erased store keeps no older rows, so a rescore of an older
+        // off-wrist night falls back to v9's zero-hour reading — and pushes
+        // that `daily_scores` row. Backfill from Health if that ever matters.
+        migrator.registerMigration("v37.wristCoverage") { db in
+            try db.create(table: "wrist_coverage", ifNotExists: true) { t in
+                t.column("user_id", .text).notNull()
+                t.column("date", .text).notNull()
+                t.column("off_wrist_min", .double).notNull()
+                t.primaryKey(["user_id", "date"])
+            }
+        }
+
         return migrator
     }
 }

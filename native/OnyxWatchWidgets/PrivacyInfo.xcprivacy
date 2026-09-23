@@ -12,7 +12,8 @@
 
   No GRDB here (no FileTimestamp, no DiskSpace): the extension opens no
   database. Health and Fitness are the same categories the host app declares;
-  this binary only draws them.
+  this binary only draws them — since W6 (7.15.0) including the off-wrist
+  count under Readiness, which arrives inside `WatchTiles`. No category moved.
 -->
 <plist version="1.0">
 <dict>

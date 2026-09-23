@@ -18,7 +18,8 @@ struct WatchTilesTests {
             restDay: false, stressIndex: 41.5, sorenessCount: 3,
             week: (0..<7).map { WatchTiles.WeekDay(trained: $0 % 2 == 0, fuelHit: $0 != 3, sleepHit: $0 > 1) },
             medianBedtime: "23:12", lastBedtime: "00:16",
-            weekSets: 84, weekVolumeKg: 12_430, proteinG: 118, proteinGoalG: 185
+            weekSets: 84, weekVolumeKg: 12_430, proteinG: 118, proteinGoalG: 185,
+            offWrist: OffWristNote(hours: 6, signals: 3)
         )
     }
 
@@ -47,11 +48,32 @@ struct WatchTilesTests {
             kcal: full.kcal, kcalGoal: full.kcalGoal,
             todayLabel: full.todayLabel, todayLogged: full.todayLogged, restDay: full.restDay,
             stressIndex: full.stressIndex, sorenessCount: full.sorenessCount,
-            week: full.week, medianBedtime: full.medianBedtime, lastBedtime: full.lastBedtime
+            week: full.week, medianBedtime: full.medianBedtime, lastBedtime: full.lastBedtime,
+            offWrist: full.offWrist
         )
         let grew = try JSONEncoder().encode(full).count - (try JSONEncoder().encode(before).count)
         #expect(grew > 0, "the four fields encoded nothing")
         #expect(grew < 80, "W4 added \(grew) B to the wire")
+    }
+
+    /// App Store W6 re-pins the budget for the one field it spent.
+    @Test("W6's off-wrist note costs the wire under 25 bytes, and a pre-W6 payload decodes without it")
+    func w6NoteIsCheapAndOptional() throws {
+        var without = try JSONDecoder().decode(WatchTiles.self, from: try JSONEncoder().encode(full))
+        without = WatchTiles(
+            date: without.date, battery: without.battery, score: without.score,
+            todayLabel: without.todayLabel, todayLogged: without.todayLogged, restDay: without.restDay
+        )
+        var with = without
+        with = WatchTiles(
+            date: with.date, battery: with.battery, score: with.score,
+            todayLabel: with.todayLabel, todayLogged: with.todayLogged, restDay: with.restDay,
+            offWrist: OffWristNote(hours: 12, signals: 3)
+        )
+        let grew = try JSONEncoder().encode(with).count - (try JSONEncoder().encode(without).count)
+        #expect(grew > 0 && grew < 25, "W6 added \(grew) B to the wire")
+        let legacy = #"{"d":"2026-09-18","b":72,"sc":81,"tl":"Rest","td":false,"r":true}"#
+        #expect(try JSONDecoder().decode(WatchTiles.self, from: Data(legacy.utf8)).offWrist == nil)
     }
 
     /// The compatibility half of "optional and last": a payload from a phone

@@ -16,6 +16,8 @@ private final class ScriptedHealth: HealthReading, @unchecked Sendable {
     var series: [HRSample] = []
     var workouts: [WorkoutSample] = []
     var activeKcal: Double?
+    /// Apple's one-minute recovery sample, where it STARTS and what it says.
+    var recovery: (at: Date, bpm: Double)?
     /// Ticks the observer stream yields; each one lets the actor re-read.
     var changes = 0
     /// What the store holds AFTER the first tick — the watch's samples
@@ -28,7 +30,11 @@ private final class ScriptedHealth: HealthReading, @unchecked Sendable {
 
     func requestAuthorization(read: [String]) async throws -> Bool { true }
     func quantity(_ identifier: String, reduce: HealthReduce, start: Date, end: Date) async throws -> Double? {
-        identifier == "HKQuantityTypeIdentifierActiveEnergyBurned" ? activeKcal : nil
+        if identifier == HealthCatalogue.heartRateRecoveryIdentifier {
+            // `.strictStartDate`, as the real statistics query.
+            return recovery.flatMap { $0.at >= start && $0.at < end ? $0.bpm : nil }
+        }
+        return identifier == "HKQuantityTypeIdentifierActiveEnergyBurned" ? activeKcal : nil
     }
     func sleepSamples(start: Date, end: Date) async throws -> [SleepSample] { [] }
     func workouts(start: Date, end: Date) async throws -> [WorkoutSample] {
@@ -93,6 +99,43 @@ struct SessionTelemetryTests {
     /// One sample a minute, rising through the session.
     private var series: [HRSample] {
         (0..<30).map { HRSample(at: start.addingTimeInterval(Double($0) * 60), bpm: 100 + $0) }
+    }
+
+    // MARK: App Store W6 — Apple's one-minute recovery
+
+    @Test("the recovery Apple wrote a minute after the finish is read, and read again on a cached open")
+    func recoveryAfterFinish() async throws {
+        let db = try store()
+        let session = try seed(db)
+        let end = try #require(session.endedAt)
+        let health = ScriptedHealth(series: series)
+        health.recovery = (end.addingTimeInterval(60), 27.6)
+        let telemetry = SessionTelemetry(database: db, reader: health, ownBundleId: Self.own)
+
+        #expect(await telemetry.recoveryBpm(sessionId: "s1") == 28)
+        // The series caches; the recovery never does — Apple may write it
+        // after the first open — and the cached series does not wait for it.
+        _ = await telemetry.reading(sessionId: "s1")
+        #expect(try #require(await telemetry.reading(sessionId: "s1")).cached)
+        #expect(await telemetry.recoveryBpm(sessionId: "s1") == 28)
+    }
+
+    @Test("a recovery outside the session's ten minutes is another workout's, and a live session has none")
+    func recoveryWindow() async throws {
+        let db = try store()
+        let session = try seed(db)
+        let end = try #require(session.endedAt)
+        let health = ScriptedHealth(series: series)
+        // A run finished twenty minutes later wrote its own.
+        health.recovery = (end.addingTimeInterval(20 * 60), 31)
+        let telemetry = SessionTelemetry(database: db, reader: health, ownBundleId: Self.own)
+        #expect(await telemetry.recoveryBpm(sessionId: "s1") == nil)
+
+        try await db.writer.write { conn in
+            try WorkoutSession(id: "live", userId: user, dayKey: "upper_a", date: "2026-09-04", startedAt: start).insert(conn)
+        }
+        health.recovery = (Date().addingTimeInterval(30), 31)
+        #expect(await telemetry.recoveryBpm(sessionId: "live") == nil)
     }
 
     @Test("the first read comes from Health, is segmented by the log, and lands in the cache")

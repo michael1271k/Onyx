@@ -11,6 +11,10 @@
   FileTimestamp C617.1  GRDB stats the shared `onyx.sqlite` (and its -wal) when
                         it opens the file read-only.
   DiskSpace     E174.1  SQLite checks free space before it reads.
+
+  Health and Fitness match the phone's. W6 (7.15.0): the Recovery tile now
+  draws "your watch was off your wrist" — derived on the phone, read here from
+  the same local file, and never sent anywhere. No category moved.
 -->
 <plist version="1.0">
 <dict>

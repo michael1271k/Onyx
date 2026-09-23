@@ -160,6 +160,8 @@ public struct AccessoryFace: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(r.title).font(AccessoryType.title).lineLimit(1)
                 Text(r.sub).font(AccessoryType.sub).foregroundStyle(.secondary).lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityLabel(r.spokenSub ?? r.sub)
             }
             Spacer(minLength: 0)
         }
@@ -244,6 +246,9 @@ struct AccessoryReading {
     let sub: String
     let inline: String
     let accent: Color
+    /// What VoiceOver says for `sub` when the words on the face are a short
+    /// form — W6's "· 3 of 5" is read as the whole sentence. Nil: `sub` itself.
+    var spokenSub: String? = nil
 
     init(id: WidgetId, tiles t: WatchTiles?) {
         let dash = "—"
@@ -263,7 +268,13 @@ struct AccessoryReading {
             // in two rows, differing in CASE, neither saying what it scores.
             // The row below them ("Stress 42 / Baseline") is the pattern: a
             // caption that says what the hero means.
-            sub = t?.score.map { "Readiness \($0)" } ?? "No score yet"
+            // W6: when the watch was off the wrist and that cost readiness a
+            // signal, the caption says how many it had — "Readiness 81 · 3 of
+            // 5" — rather than presenting the number as if nothing were missing.
+            sub = t?.score.map { score in
+                "Readiness \(score)" + (t?.offWrist.map { " · \($0.signalsText)" } ?? "")
+            } ?? "No score yet"
+            spokenSub = t?.score.flatMap { score in t?.offWrist.map { "Readiness \(score). \($0.sentence)" } }
             inline = "Battery \(b.map { "\($0)%" } ?? dash)"
             accent = Color.onyx.battery(b)
 

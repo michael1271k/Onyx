@@ -254,13 +254,19 @@ struct StartView: View {
                             .font(WatchType.hero)
                             .foregroundStyle(WatchInk.primary)
                             .monospacedDigit()
-                        Text("Readiness")
+                        // W6: a verdict the watch was off the wrist for says
+                        // how many of its five signals it had.
+                        let offWrist = model.dashboardTiles?.offWrist
+                        Text(offWrist.map { "Readiness · \($0.signalsText)" } ?? "Readiness")
                             .font(WatchType.label)
                             .foregroundStyle(WatchInk.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Readiness")
-                    .accessibilityValue(score.map { "\($0)" } ?? "not scored yet")
+                    .accessibilityValue((score.map { "\($0)" } ?? "not scored yet")
+                                        + (model.dashboardTiles?.offWrist.map { ". \($0.sentence)" } ?? ""))
                     HeroStats(tiles: model.dashboardTiles, showsScore: false, showsSleep: true)
                 }
             }

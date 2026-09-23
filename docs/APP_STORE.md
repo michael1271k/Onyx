@@ -3,7 +3,7 @@
 Everything App Store Connect asks for, in the order it asks, and what still
 stands between the binary and a first-pass approval.
 
-**Rewritten end to end at App Store sprint W7 (7.15.0, 2026-09-23)** against the
+**Rewritten end to end at App Store sprint W7 (7.16.0, 2026-09-23)** against the
 binary and the live project, not against the previous edition of this file.
 Line numbers are `native/project.yml` at that commit — the XcodeGen spec is the
 source of truth, `native/Onyx.xcodeproj` is generated and never hand-edited.
@@ -47,12 +47,12 @@ Two standing rules, not defects:
 
 | Field | Value |
 |---|---|
-| iPhone app | `app.onyx.health.michael.native` (`:222`) |
-| Home Screen widgets | `app.onyx.health.michael.native.widgets` (`:285`) |
-| Watch app | `app.onyx.health.michael.native.watchkitapp` (`:386`) |
-| Watch complications | `app.onyx.health.michael.native.watchkitapp.widgets` (`:444`) |
-| Version | `package.json` → `"version"` is the one source; `npm run version:sync` writes `MARKETING_VERSION` (`:50`) and the derived `CURRENT_PROJECT_VERSION` (`:51`, `7.15.0` → `71500`). The submission ships whatever it reads at upload — **8.0.0** when this sprint closes. |
-| Team | `W9UMPV973P` (`:231`, `:287`, `:389`) |
+| iPhone app | `app.onyx.health.michael.native` (`:220`) |
+| Home Screen widgets | `app.onyx.health.michael.native.widgets` (`:283`) |
+| Watch app | `app.onyx.health.michael.native.watchkitapp` (`:384`) |
+| Watch complications | `app.onyx.health.michael.native.watchkitapp.widgets` (`:442`) |
+| Version | `package.json` → `"version"` is the one source; `npm run version:sync` writes `MARKETING_VERSION` (`:50`) and the derived `CURRENT_PROJECT_VERSION` (`:51`, `7.16.0` → `71600`). The submission ships whatever it reads at upload — **8.0.0** when this sprint closes. |
+| Team | `W9UMPV973P` (`:229`, `:285`, `:387`) |
 | Deployment target | iOS 18.0 (`:22`), watchOS 11.0 (`:26`) |
 | Devices | iPhone, portrait only (`:163`); Apple Watch. Dark appearance only (`:162`). |
 | Primary category | Health & Fitness |
@@ -169,9 +169,22 @@ so the app's does not cover its extensions: `Onyx/Support/`,
 required-reason APIs: `UserDefaults` `CA92.1`, `FileTimestamp` `C617.1`,
 `DiskSpace` `E174.1`.
 
-**W6 owns the Health half of this section** (the HealthKit audit and the types
-it adds). If W6 lands after this edition, its read-scope changes go into the
-Health row above and all four manifests together.
+**The HealthKit scope behind "Health" and "Fitness"** (re-audited in 7.15.0,
+App Store W6 — the four manifests' comments say the same):
+
+| | Phone | Watch |
+|---|---|---|
+| **Reads** | 45 types — `HealthCatalogue.readTypes`: 41 daily metrics (activity, heart, body, sleep-window HRV, 24 dietary incl. 18 micronutrients), sleep analysis, workouts, resting energy (per cardio bout), 1-minute heart-rate recovery (per session). `HealthScopeTests` pins every one to the screen that draws it | workouts, heart rate, active energy |
+| **Writes** | the workout type and active energy (`WorkoutWriter`, a session no watch recorded) | the workout type; the live builder attaches heart rate and energy |
+| **Leaves the device** | the daily log, sleep, body composition, nutrition and its micros, imported cardio — all **Health** or **Fitness** | the training log, via the phone |
+| **Never leaves the device** | off-wrist minutes (`wrist_coverage`), 1-minute recovery, the session heart-rate series | — |
+
+No Health category changed in 7.15.0. Sixteen types had been requested and
+never read since the web era: nine dietary micros are now read and drawn, the
+other seven left the request. The two new derived readings — off-wrist minutes
+and 1-minute recovery — stay on the device, so they are not "collected".
+Background delivery is **not** requested — the entitlement is a commented
+Gate-0 block in `project.yml`, and Health is read on foreground only.
 
 ---
 
@@ -193,9 +206,10 @@ Health row above and all four manifests together.
 > It carries several months of training, nutrition, sleep and body data, so
 > every tab, chart and widget has content on first launch.
 >
-> Apple Health: the app asks for read access on first use and works fully
-> without it — the demo account's data is on the server, so you can decline the
-> prompt and still review every screen. Health data is used only to compute the
+> Apple Health: the app asks to read Health data, and to write the strength
+> workouts logged on the phone, on first use — and works fully without it: the
+> demo account's data is on the server, so you can decline the prompt and still
+> review every screen. Health data is used only to compute the
 > figures shown in the app; it is never sold, shared or used for advertising.
 >
 > Apple Watch: install Onyx from the Watch app. Starting a session on either
@@ -242,11 +256,11 @@ The output is gitignored.
 | Rule | Verdict |
 |---|---|
 | `design/minimum_functionality` | **Pass.** Native SwiftUI on iPhone and Apple Watch, live logging on both, widgets, an interactive Live Activity. |
-| `design/sign_in_with_apple` (4.8) | **In scope, written, NOT verified on a device.** Google sign-in makes Sign in with Apple mandatory, and both ship together (`SignInView`): Apple first, the same height as Google, both scaling together with Dynamic Type, beside the email form that stays. Apple → `ASAuthorizationAppleIDCredential.identityToken` + a SHA-256 nonce → `supabase.auth.signInWithIdToken`. Google → Supabase's OAuth page in an `ASWebAuthenticationSession` (PKCE), returning to `onyx://auth-callback` (the `onyx` scheme at `:211`). **The `applesignin` entitlement is PARKED** (`:118–130`): until it is uncommented at Gate 0 the Apple button fails with AuthorizationError 1000. **Never upload a build with the button and without the entitlement** — a sign-in button that always fails is a 2.1 rejection. |
-| `entitlements/unused_entitlements` | **Pass.** App: App Group (`:104`), HealthKit (`:117`). Widgets: App Group. Watch: HealthKit (`:344`), App Group (`:353`). Complications: App Group. Parked, all as comments: `applesignin` (`:129`), `healthkit.background-delivery` (`:141`), `associated-domains` (`:142–150`). |
-| Background modes | **Pass.** iPhone: none. Watch: `WKBackgroundModes: [workout-processing]` (`:369`) — used by the `HKWorkoutSession` that keeps a live session frontmost (W4). |
+| `design/sign_in_with_apple` (4.8) | **In scope, written, NOT verified on a device.** Google sign-in makes Sign in with Apple mandatory, and both ship together (`SignInView`): Apple first, the same height as Google, both scaling together with Dynamic Type, beside the email form that stays. Apple → `ASAuthorizationAppleIDCredential.identityToken` + a SHA-256 nonce → `supabase.auth.signInWithIdToken`. Google → Supabase's OAuth page in an `ASWebAuthenticationSession` (PKCE), returning to `onyx://auth-callback` (the `onyx` scheme at `:212`). **The `applesignin` entitlement is PARKED** (`:118–130`): until it is uncommented at Gate 0 the Apple button fails with AuthorizationError 1000. **Never upload a build with the button and without the entitlement** — a sign-in button that always fails is a 2.1 rejection. |
+| `entitlements/unused_entitlements` | **Pass.** App: App Group (`:104`), HealthKit (`:117`). Widgets: App Group. Watch: HealthKit (`:342`), App Group (`:351`). Complications: App Group. Parked, all as comments: `applesignin` (`:129`), `healthkit.background-delivery` (`:141`), `associated-domains` (`:142–150`). |
+| Background modes | **Pass.** iPhone: none. Watch: `WKBackgroundModes: [workout-processing]` (`:367`) — used by the `HKWorkoutSession` that keeps a live session frontmost (W4). |
 | `privacy/privacy_manifest` | **Pass.** Four manifests (§3), `NSPrivacyCollectedDataTypeName` and `…UserID` added at W7. |
-| `privacy/unnecessary_data` | **Pass** at W7's scope — the W7 change is Name, and it is declared. W6 audits the HealthKit read scope. |
+| `privacy/unnecessary_data` | **Pass — since 7.15.0, and not before.** Until App Store W6 the read scope carried sixteen web-era types no code read, so the old "Pass" was false. The scope is now exactly `HealthCatalogue.readTypes`, and `HealthScopeTests` (in `npm run swift:data`, which `npm run check` does not run) fails if a type is added without naming the screen that draws it. W7's additions — Name and User ID — are declared (§3). No contacts, no location, no camera, no photos, no ATT. |
 | **5.1.1(v) account deletion** | **Pass in the binary; founder gate on the server.** It was recorded here as N/A until this wave; that stopped being true when E6 opened sign-up. The row is in the app (Settings → Delete account, two taps, the second one naming "Delete everything"; the RPC, then sign-out, which erases the device). The function is now in the repo — `docs/sql/w7-delete-my-account.sql`, proved on a local PostgreSQL 17 cluster shaped like live (36 `user_id` tables cleared plus `auth.users`, the other user untouched, `anon` and a null `auth.uid()` refused, a held row rolls the whole call back). **Until the founder pastes it, the live body is unknown and possibly the broken E6 one** (§0 item 2). Sign in with Apple token revocation: §0 item 5. |
 | 4.8 login services | **Pass as written.** Apple is offered wherever Google is, and asks for email only (with Apple's private relay available). |
 | `metadata/accurate_metadata` | **Pass.** §2 describes what ships, Watch app included. |

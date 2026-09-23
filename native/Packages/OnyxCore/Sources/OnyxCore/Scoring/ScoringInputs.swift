@@ -115,6 +115,13 @@ public struct ScoringInputs: Codable, Sendable, Equatable {
     /// nil under five nights of history.
     public var sleepBedtimeDeltaMin: Double?
 
+    // MARK: Wrist coverage (App Store W6) — optional-and-last
+    /// Minutes of the night window the watch was off the wrist — a raw fact,
+    /// derived on the phone from gaps in the heart-rate series. Every decision
+    /// made from it is `WristCoverage`'s. Nil (every golden vector, every day
+    /// before W6, a phone with no watch) is the v9 arithmetic, unchanged.
+    public var offWristMin: Double?
+
     public init(
         sleepHours: Double = 0,
         deepMinutes: Double = 0,
@@ -168,7 +175,8 @@ public struct ScoringInputs: Codable, Sendable, Equatable {
         sleepLatencyMin: Double? = nil,
         sleepAwakeMin: Double? = nil,
         sleepAwakenings: Double? = nil,
-        sleepBedtimeDeltaMin: Double? = nil
+        sleepBedtimeDeltaMin: Double? = nil,
+        offWristMin: Double? = nil
     ) {
         self.sleepHours = sleepHours
         self.deepMinutes = deepMinutes
@@ -223,6 +231,7 @@ public struct ScoringInputs: Codable, Sendable, Equatable {
         self.sleepAwakeMin = sleepAwakeMin
         self.sleepAwakenings = sleepAwakenings
         self.sleepBedtimeDeltaMin = sleepBedtimeDeltaMin
+        self.offWristMin = offWristMin
     }
 }
 

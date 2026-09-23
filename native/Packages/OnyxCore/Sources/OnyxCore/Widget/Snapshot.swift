@@ -561,11 +561,16 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
     public let label: String
     public let color: String
     public let reason: String
-    public init(level: String, label: String, color: String, reason: String) {
+    /// Set only when the watch was off the wrist AND a wrist signal went
+    /// missing with it (App Store W6). Optional, so a payload an older build
+    /// parked in the App Group still decodes.
+    public let offWrist: OffWristNote?
+    public init(level: String, label: String, color: String, reason: String, offWrist: OffWristNote? = nil) {
       self.level = level
       self.label = label
       self.color = color
       self.reason = reason
+      self.offWrist = offWrist
     }
   }
 

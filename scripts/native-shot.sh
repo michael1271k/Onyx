@@ -177,6 +177,8 @@ if [ "$SCREEN" = "widgets" ] || [ "$SCREEN" = "all" ]; then
   # expanded and compact faces plus the Smart Stack card. One page was taller
   # than the display and photographed its own middle.
   SCREENS+=("widgets-activity" "widgets-island")
+  # W6: every readiness face over a night window with a six-hour hole in it.
+  SCREENS+=("widgets-offwrist")
 fi
 
 for s in "${SCREENS[@]}"; do

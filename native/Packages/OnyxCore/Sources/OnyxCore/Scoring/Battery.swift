@@ -154,6 +154,17 @@ public enum Battery {
         let hrvQ = zQuality(inputs.hrvZ)
         // A HIGH resting HR is the bad direction, so the sign flips.
         let rhrQ = zQuality(inputs.rhrZ.map { -$0 })
+        // ── A NIGHT THE WATCH NEVER SAW IS NOT A NIGHT OF ZERO HOURS (W6) ───
+        // With no record, `ratio` and `stagesQ` above are 0 — which is the
+        // right reading of a night you did not sleep and the wrong one of a
+        // night the watch spent on its charger. When coverage says the latter,
+        // the two terms drop and HRV and resting HR carry the charge between
+        // them, the way `Score` drops every other nil. `ratio` and `stagesQ`
+        // still report what was measured (nothing); only `quality` moves.
+        if WristCoverage.nightUnmeasured(inputs) {
+            let quality = clamp((0.25 * hrvQ + 0.15 * rhrQ) / 0.40, 0, 1)
+            return SleepQualityParts(ratio: ratio, stagesQ: stagesQ, hrvQ: hrvQ, rhrQ: rhrQ, quality: quality)
+        }
         let quality = clamp(0.45 * ratio + 0.15 * stagesQ + 0.25 * hrvQ + 0.15 * rhrQ, 0, 1)
         return SleepQualityParts(ratio: ratio, stagesQ: stagesQ, hrvQ: hrvQ, rhrQ: rhrQ, quality: quality)
     }

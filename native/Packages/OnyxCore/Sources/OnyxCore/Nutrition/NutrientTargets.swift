@@ -101,5 +101,24 @@ public enum NutrientTargets {
         t("caffeine", "Caffeine", 400, "mg", .ceiling, "Other", stack: true),
         t("theanine", "L-Theanine", 200, "mg", .floor, "Other", stack: true),
         t("glycine", "Glycine", 3000, "mg", .floor, "Other", stack: true),
+        /* ── NINE HEALTH TYPES THAT WERE AUTHORISED AND NEVER READ (W6) ──────
+           The read scope asked for them since the web era and no screen drew
+           them, which `privacy/unnecessary_data` calls a rejection. They are
+           read now, and this table is what makes them visible: the grid draws
+           exactly these keys and nothing else.
+
+           Floors are the adult DRI (NIH ODS, men 19–50 — the same basis as
+           potassium 3,400 and magnesium 400 above); cholesterol is the label
+           Daily Value, as a ceiling. Decided in W6, not measured — edit here.
+           Appended rather than interleaved, so the export's nutrient line
+           grows at its end and every existing position stays put. */
+        t("zinc", "Zinc", 11, "mg", .floor, "Minerals"),
+        t("iodine", "Iodine", 150, "mcg", .floor, "Minerals"),
+        t("vitaminA", "Vitamin A", 900, "mcg", .floor, "Vitamins"),
+        t("vitaminB6", "Vitamin B6", 1.3, "mg", .floor, "Vitamins"),
+        t("vitaminE", "Vitamin E", 15, "mg", .floor, "Vitamins"),
+        t("vitaminK", "Vitamin K", 120, "mcg", .floor, "Vitamins"),
+        t("biotin", "Biotin", 30, "mcg", .floor, "Vitamins"),
+        t("cholesterol", "Cholesterol", 300, "mg", .ceiling, "Macros"),
     ]
 }

@@ -44,6 +44,52 @@ _Nothing yet._
 
 ---
 
+## [7.15.0] — 2026-09-23 · When the watch was off your wrist, it says so
+
+Wave 6 of the App Store sprint (Lane A). The brief asked for 7.14.0; W4
+already shipped 7.14.0, so this is the next free minor, as the plan's table
+says.
+
+### Added
+- **Readiness says when the watch was off your wrist** (phone Recovery tile at
+  all three sizes, Home Screen widget, Lock Screen, the watch's Today card and
+  rest-day hero, the watch complication). When a night on the charger cost
+  readiness a signal, the Large tile reads *"Your watch was off your wrist for
+  6 h — readiness is from 3 signals, not 5."*; the smaller faces carry the
+  short form ("off wrist 6 h · 3 of 5", "Readiness 81 · 3/5", a watch-slash
+  mark). Nothing is said when the watch was worn, or when a signal is missing
+  for another reason.
+- **Nine more nutrients in Nutrients** (phone): zinc, iodine, vitamins A, B6,
+  E and K, biotin and cholesterol get a row with a target, and vitamin B12 now
+  counts what your food app logged as well as what the stack delivers. Read
+  from Apple Health, as the other micronutrients are.
+- **Heart-rate recovery after a session** (phone, session heart-rate panel):
+  Apple's one-minute recovery — how far your heart rate fell in the minute
+  after you stopped — appears beside the peak, when the watch recorded one.
+
+### Changed
+- **A night the watch never saw no longer counts as a night of zero sleep.**
+  The battery's morning charge used to read a missing night as zero hours;
+  when the watch was off your wrist for it, the charge now comes from your HRV
+  and resting heart rate alone. A night you slept with the watch on is scored
+  exactly as before.
+- **Apple Health asks for fewer things.** Seven types the app requested and
+  never used (flights climbed, move time, walking heart rate, height, UV
+  exposure, mono- and polyunsaturated fat) are no longer requested. Every
+  type still requested is shown somewhere in the app.
+- **The weekly export names the new nutrients** it could not find in your food
+  data ("Zinc not reported by the food source on 6 of 6 days…"), the way it
+  already did for calcium and iron.
+
+### Fixed
+- **The Health write prompt over-claimed.** The phone's text said it saves
+  your workouts' heart rate to Health; the phone saves the workout and its
+  energy, and only the watch saves heart rate. The words now match.
+- **The App Store preflight's "every Health type feeds a figure" was false**
+  until this release; it is now true and a test keeps it true.
+
+---
+
 ## [7.14.0] — 2026-09-23 · Start on one, the other follows
 
 Wave 4 of the App Store sprint (Lane A). Planned as 7.12.0; W5 landed first as

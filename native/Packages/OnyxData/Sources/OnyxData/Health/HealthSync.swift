@@ -1,4 +1,5 @@
 import Foundation
+import OnyxCore
 
 /// Reads a day out of HealthKit and writes it into the store.
 ///
@@ -114,7 +115,11 @@ public actor HealthSync {
                     raw = total
                 }
             }
-            if let value = HealthCatalogue.round(raw, reduce: metric.reduce, scale: metric.scale) {
+            if let value = HealthCatalogue.round(
+                raw, reduce: metric.reduce, scale: metric.scale,
+                // A micro keeps two decimals (W6): B6 at 1.4 mg rounded to a
+                // whole 1 read "not met" against a 1.3 mg floor.
+                precise: HealthCatalogue.microKeys.contains(metric.key)) {
                 payload[metric.key] = value
                 /* ── AND, FOR A DIETARY MICRO, WHO WROTE IT ──────────────────
                    Only the micros, because only they have the problem: the
@@ -124,7 +129,7 @@ public actor HealthSync {
                    apart afterwards. Steps and heart rate have no such question.
 
                    Same statistics query shape, one extra round trip per micro
-                   per day — nine of them — and it is skipped entirely on a
+                   per day — eighteen of them since W6 — and it is skipped entirely on a
                    reader that does not implement it (the default returns
                    empty). A failure here costs the attribution and never the
                    reading. */
@@ -172,12 +177,32 @@ public actor HealthSync {
             payload.hrvOvernight = true
         }
 
+        // ── WRIST COVERAGE (App Store W6) ───────────────────────────────────
+        // The watch writes nothing while it is off the wrist, so a missing
+        // night and a night of no sleep look the same to every reader above.
+        // The heart-rate series tells them apart: the longest silence in the
+        // local night (`overnight`), open-ended while it is still going on.
+        // Nil — no reading at all, a phone with no watch — writes nothing.
+        var offWrist: Double?
+        if let night = Self.overnight(dateISO, calendar: calendar) {
+            let end = min(night.to, now)
+            if end > night.from, let readings = try? await reader.heartRateSeries(start: night.from, end: end) {
+                offWrist = WristCoverage.offWristMinutes(
+                    readings: readings.map(\.at), from: night.from, to: end, openEnded: end < night.to)
+            }
+        }
+
         // Nothing in HealthKit's continuations is cancellation-aware, so the
-        // 32-metric loop above runs to completion even after `signOut` cancels
+        // 41-metric loop above runs to completion even after `signOut` cancels
         // this task. Checking HERE is what stops the write landing — in the
         // local store and then the outbox — under the id of the user who just
         // signed out.
         try Task.checkCancellation()
+        // Before the ingest, so the rescore the ingest asks for already reads
+        // it. A failure costs the disclosure, never the day.
+        if let offWrist {
+            try? database.writeWristCoverage(userId: userId, date: dateISO, offWristMin: offWrist)
+        }
         var report = try database.ingest(payload, userId: userId, now: now)
         report.declined.append(contentsOf: duplicates)
         return report
@@ -216,6 +241,17 @@ public actor HealthSync {
         return try database.editSleepWindow(
             userId: userId, date: dateISO, start: start, end: end, night: night, hrvMs: hrv, onset: onset, now: now
         )
+    }
+
+    /// The night off-wrist time is measured over: 21:00 the evening before to
+    /// 09:00 on `dateISO`, LOCAL. Not `NightWindow.range` — that is noon to
+    /// noon in UTC, which for anyone west of Greenwich is mostly the previous
+    /// waking day, and a watch charged at lunch is not a night off the wrist.
+    // ponytail: fixed hours. The honest upgrade is the athlete's usual bed
+    // window (`bedtimeOffsets`), for a shift worker or a late sleeper.
+    static func overnight(_ dateISO: String, calendar: Calendar) -> (from: Date, to: Date)? {
+        guard let midnight = localMidnight(dateISO, calendar: calendar) else { return nil }
+        return (midnight.addingTimeInterval(-3 * 3600), midnight.addingTimeInterval(9 * 3600))
     }
 
     /// Local midnight for a `yyyy-MM-dd`, in the device's own calendar — which
