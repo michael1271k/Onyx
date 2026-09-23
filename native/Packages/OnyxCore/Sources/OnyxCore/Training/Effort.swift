@@ -147,3 +147,24 @@ public enum Effort {
         return sorted.count % 2 == 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
     }
 }
+
+/// The eight-stop per-set ladder folded into four colour bands — what the
+/// phone's deck card tints while the watch's Crown scrubs a provisional RPE
+/// (overhaul W0, decision Q2; `EffortPulse` carries it).
+///
+/// 5–7.5 steady · 8–9 hard · 9.5 very hard · 10 failure. Nil and any value
+/// OFF the ladder (a legacy CR10 row of 7, a hand-typed 9.2) read `steady`:
+/// the band is ink, and an unknown rating must not paint a set as a failure.
+/// Raw values are wire strings — never rename a case.
+public enum EffortBand: String, Codable, CaseIterable, Sendable {
+    case steady, hard, veryHard, failure
+
+    public init(rpe: Double?) {
+        switch rpe {
+        case 8, 8.5, 9: self = .hard
+        case 9.5:       self = .veryHard
+        case 10:        self = .failure
+        default:        self = .steady
+        }
+    }
+}

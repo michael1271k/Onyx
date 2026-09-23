@@ -295,4 +295,75 @@ struct WatchPayloadTests {
         // Identity is still the clock, so an echo cannot re-present a cover.
         #expect(back.id == fromPhone.id)
     }
+
+    // MARK: - Overhaul W0 contract: lifecycle, masthead, effort
+
+    /// Whole seconds, per the project rule: `.iso8601` drops sub-seconds, so a
+    /// fractional date would not round-trip equal.
+    private static let start = Date(timeIntervalSince1970: 1_790_000_000)
+    private static let masthead = SessionMasthead(
+        name: "Upper A", durationSec: 3_120, tonnageKg: 8_450, avgBpm: 131, prCount: 2,
+        hrSpark: [118, 126, 139, 144, 137, 122], startedAt: start
+    )
+
+    private func json<T: Encodable>(_ value: T) throws -> String {
+        try #require(String(data: OnyxJSON.encoder.encode(value), encoding: .utf8))
+    }
+
+    @Test("SessionMasthead: golden JSON, and it round-trips")
+    func mastheadGolden() throws {
+        let golden = #"{"avgBpm":131,"durationSec":3120,"hrSpark":[118,126,139,144,137,122],"name":"Upper A","prCount":2,"startedAt":"2026-09-21T14:13:20Z","tonnageKg":8450}"#
+        #expect(try json(Self.masthead) == golden)
+        #expect(try OnyxJSON.decoder.decode(SessionMasthead.self, from: Data(golden.utf8)) == Self.masthead)
+        // No HR: the key is absent, not null — and the spark is empty.
+        var quiet = Self.masthead
+        quiet.avgBpm = nil
+        quiet.hrSpark = []
+        #expect(try json(quiet) == #"{"durationSec":3120,"hrSpark":[],"name":"Upper A","prCount":2,"startedAt":"2026-09-21T14:13:20Z","tonnageKg":8450}"#)
+    }
+
+    @Test("SessionLifecycle: golden JSON for an open and a finish, and both round-trip")
+    func lifecycleGolden() throws {
+        let open = SessionLifecycle(sessionId: "s-1", phase: .open, startedAt: Self.start)
+        #expect(try json(open) == #"{"phase":"open","sessionId":"s-1","startedAt":"2026-09-21T14:13:20Z"}"#)
+        #expect(try OnyxJSON.decoder.decode(SessionLifecycle.self, from: OnyxJSON.encoder.encode(open)) == open)
+
+        let finished = SessionLifecycle(sessionId: "s-1", phase: .finished, startedAt: Self.start,
+                                        endedAt: Self.start.addingTimeInterval(3_120), summary: Self.masthead)
+        let golden = #"{"endedAt":"2026-09-21T15:05:20Z","phase":"finished","sessionId":"s-1","startedAt":"2026-09-21T14:13:20Z","summary":{"avgBpm":131,"durationSec":3120,"hrSpark":[118,126,139,144,137,122],"name":"Upper A","prCount":2,"startedAt":"2026-09-21T14:13:20Z","tonnageKg":8450}}"#
+        #expect(try json(finished) == golden)
+        #expect(try OnyxJSON.decoder.decode(SessionLifecycle.self, from: Data(golden.utf8)) == finished)
+        #expect(SessionLifecycle.Phase.allCases.map(\.rawValue) == ["open", "finished", "discarded"])
+    }
+
+    @Test("EffortPulse: golden JSON with its band, and it round-trips")
+    func effortGolden() throws {
+        let pulse = EffortPulse(sessionId: "s-1", exerciseId: "hack-squat", setIndex: 2, rpe: 9.5)
+        #expect(pulse.band == .veryHard, "the band is derived from the rpe when not given")
+        let golden = #"{"band":"veryHard","exerciseId":"hack-squat","rpe":9.5,"sessionId":"s-1","setIndex":2}"#
+        #expect(try json(pulse) == golden)
+        #expect(try OnyxJSON.decoder.decode(EffortPulse.self, from: Data(golden.utf8)) == pulse)
+    }
+
+    @Test("a context from a build with no session key decodes with session nil; one with it round-trips")
+    func contextWithoutSessionDecodes() throws {
+        let sent = WatchContext(userId: "u-1", today: "2026-09-08", schedule: schedule)
+        var object = try #require(
+            try JSONSerialization.jsonObject(with: try OnyxJSON.encoder.encode(sent)) as? [String: Any]
+        )
+        #expect(object["session"] == nil, "a nil session must not be encoded at all")
+        object.removeValue(forKey: "session")
+        let back = try OnyxJSON.decoder.decode(
+            WatchContext.self, from: try JSONSerialization.data(withJSONObject: object)
+        )
+        #expect(back.session == nil)
+        #expect(back == sent)
+
+        var live = sent
+        live.session = SessionLifecycle(sessionId: "s-1", phase: .finished, startedAt: Self.start,
+                                        endedAt: Self.start.addingTimeInterval(3_120), summary: Self.masthead)
+        let there = try OnyxJSON.decoder.decode(WatchContext.self, from: try OnyxJSON.encoder.encode(live))
+        #expect(there.session == live.session)
+        #expect(there == live)
+    }
 }

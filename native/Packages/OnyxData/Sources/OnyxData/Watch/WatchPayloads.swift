@@ -86,13 +86,23 @@ public struct WatchContext: Codable, Sendable, Equatable {
     /// watch, which then offers swaps only from the active program — fewer
     /// candidates, never a wrong one, and never a decode failure.
     public var swapPool: [ProgramExercise]?
+    /// Is a session live, finished or thrown away — the PHONE's answer
+    /// (overhaul W0, decision Q1: the phone owns the lifecycle). The watch
+    /// reads it at launch and after any missed pulse, so "Start" is never
+    /// offered for a session the phone already closed. OPTIONAL AND LAST, the
+    /// fourth time: an old phone sends no key (nil = "no word", the watch
+    /// falls back to its own rows), an old watch ignores it. No sender yet —
+    /// Lane A pushes it, unthrottled, on open/finish/discard.
+    public var session: SessionLifecycle?
 
     /// Trims the schedule on the way in: nothing outside this initialiser has
     /// to remember the diet, and nothing can send the full catalogue by
     /// accident.
-    public init(userId: String, today: String, schedule: ScheduleContext, theme: OnyxThemeSpec? = nil, tiles: WatchTiles? = nil) {
+    public init(userId: String, today: String, schedule: ScheduleContext, theme: OnyxThemeSpec? = nil,
+                tiles: WatchTiles? = nil, session: SessionLifecycle? = nil) {
         self.userId = userId
         self.today = today
+        self.session = session
         var trimmed = schedule
         let active = schedule.activeProgram
         // `activeProgram` synthesises an EMPTY program when the id matches
@@ -167,6 +177,60 @@ public struct SessionPulse: Codable, Sendable, Equatable {
         self.startedAt = session.startedAt
         self.endedAt = phase == .finished ? session.endedAt : nil
         self.restTargetSec = restTargetSec
+    }
+}
+
+/// The phone's word on today's session, as STATE (overhaul W0, decision Q1).
+///
+/// `SessionPulse` is the EVENT — queued, ordered behind the sets, and on a
+/// simulator not delivered to a running app at all. This is the latest-state
+/// slot that rides `WatchContext.session`: whatever the queue has or has not
+/// delivered, the context says whether the session is open, finished or
+/// discarded, and a finished one carries its `SessionMasthead` for the wrist's
+/// banner. Its own `Phase` rather than `SessionPulse.Phase`, because `joined`
+/// is a watch → phone event and never a state the phone publishes.
+public struct SessionLifecycle: Codable, Hashable, Sendable {
+    public enum Phase: String, Codable, CaseIterable, Sendable {
+        case open, finished, discarded
+    }
+
+    public var sessionId: String
+    public var phase: Phase
+    public var startedAt: Date
+    /// Nil while open, and on a discard.
+    public var endedAt: Date?
+    /// The finished session in one line. Nil unless `phase == .finished`.
+    public var summary: SessionMasthead?
+
+    public init(sessionId: String, phase: Phase, startedAt: Date, endedAt: Date? = nil, summary: SessionMasthead? = nil) {
+        self.sessionId = sessionId
+        self.phase = phase
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.summary = summary
+    }
+}
+
+/// A provisional RPE the watch's Crown is scrubbing during rest (overhaul W0,
+/// decision Q2). Watch → phone, `sendMessage` only (`WatchLink.send(effort:)`):
+/// worthless a second late, and NEVER persisted — the set's tick commits the
+/// real `rpe` through the event log as it always has. The phone draws `band`
+/// as provisional ink on the deck card.
+public struct EffortPulse: Codable, Hashable, Sendable {
+    public var sessionId: String
+    public var exerciseId: String
+    public var setIndex: Int
+    /// On the 0.5 grid `Effort.ladder` scrubs.
+    public var rpe: Double
+    public var band: EffortBand
+
+    /// `band` defaults to the ladder's own fold of `rpe`.
+    public init(sessionId: String, exerciseId: String, setIndex: Int, rpe: Double, band: EffortBand? = nil) {
+        self.sessionId = sessionId
+        self.exerciseId = exerciseId
+        self.setIndex = setIndex
+        self.rpe = rpe
+        self.band = band ?? EffortBand(rpe: rpe)
     }
 }
 

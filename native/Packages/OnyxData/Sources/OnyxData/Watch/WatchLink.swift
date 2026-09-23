@@ -70,6 +70,9 @@ public final class WatchLink: NSObject, Sendable {
         /// A session opened, finished or discarded on the other device (App
         /// Store W4). Both directions. Hand to `AppDatabase.receiveSession`.
         case session(SessionPulse)
+        /// A provisional RPE the wrist's Crown is scrubbing (overhaul W0).
+        /// Watch → phone, message-only. NEVER persisted — see `EffortPulse`.
+        case effort(EffortPulse)
     }
 
     /// A payload key. Free functions rather than a `Codable` envelope because
@@ -88,6 +91,7 @@ public final class WatchLink: NSObject, Sendable {
         static let rest = "rest"
         static let water = "water"
         static let session = "session"
+        static let effort = "effort"
     }
 
     private let onInbound: @Sendable (Inbound) -> Void
@@ -217,6 +221,15 @@ public final class WatchLink: NSObject, Sendable {
         var body: [String: Any] = [Key.kind: Kind.rest]
         if let rest, let data = try? OnyxJSON.encoder.encode(rest) { body[Key.payload] = data }
         wc.sendMessage(body, replyHandler: nil) { _ in }
+    }
+
+    /// A provisional RPE, watch → phone (overhaul W0). `sendMessage` or
+    /// nothing, like the rest clock: a Crown detent is worthless a second
+    /// late, and the committed rating travels with the set's tick anyway.
+    /// No caller yet — Lane A debounces the Crown into it.
+    public func send(effort: EffortPulse) {
+        guard let wc = active(), wc.isReachable, let data = try? OnyxJSON.encoder.encode(effort) else { return }
+        wc.sendMessage([Key.kind: Kind.effort, Key.payload: data], replyHandler: nil) { _ in }
     }
 
     /// Post a glass of water to the phone (W4). Watch → phone.
@@ -353,6 +366,9 @@ public final class WatchLink: NSObject, Sendable {
                     .error("a session pulse arrived and did not decode")
             }
             onInbound(.session(pulse))
+        case Kind.effort:
+            guard let data, let pulse = try? OnyxJSON.decoder.decode(EffortPulse.self, from: data) else { return }
+            onInbound(.effort(pulse))
         default:
             return
         }
