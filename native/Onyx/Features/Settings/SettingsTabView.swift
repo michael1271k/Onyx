@@ -109,7 +109,7 @@ private struct SettingsForm: View {
                 NavigationLink {
                     PlanView(model: model)
                 } label: {
-                    row("Training plan", "Your block and phase", value: "\(model.plan.label) · \(model.phase.label)")
+                    row("Training plan", "Your block and phase", value: "\(model.plan.label)\u{00A0}· \(model.phase.label)")
                 }
                 // ── THE ROUTINE BUILDER (W5) ────────────────────────────────
                 // Beside the plan, because a routine IS the plan's deck — the
@@ -128,7 +128,7 @@ private struct SettingsForm: View {
                 NavigationLink {
                     VolumeTargetsView(model: model)
                 } label: {
-                    row("Weekly set volume", "Sets per muscle, weekly", value: "\(model.volumeTotal) sets")
+                    row("Weekly set volume", "Target sets for each muscle", value: "\(model.volumeTotal) in all")
                 }
                 NavigationLink {
                     ExerciseImportView(database: environment.database, userId: userId)
@@ -226,13 +226,14 @@ private struct SettingsForm: View {
                 }
                 // Week start is load-bearing — one `WeekWindow` cuts History,
                 // the Workout tab's This-week panel and the weekly export, so
-                // the sub-line reads the choice back as the span it produces.
+                // the sub-line says what the choice cuts (the picker already
+                // shows the day; a "Sunday–Saturday" line only repeated it).
                 Picker(selection: weekStartDay) {
                     Text("Sunday").tag(0)
                     Text("Monday").tag(1)
                 } label: {
                     Text("Week starts on")
-                    subLine("Weeks run \(weekSpanLabel)")
+                    subLine("Cuts History and the weekly export")
                 }
                 // ── AND WHY THERE IS NO "REDUCE MOTION" ROW (W1) ─────────────
                 // There was one. It wrote a value nothing read, and the app
@@ -246,7 +247,7 @@ private struct SettingsForm: View {
                 NavigationLink {
                     AppearanceView()
                 } label: {
-                    row("Appearance", "Two colours, one palette", value: themeName)
+                    row("Appearance", "Theme colours for the whole app", value: themeName)
                 }
             } header: {
                 OnyxSectionHeader("Display", .recover)
@@ -318,6 +319,7 @@ private struct SettingsForm: View {
 
             Section {
                 row("Version", "Quote in a bug report", value: OnyxLinks.versionString)
+                    .textSelection(.enabled)
                 // Support sits ABOVE the policy: it is the row a person in
                 // trouble is looking for, and the policy is the one a reviewer
                 // is. Both are `Link`, which opens Safari rather than an
@@ -436,9 +438,17 @@ private struct SettingsForm: View {
 
     /// A title, its one-line sub-line, and the current value if it has one.
     /// `Form` styles the label's second `Text` as the subtitle.
+    ///
+    /// The value is primary ink, not the platform's grey: when it does not fit
+    /// beside a sub-line it drops UNDER it (every value row at AX5, two at the
+    /// default size), and grey-under-grey read as one paragraph.
     private func row(_ title: String, _ detail: String, value: String? = nil) -> some View {
         LabeledContent {
-            if let value { Text(value) }
+            if let value {
+                Text(value)
+                    .fontWeight(.medium)
+                    .foregroundStyle(Color.onyx.textPrimary)
+            }
         } label: {
             Text(title)
             subLine(detail)
@@ -471,23 +481,14 @@ private struct SettingsForm: View {
         let days = model.deck(for: model.planId)?.days ?? []
         guard !days.isEmpty else { return "None yet" }
         let movements = days.reduce(0) { $0 + $1.exercises.count }
-        return "\(days.count) \(days.count == 1 ? "day" : "days") · \(movements) movements"
+        return "\(days.count) \(days.count == 1 ? "day" : "days")\u{00A0}· \(movements) movements"
     }
 
     /// `Baseline · 1,955 kcal`, or the release and the date it ends.
     private var leverSummary: String {
         let kcal = model.shownGoals.calorie.formatted(.number.precision(.fractionLength(0)))
-        guard let held = model.heldBy else { return "My own numbers · \(kcal) kcal" }
-        return "\(held.label) · \(kcal) kcal"
-    }
-
-    /// `Monday–Sunday` — the setting read back as the span it produces,
-    /// which is the thing being chosen. "Week starts on: Monday" leaves the
-    /// reader to work out which Sunday a session then belongs to.
-    private var weekSpanLabel: String {
-        let window = WeekWindow(containing: model.today, goals: model.goals)
-        let names = Calendar.current.weekdaySymbols
-        return "\(names[window.startDay])–\(names[(window.startDay + 6) % 7])"
+        guard let held = model.heldBy else { return "My own numbers\u{00A0}· \(kcal) kcal" }
+        return "\(held.label)\u{00A0}· \(kcal) kcal"
     }
 
     // ── Bindings ────────────────────────────────────────────────────────────

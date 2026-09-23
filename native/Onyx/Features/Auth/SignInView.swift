@@ -56,7 +56,9 @@ struct SignInView: View {
     /// fixed 50 left it small at AX5 beside a Google label that had tripled
     /// and clipped — the opposite of the parity 4.8 asks for.
     @ScaledMetric(relativeTo: .title3) private var providerHeight: CGFloat = 50
-    @ScaledMetric(relativeTo: .title3) private var googleMark: CGFloat = 18
+    /// Sized to Apple's glyph, not to the title beside it: at 18 the colour
+    /// mark read larger than the monochrome one it stands under.
+    @ScaledMetric(relativeTo: .title3) private var googleMark: CGFloat = 15
     @FocusState private var focused: Field?
 
     private enum Field { case email, password }
@@ -106,6 +108,7 @@ struct SignInView: View {
                     .accessibilityAddTraits(.isHeader)
                 Text("Engineer Your Ascent.")
                     .font(.footnote)
+                    .multilineTextAlignment(.center)
                     .foregroundStyle(Color.onyx.textSecondary)
             }
 
@@ -144,7 +147,9 @@ struct SignInView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(OnyxDomain.train.accent)
-            .foregroundStyle(Color.onyx.base)
+            // Obsidian on the accent reads; obsidian on the DISABLED fill was
+            // about 1.2:1 — a button nobody could read the name of.
+            .foregroundStyle(canSubmit || isWorking ? Color.onyx.base : Color.onyx.textSecondary)
             .controlSize(.large)
             .disabled(!canSubmit)
 
@@ -202,15 +207,22 @@ struct SignInView: View {
                 .buttonStyle(.plain)
             }
             .disabled(isWorking)
+            // Capped at AX1: Apple's title never follows Dynamic Type, and past
+            // AX1 Google's had to shrink to fit the width. Capped together they
+            // stay one size — and still grow well past the default.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
 
             Button("Create an account") { showSignUp = true }
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(OnyxDomain.train.accent)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
 
             Spacer()
 
             Text("You stay signed in on this device.")
                 .font(.caption2)
+                .multilineTextAlignment(.center)
                 .foregroundStyle(Color.onyx.textTertiary)
         }
     }
