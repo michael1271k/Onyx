@@ -44,6 +44,76 @@ _Nothing yet._
 
 ---
 
+## [7.16.0] — 2026-09-23 · Three ways in, and a way out that works
+
+Wave 7 of the App Store sprint (Lane B). Briefed as 7.15.0; W6 landed first as
+7.15.0, so this is the next free minor, as the plan's table already said.
+
+### Added
+- **Sign in with Apple and Sign in with Google** (phone, sign-in screen), beside
+  email and password, which stay. Apple is first and the same size as Google at
+  every text size. Either one creates the account on first use, and ends in
+  the same session the email path makes. **Written, not verified on a device**:
+  the Sign in with Apple entitlement cannot be signed before the Developer
+  Program is bought, and both providers are still off in the live project —
+  see `docs/APP_STORE.md` §8 for the founder's steps.
+- **Every Settings row says what it does**, in one short grey line under its
+  name (phone, Settings).
+- `docs/sql/w7-delete-my-account.sql` — the account-deletion function, in the
+  repo for the first time.
+
+### Changed
+- **Settings is grouped by what each control changes**: Plan (now with weekly
+  set volume), Targets, Logging, Reminders (both reminder switches together),
+  Display (units, week start and Appearance), History (now with Reports),
+  About, and the account rows. Five of the seven prose footers are gone; the
+  medical disclaimer and the deletion warning are unchanged, word for word.
+- **The sign-in screen no longer raises the keyboard on arrival.** It covered
+  the Apple and Google buttons; tapping the email field still offers AutoFill.
+- **The privacy policy, the app's privacy manifest and the App Privacy
+  answers name two more things collected:** your account id (every account
+  always had one; it was never declared), and your name and profile-picture
+  link, only if you sign in with Google.
+- `docs/APP_STORE.md` rewritten end to end against the binary: version, line
+  numbers, account deletion (Pass, not N/A), Sign in with Apple (in scope), the
+  subscription rows (N/A — Onyx ships free), the review notes and the founder's
+  checklist in order.
+
+### Fixed
+- **Account deletion was very likely failing on the server.** The only
+  version of `delete_my_account()` this project ever wrote named four tables
+  that were dropped on 2026-09-10, so it stopped on the first of them and the
+  app said "Could not delete the account"; it also never knew about seven
+  newer tables. The new function finds every table that holds a user's rows by
+  itself. It runs only once the founder pastes the SQL file.
+- **Deleting the account now stops syncing first.** A push could land while
+  the server was deleting (and hold the delete on a foreign key), and
+  signing out afterwards pushed the outbox as an account that no longer
+  existed. If the delete fails, syncing starts again.
+- **Editing an old day stopped rescoring it after the app's first hourly
+  sign-in refresh.** Every token refresh shut the observer that rescores past
+  edits, and only a fresh sign-in put it back. Now only switching accounts
+  shuts it. (Since 5.0.0.)
+- Tapping Cancel on Google's own consent page no longer shows an error; a
+  double tap on a sign-in button no longer starts two sign-ins.
+- The screenshot and UI-test scripts picked the first simulator whose name
+  merely started with "iPhone 15" — since W4 that is an iOS 26.5 phone — so
+  runs had quietly moved off iOS 27. They now match the name exactly and take
+  the newest runtime. `swift-ui-test.sh` also takes `UI_TEST_DERIVED`, so two
+  lanes' checks stop locking one build database.
+
+### Notes
+- **Compiled, not exercised:** the Apple sign-in (entitlement parked; the
+  sheet fails with AuthorizationError 1000 until Gate 0), the Google sign-in
+  (provider off live; the redirect `onyx://auth-callback` is not yet
+  allow-listed), and a first sign-in by a new user of either (live sign-up is
+  disabled). Email sign-in is unchanged.
+- The deletion SQL was proved on a local PostgreSQL 17 cluster shaped like the
+  live project, not on Supabase. The live function body could not be read from
+  this machine.
+
+---
+
 ## [7.15.0] — 2026-09-23 · When the watch was off your wrist, it says so
 
 Wave 6 of the App Store sprint (Lane A). The brief asked for 7.14.0; W4
