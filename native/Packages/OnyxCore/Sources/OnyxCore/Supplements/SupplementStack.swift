@@ -98,6 +98,11 @@ public struct CustomSupplement: Codable, Equatable, Sendable {
     /// them. Archiving stops the item being scheduled from that date forward
     /// and leaves the history it already wrote alone.
     public var archivedAt: String?
+    /// The doses this item USED to be taken at — `custom_supplements.
+    /// dose_periods`. Nil on a row whose dose has never changed, which is every
+    /// row written before 7.13.0. Read through `Supplements.doseAt`, never
+    /// directly: see `DosePeriod`.
+    public var dosePeriods: [DosePeriod]?
 
     /// `archived_at` is spelled the way the row spells it: the golden vectors
     /// serialise this struct from the TypeScript side, where it is a raw
@@ -107,14 +112,72 @@ public struct CustomSupplement: Codable, Equatable, Sendable {
         case archivedAt = "archived_at"
         case doseAmount = "dose_amount"
         case doseUnit = "dose_unit"
+        case dosePeriods = "dose_periods"
     }
 
     public init(id: String, name: String, dose: String, color: String? = nil, form: String? = nil,
                 time: String? = nil, schedule: CustomSchedule? = nil, micros: [String: Double]? = nil,
-                archivedAt: String? = nil, doseAmount: Double? = nil, doseUnit: String? = nil) {
+                archivedAt: String? = nil, doseAmount: Double? = nil, doseUnit: String? = nil,
+                dosePeriods: [DosePeriod]? = nil) {
         self.id = id; self.name = name; self.dose = dose; self.color = color
         self.form = form; self.time = time; self.schedule = schedule; self.micros = micros
         self.archivedAt = archivedAt; self.doseAmount = doseAmount; self.doseUnit = doseUnit
+        self.dosePeriods = dosePeriods
+    }
+}
+
+/// A dose an item used to be taken at, and the day it stopped being.
+///
+/// ── WHY THE ROW STAYS THE CURRENT DOSE ──────────────────────────────────────
+/// `custom_supplements` carried one dose and no date, so changing 300 mg to
+/// 200 mg rewrote every day the item had ever been taken: the checklist for
+/// last Tuesday, that day's micronutrient credit and the export all said
+/// 200 mg. A period records what was replaced — never what replaced it — so
+/// the row's own `dose` columns keep meaning "the dose now", and a reader that
+/// has never heard of this type still reads today correctly. Only a HISTORICAL
+/// read has to ask, and it asks `Supplements.doseAt`.
+///
+/// ── `until` IS EXCLUSIVE ────────────────────────────────────────────────────
+/// The day the change was made is the first day of the NEW dose: an item has
+/// one dose per day, and the day you change it is the day you start taking the
+/// new amount. So this period covers every day before `until`, back to the
+/// previous period's `until`.
+///
+/// camelCase inside the jsonb, like `schedule` beside it.
+public struct DosePeriod: Codable, Equatable, Sendable {
+    /// ISO date: the first day this dose was no longer in force.
+    public var until: String
+    public var dose: String
+    public var doseAmount: Double?
+    public var doseUnit: String?
+    public var trainingDose: String?
+    public var restDose: String?
+
+    public init(until: String, dose: String, doseAmount: Double? = nil, doseUnit: String? = nil,
+                trainingDose: String? = nil, restDose: String? = nil) {
+        self.until = until; self.dose = dose; self.doseAmount = doseAmount; self.doseUnit = doseUnit
+        self.trainingDose = trainingDose; self.restDose = restDose
+    }
+
+    /// The row's dose as it stands, closed at `until`.
+    public init(until: String, closing c: CustomSupplement) {
+        self.init(until: until, dose: c.dose, doseAmount: c.doseAmount, doseUnit: c.doseUnit,
+                  trainingDose: c.schedule?.trainingDose, restDose: c.schedule?.restDose)
+    }
+
+    /// Whether a reader would see the same dose. The three STRINGS, because
+    /// they are what every reader parses; the amount and unit are the editor's
+    /// copy of `dose` and cannot disagree with it.
+    ///
+    /// `dose` is compared as a PARSED amount and unit wherever both sides
+    /// parse. The editor re-spells a row the web wrote — "2 Caps" saves back
+    /// as "2 caps", "0.50 g" as "0.5 g" — so a string compare turned a time
+    /// edit into a dose change the export then reported.
+    func sameDose(as c: CustomSupplement) -> Bool {
+        let same = Supplements.parseDose(dose).flatMap { a in
+            Supplements.parseDose(c.dose).map { b in a.amount == b.amount && a.unit == b.unit }
+        } ?? (dose == c.dose)
+        return same && trainingDose == c.schedule?.trainingDose && restDose == c.schedule?.restDose
     }
 }
 
@@ -258,6 +321,14 @@ public struct SupplementDose: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// One notification's worth of a day's stack — see `Supplements.reminders`.
+public struct StackReminder: Equatable, Sendable {
+    /// "HH:MM", the slot's own time.
+    public var time: String
+    public var title: String
+    public var body: String
+}
+
 /// Where the day sits against the clock.
 ///
 /// A past day has had every slot and a future one has had none; only today
@@ -336,12 +407,20 @@ public enum Supplements {
     /// `customSlotsForDate` — the DB rows due on a day → the slots the checklist
     /// renders and the export prints. Grouped by TIME and ordered by it.
     ///
+    /// Every item carries the dose that was in force on `date` (`doseAt`).
+    /// This is where the history is applied, rather than in each caller,
+    /// because this is the one function the checklist, the day's micronutrient
+    /// credit, the Stack tile and the export all already go through.
+    ///
     /// The web sorts the time keys with `localeCompare`. The keys are "HH:MM"
     /// strings and the "—" bucket for rows with no time, and under ICU's root
     /// collation punctuation sorts before every digit — so "—" leads and the
     /// rest is bytewise. That is spelled out here rather than delegated to a
     /// locale-sensitive compare whose answer depends on the device.
-    public static func customSlotsForDate(_ customs: [CustomSupplement], weekday: Int, isTraining: Bool = true) -> [SupplementSlot] {
+    public static func customSlotsForDate(
+        _ customs: [CustomSupplement], on date: String, weekday: Int, isTraining: Bool = true
+    ) -> [SupplementSlot] {
+        let customs = customs.map { doseAt($0, on: date) }
         let due = customs.filter { c in
             let days = c.schedule?.days ?? []
             return (days.isEmpty || days.contains(weekday))
@@ -397,6 +476,64 @@ public enum Supplements {
         customs.filter { isArchived($0, on: date) }
     }
 
+    // MARK: - Dose history
+
+    /// The row as it stood on `date`: its own columns, with the dose that was
+    /// in force that day. THE one reader of `dose_periods` — see `DosePeriod`.
+    ///
+    /// The period in force is the one with the EARLIEST `until` still after
+    /// `date`, found by search rather than by position, so a list two devices
+    /// appended to in either order still resolves to the same dose. No period
+    /// after `date` means the dose on the row, which is every date for an item
+    /// whose dose has never changed.
+    public static func doseAt(_ c: CustomSupplement, on date: String) -> CustomSupplement {
+        guard let p = c.dosePeriods?.filter({ date < $0.until }).min(by: { $0.until < $1.until }) else { return c }
+        var then = c
+        then.dose = p.dose
+        then.doseAmount = p.doseAmount
+        then.doseUnit = p.doseUnit
+        if then.schedule != nil || p.trainingDose != nil || p.restDose != nil {
+            var schedule = then.schedule ?? CustomSchedule()
+            schedule.trainingDose = p.trainingDose
+            schedule.restDose = p.restDose
+            then.schedule = schedule
+        }
+        return then
+    }
+
+    /// The history after `current` is saved as `next` on `today`.
+    ///
+    /// ── APPENDED, NEVER REWRITTEN ───────────────────────────────────────────
+    /// A change closes the dose being replaced at `today` and adds it to the
+    /// list; nothing already in the list is touched, so no edit can reach a day
+    /// that has already been lived.
+    ///
+    /// ── TWICE IN ONE DAY ────────────────────────────────────────────────────
+    /// A day has one dose. If today already closed a period, the dose that
+    /// stood at the START of today is already recorded and a second change is
+    /// just a better answer for today — nothing new to close. And a change back
+    /// to that recorded dose is an undo: its period comes out, and the day
+    /// reads as though nothing happened. `>=` rather than `==` so a device
+    /// whose clock ran ahead of this one's cannot make a period that never
+    /// closes.
+    ///
+    /// Returns the row's list unchanged when the dose did not change — a name
+    /// or a time edited on its own is not a dose change.
+    public static func dosePeriods(changing current: CustomSupplement, to next: CustomSupplement, today: String) -> [DosePeriod]? {
+        guard !DosePeriod(until: today, closing: current).sameDose(as: next) else { return current.dosePeriods }
+        var periods = current.dosePeriods ?? []
+        if let i = periods.indices.filter({ periods[$0].until >= today })
+            .min(by: { periods[$0].until < periods[$1].until }) {
+            // Closed "after" today only by a clock running ahead of this one —
+            // it closes today, or today would go on reading it.
+            periods[i].until = today
+            if periods[i].sameDose(as: next) { periods.remove(at: i) }
+            return periods
+        }
+        periods.append(DosePeriod(until: today, closing: current))
+        return periods
+    }
+
     // MARK: - The day's doses
 
     /// Every scheduled dose of the day, with where it stands.
@@ -435,6 +572,29 @@ public enum Supplements {
     /// The doses whose micronutrients count towards the day.
     public static func creditedDoses(slots: [SupplementSlot], log: [DoseLogEntry], clock: DayClock) -> [SupplementDose] {
         doses(slots: slots, log: log, clock: clock).filter(\.credited)
+    }
+
+    /// One reminder per slot TIME that still holds a dose nobody has answered.
+    ///
+    /// A dose already ticked or skipped has a log row and is not asked about
+    /// again — the reason reminders are re-armed rather than repeated (see
+    /// `OnyxReminders`). An item with no time has no moment to be reminded at.
+    /// The body names each item with the dose in force that day, because the
+    /// doses came through `customSlotsForDate` and so through `doseAt`.
+    public static func reminders(_ doses: [SupplementDose]) -> [StackReminder] {
+        var order: [String] = []
+        var byTime: [String: [SupplementDose]] = [:]
+        for d in doses where (d.state == .later || d.state == .due) && d.slotTime != "—" {
+            if byTime[d.slotTime] == nil { order.append(d.slotTime) }
+            byTime[d.slotTime, default: []].append(d)
+        }
+        return order.map { time in
+            let due = byTime[time]!
+            return StackReminder(
+                time: time,
+                title: "\(due[0].slotLabel) · \(time)",
+                body: due.map { "\($0.name) \($0.dose)" }.joined(separator: ", "))
+        }
     }
 
     // MARK: - The structured dose

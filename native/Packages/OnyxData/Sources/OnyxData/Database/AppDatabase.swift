@@ -1405,7 +1405,27 @@ public final class AppDatabase: Sendable {
             }
         }
 
-        // ── v35 ── Sessions this device has thrown away (App Store W4).
+        // ── v35: a supplement's dose history (App Store sprint W5) ──────────
+        // `custom_supplements` carried one dose and no date, so changing it
+        // rewrote every day the item had been taken. `dose_periods` records
+        // each dose it replaced (`OnyxCore.DosePeriod`); `Supplements.doseAt`
+        // is its one reader. A fresh install gets the column from the
+        // regenerated `migrateMirrorV1`; this is the guarded alter for a store
+        // that already exists — the `v21.genericModel` shape.
+        //
+        // NULLABLE, the `sleep_inaccurate` rule (v20): nil on every row whose
+        // dose has never changed, so `encodeIfPresent` keeps the key out of
+        // those rows' push bodies. `w5-dose-periods.sql` is the Postgres half
+        // and the founder pastes it by hand.
+        migrator.registerMigration("v35.dosePeriods") { db in
+            let existing = Set(try db.columns(in: "custom_supplements").map(\.name))
+            guard !existing.contains("dose_periods") else { return }
+            try db.alter(table: "custom_supplements") { t in
+                t.add(column: "dose_periods", .text)
+            }
+        }
+
+        // ── v36 ── Sessions this device has thrown away (App Store W4).
         //
         // LOCAL ONLY. A session open travels twice — as a message, for the
         // wrist that is waiting, and queued, for the one that is not — and
@@ -1413,7 +1433,7 @@ public final class AppDatabase: Sendable {
         // put back a workout that was discarded in between (Start, then an
         // immediate Cancel): `receiveSession` refuses an open for an id here.
         // An id and nothing else; `eraseLocalData` sweeps it with the rest.
-        migrator.registerMigration("v35.sessionTombstones") { db in
+        migrator.registerMigration("v36.sessionTombstones") { db in
             try db.create(table: "session_tombstones", ifNotExists: true) { t in
                 t.primaryKey("id", .text)
             }
@@ -2178,7 +2198,7 @@ extension AppDatabase {
         }
 
         try db.execute(sql: "DELETE FROM workout_sessions WHERE id = ?", arguments: [id])
-        // So a late copy of this session's open cannot put it back (v35).
+        // So a late copy of this session's open cannot put it back (v36).
         try db.execute(sql: "INSERT OR IGNORE INTO session_tombstones (id) VALUES (?)", arguments: [id])
         return true
     }

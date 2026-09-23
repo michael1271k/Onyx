@@ -394,12 +394,18 @@ enum PulsePreviews {
     }
 
     /// A stack with every state on it at once: one due, one explicitly taken,
-    /// one skipped, two still ahead, and one archived.
+    /// one skipped, two still ahead, and one archived — and a dose CHANGED on
+    /// the fixture's day (magnesium 300 → 400 mg, App Store W5).
     ///
     /// The clock is PINNED to 13:00 rather than read, so the Due and Later
     /// sections hold the same rows whatever time the loop runs.
+    ///
+    /// `beforeChange` opens the day BEFORE — the `stack-before` shot, which is
+    /// the history claim photographed: the same store, one swipe back, and
+    /// magnesium still reads 300 mg. That day is over, so its clock is not
+    /// pinned: every dose on it is Due.
     @MainActor
-    static func stackDay() -> DayModel {
+    static func stackDay(beforeChange: Bool = false) -> DayModel {
         let model = model { db in
             // One of each FORM and one of each colour the token map knows:
             // the whole point of the glyph is that five silhouettes are
@@ -407,7 +413,7 @@ enum PulsePreviews {
             // `form` nil photographed the same default five times.
             let add = { (name: String, dose: String, time: String, key: String,
                          form: SupplementForm, colour: String, micros: [String: Double]?) in
-                _ = try db.addCustomSupplement(
+                try db.addCustomSupplement(
                     userId: userId, name: name, dose: dose, color: colour, form: form.rawValue, time: time,
                     schedule: CustomSchedule(key: key, slot: time == "10:30" ? "Morning" : "Before Bed"),
                     micros: micros,
@@ -415,11 +421,16 @@ enum PulsePreviews {
                     doseUnit: Supplements.parseDose(dose)?.unit.rawValue
                 )
             }
-            try add("Two Per Day Multivitamin", "2 tabs", "10:30", "multivitamin", .pill, "amber", nil)
-            try add("Vitamin D3 + K2", "125 mcg", "10:30", "d3k2", .capsule, "green", nil)
-            try add("Creatine Monohydrate", "5 g", "10:30", "creatine", .powder, "blue", nil)
-            try add("Magnesium Glycinate", "300 mg", "22:00", "magnesium", .gummy, "purple", nil)
-            try add("L-Theanine", "200 mg", "22:00", "theanine", .liquid, "teal", nil)
+            _ = try add("Two Per Day Multivitamin", "2 tabs", "10:30", "multivitamin", .pill, "amber", nil)
+            _ = try add("Vitamin D3 + K2", "125 mcg", "10:30", "d3k2", .capsule, "green", nil)
+            _ = try add("Creatine Monohydrate", "5 g", "10:30", "creatine", .powder, "blue", nil)
+            let magnesium = try add("Magnesium Glycinate", "300 mg", "22:00", "magnesium", .gummy, "purple", nil)
+            _ = try add("L-Theanine", "200 mg", "22:00", "theanine", .liquid, "teal", nil)
+            // Through the editor's own door, on the fixture's day.
+            try db.updateCustomSupplement(
+                id: magnesium, userId: userId, name: "Magnesium Glycinate", dose: "400 mg",
+                doseAmount: 400, doseUnit: DoseUnit.mg.rawValue, form: SupplementForm.gummy.rawValue,
+                time: "22:00", days: [], trainingOnly: false, today: date)
 
             let retired = try db.addCustomSupplement(
                 userId: userId, name: "Ashwagandha", dose: "600 mg", time: "22:00",
@@ -430,7 +441,12 @@ enum PulsePreviews {
             try db.markSupplement(userId: userId, date: date, itemKey: "d3k2", mark: .taken)
             try db.markSupplement(userId: userId, date: date, itemKey: "creatine", mark: .skipped)
         }
-        model.previewNowMinutes = 13 * 60
+        guard beforeChange else {
+            model.previewNowMinutes = 13 * 60
+            return model
+        }
+        model.previewNowMinutes = nil
+        model.select(ISODate.addDays(date, -1) ?? date)
         return model
     }
 
@@ -539,6 +555,10 @@ enum PulsePreviews {
                 .environment(AppEnvironment.preview)
         case "stack":
             Observing(model: stackDay()) { StackView(model: $0) }
+                .environment(AppEnvironment.preview)
+        // The day before the dose change — see `stackDay(beforeChange:)`.
+        case "stack-before":
+            Observing(model: stackDay(beforeChange: true)) { StackView(model: $0) }
                 .environment(AppEnvironment.preview)
         case "stack-add":
             Presenting(model: stackDay()) { SupplementEditSheet(model: $0, editing: nil) }

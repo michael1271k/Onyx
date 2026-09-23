@@ -1449,6 +1449,12 @@ public enum WeeklyExport {
             let stressCells = (input.stress ?? []).filter { $0.date == day.date }
                 .map { "\($0.time ?? $0.slot) \(n($0.level))" }
             let skipped = (day.supplementsSkipped ?? []) + (day.supplementsSkippedUnplanned ?? [])
+            /* A dose that changed today is filed on the day the new amount
+               started. Every other day's stack figures already carry the dose
+               that was in force (`Supplements.doseAt`); this cell is what tells
+               the reader a step in `of which stack` is a new protocol, not a
+               missed one. */
+            let doseChanges = (day.supplementDoseChanges ?? []).map { "\(phrase($0.name)) \(phrase($0.from)) → \(phrase($0.to))" }
             let flags = [
                 day.nutritionEstimated ? "estimate" : nil,
                 day.sleepInaccurate == true ? "disputed sleep" : nil,
@@ -1478,6 +1484,7 @@ public enum WeeklyExport {
                 domsCells.isEmpty ? nil : "DOMS \(domsCells.joined(separator: ", "))",
                 stressCells.isEmpty ? nil : "stress \(stressCells.joined(separator: ", "))",
                 skipped.isEmpty ? nil : "skipped \(skipped.joined(separator: ", "))",
+                doseChanges.isEmpty ? nil : "dose change \(doseChanges.joined(separator: ", "))",
                 stackNote.isEmpty ? nil : "of which stack \(stackNote)",
                 flags.isEmpty ? nil : "flags \(flags.joined(separator: ", "))",
             ]))

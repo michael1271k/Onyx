@@ -86,7 +86,7 @@ struct SupplementMacroTests {
             CustomSupplement(id: "a", name: "Psyllium Husk", dose: "5 g", time: stored),
             CustomSupplement(id: "b", name: "Magnesium", dose: "300 mg", time: stored),
         ]
-        let slots = Supplements.customSlotsForDate(rows, weekday: 4)
+        let slots = Supplements.customSlotsForDate(rows, on: "2026-09-10", weekday: 4)
         #expect(slots.count == 1)
         #expect(slots.first?.time == "18:30")
         #expect(slots.first?.items.count == 2)

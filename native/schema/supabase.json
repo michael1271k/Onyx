@@ -49,7 +49,13 @@
     "runs V1, V2 and V3 in order. `daily_logs.hrv_overnight` is a column on an OLDER table",
     "and follows the v21 rule -- listed in `cols` for a fresh install and altered in by the",
     "same migration for a store that already exists. It was introspected live on 2026-09-20",
-    "and had been missing from this file since it was written."
+    "and had been missing from this file since it was written.",
+    "",
+    "`custom_supplements.dose_periods` (App Store sprint W5, 2026-09-23) is the same shape of",
+    "change: a column on an OLDER table, listed in `cols` for a fresh install and altered in by",
+    "`v35.dosePeriods` for a store that already exists. It was ABSENT when this line was written",
+    "-- `docs/sql/w5-dose-periods.sql` is the founder's paste -- and it is nullable in Postgres",
+    "too, so a nil keeps it out of every push body until a dose actually changes."
   ],
   "strategies": {
     "cursor": "Delta by a monotonic timestamp column. Only trustworthy on a table whose updated_at is maintained by the server-side trigger; a client-written timestamp from a slow phone lands in the past and is skipped forever.",
@@ -126,7 +132,7 @@
         "id"
       ],
       "full": true,
-      "cols": "id:uuid,user_id:uuid,name:text,dose:text,color:text?,form:text?,time:text?,schedule:jsonb?,micros:jsonb?,created_at:timestamptz?,archived_at:timestamptz?,dose_amount:numeric?,dose_unit:text?,sort_order:int2?"
+      "cols": "id:uuid,user_id:uuid,name:text,dose:text,color:text?,form:text?,time:text?,schedule:jsonb?,micros:jsonb?,created_at:timestamptz?,archived_at:timestamptz?,dose_amount:numeric?,dose_unit:text?,sort_order:int2?,dose_periods:jsonb?"
     },
     "fatigue_logs": {
       "group": "daily",

@@ -105,12 +105,14 @@ struct OnyxApp: App {
                 // already hold them.
                 environment?.drainPendingWater()
                 environment?.refreshHealth()
-                /* ── THE REMINDERS ARE RE-ARMED HERE AND NOWHERE ELSE ────────
+                /* ── THE REMINDERS ARE RE-ARMED ON EVERY FOREGROUND ─────────
                    They are one-shots for the coming week, so a slot answered
                    since the last foreground has to stop being scheduled and a
                    new week has to be armed. There is no background refresh on
                    a free developer account, so "the app was opened" is the only
-                   clock this has. `refresh` is a no-op when the toggle is off. */
+                   clock this has — plus `DayModel.write`, which re-arms after
+                   a tick or a stack edit made while the app is open. `refresh`
+                   clears everything when both toggles are off. */
                 if let environment {
                     OnyxReminders.refresh(
                         database: environment.database, userId: environment.userIdString)

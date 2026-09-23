@@ -114,7 +114,7 @@ struct SupplementGoldenTests {
             case "slotTimePassed":
                 #expect(Supplements.slotTimePassed(i.hhmm!, nowMinutes: i.nowMinutes!) == e.passed, "\(c.name)")
             case "customSlotsForDate":
-                #expect(Supplements.customSlotsForDate(i.customs!, weekday: i.weekday!, isTraining: i.isTraining!) == e.slots, "\(c.name)")
+                #expect(Supplements.customSlotsForDate(i.customs!, on: "2026-01-01", weekday: i.weekday!, isTraining: i.isTraining!) == e.slots, "\(c.name)")
             case "customDoseFor":
                 #expect(Supplements.customDose(i.custom!, isTraining: i.isTraining!) == e.text, "\(c.name)")
             case "supplementKeyOf":

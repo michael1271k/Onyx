@@ -808,12 +808,14 @@ final class DayModel {
     private var activeCustoms: [CustomSupplement] { Supplements.active(decodedCustoms, on: date) }
 
     /// The rows that had left it — the Stack screen's last section.
-    var archivedCustoms: [CustomSupplement] { Supplements.archived(decodedCustoms, on: date) }
+    var archivedCustoms: [CustomSupplement] {
+        Supplements.archived(decodedCustoms, on: date).map { Supplements.doseAt($0, on: date) }
+    }
 
     private func stack(isTraining training: Bool) -> [SupplementSlot] {
         let weekday = ISODate.weekday(date) ?? 0
         return Supplements.stackForDate(
-            Supplements.customSlotsForDate(activeCustoms, weekday: weekday, isTraining: training),
+            Supplements.customSlotsForDate(activeCustoms, on: date, weekday: weekday, isTraining: training),
             isTraining: training, weekday: weekday
         )
     }
@@ -870,11 +872,18 @@ final class DayModel {
 
     /// One failure path for every write. Returns whether it landed, for the
     /// sheets that close on success.
+    ///
+    /// `rearm` is for the writers that change what a reminder asks about — a
+    /// dose ticked or skipped, the stack edited, a fatigue slot answered, a
+    /// waist taken, the day's type swapped. The reminders are one-shots built
+    /// from exactly those, so such a write must reach them now, not at the
+    /// next foreground. A glass of water must not re-read a week of stacks.
     @discardableResult
-    private func write(_ body: () throws -> Void) -> Bool {
+    private func write(rearm: Bool = false, _ body: () throws -> Void) -> Bool {
         do {
             try body()
             failure = nil
+            if rearm, OnyxReminders.anyEnabled { OnyxReminders.refresh(database: database, userId: userId) }
             return true
         } catch {
             report(error)
@@ -890,7 +899,7 @@ final class DayModel {
         if let level {
             fatigueRows.append(FatigueLogRow(id: "local", userId: userId, date: date, slot: slot.rawValue, level: level))
         }
-        write { [database, userId, date] in
+        write(rearm: true) { [database, userId, date] in
             try database.setFatigue(userId: userId, date: date, slot: slot.rawValue, level: level, superseding: superseded)
         }
     }
@@ -975,7 +984,7 @@ final class DayModel {
             ))
         }
         let due = Self.localInstant(date, hhmm: dose.slotTime)
-        write { [database, userId, date] in
+        write(rearm: true) { [database, userId, date] in
             try database.markSupplement(userId: userId, date: date, itemKey: dose.key, mark: mark, dueAt: due)
         }
     }
@@ -986,7 +995,7 @@ final class DayModel {
     func freezeTomorrow(_ dose: SupplementDose) -> Bool {
         guard let tomorrow = ISODate.addDays(date, 1) else { return false }
         let due = Self.localInstant(tomorrow, hhmm: dose.slotTime)
-        return write { [database, userId] in
+        return write(rearm: true) { [database, userId] in
             try database.markSupplement(userId: userId, date: tomorrow, itemKey: dose.key, mark: .skipped, dueAt: due)
         }
     }
@@ -994,7 +1003,7 @@ final class DayModel {
     /// Take an item out of the protocol, or put it back. Seeded items have no
     /// row of their own and cannot be archived — the caller checks first.
     func setArchived(_ custom: CustomSupplement, archived: Bool) {
-        write { [database, userId] in
+        write(rearm: true) { [database, userId] in
             try database.setCustomSupplementArchived(id: custom.id, userId: userId, archived: archived)
         }
     }
@@ -1002,7 +1011,7 @@ final class DayModel {
     /// Remove a row outright — for something added by mistake. Everything else
     /// archives, so the log keys it wrote keep resolving.
     func delete(_ custom: CustomSupplement) {
-        write { [database, userId] in
+        write(rearm: true) { [database, userId] in
             try database.deleteCustomSupplement(id: custom.id, userId: userId)
         }
     }
@@ -1020,7 +1029,7 @@ final class DayModel {
             notes: (notes ?? "").isEmpty ? nil : notes,
             trainingOnly: trainingOnly ? true : nil
         )
-        return write { [database, userId] in
+        return write(rearm: true) { [database, userId] in
             try database.addCustomSupplement(
                 userId: userId, name: name, dose: dose,
                 color: color, form: (form ?? "").isEmpty ? nil : form,
@@ -1045,7 +1054,7 @@ final class DayModel {
         name: String, dose: String, doseAmount: Double?, doseUnit: String?,
         form: String?, time: String?, days: [Int], trainingOnly: Bool
     ) -> Bool {
-        write { [database, userId] in
+        write(rearm: true) { [database, userId] in
             try database.updateCustomSupplement(
                 id: custom.id, userId: userId,
                 name: name, dose: dose, doseAmount: doseAmount, doseUnit: doseUnit,
@@ -1161,7 +1170,7 @@ final class DayModel {
     }
 
     func saveBody(_ change: @Sendable @escaping (inout DailyLogRow) -> Void) -> Bool {
-        write { [database, userId, date] in
+        write(rearm: true) { [database, userId, date] in
             try database.saveBodyMetrics(userId: userId, date: date, change)
         }
     }
@@ -1183,7 +1192,7 @@ final class DayModel {
     // MARK: Swaps
 
     func applySwap(_ writes: [ScheduleWrite], note: String) -> Bool {
-        let landed = write { [database, userId, trainingOnlyKeys] in
+        let landed = write(rearm: true) { [database, userId, trainingOnlyKeys] in
             try database.applyScheduleWrites(
                 userId: userId, writes.map { (date: $0.date, dayKey: $0.dayKey) },
                 trainingOnlySupplementKeys: trainingOnlyKeys
@@ -1198,7 +1207,7 @@ final class DayModel {
     func undoSwap() {
         let dates = swapPairDates()
         guard !dates.isEmpty else { return }
-        if write({ [database, userId, trainingOnlyKeys] in
+        if write(rearm: true, { [database, userId, trainingOnlyKeys] in
             try database.clearScheduleOverrides(userId: userId, dates: dates, trainingOnlySupplementKeys: trainingOnlyKeys)
         }) {
             swapNote = dates.count > 1

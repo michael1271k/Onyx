@@ -270,7 +270,7 @@ public final class WatchLink: NSObject, Sendable {
     /// message that wakes the other app can be handed over after the queue
     /// it finds waiting), and the receiver is built for both: a second open
     /// changes nothing, and an open for a session discarded in between is
-    /// refused by its tombstone (`AppDatabase.receiveSession`, v35). A join is
+    /// refused by its tombstone (`AppDatabase.receiveSession`, v36). A join is
     /// messaged too; it creates nothing a late copy could revive.
     ///
     /// Seen on a paired simulator (W4): a message reached the running

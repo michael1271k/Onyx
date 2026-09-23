@@ -44,6 +44,60 @@ _Nothing yet._
 
 ---
 
+## [7.13.0] — 2026-09-23 · A dose change starts today
+
+Wave 5 of the App Store sprint (Lane B). Changing a supplement's dose used to
+rewrite every day you had ever taken it. It now starts on the day you change
+it, and every past day keeps the dose it was actually taken at. The stack can
+also remind you at each of its times.
+
+### Added
+- **Dose history** (phone, export). Changing a dose in the Stack editor keeps
+  the old dose for every day before today. The Stack screen, the Pulse day and
+  the weekly export all show the dose that was in force on the day they show,
+  and a past day's Stack screen now names its date. Swiping back to a day
+  before the change shows the old dose. For a counted dose ("2 caps"), that
+  day's micronutrient credit on the Nutrition tab follows it too; a mass
+  ("300 mg") is credited as the label, as before.
+  - Changing the dose twice in one day keeps the first dose for the days
+    before. Changing it back the same day is an undo, and leaves no trace.
+  - Editing only the name, time, form or days of an item records nothing —
+    including a row whose dose the editor merely re-spells ("2 Caps" saved
+    back as "2 caps").
+  - Archiving is unchanged: it still stops the item from its date forward and
+    leaves its history alone.
+- **Supplement reminders** (phone). Settings → Training → *Supplement
+  reminders*. One notification per stack time, naming each dose still due then
+  at that day's dose, for example *Before Bed · 22:00 — Magnesium Glycinate
+  400 mg, L-Theanine 200 mg*. A dose you have already ticked or skipped is not
+  reminded. Permission is asked for when you turn the switch on, never at
+  launch. Reminders are armed a week ahead, on every foreground and after every
+  tick, skip or stack edit. Signing out or deleting the account cancels them
+  and turns both reminder switches off.
+- **The export names the day a dose changed.** The day's row in the Markdown
+  gets `dose change Magnesium Glycinate 300 mg → 400 mg`. In the JSON, each
+  day's taken list carries the dose in force that day, and the day of a change
+  carries a `supplementDoseChanges` list.
+- **`docs/sql/w5-dose-periods.sql`** — adds the nullable `dose_periods` jsonb
+  column to `custom_supplements`, for the founder to paste. It is a founder
+  gate: this build must not reach the phone before it has run.
+
+### Fixed
+- **An archived supplement no longer stays in the export after its archive
+  date.** The export read supplements through its own copy of the row mapper,
+  which dropped `archived_at`, so an item archived on Wednesday was still
+  listed as taken on Thursday to Saturday. It now uses the app's one mapper.
+
+### Notes
+- The export's golden fixtures did **not** move. None of them contains a dose
+  change, and a day without one prints exactly what it printed before.
+- The dose history is stored as `custom_supplements.dose_periods`, a list of the
+  doses an item used to be taken at, each with the date it stopped. The row's
+  own dose columns are still the current dose, so anything that does not know
+  about the history still reads today's dose correctly.
+
+---
+
 ## [7.11.0] — 2026-09-23 · Add a movement, see the heart rate when you ask
 
 Wave 3 of the App Store sprint (Lane B). Three briefs on the logger's screen

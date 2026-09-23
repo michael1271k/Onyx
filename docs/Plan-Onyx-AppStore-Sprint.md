@@ -1173,3 +1173,200 @@ so the first `npm run check`, `swift:core` or `swift:data` in W4/W5 is a cold
 build. Note for anyone purging from zsh: an empty `DerivedData/*` glob aborts
 the whole `rm` line (`no matches found`) and deletes nothing — purge each
 directory on its own, or `setopt nullglob` first.
+
+---
+
+## W5 — Supplements engine (7.13.0, Lane B)
+
+### What shipped
+
+- **(a) Dose history.**
+  - **The column.** `custom_supplements.dose_periods` is a nullable jsonb beside
+    `schedule`. It holds the doses an item USED to be taken at, oldest first:
+    `{until, dose, doseAmount, doseUnit, trainingDose, restDose}`. `until` is
+    the day the dose changed, and it is exclusive: the day of the change is
+    the first day of the new dose. The row's own dose columns are still the
+    current dose, so a reader that has never heard of the column still reads
+    today correctly.
+  - **The one reader** is `Supplements.doseAt(_:on:)`, in `SupplementStack.swift`
+    beside `stackForDate`. It resolves by searching for the earliest `until`
+    after the date, not by list position.
+  - **Where it is applied.** `customSlotsForDate` now takes `on date:` and
+    resolves every row through `doseAt`. All four callers route through it:
+    the Pulse day and Stack screen, `StackCredit` (Nutrition's micros and the
+    reminders), the export, and `WorkoutWeek`. So there is one place where
+    history is applied, not four.
+  - **The append rule** is `Supplements.dosePeriods(changing:to:today:)`. The
+    one door that calls it is `updateCustomSupplement(today:)`.
+    - A second change on the same day closes nothing new.
+    - Changing back the same day is an undo, which leaves `[]` and never nil.
+    - A dose the editor only re-spells ("2 Caps" → "2 caps") is not a change.
+    - A period dated after today, from a clock running ahead, is clamped to
+      today.
+  - **Local mirror.** `native/schema/supabase.json` gained the column, and
+    `MirrorModels.swift` was regenerated from it. Existing stores get it from
+    the `v35.dosePeriods` guarded alter.
+  - **The Postgres half** is `docs/sql/w5-dose-periods.sql`: the column, a
+    CHECK that it is null or an array, and a PostgREST reload. **Founder gate.**
+  - **The export.**
+    - Every `supplementsLog` entry carries that day's `dose`.
+    - The day of a change carries `supplementDoseChanges`, and its §4 row
+      reads `dose change Magnesium 300 mg → 400 mg`.
+    - `supplementProtocol` is the stack as it stood on the span's last day.
+  - **`archived_at` is untouched.**
+- **(b) Reminders.** This extends the reminder engine that was already here,
+  `OnyxReminders`, rather than adding a second one.
+  - **The switch.** A second switch, *Supplement reminders*, sits under
+    *Log reminders* in Settings → Training. Permission is asked for when it is
+    turned on, and a refusal turns it back off.
+  - **What gets scheduled.** One one-shot per stack time per day for the
+    coming week. Each names the doses still unanswered at that time, at that
+    day's dose. It is built from the same `stackCredit` the checklist uses.
+    The soonest 64 across both kinds of reminder are armed, which is iOS's
+    limit.
+  - **When it re-arms.** One re-arm runs at a time. It happens on every
+    foreground, and after the `DayModel` writes that change what a reminder
+    asks about. It does not happen after a glass of water.
+  - **Sign-out and deletion.** Signing out or deleting the account cancels the
+    reminders and clears both switches.
+- **(c) The Pulse day and its Stack screen.**
+  - **The dose.** A past day's stack reads `doseAt`, so swiping back to the
+    day before a change shows the old dose.
+  - **The title.** A past day's Stack screen is now titled with its date
+    (`Stack · Mon, 31 Aug`). Without it, 300 mg beside today's 400 mg looks
+    like an edit that did not save.
+
+### What the code falsified about the brief
+
+1. **"The golden fixtures will move" — they did not.**
+   - **Why.** No fixture contains a dose change, and a day without one renders
+     byte for byte as before. `ReportsGoldenTests` passed untouched.
+   - **What did move.** The hand-written JSON in `WeeklyExportBuilderTests`
+     moved, on purpose, because every taken entry now carries its dose.
+2. **A reminder engine already existed.**
+   - **What was there.** `OnyxReminders` (Features/Shell/Reminders.swift)
+     already armed a week of one-shots, re-armed on every foreground, and
+     cleared its own requests by prefix.
+   - **Why that shape is right.** Its header already explained why a
+     repeating trigger is wrong: a dose ticked at breakfast would still be
+     nagged at 22:00.
+   - **What was done.** Supplements became a second kind of reminder in it,
+     not a second scheduler.
+3. **No usage string was needed** (as W1 found), and nothing in `project.yml`
+   moved.
+4. **The export had a second row mapper that silently dropped `archived_at`.**
+   - **The bug.** `WeeklyExportBuilder.custom` built `CustomSupplement` from
+     seven columns. So `Supplements.active(_:on:)`, whose own comment says it
+     was written for this export, never saw an item leave. An item archived on
+     Wednesday was "taken" Thursday to Saturday.
+   - **Why it mattered here.** It would have dropped `dose_periods` the same
+     way, so the history would never have reached the export.
+   - **The fix.** It now routes through `AppDatabase.custom`, and only
+     `micros` is re-read with the tolerant `numbers`.
+5. **A mass dose never moved a micronutrient total.**
+   - **Why.** `SupplementNutrients.doseUnits` scales only counted units
+     ("2 caps"). A mass is the label.
+   - **What that means here.** Magnesium 300 → 400 mg changes the checklist
+     and the export, not a micro total. A count change does move the total,
+     and `DoseHistoryStoreTests` pins zinc at 30 before and 15 after.
+6. **"Vitals history" is the Pulse day.**
+   - **Where the dose is.** Its Vitals block draws no supplement doses. The
+     dose is on the Stack screen pushed from that day, so that is what was
+     photographed and what the day-level test reads (`DayModel.doses`).
+
+### Defects found and fixed that the brief did not name
+
+- The export's archive blindness (above).
+- **From code review:**
+  - Every `DayModel` write re-armed the reminders, including water. Two
+    overlapping re-arms could also interleave on the notification centre and
+    arm a reminder for a dose just skipped. The re-arm is now limited to the
+    writes that change a reminder, and the runs are serialised.
+  - Reminders survived sign-out and account deletion, naming a deleted
+    account's doses on the lock screen for up to a week.
+  - A time-only edit of a row the web wrote ("2 Caps") recorded a phantom dose
+    change.
+  - A stored history this build could not decode would have been overwritten
+    with `[new]`.
+  - One unreadable day stopped the whole week of reminders.
+- **A test trap:** the simulator's DEBUG migrator runs with
+  `eraseDatabaseOnSchemaChange`, so a migration test that alters the schema by
+  hand gets its store wiped. The v35 test turns the flag off.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| `npm run check` (incl. `swift:ui`, `check:watch`) | **PASSED**, exit 0 — `swift:ui` 42/42, watch build succeeded |
+| `npm run swift:core` | **PASSED** — 720 tests, 137 suites (706 + 14 new) |
+| `npm run swift:data` | **PASSED** — 739 tests, 91 suites, run alone (733 + 6 new) |
+| `Onyx` scheme | OnyxTests: **exactly W1's 9 names** (11 issues). OnyxCoreTests 720/720. OnyxUITests 42/42. OnyxDataTests: 3 issues — the Keychain blob (Gate 0, baseline), `SeamBenchmarkTests` timing (known flake, a build was running on the same machine), and the new v35 test (a harness wipe, fixed). Both re-run alone on the simulator: **10/10** |
+
+- **The history claim was proved by tests, not a screenshot**, as asked:
+  - `DoseHistoryDayTests` (app target). It changes a dose today through
+    `DayModel.editSupplement`, then opens yesterday's `DayModel`, which reads
+    300 mg, and today's, which reads 200 mg. It builds the export over the two
+    days: `supplementsLog[].dose` reads 300 / 200, and today carries the
+    `supplementDoseChanges` entry.
+  - `DoseHistoryStoreTests` proves the same at the store: `stackCredit`, the
+    export JSON and the §4 Markdown row. It also covers the push body (the key
+    is present only when there is history, and never in `nulls`), the v35
+    upgrade on an existing store, and the export's archive cut.
+- **Screenshots**, iPhone 15 on iOS 27.0, signed ad-hoc, reviewed:
+  - `stack` — the change day, Magnesium 400 mg.
+  - `stack-before` — the day before, Magnesium 300 mg with every dose Due.
+    Also checked at AX5; the dated title fits.
+  - Settings → Training with the new switch.
+  - The iOS permission prompt, raised only by turning the switch on. "Don't
+    Allow" was tapped, and the switch read back `0`.
+- **invariant-auditor**: clean on all seven questions asked. It raised one
+  edge: a dose changed and archived on the same day gets no change note.
+  That is left as is, because by the archive rule the item is not in that
+  day's protocol.
+- **code-reviewer**: 0 critical, 0 high, 4 medium, 10 low. Every medium was
+  fixed except one, which is covered by the founder gate. The lows fixed
+  (every one a line or two) are the rest of the "From code review" list above
+  plus:
+  - the export's protocol dose now matches the span's last day;
+  - the change note's doses are cleaned (`phrase`) like the name;
+  - a test for the v35 alter was added;
+  - the new test clears the reminder switches, so it cannot re-arm a real
+    simulator's reminders.
+
+  The lows left open are listed below.
+
+### Left open
+
+- **The founder gate.** The build must not reach the phone before
+  `w5-dose-periods.sql` has run.
+  - **Why.** Before the column exists, a dose change's push is held
+    (PGRST204), and the next full pull of `custom_supplements` writes the
+    server's old row over the local one.
+  - **The code alternative, not taken.** The reviewer suggested stripping an
+    unknown column and retrying. It was not done, because the paste closes
+    the window for good.
+- **The archive cut compares the UTC date of `archived_at`.** This is older
+  than this wave, since the Stack screen always did it. The export does it too
+  now that it sees archives. A UTC+10 archive at 08:00 leaves the stack the
+  day before.
+- **A change hidden behind a `trainingDose`/`restDose` is not reported.** The
+  editor cannot write either field, and no live row has one (the live
+  `schedule` keys are `key`, `notes`, `slot`, `trainingOnly`).
+- **Earlier issue seen in review:** at AX5 the Stack rows hyphenate long names
+  ("Multivit-amin").
+
+### Close-out
+
+| | |
+|---|---|
+| Founder gate | `w5-dose-periods.sql` pasted by the founder. Verified LIVE through PostgREST before the merge: `custom_supplements.dose_periods` is `jsonb` with its comment, and `dose_periods=not.is.null` counts 0 of 10 rows, matching the founder's "10 rows, 0 with_history" |
+| Version | **7.13.0** (71300), `version:check` in sync on `main` |
+| Changelog | `docs/CHANGELOG.md` → `[7.13.0] — A dose change starts today` |
+| Merged | `44c412a4` → `main`, no-ff. `main` had not moved since W3 (`c336759e`), so there was nothing to merge back first |
+| Branch | `wave/5-supplements` deleted locally. It was never pushed, so there is no remote branch. Worktree removed |
+| Cache purged | **3.37 GB freed**, and **only Lane B's own** (`onyx-swift/laneB-w5`). W4 was still running, so the shared caches were left: `OnyxCore`, `OnyxData`, `OnyxUI-*`, `check-watch`, `ui-test-derived`, SwiftPM, and W4's `laneA-*`. Deleting them mid-wave would cold-start or break W4's next gate. W4's close-out purges them. `DerivedData` was already empty |
+
+**Version order, for W4.** `main` is now 7.13.0. W4 was mapped to 7.12.0, and
+landing that after this would move the version backwards. The derived build
+number would go from 71300 to 71200, which App Store Connect refuses. W4 should
+take the next free minor, **7.14.0**, and W6/W7 shift up one from there.

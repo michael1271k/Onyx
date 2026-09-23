@@ -24,6 +24,21 @@ public struct ExportSupplement: Codable, Equatable, Sendable {
 public struct SupplementLogEntry: Codable, Equatable, Sendable {
     public var key: String
     public var time: String?
+    /// The dose in force ON THAT DAY (`Supplements.doseAt`), not the dose on
+    /// the row today. Nil on a payload built before 7.13.0.
+    public var dose: String?
+}
+
+/// A dose that changed on the day it is filed under — the day the NEW dose
+/// started. `from` is what was taken until the day before.
+public struct ExportDoseChange: Codable, Equatable, Sendable {
+    public var name: String
+    public var from: String
+    public var to: String
+
+    public init(name: String, from: String, to: String) {
+        self.name = name; self.from = from; self.to = to
+    }
 }
 
 /// Readiness v9's signals for one day, exactly as the scorer read them —
@@ -113,6 +128,8 @@ public struct ExportDay: Codable, Equatable, Sendable {
     /// closed week; the clause exists so a partial week cannot round a pending
     /// dose up into an adherence figure.
     public var supplementsLater: [String]?
+    /// Doses that changed on this day. Absent on every day nothing changed.
+    public var supplementDoseChanges: [ExportDoseChange]?
     public var nutrientsFood: [String: Double]?
     public var nutrientsStack: [String: Double]?
     public var activeKcal: Double?
