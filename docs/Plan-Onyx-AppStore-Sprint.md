@@ -1354,3 +1354,19 @@ directory on its own, or `setopt nullglob` first.
   `schedule` keys are `key`, `notes`, `slot`, `trainingOnly`).
 - **Earlier issue seen in review:** at AX5 the Stack rows hyphenate long names
   ("Multivit-amin").
+
+### Close-out
+
+| | |
+|---|---|
+| Founder gate | `w5-dose-periods.sql` pasted by the founder. Verified LIVE through PostgREST before the merge: `custom_supplements.dose_periods` is `jsonb` with its comment, and `dose_periods=not.is.null` counts 0 of 10 rows, matching the founder's "10 rows, 0 with_history" |
+| Version | **7.13.0** (71300), `version:check` in sync on `main` |
+| Changelog | `docs/CHANGELOG.md` → `[7.13.0] — A dose change starts today` |
+| Merged | `44c412a4` → `main`, no-ff. `main` had not moved since W3 (`c336759e`), so there was nothing to merge back first |
+| Branch | `wave/5-supplements` deleted locally. It was never pushed, so there is no remote branch. Worktree removed |
+| Cache purged | **3.37 GB freed**, and **only Lane B's own** (`onyx-swift/laneB-w5`). W4 was still running, so the shared caches were left: `OnyxCore`, `OnyxData`, `OnyxUI-*`, `check-watch`, `ui-test-derived`, SwiftPM, and W4's `laneA-*`. Deleting them mid-wave would cold-start or break W4's next gate. W4's close-out purges them. `DerivedData` was already empty |
+
+**Version order, for W4.** `main` is now 7.13.0. W4 was mapped to 7.12.0, and
+landing that after this would move the version backwards. The derived build
+number would go from 71300 to 71200, which App Store Connect refuses. W4 should
+take the next free minor, **7.14.0**, and W6/W7 shift up one from there.
