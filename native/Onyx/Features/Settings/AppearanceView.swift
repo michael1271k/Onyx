@@ -214,8 +214,9 @@ struct AppearanceView: View {
     private var footer: String {
         let what = """
             Each swatch is the theme's own four accents — training, nutrition, \
-            body and recovery — blended. Picking one moves all twenty-six \
-            colours the app draws, including all sixteen muscles. The word \
+            body and recovery — blended. Picking one moves the app's accents \
+            and, a little, its nutrition colours; water, heart rate, sleep and \
+            the sixteen muscles keep their own colours in every theme. The word \
             under each name is its mood: how saturated and how light the \
             derived colours sit. A cut, a bulk or a deload week then shifts \
             that mood on its own, and shifts back when the block ends; the two \
