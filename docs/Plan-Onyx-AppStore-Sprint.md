@@ -1620,3 +1620,95 @@ DietaryFatMonounsaturated, DietaryFatPolyunsaturated. **Written:** phone —
 `HKWorkoutSession`'s workout, with heart rate and energy attached by its
 builder. `HealthScopeTests` now pins every read type to the screen that draws
 it, so this table cannot drift silently again.
+
+### What shipped
+
+- **The read scope is exactly what the app draws.** 51 requested types → 45.
+  Nine dietary micros that were requested and never read (zinc, iodine,
+  vitamins A/B6/B12/E/K, biotin, cholesterol) now ride the existing micros
+  pipeline — `HealthKey`, the metric row, the unit, `microsBundle` — into
+  `nutrition_entries.micros` (jsonb, so no DDL) and onto the **Nutrients
+  grid**, with eight new target rows (adult DRI, men 19–50, the basis the
+  table already used; cholesterol as the label Daily Value ceiling). Seven
+  types nothing read left the request. `HealthScopeTests` pins every read
+  type to the screen that draws it.
+- **Apple's 1-minute heart-rate recovery** is read per finished session over
+  `[end − 2 min, end + 10 min)` and shown in the session heart-rate panel's
+  caption ("−28 bpm in 1 min"). Its own read, never cached, so a cached
+  series never waits on Health.
+- **Off the wrist, one mechanism.**
+  - `WristCoverage.offWristMinutes` — the LONGEST silence in the heart-rate
+    series over the LOCAL overnight window (21:00 → 09:00), open-ended at
+    `now` for today. Nil when there is no reading at all (a phone with no
+    watch is never told to wear one).
+  - Stored in a LOCAL table, `wrist_coverage` (`v37`), written by
+    `HealthSync` before the ingest, watched by `RescoreDoor`, upserted as a
+    no-op when the whole minutes have not moved.
+  - It reaches the scorer as one RAW fact, `ScoringInputs.offWristMin`, and
+    Core decides everything from those inputs: `WristCoverage.nightUnmeasured`
+    (the battery) and `OffWristNote.make` (the sentence). One threshold
+    (60 min), one set of inputs — the battery and the sentence cannot disagree.
+  - **The battery's one missing-as-zero is gone:** a night with no record and
+    the watch off the wrist drops its duration and stage terms and charges
+    from HRV and resting HR, renormalised — `Score`'s own nil-drops rule.
+    Nil `offWristMin` (every golden vector, every pre-W6 day) is v9, byte for
+    byte; the battery goldens did not move.
+  - **Every readiness face says it:** the Recovery tile Large ("Your watch was
+    off your wrist for 6 h — readiness is from 3 signals, not 5."), Medium
+    ("off wrist 6 h · 3 of 5"), Small (a watch-slash mark, the sentence as its
+    label); the rectangular accessory (Lock Screen, the watch's Today card and
+    complication: "Readiness 81 · 3 of 5"); the watch's rest-day hero. Carried
+    to the wrist in `WatchTiles.offWrist` (key `ow`, 13 bytes).
+  - **The export replays it:** `ExportDay.offWristMin`, so the Derived
+    block's recomputed charge still matches the stored battery.
+- **Docs:** the four privacy manifests say what the scope is and why no
+  category moved; `APP_STORE.md` §3 gained the scope table, §4's review note
+  no longer says "read" only, §7's `unnecessary_data` row says it was false
+  until now. The phone's `NSHealthUpdateUsageDescription` no longer claims a
+  heart-rate write the phone never makes (text only — `project.yml` is not
+  structurally touched; background delivery stays commented).
+
+### What the code falsified about the brief
+
+1. **"Add the unread types" — they were already requested.** All sixteen the
+   brief names sat in `extraReadTypes` and were passed to
+   `requestAuthorization`; nothing ever queried one. So the App Store risk was the reverse of the brief's framing:
+   the app already asked for sixteen types it never showed, and the
+   `unnecessary_data` "Pass" in `APP_STORE.md` §7 was false. Nine now surface;
+   seven with no figure to feed are gone.
+2. **"Authorization is requested in three places" — the third is not where
+   the brief says.** `HealthKitReader:48` and `HealthSync:37` are one path (the
+   second calls the first). The watch's call is at `WorkoutSessionController:113`.
+   The real third site is `TelemetrySeed.swift:46`, DEBUG-only.
+3. **"The app already has this instinct for sleep" — it had it everywhere but
+   the battery.** `Score.sleep` returns nil with no night; `Score.recovery`
+   drops the part; `sleepRecoveryMultiplier` reads "unknown, not a penalty".
+   But `Battery.sleepQualityParts` read a missing night as a zero-hour night
+   (`ratio = 0`, `stagesQ = 0`), while its own comment claimed every missing
+   term degrades to neutral. That was the one place missing read as zero, and
+   it is the one place the arithmetic changed.
+4. **`ScoreComponents.awaitingSleep` is read by nothing.** The Swift port
+   carries it; no view draws "Awaiting Sleep Data". Left as is.
+5. **A "wristCoverage fraction per window" is the wrong measure.** A fraction
+   over a noon-to-noon UTC window is mostly the previous waking day for anyone
+   west of Greenwich, and a sum of gaps turns a shower and a charge into one
+   invented night. What ships is the longest single silence over the local
+   night, and "hours off the wrist" is the number the sentence needs anyway.
+6. **The phone writes no heart rate.** Its usage string said it did.
+
+### Defects found and fixed that the brief did not name
+
+- **Micros were stored as whole numbers.** `HealthCatalogue.round` rounds
+  every `.sum` metric to an integer, so B6 at 1.4 mg would have read "1" and
+  "not met" against a 1.3 mg floor (and iron at 9.6 mg already read "met").
+  Micros now keep two decimals; the grid prints amounts under ten with one.
+- **From code review:** an unguarded read of the new table would have blanked
+  every widget after an update until the app was opened (the extension opens
+  the store read-only and never migrates) — `offWristByDate` returns empty
+  below v37, pinned by a test that drops the table; the export's recomputed
+  battery would have disagreed with the stored one on off-wrist nights; the
+  2.5× "implausible" rule, tuned on double-logged calcium, would have thrown
+  out real spinach and sweet-potato days for vitamins K and A (the seven new
+  floors are never flagged); seven permanent "not reported by the food
+  source" lines per export are now one; "from 1 signals"; the accessory
+  sub-line truncated before it shrank, and VoiceOver read a bare "3 of 5".

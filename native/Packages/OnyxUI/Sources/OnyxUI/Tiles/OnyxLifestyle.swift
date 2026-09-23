@@ -1723,8 +1723,11 @@ struct RecoveryChargeFace: View {
     VStack(alignment: .leading, spacing: 3) {
       HStack(spacing: 4) {
         Caption("RECOVERY", color: accent)
+        // Beside the caption, not in the trailing corner: the corner is the
+        // Onyx mark's, and the first shot drew the two on top of each other.
+        if let note = offWristNote(s) { OffWristMark(note: note) }
         Spacer(minLength: 0)
-        if entry.isStale { StaleTag(age: entry.age) } else if let note = offWristNote(s) { OffWristMark(note: note) }
+        if entry.isStale { StaleTag(age: entry.age) }
       }
       ZStack {
         ChargeArc(fraction: s?.score.map { min(1, max(0, Double($0) / 100)) },
