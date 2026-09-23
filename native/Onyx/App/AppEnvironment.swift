@@ -244,25 +244,6 @@ public final class AppEnvironment {
     /// widgets, so it costs nothing that was not already being paid.
     private(set) var storeGeneration = 0
 
-    /// Gym mode (§W6-B, decision 26): the shell has hidden the tab bar and the
-    /// app is standing in the logger.
-    ///
-    /// ── WHY IT LIVES HERE AND NOT IN THE SHELL'S `@State` ───────────────────
-    /// Three surfaces set it and two of them are not the shell: the launch
-    /// door in `RootView`, the Leave capsule in `WorkoutTabView`'s navigation
-    /// bar, and `sessionFinished`/`sessionCancelled`, which end it without
-    /// anybody tapping anything. `@State` on the root is also thrown away by
-    /// the theme rebuild, which is how a colour change used to evict the
-    /// selected tab (see `selectedTab`).
-    var gymMode = false
-    /// The reader tapped Leave. Gym mode does not re-arm itself for the rest
-    /// of the day, whatever the clock and the median say.
-    ///
-    /// Without it the theme `.id` on the app root — which any Appearance pick
-    /// or block roll changes — gives `SignedInTabs` a new identity, re-runs
-    /// its `.task`, finds the window still open and hides the bar again.
-    /// Cleared at midnight with everything else the day owns.
-    var gymModeDeclined = false
     /// A run is going. A thin hint (a hairline, a caption) and nothing more —
     /// no screen blocks on it, because the numbers on display are the OLD
     /// consistent ones until the generation moves.
@@ -1210,11 +1191,7 @@ public final class AppEnvironment {
         // the session by definition, and `publishPhase` declines while one is
         // up — which would leave the previous account's block behind.
         isSessionLive = false
-        // The next account is not standing in this one's gym. `selectedTab`
-        // goes with it: left at "train", the new user's first screen is the
-        // Train tab with the bar hidden, before they have logged anything.
-        gymMode = false
-        gymModeDeclined = false
+        // The next account opens on Today, not wherever this one left off.
         selectedTab = ""
         publishPhase(nil)
         weighInTask?.cancel()
@@ -1463,8 +1440,6 @@ public final class AppEnvironment {
         dayTick += 1
         // Yesterday's queue is about yesterday's routine day.
         publishProgression([], for: nil)
-        // A refusal is about a day, not about the app.
-        gymModeDeclined = false
         startWeighInWatch()
         // The watch resolves its split against the date the PHONE believes it
         // is, not against its own clock — the two can disagree across midnight,

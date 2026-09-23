@@ -107,7 +107,8 @@ final class TodayModel {
             return minute
         }
         #endif
-        return GymMode.minuteOfDay(Date())
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: Date())
+        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
     }
 
     // MARK: - Reading

@@ -47,7 +47,7 @@ struct MacroEditSheet: View {
                         // only buzz at a number that will not move.
                         StepperRow(label: "Calories", value: macros.kcal, unit: "kcal", step: 25,
                                    floor: (macros.protein ?? 0) * 4,
-                                   tint: OnyxDomain.fuel.accent) { edit(.calories($0)) }
+                                   tint: Color.onyx.calories) { edit(.calories($0)) }
                         divider
                         StepperRow(label: "Protein", value: macros.protein ?? 0, unit: "g", step: 5,
                                    tint: Color.onyx.protein) { edit(.protein($0)) }

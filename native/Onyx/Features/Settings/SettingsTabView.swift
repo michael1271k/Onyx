@@ -64,7 +64,6 @@ private struct SettingsForm: View {
     /// account row. Bound with `$` rather than a computed `Binding` because it
     /// has no GRDB row to proxy.
     @AppStorage("onyx.warmupCalculator") private var warmupCalculator = false
-    @AppStorage(GymModeSetting.key) private var gymModeEnabled = true
     /// `OnyxReminders.enabledKey` — spelled once, there, and read here through
     /// the same string so the toggle and the scheduler cannot drift.
     @AppStorage(OnyxReminders.enabledKey) private var remindersEnabled = false
@@ -170,16 +169,6 @@ private struct SettingsForm: View {
                 Toggle(isOn: $warmupCalculator) {
                     Text("Warm-up calculator")
                     subLine("Ramp-up loads per card")
-                }
-                /* ── GYM MODE (§W6-B, decision 26) ──────────────────────────
-                   On by default. When a workout is running, or a session is
-                   due today and the clock is inside the window this person
-                   usually trains in, the app opens on Train with the tab bar
-                   out of the way and a Leave capsule to bring it back. Nothing
-                   is hidden that one tap does not return. */
-                Toggle(isOn: $gymModeEnabled) {
-                    Text("Gym mode")
-                    subLine("Opens Train at lift time")
                 }
             } header: {
                 OnyxSectionHeader("Logging", .train)

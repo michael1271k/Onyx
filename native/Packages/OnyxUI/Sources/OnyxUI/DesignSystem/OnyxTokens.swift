@@ -225,43 +225,40 @@ extension Color {
             }
         }
 
-        // ── Macros & water ───────────────────────────────────────────────────
+        // ── Nutrition & water ────────────────────────────────────────────────
         //
         // Fixed app-wide and never re-mapped per screen: a bar that is coral in
         // Nutrition and teal in a widget is two facts the reader has to hold.
-        // Three of the four are domain stops rather than new hues, so the macro
-        // rails still read as Solar and Lunar rather than as a fifth palette.
+        //
+        // ── THEMED, BUT WEIGHTED (overhaul W0, decision Q19) ────────────────
+        // The five nutrition inks move with the theme by a FRACTION of its hue
+        // shift (`OnyxThemeSpec.nutritionWeight`, chroma ≤ 0.12, lightness
+        // kept), from the default theme's own coral / honey / lavender. So
+        // protein is recognisably protein in all eight themes and still leans
+        // toward the theme. They were the domain stops themselves until 8.0.0,
+        // which turned the trio all the way round the wheel.
         //
         // Computed, not stored: a Swift static is lazy and would capture the
-        // theme at first read, so a `let` here is a macro rail that ignores the
-        // theme switch every other token follows.
+        // theme at first read.
 
-        /// Coral — Solar's far stop.
-        public static var protein: Color { OnyxDomain.fuel.end }
-        /// Honey — Solar's near stop.
-        public static var carbs: Color { OnyxDomain.fuel.start }
-        /// Lavender — Lunar's near stop.
-        public static var fat: Color { OnyxDomain.recover.start }
-        /// Tide's far stop. Water is not a macro and must not be mistaken for
-        /// one, which is why it is not on Solar — but it was the last fixed
-        /// sapphire in the palette, and a fixed hue is a tile that stays blue
-        /// after the user picks Ember.
-        ///
-        /// ── WHY `body.end` AND NOT `body.accent` ────────────────────────────
-        /// `body.accent` is `body.start`, which is what every Tide section
-        /// header and gauge already draws; water would have read as "this
-        /// screen's domain colour" rather than as a reading of its own. The far
-        /// stop is the same family a step deeper — measurably distinct from
-        /// protein, carbs and fat on the one screen that draws all four — and
-        /// it rotates with the theme like everything else.
-        ///
-        /// Computed, not stored, for the reason the three macros above are: a
-        /// Swift static `let` is lazy and would capture the theme at first read.
-        public static var water: Color { OnyxDomain.body.end }
-        /// Calories are the Atwater SUM of the three macros, so they take the
-        /// domain the three sit on rather than a colour of their own. Use
+        /// Coral — the default theme's `fuel.end`, weighted.
+        public static var protein: Color { OnyxTheme.current.nutrition.protein }
+        /// Honey — the default theme's secondary, weighted.
+        public static var carbs: Color { OnyxTheme.current.nutrition.carbs }
+        /// Lavender — the default theme's `recover.start`, weighted.
+        public static var fat: Color { OnyxTheme.current.nutrition.fat }
+        /// A micronutrient's ink — muted orchid, weighted like the macros.
+        /// Status (under / over target) still reads `good` / `danger`; this is
+        /// the ink of the nutrient itself (a bar, a dot, a label rail).
+        public static var micro: Color { OnyxTheme.current.nutrition.micro }
+        /// Water is ALWAYS blue (decision Q19) — `OnyxInk.Fixed.water`. It was
+        /// `body.end` until 8.0.0, so it turned with the theme and was never
+        /// the blue the founder described.
+        public static var water: Color { OnyxInk.Fixed.water }
+        /// Calories are the Atwater SUM of the three macros, so they wear the
+        /// carbs ink rather than a colour of their own. Use
         /// `OnyxDomain.fuel.ramp` where the fill is a gradient.
-        public static var calories: Color { OnyxDomain.fuel.accent }
+        public static var calories: Color { carbs }
 
         /// The colour of a ROUTINE DAY — what tints a calendar ring, a session
         /// chip and the This-week panel — keyed onto the domains by what the day
@@ -555,13 +552,17 @@ extension Color {
         /// what makes a legend dot and a body region the same colour, so the two
         /// parameters were not merely unused: keeping them would have left the
         /// call site claiming a ramp the function no longer performs.
+        ///
+        /// FIXED (overhaul W0, decision Q18): the theme never touches it.
         public static func muscle(_ muscle: LandmarkMuscle) -> Color {
-            OnyxTheme.current.muscle[muscle]!
+            OnyxInk.Fixed.muscle(muscle)
         }
 
-        /// The sixteen as measured — the DEFAULT theme's muscle palette, in
-        /// `LandmarkMuscle` declaration order. `OnyxTheme` rotates all sixteen
-        /// by the train accent's hue offset, so the family ramps hold.
+        /// The sixteen as measured — the FIXED anatomical palette, in
+        /// `LandmarkMuscle` declaration order. Until 8.0.0 `OnyxTheme` rotated
+        /// all sixteen by the primary's hue offset; from W0 no theme moves
+        /// them, so Chest is this coral in every theme. Read it through
+        /// `muscle(_:)` / `OnyxInk.Fixed.muscle(_:)`, never directly in a view.
         public static let defaultMuscleHex: [LandmarkMuscle: UInt32] = [
             .chest:      0xF66D64,
             .lats:       0x00D4CE,
@@ -580,6 +581,62 @@ extension Color {
             .calves:     0x388D15,
             .absCore:    0xE66DB6,
         ]
+    }
+}
+
+// MARK: - The semantic ink table (overhaul W0, concept 7)
+
+/// Which colours the theme drives and which never change — said ONCE, so no
+/// wave re-derives it from the code.
+///
+/// | What the theme drives (`Themed`)          | What never changes (`Fixed`)                  |
+/// |-------------------------------------------|-----------------------------------------------|
+/// | `accent` — the primary, train's start     | `water` `4A9BD6` — always blue                |
+/// | `train` — the train ramp (start → end)    | `heart` `E5484D` — heart rate, always red     |
+/// | `selection` — chip / selected-row ink     | `sleep` — deep `4B4A8A` → core `7B76B8` →     |
+/// | `mesh` — the four domain accents a swatch |   REM `B8B3E0` → awake `textSecondary`        |
+/// |   draws                                   | `good` `4CAF87`, `record` `FFD35C`            |
+/// | (weighted, 35 %) protein, carbs, fat,     | `muscle(_:)` — the 16-muscle anatomical       |
+/// |   calories, micro — `Color.onyx.*`        |   palette (decision Q18)                      |
+///
+/// `Themed` members are thin wrappers over the accessors that already exist
+/// (`OnyxDomain`, `Color.onyx`), named for what they MEAN so a lane can ask
+/// for "the selection ink" instead of guessing that it is train's accent.
+/// `Fixed` values are literals and do not read `OnyxTheme.current` at all.
+/// `heart` is the same value as `Color.onyx.danger` under its own name: a
+/// heart-rate trace is a reading, not an error, and the two may diverge.
+public enum OnyxInk {
+
+    /// Moves with the user's theme.
+    public enum Themed {
+        /// The theme's primary — tints, gauges, the one coloured thing.
+        public static var accent: Color { OnyxDomain.train.accent }
+        /// The train ramp, primary → derived far stop.
+        public static var train: (start: Color, end: Color) { (OnyxDomain.train.start, OnyxDomain.train.end) }
+        /// A selected chip or row, and the ink on a filled chip's rim.
+        public static var selection: Color { OnyxDomain.train.accent }
+        /// The four domain accents, in `OnyxDomain` order — the mesh swatch.
+        public static var mesh: [Color] { OnyxDomain.allCases.map(\.accent) }
+    }
+
+    /// Never moves, whatever the theme or phase.
+    public enum Fixed {
+        /// Water. A 6.95:1 blue on black.
+        public static let water = Color(hex: 0x4A9BD6)
+        /// Heart rate — every bpm trace, Avg HR cell and the Live Activity heart.
+        public static let heart = Color(hex: 0xE5484D)
+        public static let sleepDeep = Color(hex: 0x4B4A8A)
+        public static let sleepCore = Color(hex: 0x7B76B8)
+        public static let sleepREM = Color(hex: 0xB8B3E0)
+        public static var sleepAwake: Color { Color.onyx.textSecondary }
+        /// The four stops in the order a night runs: deep, core, REM, awake.
+        public static var sleep: [Color] { [sleepDeep, sleepCore, sleepREM, sleepAwake] }
+        public static var good: Color { Color.onyx.good }
+        public static var record: Color { Color.onyx.record }
+        /// A landmark's anatomical colour (decision Q18).
+        public static func muscle(_ muscle: LandmarkMuscle) -> Color {
+            Color(hex: Color.onyx.defaultMuscleHex[muscle]!)
+        }
     }
 }
 
@@ -639,7 +696,17 @@ public enum OnyxCorner {
 
 /// The four sleep stages, each its own token.
 ///
-/// ── THE THREE SLEEPING STAGES ARE ONE RAMP AGAIN (W2), DELIBERATELY ─────────
+/// ── FIXED FROM OVERHAUL W0 (decisions Q6, Q19) ─────────────────────────────
+/// The stages read `OnyxInk.Fixed.sleep`: deep indigo `4B4A8A` → core
+/// lavender `7B76B8` → REM pearl `B8B3E0` → awake `textSecondary`, the same in
+/// all eight themes, so the half-ring reads one way everywhere. The W2 note
+/// below argued the opposite ("a palette that ignores the palette is not a
+/// palette"); the founder overruled it for sleep, water and heart rate. The
+/// ramp steps L 0.44 → 0.60 → 0.79, ~0.17 apart, where the Lunar stops it
+/// replaces were ~0.07 apart (the known-tight legend). Deep is 2.6:1 on
+/// black: a FILL, never a text ink.
+///
+/// ── (HISTORY) THE THREE SLEEPING STAGES ARE ONE RAMP AGAIN (W2) ──────────
 /// v1 derived all four from Lunar at fixed ALPHAS and the sheet came out as
 /// four lavender bars. v2 answered that with three hand-written hexes — an
 /// indigo, a warm pink and a grey — which fixed the legend and broke something
@@ -668,10 +735,10 @@ public enum OnyxSleepStage: CaseIterable, Sendable {
 
     public var color: Color {
         switch self {
-        case .deep:  OnyxDomain.recover.start
-        case .core:  OnyxDomain.recover.at(0.5)
-        case .rem:   OnyxDomain.recover.end
-        case .awake: Color.onyx.textSecondary
+        case .deep:  OnyxInk.Fixed.sleepDeep
+        case .core:  OnyxInk.Fixed.sleepCore
+        case .rem:   OnyxInk.Fixed.sleepREM
+        case .awake: OnyxInk.Fixed.sleepAwake
         }
     }
 

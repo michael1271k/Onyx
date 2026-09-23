@@ -377,6 +377,10 @@ final class PhoneWatchBridge {
                 // next picked up. Signed out it does nothing and the key
                 // waits, which is `drainPendingWater`'s own behaviour.
                 onWaterQueued?()
+            case .effort:
+                // Overhaul W0 contract: decoded, not yet drawn. Lane A turns
+                // it into provisional ink on the deck card; it is never stored.
+                break
             case .session(let pulse):
                 // ── THE WRIST'S SESSION, IN THIS STORE (App Store W4) ───────
                 // The row first — `ingestFromWatch` refuses a set whose

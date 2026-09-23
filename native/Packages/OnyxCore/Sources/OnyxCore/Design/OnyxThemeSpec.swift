@@ -52,7 +52,62 @@ public struct OnyxThemeSpec: Codable, Equatable, Sendable {
         lift = try c.decodeIfPresent(Double.self, forKey: .lift) ?? 0
     }
 
-    public static let `default` = OnyxThemeSpec(primary: 0x6B78F0, secondary: 0xE3A650)
+    /// Slate — the first of the eight Stone presets and what a fresh install
+    /// draws (overhaul W0, decision Q17).
+    ///
+    /// ── WHY `default` AND `origin` ARE TWO VALUES NOW ───────────────────────
+    /// Until 8.0.0 the default WAS the derivation's zero: Ion's pair, from
+    /// which `OnyxTheme` rotates every stop in `OnyxDomain.defaultDomainHex`.
+    /// Slate is not that pair, and moving the zero to Slate would have meant
+    /// re-solving twenty-four measured hexes. So the zero stays where the
+    /// numbers were measured (`origin`) and the default is simply the preset a
+    /// new install picks. Slate's primary is the drafted `6479A8` lifted to
+    /// the guard's L 0.60 floor — the draft sat at L 0.579, under AA's margin.
+    public static let `default` = OnyxThemeSpec(primary: 0x6A7FAF, secondary: 0xC09A63, chroma: 0.90, lift: 0)
+
+    /// The derivation's zero — the Ion/Solar pair every default hex in
+    /// `OnyxDomain.defaultDomainHex` was measured against. `OnyxTheme` rotates
+    /// by the hue difference from THIS, never from `default`. Not a preset.
+    public static let origin = OnyxThemeSpec(primary: 0x6B78F0, secondary: 0xE3A650)
+
+    // MARK: - The weighted nutrition pair (overhaul Q19)
+
+    /// How far a theme moves the nutrition inks — a fraction of the way.
+    public static let nutritionWeight = 0.35
+    /// The chroma ceiling on every nutrition ink, whatever the theme.
+    public static let nutritionMaxChroma = 0.12
+
+    /// THE theme's hue shift: this primary's hue minus the default's, on the
+    /// short way round, in (−180, 180]. One number for the whole theme — the
+    /// nutrition inks all move by the PRIMARY's shift, secondary-derived ones
+    /// included, because the eight secondaries bunch (row 1's four are all
+    /// golds within 30°) and a carbs ink keyed to them could not move at all.
+    public var hueShift: Double {
+        var d = (OKLCHConvert.hue(ofHex: primary) - OKLCHConvert.hue(ofHex: Self.default.primary))
+            .truncatingRemainder(dividingBy: 360)
+        if d > 180 { d -= 360 }
+        if d <= -180 { d += 360 }
+        return abs(d) < 1e-9 ? 0 : d
+    }
+
+    /// Any default-theme hex moved by this theme's shift, dampened by
+    /// `weight`, chroma capped at `nutritionMaxChroma`, lightness kept.
+    public func weighted(_ hex: UInt32, weight: Double) -> UInt32 {
+        OKLCHConvert.toward(hex, turnedBy: hueShift, weight: weight, maxChroma: Self.nutritionMaxChroma)
+    }
+
+    /// The default PAIR moved `weight` of the way toward this theme — the
+    /// spec the nutrition inks are read from. Carbs and calories ARE its
+    /// secondary; protein, fat and micros take the same move from their own
+    /// default hexes (`OnyxTheme`). The mood knob rides along untouched.
+    public func weighted(weight: Double) -> OnyxThemeSpec {
+        OnyxThemeSpec(
+            primary: weighted(Self.default.primary, weight: weight),
+            secondary: weighted(Self.default.secondary, weight: weight),
+            chroma: chroma,
+            lift: lift
+        )
+    }
 
     /// The contrast guard.
     ///

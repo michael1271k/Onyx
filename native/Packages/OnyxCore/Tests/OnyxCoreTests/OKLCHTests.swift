@@ -146,3 +146,60 @@ struct OnyxThemeSpecTests {
         #expect(text.contains("\"secondary\""))
     }
 }
+
+// MARK: - Overhaul W0: Slate is the default, and nutrition moves by a fraction
+
+@Suite("OnyxThemeSpec — Stone default and the weighted nutrition pair")
+struct OnyxThemeSpecWeightedTests {
+
+    private func shortest(_ a: Double, _ b: Double) -> Double {
+        var d = (a - b).truncatingRemainder(dividingBy: 360)
+        if d > 180 { d -= 360 }
+        if d < -180 { d += 360 }
+        return d
+    }
+
+    @Test("the default is Slate; the derivation origin is still the Ion pair")
+    func defaultIsSlate() {
+        #expect(OnyxThemeSpec.default.primary == 0x6A7FAF)
+        #expect(OnyxThemeSpec.default.secondary == 0xC09A63)
+        #expect(OnyxThemeSpec.default.chroma == 0.90)
+        #expect(OnyxThemeSpec.default.lift == 0)
+        #expect(OnyxThemeSpec.origin == OnyxThemeSpec(primary: 0x6B78F0, secondary: 0xE3A650))
+    }
+
+    @Test("toward: weight 0 is the same bits, lightness never moves, chroma is capped")
+    func towardKeepsLightness() {
+        let protein: UInt32 = 0xDA7E7A
+        #expect(OKLCHConvert.toward(protein, turnedBy: 120, weight: 0, maxChroma: 0.2) == protein)
+        let moved = OKLCHConvert.toward(protein, turnedBy: 120, weight: 0.35, maxChroma: 0.12)
+        let a = OKLCHConvert.oklch(fromHex: protein), b = OKLCHConvert.oklch(fromHex: moved)
+        #expect(abs(a.l - b.l) < 0.005)
+        #expect(b.c <= 0.12 + 0.005)
+        let turned = abs(shortest(b.h, a.h))
+        #expect(turned > 5 && turned < 120 * 0.5, "turned \(turned)°")
+    }
+
+    @Test("the default's weighted pair is itself; a far theme moves only part of the way")
+    func weightedPair() {
+        let slate = OnyxThemeSpec.default
+        #expect(slate.hueShift == 0)
+        let own = slate.weighted(weight: 0.35)
+        #expect(own.primary == slate.primary)
+        #expect(own.secondary == slate.secondary)
+
+        let clay = OnyxThemeSpec(primary: 0xB5705A, secondary: 0x6E9A9A, chroma: 0.9)
+        let full = abs(clay.hueShift)
+        #expect(full > 100)
+        let w = clay.weighted(weight: 0.35)
+        let moved = abs(shortest(OKLCHConvert.hue(ofHex: w.primary), OKLCHConvert.hue(ofHex: slate.primary)))
+        #expect(moved > 5 && moved < full * 0.5, "moved \(moved)° of \(full)°")
+        for hex in [w.primary, w.secondary] {
+            #expect(OKLCHConvert.oklch(fromHex: hex).c <= OnyxThemeSpec.nutritionMaxChroma + 0.005)
+        }
+        #expect(abs(OKLCHConvert.oklch(fromHex: w.primary).l - OKLCHConvert.oklch(fromHex: slate.primary).l) < 0.005)
+        #expect(abs(OKLCHConvert.oklch(fromHex: w.secondary).l - OKLCHConvert.oklch(fromHex: slate.secondary).l) < 0.005)
+        // The mood rides along untouched.
+        #expect(w.chroma == clay.chroma && w.lift == clay.lift)
+    }
+}

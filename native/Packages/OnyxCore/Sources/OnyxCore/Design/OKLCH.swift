@@ -111,6 +111,32 @@ public enum OKLCHConvert {
         return self.hex(from: colour)
     }
 
+    /// Move a hex `weight` of the way toward itself turned by `degrees`, at
+    /// FIXED lightness, with its chroma capped at `maxChroma`.
+    ///
+    /// The nutrition inks' whole derivation (overhaul decision Q19): a theme
+    /// moves protein, carbs, fat, calories and micros "a little", not all the
+    /// way round the wheel. The step is taken in Oklab — along the CHORD from
+    /// the colour to its fully-turned self — and not as `weight × degrees` of
+    /// hue rotation, for a measured reason: scaling a hue angle has a seam at
+    /// ±180° from the default, where two themes 40° apart on the wheel land
+    /// 112° apart after scaling (ΔE 19 at C 0.115, past "still recognisable").
+    /// The chord has no seam: ΔE between any two themes is exactly `weight`
+    /// times their full-rotation ΔE, so the dampening is linear and bounded.
+    ///
+    /// Weight 0 under the cap returns the SAME bits, for `rotate`'s reason.
+    public static func toward(_ hex: UInt32, turnedBy degrees: Double, weight: Double, maxChroma: Double) -> UInt32 {
+        let w = min(max(weight, 0), 1)
+        var colour = oklch(fromHex: hex)
+        guard abs(w * degrees) >= 1e-9 || colour.c > maxChroma else { return hex }
+        let from = colour.h * .pi / 180, to = (colour.h + degrees) * .pi / 180
+        let a = colour.c * (cos(from) + (cos(to) - cos(from)) * w)
+        let b = colour.c * (sin(from) + (sin(to) - sin(from)) * w)
+        colour.c = min((a * a + b * b).squareRoot(), maxChroma)
+        colour.h = wrap(atan2(b, a) * 180 / .pi)
+        return self.hex(from: colour)
+    }
+
     // MARK: - Pieces
 
     @inlinable static func wrap(_ degrees: Double) -> Double {

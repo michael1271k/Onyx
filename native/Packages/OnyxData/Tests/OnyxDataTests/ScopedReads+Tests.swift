@@ -34,7 +34,6 @@ extension AppDatabase {
     func liveSession(dayKey: String, date: String) throws -> WorkoutSession? {
         try liveSession(dayKey: dayKey, date: date, userId: soleUser)
     }
-    func liveWorkoutInProgress(date: String) throws -> Bool { try liveWorkoutInProgress(date: date, userId: soleUser) }
     @discardableResult
     func discardSession(id: String) throws -> Bool { try discardSession(id: id, userId: owner(of: id)) }
     func setSessionStart(id: String, startedAt: Date) throws {

@@ -189,7 +189,7 @@ private struct CaloriesCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: OnyxSpace.s) {
             figures
-            TargetBar(value: eaten, target: target, tint: OnyxDomain.fuel.start, over: OnyxDomain.fuel.end)
+            TargetBar(value: eaten, target: target, tint: Color.onyx.calories, over: OnyxDomain.fuel.end)
             HStack(spacing: OnyxSpace.s) {
                 AdherenceDots(days: model.week)
                 if model.isMacrosManual {
@@ -748,7 +748,7 @@ private struct WeekStrip: View {
     /// across a week must not do. One denominator, stated in the caption.
     private var bars: [Bar] {
         let goals: [(String, Double?, (NutritionDay) -> Double?, Color)] = [
-            ("Kcal", model.targetKcal, { $0.kcal }, OnyxDomain.fuel.accent),
+            ("Kcal", model.targetKcal, { $0.kcal }, Color.onyx.calories),
             ("P", model.target.protein, { $0.proteinG }, Color.onyx.protein),
             ("C", model.tracksCarbs ? model.target.carbs : nil, { $0.carbsG }, Color.onyx.carbs),
             ("F", model.tracksFat ? model.target.fat : nil, { $0.fatG }, Color.onyx.fat),

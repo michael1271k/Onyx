@@ -1340,9 +1340,10 @@ final class WatchModel {
             if let sessionId {
                 holdsPencil = (try? store.holdsPencil(sessionId: sessionId)) ?? true
             }
-        case .water:
+        case .water, .effort:
             // Watch → phone only. A glass tapped on the wrist is posted and
             // written there; nothing sends one back (`WatchLink.Inbound.water`).
+            // A provisional RPE (overhaul W0) is the wrist's own Crown.
             break
         case .session(let pulse):
             receive(session: pulse, store: store)

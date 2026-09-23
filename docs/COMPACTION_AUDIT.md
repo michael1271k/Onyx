@@ -1,5 +1,6 @@
 # Compaction audit — every fact this app draws more than once
 
+> (Gym mode was deleted in overhaul W0, 2026-09-23; the app always opens on Today.)
 > Onyx Expansion **W6**, decision 24: *keep five tabs and gym mode; solve bloat
 > by density and de-duplication, not by hiding.* Decision 25: *no
 > hide-until-data.* Nothing in this document removes a fact from the app. Every
