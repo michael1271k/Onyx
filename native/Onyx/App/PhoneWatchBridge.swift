@@ -4,13 +4,14 @@ import Observation
 import OnyxCore
 import OnyxData
 import OnyxUI
+import os
 // For the timeline reload a wrist-tapped glass owes the Home Screen (W4).
 import WidgetKit
 
 /// The phone's half of the watch link.
 ///
 /// ── WHAT IT OWES THE WATCH ──────────────────────────────────────────────────
-/// Two things, and they are not the same kind of thing.
+/// Three things, and they are not the same kind of thing.
 ///
 ///   · **The context** — who is signed in, what today is, and how the plan
 ///     resolves it. STATE, sent over `updateApplicationContext`, replaced
@@ -19,6 +20,9 @@ import WidgetKit
 ///   · **The events** — every set, amend, void and pause this phone produces.
 ///     FACTS, sent over `transferUserInfo`, queued and delivered even when the
 ///     watch app is not running.
+///   · **The session's life** (App Store W4) — opened, finished, discarded, as
+///     a `SessionPulse` carrying the row, in the events' own queue. Without
+///     the row the wrist's store refuses every event behind it.
 ///
 /// ── AND WHY THE PHONE IS THE ONLY ROAD TO THE NETWORK ───────────────────────
 /// Wave 10 decided the watch holds no Supabase session: no refresh token
@@ -54,16 +58,70 @@ final class PhoneWatchBridge {
     ///
     /// ── A CLOSURE, BECAUSE THE DRAIN NEEDS THE SESSION AND THIS DOES NOT ───
     /// `drainPendingWater` writes under the signed-in user id, and this type
-    /// deliberately holds a database and no auth — it is a wire, and the one
-    /// thing it has ever taken off the wire for itself is a heart rate.
+    /// deliberately holds a database and no auth — it is a wire. What it keeps
+    /// for itself is a heart rate, the sessions the wrist joined, and the news
+    /// the Train tab has not read yet.
     /// Handing it `AppEnvironment` to reach one method would give the wire a
     /// reference to the whole app; handing it the method is the same call
-    /// with none of that.
+    /// with none of that. The session closures below (W4) are the same idea.
     ///
     /// Optional because the harness and the tests build a bridge with no
     /// environment behind it, and a glass arriving there should be a no-op
     /// rather than a trap — the key simply waits for a launch that has one.
     var onWaterQueued: (() -> Void)?
+
+    /// What the wrist did to a session that the Train tab has not acted on
+    /// yet (App Store W4). The tab reads it, acts, and clears it.
+    ///
+    /// ── ONE VALUE, READ IN ONE ORDER ────────────────────────────────────────
+    /// Stored rather than a callback into a view: the tab is built lazily and
+    /// may not exist when a pulse lands. And ONE value holding both, because
+    /// the order matters and two `onChange`s have none: when the wrist's open
+    /// beats this phone's own empty one, the tab must let go of its session
+    /// BEFORE it can follow the wrist's — the follow refuses while it is
+    /// holding one.
+    struct WristNews: Equatable {
+        /// Sessions the wrist finished or discarded, or that lost to one of
+        /// the wrist's. The tab lets go of its model if it was holding one.
+        /// A set: two can end before the tab next reads.
+        var ended: Set<String> = []
+        /// A session the wrist opened. The tab presents the logger for it.
+        var opened: String?
+    }
+    private(set) var news = WristNews()
+    /// `.notice`, so `log show` returns it — the phone's half of the watch's
+    /// own session log (App Store W4).
+    private let log = Logger(subsystem: "app.onyx.phone", category: "watch")
+    func clearNews() { news = WristNews() }
+
+    /// Switches the shell to the Train tab when the wrist opens a session.
+    /// Set by `AppEnvironment.start`, for the reason `onWaterQueued` is a
+    /// closure: this is a wire, and the selected tab is the app's.
+    var onSessionOpened: (() -> Void)?
+    /// The wrist finished a session: the phone's `sessionFinished`, which a
+    /// finish on THIS phone runs from the logger (the telemetry prefetch, and
+    /// the Health-workout decision — which `joined` makes a skip).
+    var onSessionClosed: ((String) -> Void)?
+
+    /// Sessions whose `HKWorkoutSession` the wrist said it was running.
+    ///
+    /// ── THE DUPLICATE `HKWorkout` THIS PREVENTS ─────────────────────────────
+    /// `WorkoutWriter.decide` writes the phone's own workout for a session
+    /// nobody else measured, and it used to learn "somebody else did" only
+    /// from a set logged there or a heart rate echoed during the interval. A
+    /// phone-started session the wrist now FOLLOWS has neither until the
+    /// athlete rests — and the wrist saves its workout when the phone
+    /// finishes. So the wrist says `.joined` on every adoption, and this is
+    /// where it is kept.
+    ///
+    /// Persisted, because the phone is jetsammed mid-workout often enough to
+    /// matter and the wrist does not repeat itself. The last twenty is plenty:
+    /// the question is only ever asked at a finish.
+    private(set) var joined: [String] {
+        get { UserDefaults.standard.stringArray(forKey: Self.joinedKey) ?? [] }
+        set { UserDefaults.standard.set(Array(newValue.suffix(20)), forKey: Self.joinedKey) }
+    }
+    private static let joinedKey = "onyx.watch.joinedSessions"
 
     /// The wrist's last heart rate, and when it arrived (W10, decision 3).
     ///
@@ -263,6 +321,12 @@ final class PhoneWatchBridge {
         link?.send(rest: rest)
     }
 
+    /// Tell the wrist a session opened, finished or was discarded here (App
+    /// Store W4). See `WatchLink.send(session:)` for the channels.
+    func send(session pulse: SessionPulse) {
+        link?.send(session: pulse)
+    }
+
     // MARK: - Inbound
 
     private func receive(_ inbound: WatchLink.Inbound) {
@@ -313,12 +377,49 @@ final class PhoneWatchBridge {
                 // next picked up. Signed out it does nothing and the key
                 // waits, which is `drainPendingWater`'s own behaviour.
                 onWaterQueued?()
+            case .session(let pulse):
+                // ── THE WRIST'S SESSION, IN THIS STORE (App Store W4) ───────
+                // The row first — `ingestFromWatch` refuses a set whose
+                // session this store has never seen, and the watch cannot
+                // push its own.
+                let outcome = try database.receiveSession(pulse)
+                log.notice("pulse \(pulse.phase.rawValue, privacy: .public) \(pulse.sessionId, privacy: .public) from the watch: \(String(describing: outcome), privacy: .public)")
+                // A JOIN, and not an open: the wrist announces an open before
+                // HealthKit has said yes, and a refused workout session sends
+                // no join — so counting the open would stop this phone writing
+                // the one workout nobody else is going to.
+                if pulse.phase == .joined, !joined.contains(pulse.sessionId) {
+                    joined.append(pulse.sessionId)
+                }
+                switch outcome {
+                case .opened(let superseded):
+                    // This phone's own EMPTY row for the split lost to the
+                    // wrist's earlier one and is gone here; the wrist holds a
+                    // copy (this phone announced it) and is told.
+                    if let superseded {
+                        link?.send(session: SessionPulse(superseded, phase: .discarded))
+                        news.ended.insert(superseded.id)
+                    }
+                    news.opened = pulse.sessionId
+                    onSessionOpened?()
+                case .closed, .discarded:
+                    news.ended.insert(pulse.sessionId)
+                    // A start banked for this split would otherwise be adopted
+                    // by the next Start on it today — a dead session's clock
+                    // on a new one. Finish and cancel clear it; this is their
+                    // road when the wrist is the one that ended it.
+                    if let dayKey = pulse.dayKey { LiveSessionStart.clear(dayKey: dayKey, date: pulse.date) }
+                    if outcome == .closed { onSessionClosed?(pulse.sessionId) }
+                case .unchanged:
+                    break
+                }
             case .context:
                 // Phone → watch only. The watch has no plan resolution to send.
                 break
             }
         } catch {
             lastError = String(describing: error)
+            log.error("inbound refused: \(String(describing: error), privacy: .public)")
         }
     }
 }

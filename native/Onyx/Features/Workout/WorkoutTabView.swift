@@ -2,6 +2,7 @@ import SwiftUI
 import OnyxUI
 import OnyxCore
 import OnyxData
+import os
 
 /// The Workout tab — the week behind you, the session in front of you, and the
 /// door into the logger.
@@ -436,6 +437,16 @@ struct WorkoutTabView: View {
             // on a session having been there to lose.
             if !live, hadSession { environment.gymMode = false }
             hadSession = live
+        }
+        // ── WHAT THE WRIST DID (App Store W4) ───────────────────────────────
+        // An end first, then an open — `WristNews` says why the order is the
+        // point. `initial: true` because this tab is built lazily: the news
+        // can land before the view exists, and waits on the bridge for it.
+        .onChange(of: environment.watchBridge.news, initial: true) { _, news in
+            guard news != .init() else { return }
+            environment.watchBridge.clearNews()
+            news.ended.forEach(letGo)
+            if let opened = news.opened { followWrist(opened) }
         }
         // §3.4: `.success` on session finished.
         .sensoryFeedback(.success, trigger: finishes)
@@ -1573,6 +1584,53 @@ struct WorkoutTabView: View {
         // `attach` is the view's job, on appear — publishing does not need it.
         environment.publishProgression(session?.progressionAlerts ?? [], for: day.key)
         presented = session
+    }
+
+    /// Put the logger over a session the WRIST opened (App Store W4).
+    ///
+    /// The same `start` the button runs — `attach` then finds the wrist's row
+    /// by split and date, and `begin` has nothing to open. Which is why every
+    /// guard is here: a row already finished (its open and its finish were
+    /// queued back to back), a different split from the one this tab would
+    /// open, or a session this tab is already holding would each have sent
+    /// `begin` off to open a SECOND row beside the wrist's.
+    private func followWrist(_ id: String) {
+        let row = try? environment.database.session(id: id, userId: environment.userIdString)
+        // `sessionId`, not the model: a Cancel leaves the tab holding its
+        // model — emptied, for the next Start to reuse — and "holding one"
+        // has to mean holding a SESSION or a cancelled deck blocks the wrist.
+        guard session?.sessionId == nil, let day = today, let row,
+              row.endedAt == nil, row.dayKey == day.key, row.date == LogicalDay.today()
+        else {
+            // Said, because the guard has five reasons and the screen shows none.
+            return Logger(subsystem: "app.onyx.phone", category: "watch").notice(
+                "not following \(id, privacy: .public): holding \(session?.sessionId ?? "nothing", privacy: .public), split \(today?.key ?? "none", privacy: .public), row \(row.map { "\($0.dayKey ?? "-") \($0.date) ended \($0.endedAt != nil)" } ?? "missing", privacy: .public)"
+            )
+        }
+        start()
+        // Before the cover appears: a deck that follows never opens a row of
+        // its own (`LoggerModel.following`).
+        session?.following = id
+    }
+
+    /// Drop the kept model if it was on a session the wrist ended — the store
+    /// has already closed or deleted the row, and a kept model would go on
+    /// offering to append to it. `following` as well as `sessionId`: a deck
+    /// whose `attach` found the row already gone has no id, only the one it
+    /// was presented for.
+    private func letGo(_ id: String) {
+        // `following` only for a deck that bound nothing: one that `attach`
+        // bound to a different live row is not the wrist's, whatever it was
+        // presented for.
+        guard let held = session,
+              held.sessionId == id || (held.sessionId == nil && held.following == id)
+        else { return }
+        held.stopRest()
+        activity.end()
+        session = nil
+        // The cover's `onDismiss` is `reload`, which pushes the summary of a
+        // finished one; a minimised session has no cover to dismiss.
+        if presented != nil { presented = nil } else { reload() }
     }
 
     /// Re-read on every dismissal. Finishing a session changes the week panel,

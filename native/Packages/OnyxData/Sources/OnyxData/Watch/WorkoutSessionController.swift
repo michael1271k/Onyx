@@ -2,6 +2,7 @@
 import Foundation
 import HealthKit
 import Observation
+import os
 
 /// The `HKWorkoutSession` the whole watch app sits inside.
 ///
@@ -81,6 +82,10 @@ public final class WorkoutSessionController: NSObject {
     public private(set) var lastError: String?
 
     private let store = HKHealthStore()
+    /// `.notice`, never `.info`: info lines are memory-only and `log show`
+    /// never returns them, and "did the workout session start" is a question
+    /// a gate has to answer from the device's log (App Store W4).
+    private let log = Logger(subsystem: "app.onyx.watch", category: "workout")
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
 
@@ -144,8 +149,10 @@ public final class WorkoutSessionController: NSObject {
                 Task { @MainActor in self?.lastError = error.localizedDescription }
             }
             isRunning = true
+            log.notice("HKWorkoutSession started at \(startDate, privacy: .public)")
         } catch {
             lastError = error.localizedDescription
+            log.error("HKWorkoutSession could not start: \(error.localizedDescription, privacy: .public)")
             // Deliberately not rethrown. A watch that cannot start a workout
             // session can still log every set into its own store and hand them
             // to the phone; it simply loses the background runtime. Refusing to
@@ -334,6 +341,9 @@ extension WorkoutSessionController: HKWorkoutSessionDelegate {
             // already drawn.
             guard workoutSession === self.session else { return }
             self.isRunning = toState == .running
+            // Raw values, for whoever reads the log: 1 not started,
+            // 2 running, 3 ended, 4 paused, 5 prepared, 6 stopped.
+            self.log.notice("HKWorkoutSession \(fromState.rawValue) -> \(toState.rawValue)")
         }
     }
 
@@ -341,8 +351,14 @@ extension WorkoutSessionController: HKWorkoutSessionDelegate {
         _ workoutSession: HKWorkoutSession, didFailWithError error: any Error
     ) {
         Task { @MainActor in
+            // The same identity guard as the state callback above. Without it
+            // a DISCARDED session's late failure — the one a `cancel()` ends
+            // with — stamped `isRunning = false` on the workout that replaced
+            // it, and the next `adopt` read that as "start one" (W4).
+            guard workoutSession === self.session else { return }
             self.isRunning = false
             self.lastError = error.localizedDescription
+            self.log.error("HKWorkoutSession failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

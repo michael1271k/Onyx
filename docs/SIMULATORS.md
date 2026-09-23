@@ -35,6 +35,42 @@ and the shot comes back as "Open Onyx on your iPhone" — a real screen, and
 never the one under review. `watch-shot.sh` refuses to run unpaired for that
 reason.
 
+### Live phone ↔ watch traffic needs the 26.5 pair (App Store W4)
+
+The pair above is fine for SCREENS, whose state the shot hooks seed. It cannot
+carry real WatchConnectivity: the **iOS 27.0 simulator runtime has no
+`com.apple.appconduitd.device-connection`** (`launchd_sim … No such process`),
+so the phone's `wcd` never learns the watch app is installed and the phone's
+`WCSession` never finishes activating. Anything that must cross the link — a
+context push, a session starting on one device and appearing on the other —
+is tested on the iOS/watchOS **26.5** pair instead:
+
+```
+599A2E50-6841-40B8-A620-8841C562D003
+    Watch: Watch Ultra 2 (W4 lane A 26.5)  33ABD301-5D61-42AC-81FC-4D8B13F39CDA
+    Phone: iPhone 15 (W4 lane A 26.5)      2DC9C91C-4218-429E-9A07-7CDD2EA6433F
+```
+
+What it does and does not deliver, measured (W4):
+
+- `sendMessage` reaches a RUNNING app within seconds, both ways.
+- `updateApplicationContext` reaches the app only at its next launch — relaunch
+  the watch app after the phone pushes. WC does not resend a context identical
+  to the last one it sent; uninstall the phone app to reset that.
+- `transferUserInfo` **never reaches the app** — the daemon receives it and
+  drops it (`incomingMessage — doesRespondToSelector? NO`). Anything queued-only
+  (a finish, a discard, set events) cannot be photographed here; prove it in
+  `OnyxDataTests`.
+- After a fresh install the phone reports `appInstalled: NO` for a minute or
+  two. Relaunch the phone app until its log says `appInstalled: YES`.
+- The watch needs one Health grant per install (a signed build — ad hoc,
+  `CODE_SIGN_IDENTITY=-` — or there is no `HKWorkoutSession` at all).
+- `simctl launch` of the phone can ATTACH to an instance WatchConnectivity
+  woke in the background, and then `--onyx-screen` is never read. Use
+  `simctl launch --terminate-running-process`.
+- The `watch-sync` harness screen is the phone half: the real Train tab over
+  the preview store, with the link started and a context pushed.
+
 ## The two scripts
 
 ```bash

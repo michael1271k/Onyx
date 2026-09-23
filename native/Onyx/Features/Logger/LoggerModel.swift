@@ -1892,11 +1892,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// `closeSession` subtracted the whole interval. The visible state is now
     /// whatever the log accepted.
     ///
-    /// And it needs a SESSION. `attach` only looks one up; the row is created
-    /// by the first append (`ensureSession`). Pausing during your warm-up,
-    /// before ticking anything, therefore wrote no event at all — the minutes
-    /// went straight back into `duration_min`, which is the bug this whole
-    /// mechanism exists to remove.
+    /// And it needs a SESSION. `attach` only looks one up, and until App Store
+    /// W4 the row was created by the first append — so pausing during your
+    /// warm-up wrote no event at all and the minutes went straight back into
+    /// `duration_min`. `begin` opens the row at Start now; `ensureSession`
+    /// here is the fallback for a deck whose `begin` could not.
     func pause() { pause(at: Date()) }
 
     func pause(at now: Date) {
@@ -2117,21 +2117,25 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
 
     /// Throw the session away — this workout did not happen.
     ///
-    /// The common case costs nothing and touches nothing: `attach` looks a
-    /// session up but never creates one, and `ensureSession` mints the row on
-    /// the FIRST APPEND, so a logger opened by accident has no row, no events
-    /// and no outbox items to clean up. `sessionId == nil` is exactly that
-    /// state, and cancelling out of it is just leaving.
+    /// Since App Store W4 Start opens the row (`begin`), so even a deck
+    /// cancelled before its first set has one — with no events and nothing
+    /// pushed, so the discard is cheap. `sessionId == nil` is left only for a
+    /// deck whose `begin` failed, and cancelling out of it is just leaving.
     ///
-    /// Once a set has been logged there IS something to discard, and it is
-    /// discarded rather than closed — see `AppDatabase.discardSession` for why
+    /// Either way the session is discarded rather than closed — see `AppDatabase.discardSession` for why
     /// an empty-but-finished session row is the worse outcome.
     @discardableResult
     func cancel() -> Bool {
-        guard let store, let sessionId else { return true }
+        guard let store, let sessionId else {
+            following = nil
+            return true
+        }
         do {
             try store.discardSession(id: sessionId, userId: userId)
             self.sessionId = nil
+            // The tab keeps this model for the next Start, and a deck still
+            // marked as following would never `begin` a row of its own.
+            following = nil
             // The deck goes back to its prescription. Leaving the ticks on
             // screen after the events behind them are gone is the projection
             // and the log disagreeing, which is the one thing this layer exists
@@ -2379,11 +2383,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     func attach() {
         guard let store, sessionId == nil else { return }
         do {
-            // LOOK UP ONLY. Creating here leaves an empty session row behind
-            // every time the tab is opened and closed without a set being
-            // logged — and an empty session is indistinguishable, later, from a
-            // workout somebody abandoned. The row is created by the first
-            // append instead, in `ensureSession`.
+            // LOOK UP ONLY. This runs for every presentation of the cover —
+            // a resume, a return from the Mini Player — and creating here
+            // would mint rows for appearances. The row is created by the
+            // deliberate Start instead (`begin`, App Store W4), with
+            // `ensureSession` as the fallback at the first append.
             // ── `sessionId` IS ASSIGNED LAST, AND THAT IS THE POINT ─────────
             // `attach`'s own guard is `sessionId == nil`, so a read that threw
             // AFTER the id was assigned left the model owning a session with an
@@ -2432,8 +2436,9 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             } else if !startedAtWasGiven,
                       let pending = LiveSessionStart.read(dayKey: day.key, date: today) {
                 // ── THE WINDOW BEFORE THE FIRST SET ─────────────────────────
-                // `started_at` reaches disk only at `openSession`, which
-                // `ensureSession` calls on the FIRST APPEND. So a deck opened
+                // `started_at` reached disk only at `openSession`, which until
+                // App Store W4 ran on the FIRST APPEND (`begin` runs it at
+                // Start now, so this rung is a fallback). So a deck opened
                 // at 18:00 and terminated at 18:11 with the warm-up done and
                 // nothing ticked had NO row to restore from, and the relaunch
                 // minted a model that believed the workout began at 18:20.
@@ -2960,13 +2965,62 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         return created
     }
 
+    /// Open the session deliberately — the logger was presented by Start.
+    ///
+    /// ── WHY THE ROW NOW EXISTS BEFORE THE FIRST SET (App Store W4) ──────────
+    /// `attach` stays look-up-only, and `ensureSession` still covers the
+    /// append. But a session that exists only once a set does is a session the
+    /// wrist cannot follow: the watch adopts a ROW (`SessionPulse`), and
+    /// "start on the phone, raise your wrist" has to work during the warm-up,
+    /// when nothing has been ticked. The watch's own Start has created its row
+    /// on the tap since Wave 10 for the same reason — a tap on Start is not an
+    /// appearance. The logger is only ever presented by one (`WorkoutTabView`
+    /// says so in its header), and the Live Activity already treats the same
+    /// moment as the start of the workout.
+    ///
+    /// An open row with nothing in it loses to a finished session in the
+    /// Train footer (`WorkoutWeek`), is never pushed until it holds a set or
+    /// closes, and `cancel` discards it.
+    ///
+    /// Not for a deck that is `following` the wrist: that one attaches to the
+    /// wrist's row or to nothing, never to a second row of its own.
+    func begin() {
+        guard sessionId == nil, following == nil else { return }
+        do {
+            _ = try openRow()
+        } catch {
+            storeError = String(describing: error)
+        }
+    }
+
+    /// The session the WRIST opened that this deck was presented for, if it
+    /// was (App Store W4). Set by `WorkoutTabView` before the cover appears.
+    ///
+    /// If the wrist's finish lands between the tab deciding to follow and the
+    /// cover's `attach`, `attach` finds no live row — and a `begin` then would
+    /// open a brand-new session, announce it, and put an `HKWorkoutSession`
+    /// on the wrist for a workout that never happened. So a following deck
+    /// never begins, and the tab uses this id to let it go.
+    var following: String?
+
+    /// Called with the row the moment THIS deck creates one — from `begin`,
+    /// or from `ensureSession` if `begin` could not. The view tells the wrist.
+    /// A closure rather than transport in the model, for the reason
+    /// `mirrorRestToWatch` gives; and in `openRow`, because that is the one
+    /// place both roads to a new row pass through.
+    @ObservationIgnored var onOpened: ((WorkoutSession) -> Void)?
+
     /// The session row this device is writing into, created on demand.
     ///
-    /// Called from the append path and nowhere else, so a session exists exactly
-    /// when a set does.
+    /// Called from the append path, so a session exists whenever a set does —
+    /// and from `begin`, so it exists from Start.
     private func ensureSession() throws -> String? {
-        guard let store else { return nil }
         if let sessionId { return sessionId }
+        return try openRow()?.id
+    }
+
+    private func openRow() throws -> WorkoutSession? {
+        guard let store else { return nil }
         // Edit mode is handed its session and never creates one. Reaching here
         // with `editing` set would mean `attach(editing:)` failed and the deck
         // then opened a BRAND NEW session dated today for a workout three weeks
@@ -2982,7 +3036,8 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             startedAt: startedAt
         )
         sessionId = session.id
-        return session.id
+        onOpened?(session)
+        return session
     }
 
     private func appendInStore(_ row: SetRow, in exercise: ExerciseState) {
@@ -3086,10 +3141,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
 /// Where a live deck's `startedAt` lives until the first set creates a session.
 ///
 /// ── WHY THIS IS NOT THE SESSION ROW ─────────────────────────────────────────
-/// Because there isn't one yet, and there must not be: `attach` looks a session
-/// up and never creates one, so a logger opened by accident leaves nothing
-/// behind. `ensureSession` mints the row on the first APPEND, and everything
-/// this file says about empty session rows is still true.
+/// Because until App Store W4 there wasn't one before the first APPEND. `begin`
+/// now opens the row at Start, so this covers only a deck whose `begin`
+/// failed — and it is cleared on finish, on cancel, and when the WRIST ends
+/// the session (`PhoneWatchBridge`), or a later Start on the same split would
+/// adopt a dead session's clock.
 ///
 /// Which leaves a real window with no durable clock in it — open the deck,
 /// warm up for eleven minutes, get jetsammed, and the relaunch believes the

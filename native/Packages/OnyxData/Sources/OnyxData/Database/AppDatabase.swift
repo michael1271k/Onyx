@@ -1425,6 +1425,20 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // ── v36 ── Sessions this device has thrown away (App Store W4).
+        //
+        // LOCAL ONLY. A session open travels twice — as a message, for the
+        // wrist that is waiting, and queued, for the one that is not — and
+        // the two copies have no order between them. The late one must not
+        // put back a workout that was discarded in between (Start, then an
+        // immediate Cancel): `receiveSession` refuses an open for an id here.
+        // An id and nothing else; `eraseLocalData` sweeps it with the rest.
+        migrator.registerMigration("v36.sessionTombstones") { db in
+            try db.create(table: "session_tombstones", ifNotExists: true) { t in
+                t.primaryKey("id", .text)
+            }
+        }
+
         return migrator
     }
 }
@@ -1851,9 +1865,11 @@ extension AppDatabase {
     /// through, and every set logged after the relaunch would be attributed to
     /// it — a split silently torn in two, with both halves well-formed.
     ///
-    /// The caller should reach this on the FIRST WRITE and not on appearing.
-    /// Called from `onAppear`, it leaves an empty session row behind every time
-    /// the tab is opened and closed again.
+    /// The caller should reach this on a deliberate START — the watch's Start
+    /// button, the phone logger being presented by "Start workout" (App Store
+    /// W4, `LoggerModel.begin`) — or on the first write, and never because a
+    /// screen merely appeared. Called from a tab's `onAppear`, it would leave
+    /// an empty session row behind every time the tab was opened and closed.
     @discardableResult
     public func openSession(
         userId: String,
@@ -1882,6 +1898,113 @@ extension AppDatabase {
             try session.insert(db)
             return session
         }
+    }
+
+    /// What `receiveSession` did with a pulse.
+    public enum SessionPulseOutcome: Sendable, Equatable {
+        /// A row this device had never seen is now here, live. `superseded`
+        /// is this device's own EMPTY live row for the same split that the
+        /// arriving one beat — already discarded here; the caller tells the
+        /// other device and, if it was holding it, moves to the winner.
+        case opened(superseded: WorkoutSession?)
+        /// A live row was closed at the sender's instant.
+        case closed
+        /// The row, its events and its sets are gone.
+        case discarded
+        /// Nothing to do: already known, already closed, already gone,
+        /// tombstoned, or (for a finish or a discard) another account's.
+        case unchanged
+    }
+
+    /// Apply the other device's session open, finish or discard (App Store W4).
+    ///
+    /// ── ORDER-SAFE BY CONSTRUCTION ──────────────────────────────────────────
+    /// Every phase is idempotent and the three are monotonic: an open never
+    /// rewrites a row that exists, so it cannot reopen a finished workout or
+    /// move its start; a finish touches only a row that is still open; a
+    /// discard touches only a row that is still open too, so a finish always
+    /// beats one — the wrist's "throw this away" arriving after the phone has
+    /// closed, ledgered and pushed the workout must not delete it.
+    ///
+    /// ── TWO DEVICES, ONE SPLIT, ONE WINNER ──────────────────────────────────
+    /// Start on the phone with the watch app closed, open it and tap Start
+    /// before the queued open lands, and each device has a live row for the
+    /// same split. The earlier start wins (id breaks a tie) and the rule is
+    /// applied on both devices, so both reach the same answer: the device
+    /// holding the loser discards it — only if nothing was logged into it —
+    /// and says so. A loser WITH sets is left alone; two logs cannot be
+    /// merged by a rule this small, and a second session is the honest
+    /// outcome for a workout that was genuinely logged twice.
+    ///
+    /// ── AND A LATE OPEN CANNOT REVIVE A DISCARDED ONE ───────────────────────
+    /// An open travels twice, by message and by queue, in no order. Every
+    /// discard on this device leaves the id in `session_tombstones`, and an
+    /// open for one of those is refused.
+    ///
+    /// ── AN OPEN IS NOT QUEUED FOR UPLOAD ────────────────────────────────────
+    /// The row reaches the server behind the first event that names it (the
+    /// push's `ON CONFLICT DO NOTHING` ensure) and in full at the close, which
+    /// `closeSession` queues — the same two roads a row this device opened
+    /// takes. Queueing it here would push an empty open session nobody may
+    /// ever log into, which `openSession` deliberately never does either.
+    @discardableResult
+    public func receiveSession(_ pulse: SessionPulse) throws -> SessionPulseOutcome {
+        switch pulse.phase {
+        case .open:
+            return try writer.write { db in
+                guard try WorkoutSession.fetchOne(db, key: pulse.sessionId) == nil,
+                      try !(Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM session_tombstones WHERE id = ?)",
+                                          arguments: [pulse.sessionId]) ?? false)
+                else { return .unchanged }
+                let arriving = WorkoutSession(
+                    id: pulse.sessionId, userId: pulse.userId, dayKey: pulse.dayKey, date: pulse.date,
+                    startedAt: pulse.startedAt, isPendingSync: true
+                )
+                try arriving.insert(db)
+                let rival = try WorkoutSession
+                    .filter(Column("user_id") == pulse.userId && Column("date") == pulse.date
+                            && Column("day_key") == pulse.dayKey && Column("ended_at") == nil
+                            && Column("id") != pulse.sessionId)
+                    .order(Column("started_at"))
+                    .fetchOne(db)
+                guard let rival, Self.startsFirst(arriving, rival),
+                      try SetEvent.filter(SetEvent.Columns.sessionId == rival.id).fetchCount(db) == 0,
+                      try Self.discard(db, id: rival.id, userId: rival.userId)
+                else { return .opened(superseded: nil) }
+                return .opened(superseded: rival)
+            }
+        case .finished:
+            guard let row = try session(id: pulse.sessionId, userId: pulse.userId), row.endedAt == nil else {
+                return .unchanged
+            }
+            try closeSession(id: row.id, endedAt: pulse.endedAt ?? Date(), restTargetSec: pulse.restTargetSec)
+            return .closed
+        case .discarded:
+            return try writer.write { db in
+                guard try Self.ownedSession(db, id: pulse.sessionId, userId: pulse.userId)?.endedAt == nil,
+                      try Self.discard(db, id: pulse.sessionId, userId: pulse.userId)
+                else { return .unchanged }
+                return .discarded
+            }
+        case .joined:
+            // A fact about the other device's runtime, not about the row.
+            return .unchanged
+        }
+    }
+
+    /// Earlier start wins; the id settles a tie, so both devices agree.
+    ///
+    /// ── IN WHOLE SECONDS, BECAUSE THAT IS WHAT CROSSES ──────────────────────
+    /// `OnyxJSON` writes ISO-8601 without a fraction, so the arriving row's
+    /// start is truncated and the local one is not. Compared as they stand,
+    /// two Starts inside one second each see the OTHER as earlier, each
+    /// discards its own row, and the workout is gone on both devices. Floored
+    /// to the second on both sides, that case is a tie and the id decides it
+    /// the same way everywhere. A missing start sorts first, as SQLite's
+    /// `ORDER BY started_at` sorts NULL — one rule for both reads.
+    static func startsFirst(_ a: WorkoutSession, _ b: WorkoutSession) -> Bool {
+        func second(_ s: WorkoutSession) -> Double { (s.startedAt?.timeIntervalSince1970 ?? -.infinity).rounded(.down) }
+        return second(a) != second(b) ? second(a) < second(b) : a.id < b.id
     }
 
     /// A session for a day that has already happened (W2, decision 12).
@@ -2029,10 +2152,11 @@ extension AppDatabase {
     /// Throw a session away — the workout did not happen.
     ///
     /// ── WHY THIS IS A DELETE AND NOT A CLOSE ────────────────────────────────
-    /// `attach` deliberately does not create a session row, so opening the
-    /// logger and leaving costs nothing and needs none of this. What this is for
-    /// is the session you started, logged a set into, and then realised was the
-    /// wrong day — where closing it would leave a one-set workout in the history,
+    /// Since App Store W4 Start opens the row (so the other device can follow
+    /// before the first set), and cancelling out of an empty one comes through
+    /// here too — cheaply: nothing was ever pushed for it. What this is really
+    /// for is the session you started, logged a set into, and then realised was
+    /// the wrong day — where closing it would leave a one-set workout in the history,
     /// in the trends, in the week's volume and in the PR ledger, and voiding
     /// every set would leave an empty session row that is indistinguishable
     /// later from a workout somebody abandoned.
@@ -2049,30 +2173,34 @@ extension AppDatabase {
     /// `workout_sets` all cascade from `workout_sessions`.
     @discardableResult
     public func discardSession(id: String, userId: String) throws -> Bool {
-        try writer.write { db in
-            guard try Self.ownedSession(db, id: id, userId: userId) != nil else { return false }
+        try writer.write { db in try Self.discard(db, id: id, userId: userId) }
+    }
 
-            // Server-side deletes, queued while the ids are still readable.
-            for set in try WorkoutSet.filter(Column("session_id") == id).fetchAll(db) {
-                try Self.enqueueRowDelete(table: WorkoutSet.databaseTableName, key: ["id": set.id], in: db)
-            }
-            try Self.enqueueRowDelete(table: WorkoutSession.databaseTableName, key: ["id": id], in: db)
+    static func discard(_ db: Database, id: String, userId: String) throws -> Bool {
+        guard try Self.ownedSession(db, id: id, userId: userId) != nil else { return false }
 
-            // Anything still queued that would bring it back.
-            try db.execute(
-                sql: "DELETE FROM outbox WHERE idempotency_key = ?", arguments: ["session:\(id)"]
-            )
-            for item in try OutboxItem.fetchAll(db)
-            where item.kind.hasPrefix(SyncKind.setEventPrefix) {
-                guard let event = try? OnyxJSON.decoder.decode(SetEvent.self, from: item.payload),
-                      event.sessionId == id
-                else { continue }
-                try item.delete(db)
-            }
-
-            try db.execute(sql: "DELETE FROM workout_sessions WHERE id = ?", arguments: [id])
-            return true
+        // Server-side deletes, queued while the ids are still readable.
+        for set in try WorkoutSet.filter(Column("session_id") == id).fetchAll(db) {
+            try Self.enqueueRowDelete(table: WorkoutSet.databaseTableName, key: ["id": set.id], in: db)
         }
+        try Self.enqueueRowDelete(table: WorkoutSession.databaseTableName, key: ["id": id], in: db)
+
+        // Anything still queued that would bring it back.
+        try db.execute(
+            sql: "DELETE FROM outbox WHERE idempotency_key = ?", arguments: ["session:\(id)"]
+        )
+        for item in try OutboxItem.fetchAll(db)
+        where item.kind.hasPrefix(SyncKind.setEventPrefix) {
+            guard let event = try? OnyxJSON.decoder.decode(SetEvent.self, from: item.payload),
+                  event.sessionId == id
+            else { continue }
+            try item.delete(db)
+        }
+
+        try db.execute(sql: "DELETE FROM workout_sessions WHERE id = ?", arguments: [id])
+        // So a late copy of this session's open cannot put it back (v36).
+        try db.execute(sql: "INSERT OR IGNORE INTO session_tombstones (id) VALUES (?)", arguments: [id])
+        return true
     }
 
     /// Move the session's start instant.

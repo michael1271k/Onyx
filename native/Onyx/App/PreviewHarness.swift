@@ -497,6 +497,9 @@ enum PreviewHarness {
         // photographed on `train`.
         case "mini-player":
             MiniPlayerHarness().environment(AppEnvironment.preview)
+        // W4 (App Store): the paired-simulator sync test's phone half.
+        case "watch-sync":
+            WatchSyncHarness()
         case "logger", "logger-stats", "logger-lifts", "logger-paused", "logger-finish", "logger-options", "logger-timer",
              // W10: the rest bar and the progression cue, on one card.
              "logger-rest",
@@ -560,6 +563,37 @@ enum PreviewHarness {
                 "No harness screen named \(screen)",
                 systemImage: "questionmark.square.dashed"
             )
+        }
+    }
+}
+/// The phone half of the paired-simulator sync test (App Store W4).
+///
+/// The REAL Train tab over the preview store, with the one thing a harness
+/// never does: the watch link is opened and a context is pushed to the wrist,
+/// so the paired watch simulator resolves the same split this tab opens.
+/// "Start workout" is then the shipping button, the logger the shipping
+/// cover, and the pulse the shipping send — nothing here stands in for them.
+///
+/// The context goes out under `userIdString`, which is "" here: the logger
+/// writes its rows under the same value, and the wrist only rejoins a row
+/// whose user matches its context. The schedule is the preview catalogue's,
+/// with today pinned to Upper B so the shot does not depend on the weekday.
+struct WatchSyncHarness: View {
+    private let environment = AppEnvironment.preview
+
+    var body: some View {
+        NavigationStack {
+            WorkoutTabView(seededDay: PlanTemplates.program("onyx5")?.day(key: "cb_b"))
+        }
+        .environment(environment)
+        .task {
+            environment.watchBridge.start()
+            // Straight after `start`: a push made before `WCSession` has
+            // activated is held and sent on activation (`WatchLink.unsent`).
+            let today = LogicalDay.today()
+            guard var schedule = try? environment.database.scheduleContext(userId: PreviewCatalogue.userId) else { return }
+            schedule.overrides[today] = "cb_b"
+            environment.watchBridge.send(userId: environment.userIdString, today: today, schedule: schedule, tiles: nil)
         }
     }
 }

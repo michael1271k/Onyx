@@ -120,10 +120,10 @@ ceiling on this machine; three wedge the simulator. Lanes must not both run
 | W1 | solo | 7.9.0 | Baseline, all `project.yml` structure, widget `containerBackground`, placeholder purge |
 | W2 | A | 7.10.0 | Watch IA rebuilt from scratch |
 | W3 | B | 7.11.0 | Logger: Add Exercise, HR chart, Hevy line |
-| W4 | A | 7.12.0 | Bidirectional session sync + Watch stays awake |
+| W4 | A | 7.14.0 (was 7.12.0; W5 took 7.13.0 first) | Bidirectional session sync + Watch stays awake |
 | W5 | B | 7.13.0 | Supplements: dose periods, reminders, export |
-| W6 | A | 7.14.0 | HealthKit audit, unread types, off-wrist handling |
-| W7 | B | 7.15.0 | Auth (Apple + Google), Settings redesign, preflight |
+| W6 | A | 7.15.0 | HealthKit audit, unread types, off-wrist handling |
+| W7 | B | 7.16.0 | Auth (Apple + Google), Settings redesign, preflight |
 | W8 | solo | 8.0.0 | Final integration, docs, purge, push |
 
 Sequence: `W1` → `W2 ∥ W3` → `W4 ∥ W5` → `W6 ∥ W7` → `W8`.
@@ -505,7 +505,7 @@ Verification:
     one. State plainly which reads were proved and which were only compiled.
   - Screenshot the off-wrist copy on a readiness card with a synthetic gap.
 
-Then run the MANDATORY END-OF-WAVE PROTOCOL in the plan, with version 7.14.0.
+Then run the MANDATORY END-OF-WAVE PROTOCOL in the plan, with version 7.15.0.
 ```
 
 ---
@@ -571,7 +571,7 @@ Verification:
   - curl -I both live URLs and paste the status lines into the wave summary.
   - State explicitly which auth paths were compiled but NOT exercised.
 
-Then run the MANDATORY END-OF-WAVE PROTOCOL in the plan, with version 7.15.0.
+Then run the MANDATORY END-OF-WAVE PROTOCOL in the plan, with version 7.16.0.
 ```
 
 ---
@@ -1370,3 +1370,189 @@ directory on its own, or `setopt nullglob` first.
 landing that after this would move the version backwards. The derived build
 number would go from 71300 to 71200, which App Store Connect refuses. W4 should
 take the next free minor, **7.14.0**, and W6/W7 shift up one from there.
+
+---
+
+## W4 — Bidirectional session sync + Watch stays awake (7.14.0, Lane A)
+
+### What shipped
+
+- **A session is a message now, and it carries the row.** `SessionPulse`
+  (`WatchPayloads.swift`) has four phases — `open`, `finished`, `discarded`,
+  `joined` — and the session's identity (id, user, day key, date, start, end,
+  rest target). `WatchLink` gained the `session` kind, both directions.
+  - **Every phase is queued** with `transferUserInfo`, in the same FIFO the set
+    events ride: an open is queued ahead of the first set, a finish behind the
+    last one.
+  - **`open` and `joined` are also messaged** when the other side is
+    reachable. A finish is never messaged — it could overtake queued sets and
+    the phone would close the session without them.
+  - **Sends made before `WCSession` activates are held** (transfers and the
+    newest application context) and go out on activation, oldest first.
+- **One store rule, both devices:** `AppDatabase.receiveSession(_:)`.
+  - An open inserts the row under the sender's id and never rewrites one.
+  - A finish closes a row only while it is still open, at the sender's
+    `endedAt` and `restTargetSec` (so the phone's close — the one the server
+    keeps — derives the same duration, totals and PRs from the wrist's events).
+  - A discard deletes a row only while it is still open: **a finish beats a
+    discard**.
+  - **One split, one winner.** Two opens for the same user/date/day key keep
+    the earlier start, compared in whole seconds (see falsified #4), id as the
+    tie-break. The device holding the losing row discards it — only if it has
+    no events — and tells the other device.
+  - **Tombstones** (`v36.sessionTombstones`, local only): every discard leaves
+    the id behind, and an open for a tombstoned id is refused, so the late
+    copy of a messaged open cannot revive a discarded workout.
+- **Watch** (`WatchModel`): a phone open runs `rejoinLiveSession()` →
+  `adopt()` → `workout.start()`. That running `HKWorkoutSession` is the whole
+  of "stays awake". `beginSession`/`ensureSession` announce the open before
+  `adopt`; `adopt` sends `joined` only when HealthKit is actually running;
+  `finish()` and `cancelSession()` announce. A phone finish ends the wrist's
+  `HKWorkout` at the phone's instant and saves it — unless the wrist only
+  adopted the session after it had already ended, in which case it discards
+  it. `rejoinLiveSession` never switches a held session.
+- **Phone:** "Start workout" opens the row (`LoggerModel.begin`), and the
+  `onOpened` hook announces every row this deck creates. The Train tab follows
+  a wrist-opened session (`followWrist`, with the deck marked `following` so it
+  never opens a second row) and lets go of a wrist-ended one (`letGo`). A wrist
+  finish runs `sessionFinished`. `joined` feeds `WorkoutWriter.decide`, so the
+  phone does not write a second `HKWorkout` for a session the wrist recorded.
+- **Diagnostics a gate can read:** `.notice` logs under `app.onyx.watch`
+  (`workout`: HK start and state changes; `session`: pulses, adoptions, and why
+  a pulse was not followed) and `app.onyx.phone` (pulses and outcomes, and why
+  the tab did not follow). `WorkoutSessionController.didFailWithError` gained
+  the `=== self.session` identity guard it was missing.
+
+### What the code falsified about the brief
+
+1. **"A workout does not reach the other device until a set is logged" — it
+   never reached it at all.** `set_events.session_id` is a foreign key to
+   `workout_sessions`, and neither device ever received the other's session
+   row: the watch has no Supabase, and the link carried events only. Every
+   cross-device set was refused by the constraint — through a `try?` on the
+   watch, into `lastError` on the phone. `WatchConvergenceTests` never saw it
+   because its harness inserts the same row into both stores first.
+   `SessionPulseTests` opens with the old world, pinned.
+2. **"Send it from `LoggerModel`'s `store.openSession` path" could not satisfy
+   the brief's own test.** That path ran at the FIRST SET, so a phone-started
+   session had no row — nothing to announce — until one was logged. Start now
+   opens the row, as the watch's Start always has.
+3. **"sendMessage when reachable, transferUserInfo as the fallback" is a
+   race.** Two copies on two channels have no order, and the late one revives
+   a discarded session. Both are sent; the tombstone makes the late copy a
+   no-op. And a finish must ride the queue only (see "What shipped").
+4. **The wire drops fractional seconds.** `OnyxJSON` is ISO-8601 without a
+   fraction and each store keeps milliseconds. Compared raw, two Starts inside
+   one second each saw the other as earlier and both discarded their own row
+   (code review caught it). The rule compares whole seconds.
+5. **The watch's discard and finish never reached the phone.** `cancelSession`
+   said the phone would learn "from the store, when the two next sync" and
+   `finish()` queued a `session.upsert` — both in the watch's own outbox, which
+   nothing ever drains. A watch-finished workout stayed open on the phone for
+   good, with no duration, totals, PRs or `ended_at` on the server.
+6. **The 30 s throttle needed nothing.** It is right for tiles; the session
+   channel never goes near it.
+
+### Defects found and fixed that the brief did not name
+
+- **The store did not open on the iOS/watchOS 26.5 runtimes** — "Store
+  unavailable — qualified table names are not allowed on INSERT, UPDATE and
+  DELETE statements within triggers". The rescore door's TEMP triggers (since
+  7.1.0) wrote `INSERT INTO temp.rescore_touched`, which only the newer SQLite
+  in the 27 runtimes accepts. Unqualified, the name still resolves to `temp`.
+  Pinned by a test that reads `sqlite_temp_master`, because the macOS SQLite
+  the suite runs on accepts both. **Not checked on hardware**, but the app's
+  minimums are iOS 18 / watchOS 11, and a device below 27 very likely carries
+  the older SQLite — this belongs in the App Store risk list until a device
+  says otherwise.
+- **A send in the first moment after launch was dropped.** `active()` answers
+  nil until `WCSession` activates, and every send returned on nil. For the
+  watch's Start that lost the session's open, and the phone refused every set
+  of the workout. The same drop lost a sign-in context push, leaving the watch
+  on "Open Onyx on your iPhone".
+- **The phone counted a wrist `open` as "the wrist is recording"** in the
+  first draft, which would have left no `HKWorkout` anywhere when the wrist's
+  HealthKit was refused. Only `joined` counts.
+- **After a phone Cancel the tab keeps its emptied `LoggerModel`** for the next
+  Start, so "holding a session" had to mean `sessionId`, not the model — the
+  first version refused to follow the wrist after any cancel (found on the
+  simulator pair).
+- A stale `LiveSessionStart` could put a wrist-ended session's clock on the
+  next Start of the same split; the bridge clears it on every wrist end.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| `npm run check` (incl. `swift:ui` 42/42, `check:watch`) | **PASSED**, exit 0 — on the merged, version-bumped tree |
+| `npm run swift:core` | **PASSED** — 720/720 |
+| `npm run swift:data` | **752/752** — the one issue in the full run was the known `W6 seam benchmarks` timing test under load; it passed alone (4/4) |
+| Full `Onyx` scheme suite | **No new failures** — exactly W1's baseline: OnyxTests 11 issues on the same 9 names; OnyxDataTests 1 (the Gate-0 Keychain test); OnyxCore 720/720; OnyxUI 42/42 |
+| invariant-auditor | **Clean, 0 violations** — including that pause/resume events do reach the phone over the link |
+| code-reviewer (×2), architect-reviewer | Every blocking finding fixed — listed above |
+
+**The paired-simulator test — photographed in both directions, on the final
+merged build.**
+
+- **Where it could run.** The **iOS 27 simulator runtime cannot do
+  WatchConnectivity on the phone side**: it has no
+  `com.apple.appconduitd.device-connection` service (`launchd_sim: No such
+  process`), so `wcd` can never enumerate the watch's apps and the phone's
+  `WCSession` never finishes activating. A fresh `iPhone 15 (W4 lane A 26.5)`
+  + `Watch Ultra 2 (W4 lane A 26.5)` pair on the iOS/watchOS 26.5 runtimes
+  works — after the SQLite fix above, since the store did not open there
+  before it.
+- **Phone → watch:** watch on its Start page ("Upper B · Start"); tap "Start
+  workout" on the phone; 3 s later the watch is on the set screen (Chest
+  Press, Set 1/3, Log set), nothing logged on either device. **The watch's own
+  log, read with `log show`:** `pulse open df750f30… from the phone` →
+  `HKWorkoutSession started at …` → `adopted df750f30…; HKWorkoutSession
+  running: true` → `HKWorkoutSession 1 -> 2` (not started → running), all
+  within 40 ms.
+- **Watch → phone:** phone idle on Train; tap Start on the watch; the phone
+  logs `pulse open 2a9a56da… from the watch: opened(superseded: nil)` 2 s
+  later and presents the logger on the wrist's session (clock counting from
+  the wrist's start, 0/3). Also proved after a phone-side Cancel (the tab's
+  emptied model — the defect above).
+- **What this simulator could NOT show.** Only the immediate half of the link
+  delivers here: `sendMessage` reached a running app within seconds, while a
+  queued `transferUserInfo` never reached the app at all (the daemon logs
+  `IDSService delegate … incomingMessage — doesRespondToSelector? NO`, and the
+  app's delegate was never called, even at relaunch). So **finish/discard
+  propagation and set-by-set sync were not photographed**; they are proved by
+  `SessionPulseTests` (12) against real stores. The application context
+  reached a running watch only at its next launch, so each run relaunched the
+  watch after the phone's push. Under the other lane's load, one message took
+  about 2 minutes; unloaded, 2–5 s.
+- The red "iPhone disconnected" glyph in the watch's status bar in some shots
+  is simulator chrome; the pair reported connected throughout.
+
+### Left open
+
+- **`HKHealthStore.startWatchApp(toHandle:)` is not built.** Starting on the
+  phone moves a watch whose app is already running; it does not LAUNCH the
+  watch app. That API (plus a `WKApplicationDelegate` that handles the
+  configuration) is how Apple's own apps do it — a founder call, and one that
+  can only be verified on devices.
+- **A movement added on the phone mid-session is still not on the watch's
+  deck** (W3's seam). The set arrives, but `SetSnapshot` carries an id and no
+  name, and the watch has no catalogue row to name it by — this needs the name
+  on the wire or the movement in the context.
+- **Two live sessions can still happen** when the earlier one is empty and the
+  later one already has sets; the rule keeps both rather than merge two logs.
+- **An abandoned Start leaves an open, empty row** for the day (and the wrist's
+  workout session running until it is discarded there). The watch's Start has
+  always done this; the phone now does too. `sessionEndedStream` and
+  `isTrainingDay` read it as a session in progress, which is what the phone
+  shows. No sweep was added.
+- **`.open` inserts a row under whatever user id the pulse carries.** The watch
+  keeps the last context's user until the next push; after an account switch a
+  stale wrist could put the previous account's id on a row that the server's
+  RLS then refuses. Same exposure the event ingest has always had.
+- **The `LiveSessionStart` fallback is now nearly dead** — `begin` puts the
+  start on the row at Start. Kept because `LiveStateRestoreTests` pins it and
+  it still covers a `begin` that failed.
+- **Simulators.** The iOS 27 lane-A pair this wave created was deleted at
+  close-out (no WatchConnectivity on that runtime). The **26.5 pair is kept** —
+  the only pair on this machine where the link works — and
+  `docs/SIMULATORS.md` now says how to drive it and what it cannot deliver.

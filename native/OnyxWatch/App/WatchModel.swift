@@ -6,6 +6,7 @@ import Observation
 import OnyxCore
 import OnyxData
 import OnyxUI
+import os
 import SwiftUI
 import WidgetKit
 
@@ -76,6 +77,15 @@ final class WatchModel {
     /// one. `clock(at:)` is what a view reads; this is one of its two inputs.
     private(set) var sessionStartedAt: Date?
 
+    /// When THIS wrist adopted the live session — not when it started.
+    ///
+    /// The one question it answers: did the wrist's `HKWorkoutSession` cover
+    /// any of the workout? A watch that was off while the phone ran a whole
+    /// session receives the queued open and the queued finish back to back
+    /// at its next launch, and saving the few seconds between them would put
+    /// a phantom workout in Health (`receive(session:)`).
+    private var adoptedAt: Date?
+
     /// The origin a PHONE-DRIVEN session sent us, pauses already subtracted.
     ///
     /// ── TWO WRITERS, AND THE OTHER ONE WINS WHEN IT SPEAKS ──────────────────
@@ -138,6 +148,10 @@ final class WatchModel {
     /// The `HKWorkoutSession`. See `WorkoutSessionController` — it is the
     /// runtime, not a heart-rate feature.
     let workout = WorkoutSessionController()
+
+    /// `.notice`, so `log show` returns it: which session the wrist followed
+    /// and why it did not, answered from the device (App Store W4).
+    private let log = Logger(subsystem: "app.onyx.watch", category: "session")
 
     /// The session clock's ledger, as the event log last stated it.
     ///
@@ -332,9 +346,16 @@ final class WatchModel {
             let session = try store.openSession(
                 userId: context.userId, dayKey: day.key, date: context.today
             )
+            // ── THE PHONE HEARS BEFORE ANYTHING IS LOGGED (App Store W4) ────
+            // Before `adopt`, so the open is queued ahead of any event: the
+            // phone's store refuses a set whose session row it has never seen.
+            link?.send(session: SessionPulse(session, phase: .open))
             adopt(session)
         } catch {
-            storeError = String(describing: error)
+            // `writeError`, not `storeError`: a failed open is one refused
+            // write, and `storeError` replaces the app with `StoreErrorView`
+            // until a force-quit.
+            failed(error)
         }
     }
 
@@ -392,7 +413,14 @@ final class WatchModel {
     /// opened and closed without a set, and an empty session is indistinguishable
     /// later from an abandoned workout. The row is created by the first append.
     private func rejoinLiveSession() {
-        guard let store, let day, let context else { return }
+        // ── NEVER A SWITCH (App Store W4) ───────────────────────────────────
+        // Only a wrist holding nothing rejoins. This ran on every context
+        // push, and `liveSession` answers the EARLIEST live row for the
+        // split — so a second one arriving over the link would have moved the
+        // wrist off the session it was logging, silently, leaving that one
+        // open on both devices for good. Two rows for one split are settled
+        // by `receiveSession`'s rule, and the wrist moves only when it says so.
+        guard sessionId == nil, let store, let day, let context else { return }
         guard let live = try? store.liveSession(dayKey: day.key, date: context.today, userId: context.userId) else { return }
         adopt(live)
     }
@@ -400,6 +428,7 @@ final class WatchModel {
     private func adopt(_ session: WorkoutSession) {
         guard let store, sessionId != session.id else { return }
         sessionId = session.id
+        adoptedAt = Date()
         // The row's own start — wall time. `clock(at:)` takes the pauses off
         // it, from the ledger `reload` reads two lines below.
         sessionStartedAt = session.startedAt
@@ -407,6 +436,17 @@ final class WatchModel {
         observeSets(session.id)
         seedCursor()
         if !workout.isRunning { workout.start() }
+        // ── AND THE PHONE LEARNS THE WRIST IS RUNNING IT (App Store W4) ─────
+        // Every adoption, however it came about. The phone writes its own
+        // `HKWorkout` for a session nobody else measured, and this is how it
+        // knows somebody did: a phone-started session the wrist followed is
+        // saved HERE when the phone finishes it, and a second one from the
+        // phone would be the same workout twice in Health.
+        // Only when it IS running: a session HealthKit refused (no access, no
+        // entitlement) records nothing here, and a join would stop the phone
+        // writing the workout nobody else is going to.
+        if workout.isRunning { link?.send(session: SessionPulse(session, phase: .joined)) }
+        log.notice("adopted \(session.id, privacy: .public); HKWorkoutSession running: \(self.workout.isRunning)")
         // ── AND HEALTHKIT AGREES WITH THE LOG ───────────────────────────────
         // `observeSets` has just read the ledger. A session rejoined after a
         // relaunch while paused would otherwise start a RUNNING
@@ -732,11 +772,12 @@ final class WatchModel {
     /// the phone is not left locked out of a session that no longer exists, and
     /// the local deck arrangement goes with it.
     ///
-    /// Nothing is sent over the link. The phone learns about the discard the
-    /// way it learns about everything else — from the store, when the two next
-    /// sync — and a `WatchLink` message saying "forget that" is a second
-    /// deletion protocol for a case the event log already covers by having no
-    /// events to fold.
+    /// ── AND THE PHONE IS TOLD (App Store W4) ────────────────────────────────
+    /// This used to send nothing, on the reasoning that the phone learns about
+    /// a discard "from the store, when the two next sync". The watch never
+    /// syncs — the phone is its only road — so the phone kept the session row
+    /// the wrist had opened, live, for good. A `discarded` pulse now follows
+    /// the events it cancels down the same queue.
     ///
     /// ── THE LOG LETS GO FIRST ───────────────────────────────────────────────
     /// `workout.cancel()` ran first and the teardown ran unconditionally, and
@@ -751,7 +792,11 @@ final class WatchModel {
     /// So: the store, checked; then Health; then the model.
     func cancelSession() {
         guard let store, let sessionId, let context else { return }
+        let row: WorkoutSession?
         do {
+            // Read BEFORE the delete: the pulse names a row that is about to
+            // stop existing.
+            row = try store.session(id: sessionId, userId: context.userId)
             guard try store.discardSession(id: sessionId, userId: context.userId) else {
                 writeError = "That session belongs to another account."
                 return
@@ -761,11 +806,19 @@ final class WatchModel {
             failed(error)
             return
         }
+        if let row { link?.send(session: SessionPulse(row, phase: .discarded)) }
         workout.cancel()
+        tearDown()
+    }
+
+    /// Forget the session this wrist was running: every field `adopt` and the
+    /// log filled. Finish, discard, and both of those arriving from the phone.
+    private func tearDown() {
         writeError = nil
         setsObserver = nil
-        self.sessionId = nil
+        sessionId = nil
         sessionStartedAt = nil
+        adoptedAt = nil
         remoteOrigin = nil
         pauses = PauseLedger()
         sets = []
@@ -965,6 +1018,8 @@ final class WatchModel {
         let session = try store.openSession(
             userId: context.userId, dayKey: day.key, date: context.today
         )
+        // Queued ahead of the set this is about to append — see `beginSession`.
+        link?.send(session: SessionPulse(session, phase: .open))
         adopt(session)
         return session.id
     }
@@ -1229,15 +1284,23 @@ final class WatchModel {
     func finish() async {
         guard let store, let sessionId, let context else { return }
         let metrics = await workout.end()
+        let restTarget = cursor.map { Double($0.movement.plan.restSec ?? 120) }
         do {
             try store.setSessionMetrics(
                 id: sessionId, userId: context.userId, durationMin: nil,
                 avgBpm: metrics.avgBpm, caloriesBurned: metrics.calories
             )
-            _ = try store.closeSession(
-                id: sessionId, restTargetSec: cursor.map { Double($0.movement.plan.restSec ?? 120) }
-            )
+            let closed = try store.closeSession(id: sessionId, restTargetSec: restTarget)
             try store.releasePencil(sessionId: sessionId)
+            // ── THE PHONE CLOSES IT TOO (App Store W4) ──────────────────────
+            // The `session.upsert` `closeSession` just queued is in THIS
+            // device's outbox, and this device never drains one. Without the
+            // pulse the phone — the only road to the server — kept the row
+            // open forever: no `ended_at`, no duration, no totals, no PRs. It
+            // is queued behind the last set, so the phone closes over them.
+            if let closed {
+                link?.send(session: SessionPulse(closed, phase: .finished, restTargetSec: restTarget))
+            }
         } catch {
             // ── AND THE SESSION STAYS OPEN ──────────────────────────────────
             // The teardown used to run whatever happened, so a throw in the
@@ -1248,22 +1311,17 @@ final class WatchModel {
             failed(error)
             return
         }
-        writeError = nil
-        setsObserver = nil
-        self.sessionId = nil
-        sessionStartedAt = nil
-        remoteOrigin = nil
-        pauses = PauseLedger()
-        sets = []
-        rest = nil
-        arrangement = DeckArrangement()
-        clearLiveSnapshot()
-        // ── THE WRIST WARMS ITS OWN CACHE (W5, decision 10) ─────────────────
-        // The `HKWorkout` just written holds the series, and this store is
-        // the wrist's own; the read is one query and it lands in the watch's
-        // `session_telemetry`. The PHONE's cache is the phone's — its samples
-        // arrive through Health's sync, which `sessionFinished` there listens
-        // for. Detached and unawaited: the finish is already over.
+        tearDown()
+        prefetchTelemetry(sessionId: sessionId, store: store)
+    }
+
+    /// ── THE WRIST WARMS ITS OWN CACHE (W5, decision 10) ─────────────────────
+    /// The `HKWorkout` just written holds the series, and this store is the
+    /// wrist's own; the read is one query and it lands in the watch's
+    /// `session_telemetry`. The PHONE's cache is the phone's — its samples
+    /// arrive through Health's sync, which `sessionFinished` there listens
+    /// for. Detached and unawaited: the finish is already over.
+    private func prefetchTelemetry(sessionId: String, store: AppDatabase) {
         let telemetry = SessionTelemetry(database: store, reader: HealthKitReader())
         Task.detached(priority: .utility) { await telemetry.prefetch(sessionId: sessionId) }
     }
@@ -1286,6 +1344,8 @@ final class WatchModel {
             // Watch → phone only. A glass tapped on the wrist is posted and
             // written there; nothing sends one back (`WatchLink.Inbound.water`).
             break
+        case .session(let pulse):
+            receive(session: pulse, store: store)
         case .context(let next):
             context = next
             WatchContextCache.save(next)
@@ -1322,6 +1382,73 @@ final class WatchModel {
             // leaves the wrist resolving its own ledger — see `remoteOrigin`.
             if let origin = pulse?.timerOrigin { remoteOrigin = origin }
             answerWithHeartRate(pulse)
+        }
+    }
+
+    /// A session opened, finished or discarded on the PHONE (App Store W4).
+    ///
+    /// ── AN OPEN IS WHAT KEEPS THE APP ON THE WRIST ──────────────────────────
+    /// The row lands first (`receiveSession`), then the ordinary rejoin path —
+    /// `rejoinLiveSession` → `adopt` → `workout.start()` — which is the whole
+    /// of "the watch stays awake": a running `HKWorkoutSession` is what gives
+    /// this app the frontmost privilege that brings a raised wrist back to the
+    /// set. There is nothing else to build for it, and `WKExtendedRuntimeSession`
+    /// is the wrong API for a workout.
+    ///
+    /// ── A FINISH OR A DISCARD ENDS THE WRIST'S HALF ─────────────────────────
+    /// The store has already closed or deleted the row. What is left is the
+    /// `HKWorkoutSession` and the model. A finish SAVES the workout — the
+    /// phone skipped its own because this wrist said `.joined` — unless this
+    /// wrist only adopted the session after the phone had already finished it
+    /// (a watch that was off receives the queued open and finish back to
+    /// back); that workout covered none of the session and is discarded.
+    private func receive(session pulse: SessionPulse, store: AppDatabase) {
+        log.notice("pulse \(pulse.phase.rawValue, privacy: .public) \(pulse.sessionId, privacy: .public) from the phone")
+        let outcome: AppDatabase.SessionPulseOutcome
+        do {
+            outcome = try store.receiveSession(pulse)
+        } catch {
+            // Said in the log as well as in `writeError`: the dashboard, which
+            // is where the wrist is when a pulse lands, draws no write error.
+            log.error("pulse \(pulse.sessionId, privacy: .public) refused: \(String(describing: error), privacy: .public)")
+            return failed(error)
+        }
+        switch pulse.phase {
+        case .open:
+            // ── THE PHONE'S STARTED FIRST, AND THIS WRIST'S WAS EMPTY ───────
+            // `receiveSession` has discarded the wrist's own row. The phone
+            // holds a copy of it (this wrist announced it), so it is told;
+            // and if the wrist was on it, it moves — the `HKWorkoutSession`
+            // runs on, because it is the same workout under a different id.
+            if case .opened(let superseded?) = outcome {
+                link?.send(session: SessionPulse(superseded, phase: .discarded))
+                if superseded.id == sessionId { tearDown() }
+            }
+            rejoinLiveSession()
+            if sessionId != pulse.sessionId {
+                log.notice("did not follow \(pulse.sessionId, privacy: .public): holding \(self.sessionId ?? "nothing", privacy: .public), today's split \(self.day?.key ?? "none", privacy: .public)")
+            }
+        case .finished where pulse.sessionId == sessionId && outcome == .closed:
+            let coveredNothing = pulse.endedAt.map { end in adoptedAt.map { end < $0 } ?? true } ?? false
+            Task {
+                // At the PHONE's instant, not this one's: the pulse may have
+                // sat in the queue, and the rings should end where the
+                // workout did.
+                if coveredNothing { workout.cancel() } else { await workout.end(endDate: pulse.endedAt ?? Date()) }
+                // Still the same session after the await — a new one may have
+                // been adopted meanwhile, and it is not this pulse's to end.
+                guard sessionId == pulse.sessionId else { return }
+                tearDown()
+                if !coveredNothing { prefetchTelemetry(sessionId: pulse.sessionId, store: store) }
+            }
+        // `outcome`, not the phase: a discard the store refused (the row had
+        // already closed — the wrist's own Finish got there first) must not
+        // throw away the HealthKit workout that Finish is saving.
+        case .discarded where pulse.sessionId == sessionId && outcome == .discarded:
+            workout.cancel()
+            tearDown()
+        default:
+            break
         }
     }
 

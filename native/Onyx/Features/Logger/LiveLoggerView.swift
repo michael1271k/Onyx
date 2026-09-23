@@ -310,7 +310,18 @@ struct LiveLoggerView: View {
             // finished three weeks ago puts a countdown on the Lock Screen for
             // a session nobody is doing.
             guard !model.isEditing else { return }
+            // ── START OPENS THE ROW, AND THE WRIST FOLLOWS (App Store W4) ───
+            // `attach` rejoins a session that exists; `begin` opens one when
+            // none does. Only a row this deck CREATES is announced — a rejoin
+            // re-announcing could revive, on the wrist, a session the wrist
+            // discarded while this cover was away. The hook is set first so
+            // `ensureSession`'s fallback announces too.
+            // The bridge, captured now: the hook may fire from a tap long
+            // after this closure was made.
+            let bridge = environment?.watchBridge
+            model.onOpened = { bridge?.send(session: SessionPulse($0, phase: .open)) }
             model.attach()
+            model.begin()
             // Before `start`, so the FIRST card already carries the wrist's
             // reading rather than acquiring it one pulse later.
             activity.liveBpm = environment?.watchBridge.liveBpm
@@ -813,7 +824,10 @@ struct LiveLoggerView: View {
     /// would leave the session live with the failure reported to a screen that
     /// no longer exists — the same rule `finish` follows.
     private func cancelWorkout() {
+        // Read BEFORE the discard deletes it — the pulse names the row.
+        let row = storedRow(model.sessionId)
         guard model.cancel() else { return }
+        tellWatch(.discarded, row)
         model.stopRest()
         activity.end()
         dismiss()
@@ -830,6 +844,9 @@ struct LiveLoggerView: View {
         if model.isEditing { return finishEdit(sessionRpe: sessionRpe) }
         let finished = model.sessionId
         guard model.finish(sessionRpe: sessionRpe) else { return false }
+        // The closed row, so the wrist ends its `HKWorkoutSession` at the
+        // instant this one was stamped rather than when the pulse lands.
+        tellWatch(.finished, storedRow(finished))
         model.stopRest()
         activity.end()
         // The phone's own `HKWorkout` when the watch did not run this one,
@@ -867,6 +884,20 @@ struct LiveLoggerView: View {
         model.stopRest()
         dismiss()
         return true
+    }
+
+    /// Tell the wrist a session opened, finished or was discarded here (App
+    /// Store W4). From the view, for the reason `mirrorRestToWatch` gives one
+    /// function down: the model is the session's arithmetic and holds no
+    /// transport.
+    private func tellWatch(_ phase: SessionPulse.Phase, _ row: WorkoutSession?) {
+        guard let row, let bridge = environment?.watchBridge else { return }
+        bridge.send(session: SessionPulse(row, phase: phase))
+    }
+
+    private func storedRow(_ id: String?) -> WorkoutSession? {
+        guard let id, let environment else { return nil }
+        return try? environment.database.session(id: id, userId: environment.userIdString)
     }
 
     /// Put the phone's rest clock on the wrist — including when it STOPS.
