@@ -288,7 +288,9 @@ public struct WeeklyExportBuilder: Sendable {
                         : "manual",
                 ] as [String: Any]
             },
-            "supplementProtocol": supplementStack(rows.customs),
+            // As the stack stood on the span's LAST day, so the protocol and
+            // the days above it cannot disagree about a dose.
+            "supplementProtocol": supplementStack(rows.customs.map { Supplements.doseAt($0, on: weekEnd) }),
             "ledger": ledger(rows, weekStart: weekStart, ctx: ctx).map(Self.encodeToJSON),
             // FORCED. `LeverLadder.rungs` is empty for this athlete — nothing
             // writes `target_profiles.kind`, so every profile defaults to `.day`
@@ -996,7 +998,7 @@ public struct WeeklyExportBuilder: Sendable {
             // inflating the denominator AND appearing in the taken list of
             // three days it had already left.
             let liveCustoms = Supplements.active(d.customs, on: day.date)
-            let custom = Supplements.customSlotsForDate(liveCustoms, weekday: weekday, isTraining: training)
+            let custom = Supplements.customSlotsForDate(liveCustoms, on: day.date, weekday: weekday, isTraining: training)
             let slots = Supplements.stackForDate(custom, isTraining: training, weekday: weekday)
             var doses: [String: String] = [:]
             for sl in slots { for i in sl.items { doses[i.key] = i.dose } }
@@ -1056,7 +1058,22 @@ public struct WeeklyExportBuilder: Sendable {
             out["nutrientsFood"] = food
             out["nutrientsStack"] = stack
             out["supplementsTaken"] = scheduled.isEmpty ? NSNull() : Double(taken.count)
-            out["supplementsLog"] = taken.map { ["key": $0.key, "time": $0.time] }
+            // The dose IN FORCE THAT DAY — `slots` came through `doseAt`.
+            out["supplementsLog"] = taken.map { ["key": $0.key, "time": $0.time, "dose": j(doses[$0.key])] }
+            // ── THE DAY A DOSE CHANGED ──────────────────────────────────────
+            // Filed under the day the new dose started, which is the period's
+            // `until`. Each side is the dose a reader of THAT day would see —
+            // the same `customDose` the checklist uses, for the day's training
+            // flag — so a change to a rest-day dose on a training day, which
+            // no reader of the day could see, is not reported as one.
+            let changes: [[String: Any]] = liveCustoms.compactMap { c in
+                guard c.dosePeriods?.contains(where: { $0.until == day.date }) == true,
+                      let before = ISODate.addDays(day.date, -1) else { return nil }
+                let from = Supplements.customDose(Supplements.doseAt(c, on: before), isTraining: training)
+                let to = Supplements.customDose(Supplements.doseAt(c, on: day.date), isTraining: training)
+                return from == to ? nil : ["name": c.name, "from": from, "to": to]
+            }
+            if !changes.isEmpty { out["supplementDoseChanges"] = changes }
             // ── THE SKIP IS NEVER FILTERED THROUGH THE SCHEDULE ─────────────
             // `scheduled.filter { skipped.contains($0.key) }` was the bug: a
             // refusal logged against an item the day's projection no longer
@@ -1770,12 +1787,21 @@ public struct WeeklyExportBuilder: Sendable {
         return obj.compactMapValues { ($0 as? NSNumber).map(\.doubleValue) }.filter { $0.value.isFinite }
     }
 
+    /// The app's one row mapper, with the export's more forgiving micros read.
+    ///
+    /// ── THIS WAS A SECOND MAPPER, AND IT DROPPED THE HISTORY ────────────────
+    /// It built the struct from seven of the row's columns and left out
+    /// `archived_at` — so `Supplements.active(_:on:)` below, written for
+    /// exactly this export, never saw an item leave the stack, and one archived
+    /// on a Wednesday was still "scheduled" on Thursday. It would have dropped
+    /// `dose_periods` the same way and exported every past day at today's dose.
+    /// Everything now comes from `AppDatabase.custom`; only `micros` is re-read,
+    /// through `numbers`, which keeps the numeric entries of a payload holding
+    /// a null where a strict decode would throw the whole payload away.
     static func custom(_ r: CustomSupplementRow) -> CustomSupplement {
-        CustomSupplement(
-            id: r.id, name: r.name, dose: r.dose, color: r.color, form: r.form, time: r.time,
-            schedule: r.schedule.flatMap { try? JSONDecoder().decode(CustomSchedule.self, from: Data($0.raw.utf8)) },
-            micros: r.micros.flatMap(numbers)
-        )
+        var c = AppDatabase.custom(r)
+        c.micros = r.micros.flatMap(numbers)
+        return c
     }
 
     /// `L` / `R` or nil — the export never carries another spelling.

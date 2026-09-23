@@ -1405,6 +1405,26 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // ── v35: a supplement's dose history (App Store sprint W5) ──────────
+        // `custom_supplements` carried one dose and no date, so changing it
+        // rewrote every day the item had been taken. `dose_periods` records
+        // each dose it replaced (`OnyxCore.DosePeriod`); `Supplements.doseAt`
+        // is its one reader. A fresh install gets the column from the
+        // regenerated `migrateMirrorV1`; this is the guarded alter for a store
+        // that already exists — the `v21.genericModel` shape.
+        //
+        // NULLABLE, the `sleep_inaccurate` rule (v20): nil on every row whose
+        // dose has never changed, so `encodeIfPresent` keeps the key out of
+        // those rows' push bodies. `w5-dose-periods.sql` is the Postgres half
+        // and the founder pastes it by hand.
+        migrator.registerMigration("v35.dosePeriods") { db in
+            let existing = Set(try db.columns(in: "custom_supplements").map(\.name))
+            guard !existing.contains("dose_periods") else { return }
+            try db.alter(table: "custom_supplements") { t in
+                t.add(column: "dose_periods", .text)
+            }
+        }
+
         return migrator
     }
 }

@@ -486,7 +486,7 @@ enum PreviewHarness {
                 .environment(AppEnvironment.preview)
         case "day", "day-rows", "day-past", "day-session", "day-two", "day-empty", "day-stress", "day-edit", "day-soreness", "day-hero",
              "scale", "scale-first", "day-swap", "doms", "doms-rate",
-             "pulse-squares", "pulse-squares-evening", "pulse-squares-empty", "stack", "stack-add", "stack-edit",
+             "pulse-squares", "pulse-squares-evening", "pulse-squares-empty", "stack", "stack-before", "stack-add", "stack-edit",
              "sleep-edit", "stress", "fatigue", "stress-log", "stress-day", "quick-log",
              // W6: the three day answers merged onto one sheet.
              "log-day", "log-day-soreness", "log-day-water":

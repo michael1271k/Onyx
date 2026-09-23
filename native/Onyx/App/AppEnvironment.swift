@@ -1151,6 +1151,14 @@ public final class AppEnvironment {
 
         auth = .signedOut
 
+        // The reminders name this account's stack and its doses on the lock
+        // screen, and the switches were this account's choice. Both leave
+        // with it — and before a deleted account's magnesium can fire a week
+        // after it no longer exists.
+        UserDefaults.standard.removeObject(forKey: OnyxReminders.enabledKey)
+        UserDefaults.standard.removeObject(forKey: OnyxReminders.supplementsKey)
+        OnyxReminders.cancelAll()
+
         // 5. NOT `scheduleWidgetReload()`. That debounces two seconds against a
         //    commit storm, and the storm here is the erase itself — the user
         //    would watch a stale week sit on their home screen for two seconds

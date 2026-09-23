@@ -72,7 +72,7 @@ public extension AppDatabase {
         let active = Supplements.active(customs, on: date)
         let weekday = ISODate.weekday(date) ?? 0
         let slots = Supplements.stackForDate(
-            Supplements.customSlotsForDate(active, weekday: weekday, isTraining: isTraining),
+            Supplements.customSlotsForDate(active, on: date, weekday: weekday, isTraining: isTraining),
             isTraining: isTraining, weekday: weekday
         )
 

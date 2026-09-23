@@ -94,7 +94,7 @@ struct SupplementCreditGoldenTests {
         #expect(active.map(\.id) == ["r-cre"])
         #expect(Supplements.archived(customs, on: date).map(\.id) == ["r-mag"])
 
-        let slots = Supplements.customSlotsForDate(active, weekday: 6, isTraining: true)
+        let slots = Supplements.customSlotsForDate(active, on: "2026-09-12", weekday: 6, isTraining: true)
         let credited = Supplements.creditedDoses(
             slots: slots, log: [], clock: .today(minutes: 23 * 60)
         )
