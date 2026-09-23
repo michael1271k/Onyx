@@ -44,6 +44,65 @@ _Nothing yet._
 
 ---
 
+## [7.14.0] — 2026-09-23 · Start on one, the other follows
+
+Wave 4 of the App Store sprint (Lane A). Planned as 7.12.0; W5 landed first as
+7.13.0, and a lower number would give App Store Connect a lower build number
+(71200 < 71300), which it refuses — so this is the next free minor, and W6/W7
+move up one.
+
+### Added
+- **Start a workout on the phone and the watch follows** (watch app). Within
+  seconds, and before any set is logged, the watch leaves its dashboard for
+  the set screen and starts its workout session — which is what keeps the
+  watch app on the wrist when you raise it. Nothing else was built for "stays
+  awake", and `WKExtendedRuntimeSession` stays out.
+- **Start on the watch and the phone follows** (phone). The Train tab opens
+  the logger on the wrist's session, on the same clock.
+- **Finish or discard on either device, and the other hears about it.** A
+  workout finished on the watch is now closed on the phone — duration, set
+  count, volume, PRs and the upload — from the wrist's own sets. Before this,
+  a watch-finished workout stayed open on the phone for good.
+
+### Changed
+- **"Start workout" on the phone opens the session right away** instead of at
+  the first ticked set, the way the watch's Start always has. Cancelling with
+  nothing logged still leaves nothing behind.
+- **Starting on both devices at once ends with one workout**, not two: the
+  earlier start wins on both, and an empty duplicate is removed.
+- **The watch's workout is not written to Health twice.** When the watch runs
+  a phone-started workout it says so, and the phone skips writing its own.
+
+### Fixed
+- **Sets logged on one device never reached the other.** Every set names its
+  session, and the other device had never been sent that session, so its
+  database refused the set — silently, on the watch. The session now travels
+  first.
+- **The database would not open on the iOS/watchOS 26.5 simulators** ("Store
+  unavailable — qualified table names are not allowed…"). Since 7.1.0 the
+  rescore triggers used SQL that only the newer SQLite in the 27 runtimes
+  accepts. Devices below 27 very likely carry the older SQLite (not checked on
+  hardware); the app's minimums are iOS 18 / watchOS 11.
+- A send made in the first moment after launch — the watch's Start among
+  them — was dropped before the phone/watch link had finished starting. It
+  now waits and goes out once the link is up.
+- A discarded watch workout session's late failure could mark the next one as
+  not running.
+
+### Notes
+- **Proved on paired simulators — iPhone 15 + Apple Watch Ultra 2 on the
+  iOS/watchOS 26.5 runtimes — in both directions, with screenshots and the
+  watch's own log** (`HKWorkoutSession started`, state `1 -> 2`). The iOS 27
+  simulator runtime has no `appconduitd`, so WatchConnectivity cannot activate
+  on the phone there at all.
+- On those simulators only the immediate half of the link delivers; queued
+  transfers never reached a running app. The finish/discard half and
+  set-by-set sync are proved by tests (`SessionPulseTests`, 12), not on screen.
+- A movement added on the phone mid-session is still not on the watch's deck
+  (from W3): the watch has no catalogue row to name it by.
+
+---
+
 ## [7.13.0] — 2026-09-23 · A dose change starts today
 
 Wave 5 of the App Store sprint (Lane B). Changing a supplement's dose used to
