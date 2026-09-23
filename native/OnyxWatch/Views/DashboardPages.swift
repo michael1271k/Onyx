@@ -222,7 +222,7 @@ struct DashboardView: View {
             // in-session push and a `TabView` selection that matches no tag
             // draws NOTHING — silently, permanently, under a correct filename.
             let wanted: DashboardPage? = switch screen {
-            case .start, .restday: .start
+            case .start, .restday, .banner, .join: .start
             case .dashboard: .today
             case .train: .train
             case .fuel: .fuel

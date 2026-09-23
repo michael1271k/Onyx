@@ -527,6 +527,11 @@ public final class AppEnvironment {
         watchBridge.onSessionOpened = { [weak self] in self?.selectedTab = "train" }
         // A wrist-finished session gets what a phone-finished one gets.
         watchBridge.onSessionClosed = { [weak self] in self?.sessionFinished(sessionId: $0) }
+        // An open, a finish or a discard reaches the wrist NOW (overhaul
+        // Lane A) — never through the tiles' two-second debounce and thirty-
+        // second throttle, which is what left "Start" on the watch after the
+        // phone had finished.
+        watchBridge.onLifecycleChanged = { [weak self] in self?.pushLifecycle() }
         watchBridge.start()
         authTask = Task { [weak self] in
             guard let self else { return }
@@ -1373,6 +1378,23 @@ public final class AppEnvironment {
             self.publishPhase(schedule)
             self.watchBridge.send(userId: userId, today: today, schedule: schedule, tiles: tiles)
         }
+    }
+
+    /// The lifecycle push (overhaul Lane A, decision Q1): the session opened,
+    /// finished or was discarded, and the wrist hears it now.
+    ///
+    /// ── THE LAST TILES RIDE WITH IT ─────────────────────────────────────────
+    /// The application context is ONE slot, so a lifecycle-only payload would
+    /// wipe the schedule and the complications' numbers. The bridge re-sends
+    /// the last context it built with the new lifecycle on it — no `.full`
+    /// snapshot build, no debounce, no throttle. Only a launch that has not
+    /// pushed yet builds a whole context, immediately.
+    ///
+    /// The throttled tiles push is untouched and still fires after the
+    /// finish's own commits, carrying the same lifecycle plus fresh numbers.
+    func pushLifecycle() {
+        guard !watchBridge.pushLifecycle(), case .signedIn(let userID) = auth else { return }
+        pushWatchContext(userID: userID)
     }
 
     /// The commit path's push (W7): a 30 s TRAILING throttle. The first

@@ -366,4 +366,85 @@ struct WatchPayloadTests {
         #expect(there.session == live.session)
         #expect(there == live)
     }
+
+    // MARK: - Overhaul Lane A: the wire decode, the messaged finish, the front door
+
+    /// A WatchConnectivity dictionary, spelled the way `WatchLink` builds one.
+    private func wire(_ kind: String, _ value: some Encodable) throws -> [String: Any] {
+        ["k": kind, "p": try OnyxJSON.encoder.encode(value)]
+    }
+
+    @Test("WatchLink's decode hands an effort pulse through intact (W0 open call 6)")
+    func wireDecodesEffort() throws {
+        let pulse = EffortPulse(sessionId: "s-1", exerciseId: "hack-squat", setIndex: 2, rpe: 8.5)
+        #expect(WatchWire.decode(try wire("effort", pulse)) == .effort(pulse))
+        // A malformed payload, an unknown kind and no kind at all are quiet
+        // drops — a newer build may send what this one has never heard of.
+        #expect(WatchWire.decode(["k": "effort", "p": Data("{}".utf8)]) == nil)
+        #expect(WatchWire.decode(try wire("flourish", pulse)) == nil)
+        #expect(WatchWire.decode(["p": Data()]) == nil)
+        // A rest message with no payload IS the message: the clock stopped.
+        #expect(WatchWire.decode(["k": "rest"]) == .rest(nil))
+    }
+
+    @Test("a finish carries its event count; a pulse from an older build decodes with none")
+    func finishCarriesItsCount() throws {
+        let row = WorkoutSession(id: "s-1", userId: "u-1", dayKey: "legs_a", date: "2026-09-21",
+                                 startedAt: Self.start, endedAt: Self.start.addingTimeInterval(3_120))
+        let finish = SessionPulse(row, phase: .finished, expectedEventCount: 14)
+        #expect(WatchWire.decode(try wire("session", finish)) == .session(finish))
+        #expect(SessionPulse(row, phase: .open, expectedEventCount: 14).expectedEventCount == nil,
+                "only a finish waits for a count")
+
+        var object = try #require(
+            try JSONSerialization.jsonObject(with: try OnyxJSON.encoder.encode(finish)) as? [String: Any]
+        )
+        #expect(object["expectedEventCount"] as? Int == 14)
+        object.removeValue(forKey: "expectedEventCount")
+        let old = try OnyxJSON.decoder.decode(SessionPulse.self, from: try JSONSerialization.data(withJSONObject: object))
+        #expect(old.expectedEventCount == nil)
+    }
+
+    @Test("the front door: open → Join, finished today → banner, discard or nothing → Start")
+    func frontDoorTable() {
+        var context = WatchContext(userId: "u-1", today: "2026-09-21", schedule: schedule)
+        #expect(WatchFrontDoor.resolve(nil) == .start)
+        #expect(WatchFrontDoor.resolve(context) == .start)
+
+        let open = SessionLifecycle(sessionId: "s-1", phase: .open, startedAt: Self.start, date: "2026-09-21")
+        context.session = open
+        #expect(WatchFrontDoor.resolve(context) == .join(open))
+
+        context.session = SessionLifecycle(sessionId: "s-1", phase: .finished, startedAt: Self.start,
+                                           summary: Self.masthead, date: "2026-09-21")
+        #expect(WatchFrontDoor.resolve(context) == .banner(Self.masthead))
+
+        // Yesterday's finish is not today's banner.
+        context.session?.date = "2026-09-20"
+        #expect(WatchFrontDoor.resolve(context) == .start)
+
+        // A discard says nothing happened — unless the tiles say something did.
+        context.session = SessionLifecycle(sessionId: "s-2", phase: .discarded, startedAt: Self.start, date: "2026-09-21")
+        #expect(WatchFrontDoor.resolve(context) == .start)
+        context.tiles = WatchTiles(date: "2026-09-21", todayLabel: "Upper A", todayLogged: true, restDay: false)
+        #expect(WatchFrontDoor.resolve(context) == .banner(nil))
+    }
+
+    @Test("a masthead off a closed row: stored totals, the row's HR, a six-point spark")
+    func mastheadFromRow() throws {
+        var row = WorkoutSession(id: "s-1", userId: "u-1", dayKey: "legs_a", date: "2026-09-21",
+                                 startedAt: Self.start, totalVolumeKg: 8_450, prCount: 2)
+        #expect(SessionMasthead(session: row, name: "Legs A", samples: []) == nil, "an open row has no masthead")
+        row.endedAt = Self.start.addingTimeInterval(3_150)
+        row.durationMin = 52
+        let samples = (0..<12).map { HRSample(at: Self.start.addingTimeInterval(Double($0) * 60), bpm: 120 + $0) }
+        let head = try #require(SessionMasthead(session: row, name: "Legs A", samples: samples))
+        #expect(head.durationSec == 3_120, "duration_min wins over the wall interval")
+        #expect(head.tonnageKg == 8_450)
+        #expect(head.prCount == 2)
+        #expect(head.avgBpm == 126, "no stored avg_bpm: the samples' mean")
+        #expect(head.hrSpark == [120.5, 122.5, 124.5, 126.5, 128.5, 130.5])
+        row.avgBpm = 131
+        #expect(SessionMasthead(session: row, name: "Legs A", samples: samples)?.avgBpm == 131)
+    }
 }

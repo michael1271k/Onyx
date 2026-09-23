@@ -64,6 +64,8 @@ screen_env() {
     # The state the founder complained about by name. It had no hook before
     # W2, which is why nobody had looked at it.
     restday) echo "ONYX_WATCH_SCREEN=restday" ;;
+    banner)  echo "ONYX_WATCH_SCREEN=banner" ;;
+    join)    echo "ONYX_WATCH_SCREEN=join" ;;
     # ⚠️ ONLY HONEST AS THE FIRST SCREEN OF A RUN, AFTER AN UNINSTALL. It has
     # no environment, so it draws whatever `WatchContextCache` is holding — and
     # every other screen in this list seeds one. Shot after `start` it comes
@@ -202,7 +204,7 @@ shoot() {
 
   case "$env" in
     UNKNOWN)
-      echo "  unknown screen '$screen' — known: start restday nophone set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget" >&2; return 1 ;;
+      echo "  unknown screen '$screen' — known: start restday banner join nophone set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget" >&2; return 1 ;;
     NOT_REACHABLE)
       echo "  '$screen' has no launch hook yet: it is presented by navigation" >&2
       echo "  inside a live session. Add a case to WatchModel.DebugScreen and a" >&2
@@ -280,7 +282,7 @@ shoot() {
 }
 
 read -ra SCREENS <<< "$SCREEN"
-[ "$SCREEN" = "all" ] && SCREENS=(start restday set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget)
+[ "$SCREEN" = "all" ] && SCREENS=(start restday banner join set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget)
 
 status=0
 for s in ${SCREENS[@]+"${SCREENS[@]}"}; do

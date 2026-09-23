@@ -106,6 +106,15 @@ struct OnyxWatchApp: App {
                     if let name = ProcessInfo.processInfo.environment["ONYX_WATCH_SCREEN"],
                        let screen = WatchModel.DebugScreen(rawValue: name) {
                         model.debugScreen = screen
+                        // ── EVERY SCREEN STARTS FROM ZERO, NOT ONLY AUTOSTART ──
+                        // A screen shot WITHOUT autostart after one shot with
+                        // it (`finish`, then `dashboard`) rejoined the earlier
+                        // shot's live session in `start()` and photographed
+                        // the finish card under `dashboard.png` — found in the
+                        // overhaul A1 round. Discarded the same shipping way.
+                        if ProcessInfo.processInfo.environment["ONYX_WATCH_AUTOSTART"] != "1" {
+                            model.cancelSession()
+                        }
                         switch screen {
                         case .rest:
                             model.seedDebugRest()
@@ -142,6 +151,14 @@ struct OnyxWatchApp: App {
                             // input is a face whose truncation nobody has
                             // reviewed.
                             model.seedDebugSets(3)
+                        case .banner, .join:
+                            // ── THE PHONE'S LIFECYCLE, SEEDED (overhaul A1) ─
+                            // The same context every dashboard shot gets,
+                            // with a finished or a live session on it — what
+                            // `pushLifecycle` sends. Page one then draws the
+                            // banner, or Start turned into Join, through
+                            // `frontDoor` exactly as a real push would.
+                            model.seedDebugContext(session: WatchModel.debugLifecycle(screen == .banner ? .finished : .open))
                         case .restday:
                             // The same seed with today unscheduled — see
                             // `seedDebugContext(restDay:)`. It falls through to

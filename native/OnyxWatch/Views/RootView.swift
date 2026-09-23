@@ -206,7 +206,29 @@ struct StartView: View {
 
     @Environment(WatchModel.self) private var model
 
+    /// ── START, JOIN, OR TODAY'S BANNER (overhaul A1, decisions Q1 + Q3) ────
+    /// This page drew "Start" whenever there was a day, and ignored whether
+    /// today's session had already closed — the founder's "the watch offers
+    /// Start after the phone finished". The phone's lifecycle picks now
+    /// (`WatchModel.frontDoor`): finished today is the banner, a session the
+    /// phone is logging that this wrist has not followed is Join, and only
+    /// nothing at all is Start.
     var body: some View {
+        switch model.frontDoor {
+        case .banner(let summary):
+            SessionBannerView(summary: summary)
+        case .start, .join:
+            startPage
+        }
+    }
+
+    /// The phone's live session this wrist can follow, if that is the door.
+    private var joining: SessionLifecycle? {
+        if case .join(let word) = model.frontDoor { return word }
+        return nil
+    }
+
+    private var startPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: OnyxSpace.xs) {
                 if let day = model.day {
@@ -219,10 +241,34 @@ struct StartView: View {
                         // a later block invents, because a truncated split is
                         // a split you cannot identify.
                         .minimumScaleFactor(0.8)
-                    HeroStats(
-                        tiles: model.dashboardTiles,
-                        movements: day.exercises(for: model.phase).count
-                    )
+                    if let joining {
+                        // Where the session is, and how long it has run —
+                        // ticked by the system, one redraw a minute, the
+                        // same `h:mm` the session timer uses. It takes the
+                        // stat row's place rather than joining it: the 49 mm
+                        // shot with both put the readings under the Join
+                        // capsule, and a live session is not the moment for
+                        // battery and readiness.
+                        TimelineView(.periodic(from: .now, by: 60)) { tick in
+                            Label {
+                                Text("Live on iPhone · "
+                                     + Duration.seconds(max(0, tick.date.timeIntervalSince(joining.startedAt)))
+                                        .formatted(.time(pattern: .hourMinute)))
+                                    .monospacedDigit()
+                            } icon: {
+                                Image(systemName: "iphone")
+                            }
+                            .font(WatchType.label)
+                            .foregroundStyle(WatchInk.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        }
+                    } else {
+                        HeroStats(
+                            tiles: model.dashboardTiles,
+                            movements: day.exercises(for: model.phase).count
+                        )
+                    }
                 } else if model.context == nil {
                     // The honest empty state. The watch cannot sign in — by
                     // design, Wave 10 — so the only way it learns who you are
@@ -276,9 +322,9 @@ struct StartView: View {
         .safeAreaInset(edge: .bottom) {
             if model.day != nil {
                 Button {
-                    model.beginSession()
+                    if joining != nil { model.joinSession() } else { model.beginSession() }
                 } label: {
-                    Label("Start", systemImage: "play.fill")
+                    Label(joining == nil ? "Start" : "Join", systemImage: joining == nil ? "play.fill" : "arrow.right.circle.fill")
                         .font(WatchType.value)
                         .frame(maxWidth: .infinity)
                 }

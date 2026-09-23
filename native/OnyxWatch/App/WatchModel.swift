@@ -208,7 +208,7 @@ final class WatchModel {
     /// `dashboard` is W4's, and it is the last name `watch-shot.sh` refused
     /// (W1 left it named as unreachable and said so by name rather than
     /// photographing `StartView` under its filename).
-    enum DebugScreen: String { case start, restday, rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget }
+    enum DebugScreen: String { case start, restday, rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget, banner, join }
     var debugScreen: DebugScreen?
     #endif
 
@@ -340,8 +340,24 @@ final class WatchModel {
     /// rather than at the first set — the whole point of the workout session is
     /// to be running during the warm-up, when the app would otherwise be
     /// suspended between the first two things you do.
-    func beginSession() {
+    ///
+    /// ── AND IT REFUSES A DAY THE PHONE HAS ALREADY FINISHED (overhaul A1) ───
+    /// Its only guard used to be `sessionId == nil`, so the Start that
+    /// reappeared after a phone finish opened a SECOND session — and messaged
+    /// the open, which yanked the phone onto the Train tab. With today's
+    /// workout done the front door is the banner, and a second session is
+    /// the banner's long-press: `another: true`, a two-a-day on purpose.
+    func beginSession(another: Bool = false) {
         guard let store, let context, let day, sessionId == nil else { return }
+        switch frontDoor {
+        case .banner where !another:
+            log.notice("Start refused: today's session is finished — the banner's Start another opens a second")
+            return
+        case .join:
+            return joinSession()
+        default:
+            break
+        }
         do {
             let session = try store.openSession(
                 userId: context.userId, dayKey: day.key, date: context.today
@@ -356,6 +372,84 @@ final class WatchModel {
             // write, and `storeError` replaces the app with `StoreErrorView`
             // until a force-quit.
             failed(error)
+        }
+    }
+
+    // MARK: - The front door (overhaul A1, decisions Q1 + Q3)
+
+    /// What the idle root offers: Start, Join, or today's banner.
+    ///
+    /// The phone's lifecycle decides (`WatchFrontDoor.resolve`, pure and
+    /// tested in OnyxData), with the two things only THIS store knows laid
+    /// over a Join: a session this wrist discarded is not joinable (it is
+    /// tombstoned here, and the phone has not heard yet), and one this wrist
+    /// FINISHED is today's banner even while the phone — whose copy of the
+    /// finish is still in the queue — calls it open.
+    var frontDoor: WatchFrontDoor {
+        let door = WatchFrontDoor.resolve(context)
+        guard let store, let context else { return door }
+        // A finish learned from the PULSE carries no masthead (the phone's
+        // context brings one later): this store's own closed copy stands in.
+        if case .banner(nil) = door, let word = context.session, word.phase == .finished {
+            return .banner(try? store.sessionMasthead(sessionId: word.sessionId, userId: context.userId, name: day?.label ?? "Workout"))
+        }
+        guard case .join(let word) = door else { return door }
+        if (try? store.isTombstoned(sessionId: word.sessionId)) == true { return .start }
+        if let row = try? store.session(id: word.sessionId, userId: context.userId), row.endedAt != nil {
+            return .banner(try? store.sessionMasthead(sessionId: row.id, userId: context.userId, name: day?.label ?? "Workout"))
+        }
+        return door
+    }
+
+    /// Follow the session the phone is logging.
+    ///
+    /// Usually nothing to do: the phone's open is ALSO messaged, lands the row
+    /// (`receiveSession`) and `rejoinLiveSession` adopts it before anyone sees
+    /// a Join. The button exists for the case that path missed — the watch
+    /// app was not running when the message went, and the queued copy is
+    /// still in a queue a simulator never drains. The context carries enough
+    /// to build the row itself (`SessionLifecycle.date`/`dayKey`), and it goes
+    /// through the ordinary receive, so a rival row and a tombstone are
+    /// settled by the same rule as a pulse.
+    func joinSession() {
+        guard let store, let context, let day, sessionId == nil, case .join(let word) = frontDoor else { return }
+        let row = WorkoutSession(
+            id: word.sessionId, userId: context.userId, dayKey: word.dayKey ?? day.key,
+            date: word.date ?? context.today, startedAt: word.startedAt
+        )
+        receive(session: SessionPulse(row, phase: .open), store: store)
+        // A session on a split other than the one this wrist resolved is not
+        // found by `rejoinLiveSession` (it looks up TODAY'S split) — adopt it
+        // by id: the person asked for this one.
+        if sessionId == nil, let live = try? store.session(id: word.sessionId, userId: context.userId), live.endedAt == nil {
+            adopt(live)
+        }
+    }
+
+    /// Apply the phone's lifecycle to this store: a finished or discarded
+    /// session is closed or thrown away here and tombstoned
+    /// (`AppDatabase.applyLifecycle`), so neither the next context push nor a
+    /// late open can put it back for `rejoinLiveSession` to adopt — the third
+    /// defect behind "Start after the phone finished". If this wrist was
+    /// running it, its half ends the way the missed pulse would have ended it.
+    private func applyLifecycle() {
+        guard let store, let context, let word = context.session, word.phase != .open else { return }
+        let outcome: AppDatabase.SessionPulseOutcome
+        do {
+            outcome = try store.applyLifecycle(word, userId: context.userId)
+        } catch {
+            log.error("lifecycle \(word.sessionId, privacy: .public) refused: \(String(describing: error), privacy: .public)")
+            return
+        }
+        if outcome != .unchanged {
+            log.notice("context \(word.phase.rawValue, privacy: .public) \(word.sessionId, privacy: .public): \(String(describing: outcome), privacy: .public)")
+        }
+        guard word.sessionId == sessionId else { return }
+        if word.phase == .finished {
+            endAdopted(word.sessionId, at: word.endedAt, store: store)
+        } else {
+            workout.cancel()
+            tearDown()
         }
     }
 
@@ -402,6 +496,10 @@ final class WatchModel {
         link.activate()
         self.link = link
 
+        // The cached context's lifecycle FIRST: a session the phone finished
+        // while this app was not running must be closed here before the
+        // rejoin below can find it live and restart its workout.
+        applyLifecycle()
         rejoinLiveSession()
         Task { try? await workout.requestAuthorization() }
     }
@@ -422,6 +520,14 @@ final class WatchModel {
         // by `receiveSession`'s rule, and the wrist moves only when it says so.
         guard sessionId == nil, let store, let day, let context else { return }
         guard let live = try? store.liveSession(dayKey: day.key, date: context.today, userId: context.userId) else { return }
+        // ── NEVER A SESSION THE PHONE SAYS IS OVER (overhaul A1) ────────────
+        // `applyLifecycle` has normally closed it already; this is the guard
+        // for a store write that failed there, so a refused close cannot turn
+        // back into an adoption and a second `HKWorkoutSession`.
+        if let word = context.session, word.sessionId == live.id, word.phase != .open {
+            log.notice("did not rejoin \(live.id, privacy: .public): the phone says \(word.phase.rawValue, privacy: .public)")
+            return
+        }
         adopt(live)
     }
 
@@ -1346,6 +1452,21 @@ final class WatchModel {
             // A provisional RPE (overhaul W0) is the wrist's own Crown.
             break
         case .session(let pulse):
+            // ── A MESSAGED FINISH WAITS FOR THE QUEUE (overhaul A1) ─────────
+            // The phone's finish now also travels as a message, carrying how
+            // many events it holds. Applied before the sets queued ahead of it
+            // it would close this copy without them — so it waits until the
+            // log has caught up, or `SessionPulse.finishGrace`, whichever
+            // comes first. The queued copy (no count) is applied at once, and
+            // whichever lands second finds the row closed and changes nothing.
+            if pulse.phase == .finished, (try? store.finishIsReady(pulse)) == false {
+                log.notice("finish \(pulse.sessionId, privacy: .public) waits for the queue: \(pulse.expectedEventCount ?? 0) events")
+                Task { [weak self] in
+                    await store.waitForFinish(pulse)
+                    self?.receive(session: pulse, store: store)
+                }
+                return
+            }
             receive(session: pulse, store: store)
         case .context(let next):
             context = next
@@ -1373,6 +1494,8 @@ final class WatchModel {
                 WidgetCenter.shared.reloadAllTimelines()
             }
             resolveDay()
+            // The phone's lifecycle before the rejoin — see `start()`.
+            applyLifecycle()
             rejoinLiveSession()
         case .rest(let pulse):
             // The phone started or stopped resting. Mirrored, not merged: a
@@ -1414,6 +1537,7 @@ final class WatchModel {
             log.error("pulse \(pulse.sessionId, privacy: .public) refused: \(String(describing: error), privacy: .public)")
             return failed(error)
         }
+        noteWord(pulse)
         switch pulse.phase {
         case .open:
             // ── THE PHONE'S STARTED FIRST, AND THIS WRIST'S WAS EMPTY ───────
@@ -1430,26 +1554,78 @@ final class WatchModel {
                 log.notice("did not follow \(pulse.sessionId, privacy: .public): holding \(self.sessionId ?? "nothing", privacy: .public), today's split \(self.day?.key ?? "none", privacy: .public)")
             }
         case .finished where pulse.sessionId == sessionId && outcome == .closed:
-            let coveredNothing = pulse.endedAt.map { end in adoptedAt.map { end < $0 } ?? true } ?? false
-            Task {
-                // At the PHONE's instant, not this one's: the pulse may have
-                // sat in the queue, and the rings should end where the
-                // workout did.
-                if coveredNothing { workout.cancel() } else { await workout.end(endDate: pulse.endedAt ?? Date()) }
-                // Still the same session after the await — a new one may have
-                // been adopted meanwhile, and it is not this pulse's to end.
-                guard sessionId == pulse.sessionId else { return }
-                tearDown()
-                if !coveredNothing { prefetchTelemetry(sessionId: pulse.sessionId, store: store) }
-            }
+            endAdopted(pulse.sessionId, at: pulse.endedAt, store: store)
         // `outcome`, not the phase: a discard the store refused (the row had
         // already closed — the wrist's own Finish got there first) must not
         // throw away the HealthKit workout that Finish is saving.
         case .discarded where pulse.sessionId == sessionId && outcome == .discarded:
             workout.cancel()
             tearDown()
+        case .finished where pulse.sessionId != sessionId, .discarded where pulse.sessionId != sessionId:
+            // ── A SESSION THIS WRIST NEVER ADOPTED (overhaul A1) ────────────
+            // This was `default: break`, and it left two things behind: the
+            // id stayed open to a late copy of its open (message and queue
+            // both carry one, in no order), which the next context push's
+            // rejoin then adopted — and a Smart Stack card published from
+            // an earlier adoption of it. Retire the id and, when nothing else
+            // is live here, the card.
+            if let word = SessionLifecycle(pulse) { _ = try? store.applyLifecycle(word, userId: pulse.userId) }
+            if sessionId == nil { clearLiveSnapshot() }
+            log.notice("retired \(pulse.sessionId, privacy: .public) (\(pulse.phase.rawValue, privacy: .public)), never adopted here")
         default:
             break
+        }
+    }
+
+    /// A phone pulse IS the phone's lifecycle word, so it goes into the cached
+    /// context too (overhaul A1).
+    ///
+    /// ── WHY THE PULSE AND NOT ONLY THE CONTEXT ──────────────────────────────
+    /// The phone pushes the context at once — but WatchConnectivity hands a
+    /// RUNNING app a new context only at its next launch on a simulator, and
+    /// whenever it likes on hardware. The messaged finish is the copy that
+    /// arrives in a second. Without this the wrist closed the session and went
+    /// straight back to Start until the context landed — the reported bug,
+    /// shortened.
+    ///
+    /// Never backwards: a late pulse for an OLDER session than the word the
+    /// context already holds changes nothing, and a late open never reopens a
+    /// session the word has closed. The phone's next context replaces this
+    /// with its own, masthead and all.
+    private func noteWord(_ pulse: SessionPulse) {
+        guard var next = context, let word = SessionLifecycle(pulse) else { return }
+        if let current = next.session {
+            if current.sessionId != word.sessionId, current.startedAt > word.startedAt { return }
+            // The discard of a LOSING rival (`receiveSession`'s one-winner
+            // rule) is not news about the session that won.
+            if current.sessionId != word.sessionId, current.phase == .open, word.phase == .discarded { return }
+            if current.sessionId == word.sessionId, current.phase != .open, word.phase == .open { return }
+        }
+        next.session = word
+        context = next
+        WatchContextCache.save(next)
+    }
+
+    /// End this wrist's half of a session the phone finished — by pulse or by
+    /// the context's lifecycle, whichever arrived first.
+    ///
+    /// SAVES the `HKWorkout` (the phone skipped its own because this wrist
+    /// said `.joined`) unless the wrist only adopted the session after the
+    /// phone had finished it — a watch that was off receives the queued open
+    /// and finish back to back — in which case the workout covered none of
+    /// the session and is discarded.
+    private func endAdopted(_ id: String, at endedAt: Date?, store: AppDatabase) {
+        let coveredNothing = endedAt.map { end in adoptedAt.map { end < $0 } ?? true } ?? false
+        Task {
+            // At the PHONE's instant, not this one's: the pulse may have
+            // sat in the queue, and the rings should end where the
+            // workout did.
+            if coveredNothing { workout.cancel() } else { await workout.end(endDate: endedAt ?? Date()) }
+            // Still the same session after the await — a new one may have
+            // been adopted meanwhile, and it is not this pulse's to end.
+            guard sessionId == id else { return }
+            tearDown()
+            if !coveredNothing { prefetchTelemetry(sessionId: id, store: store) }
         }
     }
 
@@ -1614,7 +1790,7 @@ extension WatchModel {
     ///   named by name — the old root was the word "Rest day" and nothing else
     ///   — and it had no shot hook, so nobody had reviewed it since it was
     ///   written. `watch-shot.sh restday` is that hook.
-    func seedDebugContext(restDay: Bool = false) {
+    func seedDebugContext(restDay: Bool = false, session: SessionLifecycle? = nil) {
         let today = LogicalDay.iso()
         let next = WatchContext(
             userId: "preview",
@@ -1656,7 +1832,7 @@ extension WatchModel {
                 date: today, battery: 72, score: 81, sleepMin: 445, sleepScore: 58,
                 waterMl: 1_750, waterGoalMl: 3_000, steps: 8_412, stepsGoal: 10_000,
                 kcal: 1_640, kcalGoal: 2_150, todayLabel: restDay ? "Rest" : "Upper B",
-                todayLogged: false,
+                todayLogged: session?.phase == .finished,
                 restDay: restDay, stressIndex: 41.5, sorenessCount: 3,
                 week: (0..<7).map { WatchTiles.WeekDay(trained: $0 % 2 == 0, fuelHit: $0 != 3, sleepHit: $0 > 1) },
                 medianBedtime: "23:12", lastBedtime: "00:16",
@@ -1664,13 +1840,41 @@ extension WatchModel {
                 // volume yet" and the Fuel page falls back to the kcal line
                 // — both real states, and neither the one under review.
                 weekSets: 84, weekVolumeKg: 12_430, proteinG: 118, proteinGoalG: 185
-            )
+            ),
+            // The phone's lifecycle word (overhaul A1) — the `banner` and
+            // `join` shots seed one; every other screen has none.
+            session: session
         )
         WatchContextCache.save(next)
         next.tiles?.save()
         WidgetCenter.shared.reloadAllTimelines()
         context = next
         resolveDay()
+    }
+
+    /// The phone's lifecycle word for the `banner` and `join` shots (overhaul
+    /// A1): a finished Upper B with its masthead, or one still being logged.
+    ///
+    /// Two ids, not one: a finished word is TOMBSTONED here at the next
+    /// launch (`applyLifecycle` runs on the cached context before the seed),
+    /// and a join shot reusing that id would photograph Start — the refusal
+    /// working, under the wrong filename.
+    static func debugLifecycle(_ phase: SessionLifecycle.Phase) -> SessionLifecycle {
+        let start = Date().addingTimeInterval(-52 * 60)
+        let finished = phase == .finished
+        return SessionLifecycle(
+            sessionId: finished ? "preview-finished" : "preview-live",
+            phase: phase, startedAt: start,
+            endedAt: finished ? Date() : nil,
+            summary: finished ? SessionMasthead(
+                name: "Upper B", durationSec: 3_120, tonnageKg: 8_450, avgBpm: 131, prCount: 2,
+                // A session's shape — up through the compounds, down through
+                // the isolation work — not the rest curve `debugHeartSeries`
+                // draws, so the spark reads as a workout.
+                hrSpark: [112, 128, 141, 146, 137, 121], startedAt: start
+            ) : nil,
+            date: LogicalDay.iso(), dayKey: "cb_b"
+        )
     }
 
     /// The rest cover, with the set that earned it.
