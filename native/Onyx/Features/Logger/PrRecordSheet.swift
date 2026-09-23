@@ -119,13 +119,12 @@ struct PrRecordSheet: View {
             }
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 1) {
-                // The arrow carries the direction, so the sign never has to be
-                // parsed off a bare number.
-                Label(value(record.axis, max(0, record.mark.value - record.mark.previous)),
-                      systemImage: "arrow.up")
+                // A record only ever moves up, so the sign is the direction —
+                // no arrow, and the theme's accent rather than green (overhaul
+                // Q14: deltas are tinted numerals).
+                Text("+" + value(record.axis, max(0, record.mark.value - record.mark.previous)))
                     .onyxType(.caption).fontWeight(.bold).onyxNumeral()
-                    .foregroundStyle(Color.onyx.good)
-                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(OnyxInk.Themed.accent)
                 Text("was \(value(record.axis, record.mark.previous))")
                     .onyxType(.micro)
                     .foregroundStyle(Color.onyx.textTertiary)

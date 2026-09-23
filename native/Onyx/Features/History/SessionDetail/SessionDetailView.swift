@@ -24,6 +24,15 @@ import OnyxData
 ///   5. THE LEDGER — every set, grouped by movement, with the previous session's
 ///      set beside each and a 40×16 trail of estimated 1RM in the header.
 ///
+/// ── A BENTO SINCE THE OVERHAUL (C1, decisions Q12–Q15) ───────────────────
+/// The five questions above made five panels and a ledger card per movement:
+/// four screens of scroll on a six-movement day. The first screen is now the
+/// answer and the rest is one tap away — masthead, the heart-rate strip
+/// (inline, segments only), a 2-column grid of exercise chips (each opens its
+/// ledger card in a sheet), the focus pills (open the atlas) and one
+/// Progression button (the split's chart and the full metric grid, in a
+/// sheet). Target ≤ 1.1 screens at default type on a 393 pt phone.
+///
 /// Records are DETECTED here, not read: `personal_records` is a current-best
 /// table, so an old session's trophies would vanish the day they were beaten.
 /// `SessionAnalysis` replays the engine against the sets that came before,
@@ -61,6 +70,11 @@ struct SessionDetailView: View {
     /// `startWithAssists` takes for row 2: `session-ledger` is the page at
     /// rest, `session-margin` is the two seconds it opens on.
     var holdMargins = false
+    /// Set by the tab that PUSHED this page after a finish (overhaul C2):
+    /// when the edit cover closes, the summary pops too and the athlete lands
+    /// on Train — the workout is done. Nil from History and every other
+    /// caller, where closing the editor returns to this page as it always did.
+    var dismissToTrain: (() -> Void)? = nil
 
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -84,10 +98,10 @@ struct SessionDetailView: View {
     /// Hevy's record of this session, if Health holds one and the athlete has
     /// not answered the card yet (W5, decision 7).
     @State private var foreign: WorkoutSample?
-    /// The heart-rate chart's panel is up, and whether there is a series for
-    /// it (W3).
-    @State private var heartOpen = false
-    @State private var heartSeries = false
+    /// The movement whose ledger card is up in a sheet (row 3's chips).
+    @State private var ledgerFor: SessionAnalysis.ExerciseReport?
+    /// The Progression sheet — the split's chart and the metric grid (row 5).
+    @State private var showProgression = false
 
     /// One long-pressed trophy, frozen at the moment of the press.
     struct PrTarget: Identifiable {
@@ -115,27 +129,22 @@ struct SessionDetailView: View {
     private var report: SessionAnalysis.Report? { page?.report }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            list(scroller: proxy)
-        }
-        // The chart the Avg HR reading opens (W3) — see `heartRatePanel`.
-        .heartRatePanel(
-            isPresented: $heartOpen, available: $heartSeries, sessionId: sessionId,
-            storedAvgBpm: page.flatMap { $0.avgBpmEstimated ? nil : $0.avgBpm.map { Int(jsRound($0)) } },
-            kcal: page?.calories.map { Int(jsRound($0)) }
-        )
-    }
-
-    private func list(scroller: ScrollViewProxy) -> some View {
-        List {
-            if let page {
-                band(page).plainRow(edgeToEdge: true)
-                metrics(page).plainRow(edgeToEdge: true)
-                if let foreign { hevy(page, foreign).plainRow(edgeToEdge: true) }
-                progression(page).plainRow(edgeToEdge: true)
-                if !page.report.muscles.isEmpty { muscles(page.report).plainRow(edgeToEdge: true) }
-                ForEach(page.report.exercises) { exercise in
-                    ledger(exercise)
+        ScrollView {
+            VStack(spacing: OnyxSpace.m) {
+                if let page {
+                    // 1 · which session, and what it weighed
+                    masthead(page)
+                    // 2 · the heart rate, inline — nothing when there is none
+                    HeartStrip(sessionId: sessionId)
+                    if let foreign { hevy(page, foreign) }
+                    // 3 · every movement, one chip each
+                    exerciseGrid(page.report)
+                    // 4 · what it trained
+                    if !page.report.muscles.isEmpty {
+                        FocusPills(muscles: page.report.muscles) { showAtlas = true }
+                    }
+                    // 5 · the one door to the chart and every figure
+                    ProgressionButton(caption: page.verdict) { showProgression = true }
                 }
                 // ── NO CARDIO BANNER HERE ───────────────────────────────────
                 // `cardio_logs` is the MAIN TAB's subject — a bout is planned,
@@ -149,10 +158,9 @@ struct SessionDetailView: View {
                 // `workout_sets` row and gets an exercise card like any other
                 // movement — see the seed's Treadmill, first in this list.
             }
+            .padding(.horizontal, OnyxSpace.l)
+            .padding(.vertical, OnyxSpace.s)
         }
-        .listRowBackground(Rectangle().fill(.ultraThinMaterial))
-        .listSectionSpacing(OnyxSpace.m)
-        .scrollContentBackground(.hidden)
         .onyxScreen(.train)
         .tint(OnyxDomain.train.accent)
         .navigationTitle(report.map { SessionRow.date($0.session.date) } ?? "Session")
@@ -174,7 +182,10 @@ struct SessionDetailView: View {
         // `isPresented:` for the reason that file spends a paragraph on — a
         // cover whose content builder reads `if let model` comes up empty when
         // the flag and the model are set in the same runloop turn.
-        .fullScreenCover(item: $editing, onDismiss: { editing = nil }) { model in
+        .fullScreenCover(item: $editing, onDismiss: {
+            editing = nil
+            dismissToTrain?()
+        }) { model in
             NavigationStack {
                 LiveLoggerView(model: model)
             }
@@ -207,13 +218,17 @@ struct SessionDetailView: View {
         // is not re-implemented for this page and must not be: a record read
         // mid-workout and the same record read afterwards are one fact, and two
         // sheets is how they start rounding differently.
-        .sheet(item: $prSheet) { target in
-            PrRecordSheet(
-                exerciseName: target.exercise,
-                setLabel: target.setLabel,
-                records: target.records,
-                timed: target.timed
-            )
+        .sheet(item: ledgerFor == nil ? $prSheet : .constant(nil)) { target in
+            prRecordSheet(target)
+        }
+        // Row 3's door: one movement's ledger card. The record and trail
+        // sheets it can open are presented FROM it — a page already presenting
+        // a sheet cannot present a second.
+        .sheet(item: $ledgerFor) { ex in
+            ledgerSheet(ex)
+        }
+        .sheet(isPresented: $showProgression) {
+            if let page { progressionSheet(page) }
         }
         // ── THE SPARKLINE'S OWN SHEET (W10) ────────────────────────────────
         // The same chart the exercise's own page draws, from the same type
@@ -223,9 +238,6 @@ struct SessionDetailView: View {
         // and that needs an axis, which is the one thing a sparkline refuses
         // to have. `.medium` because a line chart with a date axis is a
         // half-screen object and the ledger under it stays visible.
-        .sheet(item: $trailSheet) { target in
-            trailSheet(target)
-        }
         // ── WHY THIS IS `id:`-KEYED AND NOT A ONE-SHOT `.task` ──────────────
         // §U4.5 makes this page's own Edit button rewrite the session it is
         // drawing, and §E1's cascade then rewrites every daily score behind it.
@@ -269,12 +281,14 @@ struct SessionDetailView: View {
                 else if startAtRecord { openFirstRecord() }
             }
             #endif
-            // `defaultScrollAnchor` is decided at first layout, when the list
-            // is still empty — so the harness's ledger shot has to scroll after
-            // the page lands.
-            if startAtLedger, let first = page?.report.exercises.first {
+            // The ledger lives in a sheet now: the harness opens the card
+            // worth photographing — a pair card when the session has one, a
+            // record card next, the first movement otherwise.
+            if first, startAtLedger, let exercises = page?.report.exercises {
                 try? await Task.sleep(for: .milliseconds(400))
-                scroller.scrollTo(first.id, anchor: .top)
+                ledgerFor = exercises.first { $0.rows.contains { $0.kind == "pair" } }
+                    ?? exercises.first { !$0.records.isEmpty }
+                    ?? exercises.first
             }
         }
     }
@@ -497,7 +511,6 @@ struct SessionDetailView: View {
             hevy: workout,
             onUse: { useHevy(current, workout) }
         )
-        .padding(.horizontal, OnyxSpace.m)
     }
 
     /// The same write the finish sheet makes: adopted as the athlete's answer,
@@ -528,53 +541,114 @@ struct SessionDetailView: View {
         }
     }
 
-    // MARK: - 1 · The title band
+    // MARK: - 1 · The masthead
 
-    /// The masthead — `SessionHeaderCard`, which the Train tab draws from the
-    /// same value (A6).
+    /// Row 1 — `SessionMasthead`, the one value every surface that names a
+    /// finished session draws, through the local placeholder until Lane B's
+    /// shared face lands.
     ///
-    /// ── WHY IT LEFT THIS FILE ───────────────────────────────────────────────
-    /// It was 250 lines here, and the Train tab and the Pulse day each drew
-    /// their own summary of the same finished session: three cards stating the
-    /// same facts in three layouts, disagreeing about which ones mattered and
-    /// drifting apart one edit at a time. `SessionHeader` is the value they
-    /// share; everything in it is already on the page, so this is a field copy
-    /// rather than a second derivation.
-    ///
-    /// The headline stays a parameter rather than a field: it introduces the
-    /// metric grid directly below it, and there is no grid on a tab card.
-    private func band(_ page: SessionAnalysis.Page) -> some View {
-        // `page.program` — the deck that OWNED the session's date — and not the
-        // environment's ACTIVE program, which is whichever plan is selected
-        // now. They are the same deck for a session logged this block and they
-        // are not for an older one, and the shot proved it: the Train tab
-        // (which resolves through the loader, on the session's own date) read
-        // `Upper A` while this page read `Cb A` — the tidied day KEY, which is
-        // what `dayLabel` falls back to when the program handed to it does not
-        // know the day. One session, two names, on two screens the reader moves
-        // between with a tap.
+    /// `page.program` — the deck that OWNED the session's date — names it, not
+    /// the environment's active program: one session, one name, on every
+    /// screen the reader moves between with a tap.
+    private func masthead(_ page: SessionAnalysis.Page) -> some View {
         let label = SessionAnalysis.dayLabel(page.report.session.dayKey, in: page.program) ?? "Session"
-        let verdict = delta(page.tonnageDelta, unit: "kg", higherIsBetter: true)
-        return SessionHeaderCard(
-            header: SessionHeader(page: page, label: label),
-            headline: page.headline(label),
-            // Volume left the metric grid for the masthead (§W2 A): it was the
-            // first of seven equal `.display` figures under this card, which is
-            // seven answers to "how did that go" and no hero.
-            //
-            // ── AND A SESSION THAT LIFTED NOTHING HAS NO HERO ───────────────
-            // `0.0 kg` at 28 pt over a treadmill-only day is the same category
-            // error `headerTags` already refuses for the tonnage capsule: the
-            // work carried no load, so there is no tonnage to be zero of. With
-            // no hero the split's own name takes the role back — one hero per
-            // screen, and on that screen the subject is the bout.
-            hero: page.report.tonnageKg > 0 ? .init(
-                value: OnyxFormat.volumeExact(page.report.tonnageKg), unit: "kg",
-                sub: verdict.text, subTint: verdict.color, symbol: volumeSymbol(page)
-            ) : nil
+        let session = page.report.session
+        return MastheadPlaceholder(
+            masthead: SessionMasthead(page: page, label: label),
+            dayKey: session.dayKey,
+            // The start time only: the bar's title already names the date.
+            stamp: session.startedAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "",
+            tonnageInk: page.tonnageDelta.flatMap { abs($0) >= 0.5 ? SetRow.deltaInk($0, upIsGood: true) : nil }
         )
     }
 
+    // MARK: - 3 · The exercise grid
+
+    /// Two columns of chips until the type says otherwise, then one — the
+    /// metric grid's own rule (`columns`) for the same reason.
+    ///
+    /// A `Grid`, not a `LazyVGrid`: a lazy grid sizes every cell to its own
+    /// content, so a two-line name beside a one-line name drew two chips of
+    /// different heights on one row (shot round 1). A `GridRow` gives both
+    /// cells the row's height. Six movements is not a list worth lazing.
+    private func exerciseGrid(_ report: SessionAnalysis.Report) -> some View {
+        let perRow = typeSize.isAccessibilitySize ? 1 : 2
+        let rows = stride(from: 0, to: report.exercises.count, by: perRow).map {
+            Array(report.exercises[$0..<min($0 + perRow, report.exercises.count)])
+        }
+        return Grid(horizontalSpacing: OnyxSpace.s, verticalSpacing: OnyxSpace.s) {
+            ForEach(rows, id: \.first?.id) { row in
+                GridRow {
+                    ForEach(row) { ex in
+                        ExerciseChip(exercise: ex, tint: Self.family(ex)) { ledgerFor = ex }
+                    }
+                    if row.count < perRow { Color.clear.gridCellUnsizedAxes(.vertical) }
+                }
+            }
+        }
+    }
+
+    /// One movement's ledger card, in a sheet. The card is the one the page
+    /// used to scroll through, unchanged; its record and trail sheets are
+    /// presented from here.
+    private func ledgerSheet(_ ex: SessionAnalysis.ExerciseReport) -> some View {
+        NavigationStack {
+            ScrollView {
+                ledger(ex)
+                    .padding(OnyxSpace.l)
+            }
+            .onyxScreen(.train)
+            // No title: the card's own header names the movement, and a bar
+            // title said it a second time 20 pt above it (shot round 1).
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { ledgerFor = nil }
+                }
+            }
+            .sheet(item: $prSheet) { target in prRecordSheet(target) }
+            .sheet(item: $trailSheet) { target in trailSheet(target) }
+        }
+        // At the accessibility sizes a half-height sheet holds the header and
+        // not one set, so it opens full height.
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+    }
+
+    private func prRecordSheet(_ target: PrTarget) -> some View {
+        PrRecordSheet(
+            exerciseName: target.exercise,
+            setLabel: target.setLabel,
+            records: target.records,
+            timed: target.timed
+        )
+    }
+
+    // MARK: - 5 · Progression
+
+    /// Row 5's sheet: the split's tonnage line, then every figure of the
+    /// session with its comparison — the metric grid that used to sit under
+    /// the masthead. Deltas live here and in the ledger's tinted numerals,
+    /// not on the first screen (concept 6).
+    private func progressionSheet(_ page: SessionAnalysis.Page) -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: OnyxSpace.m) {
+                    progression(page)
+                    metrics(page)
+                }
+                .padding(OnyxSpace.l)
+            }
+            .onyxScreen(.train)
+            .navigationTitle("Progression")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showProgression = false }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
 
     // MARK: - 2 · The metric grid
 
@@ -603,7 +677,7 @@ struct SessionDetailView: View {
         return VStack(spacing: OnyxSpace.grid) {
             LazyVGrid(columns: columns(3), spacing: OnyxSpace.grid) {
                 // ── THE GLYPHS AND THE HUES ARE THE ONES THE APP ALREADY OWNS ──
-                // `Color.onyx.danger` for a heart rate and `Color.onyx.calories`
+                // `OnyxInk.Fixed.heart` for a heart rate and `Color.onyx.calories`
                 // for a burn is what the Live Stats card has drawn since U3, so
                 // the screen you finish on and the screen you review say the
                 // same two readings in the same two colours. Nothing new is
@@ -673,26 +747,16 @@ struct SessionDetailView: View {
         }
     }
 
-    /// The Avg HR reading — and, once the session has a series, the way to its
-    /// chart (W3). A Button for the touch-DOWN response `OnyxPressStyle`
-    /// gives; a session with no watch on the wrist has nothing to open, and
-    /// its cell is the plain reading it always was.
-    @ViewBuilder
+    /// The Avg HR reading, in the fixed heart red (overhaul Q19). It used to
+    /// open the chart panel; the chart is the page's inline strip now.
     private func avgHr(_ page: SessionAnalysis.Page) -> some View {
-        let cell = OnyxStatCell(
+        OnyxStatCell(
             "Avg HR", page.avgBpm.map { jsIntegerString($0) } ?? "—",
             unit: page.avgBpm == nil ? nil : "bpm",
-            tint: page.avgBpm == nil ? nil : Color.onyx.danger,
-            symbol: heartSeries ? "waveform.path.ecg" : "heart.fill",
+            tint: page.avgBpm == nil ? nil : OnyxInk.Fixed.heart,
+            symbol: "heart.fill",
             spark: page.trail { $0.avgBpm }, detail: bpmBasis(page)
         )
-        if heartSeries {
-            Button { heartOpen = true } label: { cell }
-                .onyxPress(scale: 0.97)
-                .accessibilityHint("Opens the heart-rate chart")
-        } else {
-            cell
-        }
     }
 
     /// Three or four across until the type says otherwise, then ONE.
@@ -711,27 +775,10 @@ struct SessionDetailView: View {
     /// whole reason the two squares merged.
     private typealias Sub = OnyxStatCell.Sub
 
-    /// Up, down, or nothing at all — the session's tonnage against the previous
-    /// session of the same split.
+    /// A signed change, in the ink of what it means — or the honest absence.
     ///
-    /// The arrow is on the LABEL rather than in the sub-line because the
-    /// sub-line already prints the figure: two marks for one claim is what the
-    /// `calc` superscript was, and this is the one that costs no width. Below
-    /// half a kilogram there is no arrow: `delta` calls that "level", and an
-    /// arrow that points at half a plate is noise with a direction.
-    private func volumeSymbol(_ page: SessionAnalysis.Page) -> String? {
-        guard let value = page.tonnageDelta, abs(value) >= 0.5 else { return nil }
-        return value > 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill"
-    }
-
-    /// More tonnage is good news and less is not a verdict — the same asymmetry
-    /// `delta(higherIsBetter:)` draws, through the same tokens.
-    private func volumeTint(_ page: SessionAnalysis.Page) -> Color? {
-        guard let value = page.tonnageDelta, abs(value) >= 0.5 else { return nil }
-        return value > 0 ? Color.onyx.good : Color.onyx.textSecondary
-    }
-
-    /// A signed change, in the colour of what it means — or the honest absence.
+    /// Overhaul Q14: better is the theme's accent and worse is quiet ink, the
+    /// ledger's own rule (`SetRow.deltaInk`) — no green, no red.
     ///
     /// `higherIsBetter: nil` for duration: a session that took twelve minutes
     /// less is not worse and not better, it is shorter, and painting it red
@@ -742,7 +789,7 @@ struct SessionDetailView: View {
         let sign = value > 0 ? "+" : "−"
         let text = "\(sign)\(OnyxFormat.volume(abs(value)))\(unit.isEmpty ? "" : " \(unit)")"
         guard let higherIsBetter else { return Sub(text, Color.onyx.textSecondary) }
-        return Sub(text, (value > 0) == higherIsBetter ? Color.onyx.good : Color.onyx.textSecondary)
+        return Sub(text, SetRow.deltaInk(value, upIsGood: higherIsBetter) ?? Color.onyx.textSecondary)
     }
 
     /// `3 warm-up · 1 drop` — what the set count is made of.
@@ -790,7 +837,7 @@ struct SessionDetailView: View {
         let change = page.report.prCount - previous.prCount
         if change == 0 { return Sub("same as last", Color.onyx.textTertiary) }
         return Sub(change > 0 ? "+\(change)" : "−\(-change)",
-                   change > 0 ? Color.onyx.record : Color.onyx.textSecondary)
+                   SetRow.deltaInk(Double(change), upIsGood: true) ?? Color.onyx.textSecondary)
     }
 
     // MARK: - 3 · Progression
@@ -813,105 +860,7 @@ struct SessionDetailView: View {
         }
     }
 
-    // MARK: - 4 · Muscle focus
-
-    /// ── THE WHOLE CARD OPENS THE ATLAS, NOT JUST THE 96 pt FIGURE ───────────
-    /// The figure was the only tap target on it, which made the one control on
-    /// the card the smallest thing on it — and left the ranked list beside it,
-    /// which is the part the reader is actually looking at, inert. A tile whose
-    /// content is a summary of a bigger view should open the bigger view from
-    /// anywhere on it; the figure keeps its own press animation because it is
-    /// what the sheet zooms out of.
-    ///
-    /// Nested buttons is the trap here: a `Button` inside a `Button` gets a
-    /// touch neither of them handles cleanly, so the inner one is gone and the
-    /// figure is now just a picture inside the card's own control.
-    private func muscles(_ report: SessionAnalysis.Report) -> some View {
-        let total = report.muscles.reduce(0) { $0 + $1.sets }
-        return Button {
-            showAtlas = true
-        } label: {
-            VStack(alignment: .leading, spacing: OnyxSpace.s) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Muscle focus").onyxMicro()
-                    Spacer(minLength: OnyxSpace.s)
-                    Text("\(OnyxFormat.sets(total)) weighted sets")
-                        .onyxType(.caption).onyxNumeral()
-                        .foregroundStyle(Color.onyx.textSecondary)
-                    Image(systemName: "chevron.right")
-                        .onyxType(.caption)
-                        .foregroundStyle(Color.onyx.textTertiary)
-                }
-                HStack(alignment: .center, spacing: OnyxSpace.m) {
-                    AtlasFigure(side: .front, worked: MuscleCredit.worked(
-                        from: Dictionary(uniqueKeysWithValues: report.muscles.map { ($0.muscle, $0.sets) })
-                    ))
-                    .frame(height: 96)
-
-                    // ── ONE FACT, TWO DRAWINGS, NOT THREE (§W2 D) ───────
-                    // The card encoded the same distribution three ways: the
-                    // atlas figure paints it on a body, the legend names the
-                    // top four with their shares, and a 100 % ramp sat between
-                    // them saying the legend's numbers again as lengths — in
-                    // 6 pt of stacked capsule where a 4.5 and a 4.0 are one
-                    // pixel apart and the sixteenth muscle is a `max(2, …)`
-                    // sliver that is wider than its share. A bar that cannot
-                    // be measured is not a comparison, it is a decoration of
-                    // the numbers beside it.
-                    //
-                    // The figure is the shape and the legend is the reading.
-                    legend(report.muscles)
-                }
-            }
-            .padding(OnyxSpace.l)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .onyxGlass(.tile)
-            // AFTER the glass, so the whole tile is hit-testable and not just
-            // the text inside it — and `onyxPress` scales the label, so the
-            // shape follows the scale rather than the finger losing the target
-            // at the moment it lands.
-            .contentShape(RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .onyxPress()
-        // `.combine` and NO `accessibilityLabel`: the label it builds is the
-        // legend — "Muscle focus, 27 weighted sets, Lats 4.5, Upper back
-        // 4.5…" — and a hand-written one would silence the ranking that used
-        // to be readable when the card was not a control.
-        .accessibilityElement(children: .combine)
-        .accessibilityHint("Opens the body you can turn over")
-    }
-
-    /// The four biggest, named. The rest are one row, because a legend of
-    /// sixteen entries is a table nobody reads standing up — the sheet behind
-    /// the figure is where the full ranking lives.
-    private func legend(_ rows: [(muscle: LandmarkMuscle, sets: Double)]) -> some View {
-        VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-            ForEach(Array(rows.prefix(4).enumerated()), id: \.element.muscle) { i, row in
-                HStack(spacing: OnyxSpace.xs) {
-                    Circle()
-                        .fill(Color.onyx.muscle(row.muscle))
-                        .frame(width: 6, height: 6)
-                    Text(row.muscle.displayName)
-                        .onyxType(.caption)
-                        .foregroundStyle(Color.onyx.textSecondary)
-                        .lineLimit(1)
-                    Spacer(minLength: OnyxSpace.xs)
-                    Text(OnyxFormat.sets(row.sets))
-                        .onyxType(.caption).onyxNumeral()
-                        .foregroundStyle(Color.onyx.textPrimary)
-                }
-                .accessibilityElement(children: .combine)
-            }
-            if rows.count > 4 {
-                Text("+\(rows.count - 4) more")
-                    .onyxType(.caption)
-                    .foregroundStyle(Color.onyx.textTertiary)
-            }
-        }
-    }
-
-    // MARK: - 5 · The ledger
+    // MARK: - The ledger card (row 3's sheet)
 
     /// ── ONE CARD PER MOVEMENT, NOT THREE STACKED SURFACES ───────────────────
     /// This was a `Section`: a tinted header row, a separate dark card of sets,
@@ -1015,8 +964,6 @@ struct SessionDetailView: View {
         // not a panel floating on it. Header and rows are inside one modified
         // view here, which is the whole point — see `OnyxMuscleWash`.
         .onyxMuscleWash(family, secondary: assist)
-        .id(ex.id)
-        .plainRow(edgeToEdge: true)
     }
 
     /// The table's column heads — `KG · REPS · RPE`, or `MIN · KM · PACE`.
@@ -1400,8 +1347,7 @@ struct SessionDetailView: View {
             } else {
                 brief.insert(.init(
                     "\(percent > 0 ? "+" : "−")\(jsIntegerString(jsRound(abs(percent))))%",
-                    symbol: percent > 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill",
-                    tint: percent > 0 ? Color.onyx.good : Color.onyx.danger
+                    tint: SetRow.deltaInk(percent, upIsGood: true) ?? Color.onyx.textSecondary
                 ), at: 0)
             }
         }
@@ -1470,14 +1416,14 @@ struct SessionDetailView: View {
         return tags
     }
 
-    /// Green up, red down, plain when there is nothing to compare against —
-    /// the tonnage capsule's own colour, computed from the same two numbers the
-    /// verdict capsule beside it is.
+    /// Accent up, quiet down, plain when there is nothing to compare against
+    /// (overhaul Q14) — the tonnage capsule's own colour, computed from the
+    /// same two numbers the verdict capsule beside it is.
     private func volumeTone(_ ex: SessionAnalysis.ExerciseReport) -> Color {
         guard let previous = previousVolume(ex) else { return Color.onyx.textSecondary }
         let delta = ex.detail.volumeKg - previous
         if abs(delta) < 0.5 { return Color.onyx.textSecondary }
-        return delta > 0 ? Color.onyx.good : Color.onyx.danger
+        return SetRow.deltaInk(delta, upIsGood: true) ?? Color.onyx.textSecondary
     }
 
     /// This movement's tonnage on the session before this one.

@@ -19,10 +19,10 @@ import OnyxData
 /// It washed each stretch in its movement's MUSCLE colour, from
 /// `MuscleMap.movers`. That drew a heart rate in sixteen hues that mean
 /// "chest", "lats" and "quads" everywhere else in the app — a claim about
-/// anatomy on a chart about a pulse. It is now `OnyxDomain.recover.accent`
-/// alone, red under the default theme and whatever each Appearance preset
-/// makes it, and neighbouring movements are told apart by OPACITY steps of
-/// that one ink (`step`). The number is still the signal colour cannot be.
+/// anatomy on a chart about a pulse. It is one ink now — the FIXED heart red
+/// (`OnyxInk.Fixed.heart`, overhaul Q19), the same in every Appearance preset —
+/// and neighbouring movements are told apart by OPACITY steps of that one ink
+/// (`step`). The number is still the signal colour cannot be.
 ///
 /// The x axis stopped being the wall clock. "18:40" answered a question
 /// nobody asks of a heart rate after a workout; "which movement was that
@@ -35,10 +35,10 @@ import OnyxData
 /// here; the average and the peak are already the hero and its caption, so
 /// a bpm scale is a detail you ask for, not one the card wears.
 ///
-/// ── AND IT IS NOT ON THE PAGE UNTIL ASKED FOR (W3) ──────────────────────────
-/// Both surfaces that drew it inline — the finish sheet and the session page
-/// — now draw it in `heartRatePanel`, which slides it up from the bottom when
-/// the Avg HR reading is tapped. See that modifier.
+/// ── WHERE IT IS DRAWN ──────────────────────────────────────────────────────
+/// On the finish sheet, in `heartRatePanel`, which slides it up from the
+/// bottom when the Avg HR reading is tapped. The session page no longer opens
+/// it: its heart rate is `HeartStrip`, inline (overhaul C1, decision Q12).
 ///
 /// ── IT NEVER HOLDS THE SCREEN ───────────────────────────────────────────────
 /// A skeleton until the actor answers, then either the card or nothing at all:
@@ -149,7 +149,7 @@ struct TelemetryCard: View {
     /// samples in each bucket. Display only: the numbers come from the actor
     /// over the raw series. Six hundred points across a 250 pt plot is two
     /// samples per pixel, and every edge came out a staircase.
-    private static func bucketed(_ samples: [HRSample], seconds: TimeInterval = 15) -> [HRSample] {
+    static func bucketed(_ samples: [HRSample], seconds: TimeInterval = 15) -> [HRSample] {
         guard let first = samples.first else { return [] }
         var out: [HRSample] = []
         var bucketStart = first.at
@@ -185,7 +185,7 @@ struct TelemetryCard: View {
     private func chart(_ reading: SessionTelemetry.Reading) -> some View {
         let samples = Self.bucketed(reading.samples)
         let domain = yDomain(samples)
-        let numbers = numbered(reading)
+        let numbers = Self.numbered(reading)
         // The gaps: every bucket no segment claims — rests after the last
         // set, paused minutes — as one tertiary line. The washed stretches
         // draw their own line, so nothing is drawn twice.
@@ -281,10 +281,10 @@ struct TelemetryCard: View {
                     // The number is the signal: the movements share one ink by
                     // decision, and an opacity step alone is not a name.
                     Text("\(entry.number)")
-                        .font(.caption2.weight(.bold).monospacedDigit())
+                        .onyxType(.micro).fontWeight(.bold).onyxNumeral()
                         .foregroundStyle(ink)
                     Text(shortName(for: entry.segment.exerciseId))
-                        .font(.caption2.weight(.medium))
+                        .onyxType(.micro).fontWeight(.medium)
                         .foregroundStyle(Color.onyx.textSecondary)
                         .lineLimit(1)
                 }
@@ -306,7 +306,7 @@ struct TelemetryCard: View {
 
     /// Every segment's movement number, the continuing pieces included — a
     /// stretch after a pause is the same movement in the same step of ink.
-    private func numbered(_ reading: SessionTelemetry.Reading) -> [String: Int] {
+    static func numbered(_ reading: SessionTelemetry.Reading) -> [String: Int] {
         var out: [String: Int] = [:]
         var n = 0
         for segment in reading.segments {
@@ -321,16 +321,15 @@ struct TelemetryCard: View {
     private func numbers(_ reading: SessionTelemetry.Reading) -> some View {
         VStack(alignment: .leading, spacing: OnyxSpace.s) {
             Text("HEART RATE")
-                .font(.caption.weight(.semibold))
+                .onyxType(.caption).fontWeight(.semibold)
                 .tracking(0.6)
                 .foregroundStyle(ink)
             Text(headline(reading))
-                .font(.system(.title3, design: .rounded).weight(.semibold))
-                .monospacedDigit()
+                .onyxType(.display).onyxNumeral()
                 .foregroundStyle(Color.onyx.textPrimary)
             if let caption = caption(reading) {
                 Text(caption)
-                    .font(.footnote)
+                    .onyxType(.caption)
                     .foregroundStyle(Color.onyx.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -375,9 +374,11 @@ struct TelemetryCard: View {
         return full.components(separatedBy: " (").first ?? full
     }
 
-    /// The chart's one colour (decision 3). Computed, not stored: the token
-    /// follows the Appearance preset, and a `static let` would keep the first.
-    private var ink: Color { OnyxDomain.recover.accent }
+    /// The chart's one colour: the FIXED heart red (overhaul Q19 / concept 7).
+    /// It was `OnyxDomain.recover.accent`, which is lavender under most
+    /// presets — a heart rate in the colour of sleep. Heart rate is one of the
+    /// semantic inks no theme moves.
+    private var ink: Color { OnyxInk.Fixed.heart }
 
     /// Movement `n`'s opacity step of `ink`. Three steps, so neighbours always
     /// differ; the faintest was 0.45 and measured under 3:1 as a line on the
@@ -539,5 +540,165 @@ private struct HeartRatePanel: ViewModifier {
 
     private func close() {
         withAnimation(motion) { isPresented = false }
+    }
+}
+
+
+// MARK: - The inline strip (overhaul C1, decision Q12)
+
+/// The session page's heart rate: full width, inline, segments only.
+///
+/// The card above (`TelemetryCard`) is the finish sheet's panel and keeps its
+/// average, peak and legend. The summary page does not repeat any of that —
+/// the masthead already carries the average — so this strip is the SHAPE and
+/// nothing else: each movement's stretch in one opacity step of the fixed
+/// heart red, the gaps in tertiary ink, no axes, no numbers, no legend. Tap a
+/// stretch and the strip's header names it: movement · avg bpm · duration.
+///
+/// Nothing at all when the session has no series — a phone-only workout has
+/// no watch on the wrist, and an empty state here would be chrome saying so.
+struct HeartStrip: View {
+    let sessionId: String
+
+    @Environment(AppEnvironment.self) private var environment
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var reading: SessionTelemetry.Reading?
+    @State private var names: [String: String] = [:]
+    @State private var selected: HRSegment?
+
+    private var ink: Color { OnyxInk.Fixed.heart }
+
+    var body: some View {
+        Group {
+            if let reading, !reading.isEmpty {
+                strip(reading)
+            }
+        }
+        .task(id: environment.telemetryGeneration) {
+            let telemetry = environment.telemetry
+            let database = environment.database
+            let next = await telemetry.reading(sessionId: sessionId)
+            if names.isEmpty, next?.isEmpty == false {
+                names = await Task.detached(priority: .userInitiated) {
+                    Dictionary(
+                        ((try? database.exercises()) ?? []).map { ($0.id, $0.name) },
+                        uniquingKeysWith: { first, _ in first }
+                    )
+                }.value
+            }
+            reading = next
+        }
+    }
+
+    private func strip(_ reading: SessionTelemetry.Reading) -> some View {
+        VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+            header
+            chart(reading)
+                .frame(height: 56)
+        }
+        .padding(OnyxSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onyxGlass(.tile)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Heart rate by movement")
+        .accessibilityValue(spoken(reading))
+    }
+
+    /// One line, always there, so a tap swaps its words and moves nothing.
+    private var header: some View {
+        HStack(spacing: OnyxSpace.xs) {
+            Image(systemName: "heart.fill")
+                .onyxType(.micro)
+                .foregroundStyle(ink)
+            if let selected {
+                Text(callout(selected))
+                    .onyxType(.caption).onyxNumeral().fontWeight(.semibold)
+                    .foregroundStyle(Color.onyx.textPrimary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            } else {
+                Text("Heart rate")
+                    .onyxMicro()
+            }
+        }
+        .animation(reduceMotion ? nil : OnyxMotion.fade, value: selected?.id)
+    }
+
+    private func chart(_ reading: SessionTelemetry.Reading) -> some View {
+        let samples = TelemetryCard.bucketed(reading.samples)
+        let steps = TelemetryCard.numbered(reading)
+        let gaps = samples.filter { s in !reading.segments.contains { s.at >= $0.start && s.at < $0.end } }
+        let values = samples.map { Double($0.bpm) }
+        let floor = (values.min() ?? 60) - 6
+        let ceiling = max((values.max() ?? 180) + 4, floor + 20)
+        return Chart {
+            ForEach(gaps, id: \.at) { s in
+                LineMark(x: .value("Time", s.at), y: .value("bpm", Double(s.bpm)), series: .value("Series", "gaps"))
+                    .foregroundStyle(Color.onyx.textTertiary)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.monotone)
+            }
+            ForEach(reading.segments) { segment in
+                let base = TelemetryCard.step(steps[segment.id] ?? 1)
+                let dimmed = selected != nil && selected?.exerciseId != segment.exerciseId
+                let tint = ink.opacity(dimmed ? base * 0.35 : base)
+                ForEach(samples.filter { $0.at >= segment.start && $0.at < segment.end }, id: \.at) { s in
+                    AreaMark(
+                        x: .value("Time", s.at),
+                        yStart: .value("floor", floor), yEnd: .value("bpm", Double(s.bpm)),
+                        series: .value("Series", segment.id)
+                    )
+                    .foregroundStyle(tint.opacity(0.35))
+                    .interpolationMethod(.monotone)
+                    LineMark(x: .value("Time", s.at), y: .value("bpm", Double(s.bpm)), series: .value("Series", segment.id))
+                        .foregroundStyle(tint)
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+                        .interpolationMethod(.monotone)
+                }
+            }
+        }
+        .chartYScale(domain: floor...ceiling)
+        .chartXAxis(.hidden)
+        .chartYAxis(.hidden)
+        .chartLegend(.hidden)
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .onTapGesture { location in
+                        guard let plot = proxy.plotFrame else { return }
+                        let x = location.x - geometry[plot].origin.x
+                        guard let date: Date = proxy.value(atX: x) else { return }
+                        let hit = reading.segments.first { date >= $0.start && date < $0.end }
+                        selected = hit == nil || hit?.exerciseId == selected?.exerciseId ? nil : hit
+                    }
+            }
+        }
+    }
+
+    /// `Incline DB Press · 128 bpm · 6 min` — the tapped movement, every piece
+    /// of it (a pause splits one movement into two segments).
+    private func callout(_ segment: HRSegment) -> String {
+        let pieces = reading?.segments.filter { $0.exerciseId == segment.exerciseId } ?? [segment]
+        let seconds = pieces.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) }
+        let weighted = pieces.compactMap { p in p.avgBpm.map { (Double($0), p.end.timeIntervalSince(p.start)) } }
+        let span = weighted.reduce(0) { $0 + $1.1 }
+        let avg = span > 0 ? Int((weighted.reduce(0) { $0 + $1.0 * $1.1 } / span).rounded()) : segment.avgBpm
+        var parts = [name(segment.exerciseId)]
+        if let avg { parts.append("\(avg) bpm") }
+        parts.append("\(max(1, Int((seconds / 60).rounded()))) min")
+        return parts.joined(separator: " · ")
+    }
+
+    private func spoken(_ reading: SessionTelemetry.Reading) -> String {
+        reading.segments.filter { !$0.continues }.map(callout).joined(separator: "; ")
+    }
+
+    private func name(_ exerciseId: String) -> String {
+        let full = names[exerciseId] ?? exerciseId.replacingOccurrences(of: "-", with: " ").capitalized
+        return full.components(separatedBy: " (").first ?? full
     }
 }
