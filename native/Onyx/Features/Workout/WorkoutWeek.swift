@@ -580,7 +580,7 @@ final class WorkoutWeek {
         let active = Supplements.active(customs.map(AppDatabase.custom), on: today)
         out.trainingOnlyKeys = Array(Set((0..<7).flatMap { weekday in
             Supplements.stackForDate(
-                Supplements.customSlotsForDate(active, weekday: weekday, isTraining: true),
+                Supplements.customSlotsForDate(active, on: today, weekday: weekday, isTraining: true),
                 isTraining: true, weekday: weekday
             )
             .flatMap(\.items)

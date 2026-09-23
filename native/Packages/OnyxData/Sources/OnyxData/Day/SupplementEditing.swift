@@ -128,12 +128,13 @@ public extension AppDatabase {
             // is the truth about every one of these: naming each nil one makes
             // the server match it exactly.
             //
-            // TWO columns are deliberately NOT in the list. `created_at`,
+            // THREE columns are deliberately NOT in the list. `created_at`,
             // because nothing clears it and a null there would be a lie. And
             // `sort_order`, because it is nullable in the local mirror only —
             // Postgres has it NOT NULL DEFAULT 0 (the W2 rule: a pull before
             // the paste must still decode), so naming it would push a null into
-            // a column that refuses one.
+            // a column that refuses one. `dose_periods` is the third, for the
+            // reason `clearedColumns` gives.
             try Self.enqueueRowUpsert(
                 table: CustomSupplementRow.databaseTableName, id: id,
                 nulls: Self.clearedColumns(of: row), in: db
@@ -157,12 +158,21 @@ public extension AppDatabase {
     /// The editor could not reach `days` or `trainingOnly` at all before this:
     /// the only way to change an item's schedule was to delete it and add it
     /// again, which is that same silent loss with an extra step.
+    ///
+    /// ── A NEW DOSE STARTS `today`; THE OLD ONE IS KEPT ──────────────────────
+    /// Changing 300 mg to 200 mg used to rewrite every day the item had ever
+    /// been taken. The dose being replaced is now closed at `today` and
+    /// appended to `dose_periods` (`Supplements.dosePeriods`), so a day before
+    /// the change still reads 300 mg through `Supplements.doseAt`. `today` is
+    /// the logical day the edit was made on, whichever day the screen showed.
     func updateCustomSupplement(
         id: String, userId: String,
         name: String, dose: String, doseAmount: Double?, doseUnit: String?,
-        form: String?, time: String?, days: [Int], trainingOnly: Bool
+        form: String?, time: String?, days: [Int], trainingOnly: Bool,
+        today: String = LogicalDay.today()
     ) throws {
         try editCustomSupplement(id: id, userId: userId) { row in
+            let before = Self.custom(row)
             row.name = name
             row.dose = dose
             row.doseAmount = doseAmount
@@ -183,6 +193,14 @@ public extension AppDatabase {
             // `custom:<id>` fallback it has been resolving to all along.
             if (schedule.key ?? "").isEmpty { schedule.key = "custom:\(id)" }
             row.schedule = (try? Self.json(schedule)) ?? row.schedule
+
+            // Last, against the row as saved, so a dose that only LOOKS edited
+            // (the same string written back) closes nothing. A stored history
+            // this build cannot read is left exactly as it is: rewriting it
+            // from nothing would erase every period it holds.
+            let unreadable = row.dosePeriods != nil && before.dosePeriods == nil
+            let periods = Supplements.dosePeriods(changing: before, to: Self.custom(row), today: today)
+            if !unreadable, periods != before.dosePeriods { row.dosePeriods = (try? Self.json(periods)) ?? row.dosePeriods }
         }
     }
 
@@ -213,7 +231,8 @@ public extension AppDatabase {
             schedule: row.schedule.flatMap { try? OnyxJSON.decoder.decode(CustomSchedule.self, from: Data($0.raw.utf8)) },
             micros: row.micros.flatMap { try? OnyxJSON.decoder.decode([String: Double].self, from: Data($0.raw.utf8)) },
             archivedAt: row.archivedAt.map(ISO8601.string),
-            doseAmount: row.doseAmount, doseUnit: row.doseUnit
+            doseAmount: row.doseAmount, doseUnit: row.doseUnit,
+            dosePeriods: row.dosePeriods.flatMap { try? OnyxJSON.decoder.decode([DosePeriod].self, from: Data($0.raw.utf8)) }
         )
     }
 
@@ -231,6 +250,10 @@ public extension AppDatabase {
         // next pull is the same defect the `time` case above already records.
         if row.doseAmount == nil { out.append("dose_amount") }
         if row.doseUnit == nil { out.append("dose_unit") }
+        // `dose_periods` is deliberately NOT here. History only grows — an
+        // undone change leaves `[]`, never nil — so a nil row has nothing to
+        // clear, and naming it would push a null into a column the server may
+        // not have yet on every edit of every row.
         return out
     }
 

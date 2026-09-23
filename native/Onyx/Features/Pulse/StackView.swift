@@ -31,6 +31,15 @@ struct StackView: View {
 
     private var doses: [SupplementDose] { model.doses }
 
+    /// A past day says which day. Each row carries the dose in force THAT day
+    /// (`Supplements.doseAt`), so the day before a change reads 300 mg where
+    /// today reads 400 — and a screen titled only "Stack" would make that look
+    /// like an edit that did not save.
+    private var title: String {
+        guard !model.isToday, let day = LogicalDay.date(fromISO: model.date) else { return "Stack" }
+        return "Stack · \(day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))"
+    }
+
     var body: some View {
         List {
             if doses.isEmpty && model.archivedCustoms.isEmpty {
@@ -59,7 +68,7 @@ struct StackView: View {
         .listSectionSpacing(OnyxSpace.l)
         .scrollContentBackground(.hidden)
         .onyxScreen(.fuel)
-        .navigationTitle("Stack")
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .tint(Color.onyx.accent(.fuel))
         .toolbar {

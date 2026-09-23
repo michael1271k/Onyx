@@ -67,6 +67,7 @@ private struct SettingsForm: View {
     /// `OnyxReminders.enabledKey` — spelled once, there, and read here through
     /// the same string so the toggle and the scheduler cannot drift.
     @AppStorage(OnyxReminders.enabledKey) private var remindersEnabled = false
+    @AppStorage(OnyxReminders.supplementsKey) private var supplementRemindersEnabled = false
 
     @State private var isSigningOut = false
     @State private var isDeleting = false
@@ -219,21 +220,20 @@ private struct SettingsForm: View {
                    "Don't Allow" and can never ask again. */
                 Toggle("Log reminders", isOn: $remindersEnabled)
                     .onChange(of: remindersEnabled) { _, on in
-                        Task { @MainActor in
-                            if on, await !OnyxReminders.requestAuthorization() {
-                                // Refused at the system sheet. The switch goes
-                                // back rather than sitting on beside nothing.
-                                remindersEnabled = false
-                                return
-                            }
-                            OnyxReminders.refresh(
-                                database: environment.database, userId: environment.userIdString)
-                        }
+                        armReminders(on) { remindersEnabled = false }
+                    }
+                /* ── THE STACK, AT EACH SLOT'S TIME (App Store W5) ──────────
+                   One switch for every supplement reminder. Each names what is
+                   still due at that time, at the dose in force that day, and a
+                   dose already ticked is not asked about. */
+                Toggle("Supplement reminders", isOn: $supplementRemindersEnabled)
+                    .onChange(of: supplementRemindersEnabled) { _, on in
+                        armReminders(on) { supplementRemindersEnabled = false }
                     }
             } header: {
                 OnyxSectionHeader("Training", .train)
             } footer: {
-                Text("Adds an RPE control to every logged set. Half of the double-progression rule reads it. The warm-up calculator adds a row of ramp-up loads to each card that can resolve a working weight. Reminders ask for the day's fatigue slots and for the Thursday waist, and only for the ones still unanswered.")
+                Text("Adds an RPE control to every logged set. Half of the double-progression rule reads it. The warm-up calculator adds a row of ramp-up loads to each card that can resolve a working weight. Log reminders ask for the day's fatigue slots and for the Thursday waist; supplement reminders arrive at each stack time. Both skip what you have already answered.")
             }
 
             // ── THE MANUAL CASCADE (W2, decision 11) ────────────────────────
@@ -389,6 +389,21 @@ private struct SettingsForm: View {
     private var userId: String {
         if case let .signedIn(id) = environment.auth { return OnyxJSON.canonicalUserID(id) }
         return ""
+    }
+
+    /// Both reminder switches. Turning one ON is the one moment permission is
+    /// asked — never at launch, where it gets "Don't Allow" and can never be
+    /// asked again. Refused at the system sheet, the switch goes back rather
+    /// than sitting on beside nothing; either way the week is re-armed, so
+    /// turning one OFF clears exactly its own.
+    private func armReminders(_ on: Bool, refused: @escaping @MainActor () -> Void) {
+        Task { @MainActor in
+            if on, await !OnyxReminders.requestAuthorization() {
+                refused()
+                return
+            }
+            OnyxReminders.refresh(database: environment.database, userId: environment.userIdString)
+        }
     }
 
     /// The preset the live theme matches, or `Custom`.
