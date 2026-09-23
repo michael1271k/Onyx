@@ -141,7 +141,10 @@ screen_gesture() {
 # two lines below never print and the first person to run it gets a bare
 # exit 1. The `grep -o` also means a device line that does not yield a UDID
 # comes back EMPTY rather than as the whole line, so the guard actually guards.
-UDID="$(xcrun simctl list devices available | grep -m1 "$DEVICE (" | grep -oE '[0-9A-F-]{36}' || true)"
+# EXACT name, newest runtime. `grep -m1 "$DEVICE ("` took the first line that
+# merely STARTED with the name, so "iPhone 15" resolved to W4's
+# "iPhone 15 (W4 lane A 26.5)" and every run quietly moved to iOS 26.5.
+UDID="$(xcrun simctl list devices available | awk -v n="$DEVICE" '{ l = $0; sub(/^ +/, "", l); u = substr(l, length(n) + 3, 36); if (index(l, n " (") == 1 && u ~ /^[0-9A-F-]+$/ && length(u) == 36) print u }' | tail -1 || true)"
 if [ -z "$UDID" ]; then
   echo "No available simulator named '$DEVICE'." >&2
   echo "See docs/SIMULATORS.md — the pair has to exist before any wave shoots." >&2

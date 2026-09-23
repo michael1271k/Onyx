@@ -19,7 +19,7 @@
 
   <section aria-labelledby="collect">
     <h2 id="collect">What Onyx collects</h2>
-    <p>Three categories, and no others. Each is <strong>linked to you</strong> — it is stored against your account — and <strong>none of it is used for tracking</strong>. Every one is collected for <strong>App Functionality</strong>: the app cannot produce its figures without it.</p>
+    <p>Five categories, and no others. Each is <strong>linked to you</strong> — it is stored against your account — and <strong>none of it is used for tracking</strong>. Every one is collected for <strong>App Functionality</strong>: the app cannot produce its figures without it.</p>
     <div class="scroll">
     <table>
       
@@ -27,11 +27,13 @@
       <tbody>
         <tr><th scope="row">Health</th><td>Heart rate, resting heart rate, heart-rate variability, respiratory rate, blood oxygen, wrist temperature, sleep stages and duration, body mass, body-fat percentage and the other body-composition readings your scale writes.</td><td>To compute the readiness score, the recovery battery, the stress index and the body trends the app draws. Nothing else reads it.</td></tr>
         <tr><th scope="row">Fitness</th><td>Steps, distance, active and resting energy, exercise and stand minutes, VO₂ max, and the strength sessions, sets, loads and cardio bouts you log in the app itself.</td><td>To compute training load, the weekly volume targets, progression and the energy balance. Nothing else reads it.</td></tr>
-        <tr><th scope="row">Email address</th><td>The address you sign up with.</td><td>To identify your account and to send you a sign-in confirmation or a password reset. It is not used for marketing, and there is no mailing list.</td></tr>
+        <tr><th scope="row">Email address</th><td>The address you sign up with — or the one Apple or Google hands over when you sign in with them. With Sign in with Apple you can choose Apple's private relay address instead of your own.</td><td>To identify your account and to send you a sign-in confirmation or a password reset. It is not used for marketing, and there is no mailing list.</td></tr>
+        <tr><th scope="row">Account id</th><td>The id Onyx gives your account, and — if you sign in with Apple or Google — the id that company uses for you.</td><td>To store every row against your account and nobody else's, and to recognise you the next time you sign in.</td></tr>
+        <tr><th scope="row">Name</th><td>Only if you sign in with Google: the name on your Google account and the link to its profile picture, which Google shares with every sign-in. Sign in with Apple is asked for your email only, and email sign-up asks for no name at all.</td><td>Kept on your account record. Nothing in the app reads or shows it.</td></tr>
       </tbody>
     </table>
     </div>
-    <p>Onyx collects no contact details beyond your email address, no identifiers, no location, no contacts, no photos, no browsing history, no purchase history, no diagnostics and no usage data.</p>
+    <p>Onyx collects no contact details beyond your email address and, with Google, your name — no identifiers beyond your account id, no location, no contacts, no photos, no browsing history, no purchase history, no diagnostics and no usage data.</p>
   </section>
 
   <section aria-labelledby="health">
@@ -45,7 +47,7 @@
     <h2 id="where">Where your data is stored</h2>
     <p>In two places, and no others: on the devices you have signed in on, and in a single private database hosted by <a href="https://supabase.com/privacy" target="_blank" rel="noopener noreferrer">Supabase</a>, which Onyx uses purely as infrastructure to hold your rows and sync them between your phone and your watch.</p>
     <p>Every row carries your user id, and the database enforces row-level security: a request signed as you can read and write your rows and nobody else's. Data in transit is encrypted with TLS; data at rest is encrypted by the host.</p>
-    <p>Onyx talks to no other server. There is no analytics endpoint, no crash-reporting service, no advertising network and no third-party API in the data path.</p>
+    <p>Onyx talks to no other server. There is no analytics endpoint, no crash-reporting service, no advertising network and no third-party API in the data path. If you sign in with Apple or Google, that one step happens on their own sign-in screen, and what reaches Onyx is the proof of who you are — never your Apple or Google password.</p>
   </section>
 
   <section aria-labelledby="device">

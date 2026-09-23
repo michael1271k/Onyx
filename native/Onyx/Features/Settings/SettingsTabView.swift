@@ -3,7 +3,8 @@ import OnyxUI
 import OnyxCore
 import OnyxData
 
-/// The Settings tab — six `Section`s of a stock `Form` (§5.8).
+/// The Settings tab — a stock `Form`, one `Section` per thing a control changes
+/// (§5.8; regrouped, and every row given a sub-line, in App Store W7).
 ///
 /// ── WHAT THE WEB VERSION DID THAT THIS DOES NOT ─────────────────────────────
 /// Four things, all of them WEB-SIM:
@@ -88,11 +89,27 @@ private struct SettingsForm: View {
                 }
             }
 
+            // ── EVERY ROW SAYS WHAT IT DOES (App Store W7) ──────────────────
+            // A row is a title and one compact sub-line: a label of two `Text`s,
+            // which `Form` draws as title and subtitle for a `LabeledContent`, a
+            // `Toggle` and a `Picker` alike. That is the eleven
+            // `LabeledContent`-in-a-`NavigationLink` rows this screen already
+            // had, extended to every row — not a second row type.
+            //
+            // Footers keep only what a sub-line cannot carry: the medical
+            // disclaimer (1.4.1) and what deleting the account destroys.
+            //
+            // Sections group by what a control CHANGES: the plan and the volume
+            // it prescribes; the fuel targets; how a set is logged; what the
+            // phone asks you about; how numbers and weeks read; the history
+            // those weeks make. Weekly volume sat with the calorie levers and
+            // Reports with the targets, and the supplement reminder was a
+            // "Training" switch.
             Section {
                 NavigationLink {
                     PlanView(model: model)
                 } label: {
-                    LabeledContent("Training plan", value: "\(model.plan.label) · \(model.phase.label)")
+                    row("Training plan", "Your block and phase", value: "\(model.plan.label) · \(model.phase.label)")
                 }
                 // ── THE ROUTINE BUILDER (W5) ────────────────────────────────
                 // Beside the plan, because a routine IS the plan's deck — the
@@ -106,12 +123,17 @@ private struct SettingsForm: View {
                         programLabel: model.plan.label
                     ))
                 } label: {
-                    LabeledContent("Routines", value: routineSummary)
+                    row("Routines", "What each day holds", value: routineSummary)
+                }
+                NavigationLink {
+                    VolumeTargetsView(model: model)
+                } label: {
+                    row("Weekly set volume", "Sets per muscle, weekly", value: "\(model.volumeTotal) sets")
                 }
                 NavigationLink {
                     ExerciseImportView(database: environment.database, userId: userId)
                 } label: {
-                    Text("Import exercises")
+                    row("Import exercises", "Add a movement list")
                 }
             } header: {
                 OnyxSectionHeader("Plan", .train)
@@ -121,95 +143,49 @@ private struct SettingsForm: View {
                 NavigationLink {
                     LeversView(model: model)
                 } label: {
-                    LabeledContent("Levers", value: leverSummary)
-                }
-                NavigationLink {
-                    VolumeTargetsView(model: model)
-                } label: {
-                    LabeledContent("Weekly set volume", value: "\(model.volumeTotal) sets")
+                    row("Levers", "Calories and macros", value: leverSummary)
                 }
                 NavigationLink {
                     BodyTargetsView(model: model)
                 } label: {
-                    LabeledContent(
-                        "Body targets",
+                    row(
+                        "Body targets", "Weight and muscle goals",
                         value: model.targetWeightKg.map { "\($0.formatted(.number.precision(.fractionLength(0...1)))) kg" } ?? "—"
                     )
                 }
                 NavigationLink {
                     PrescriptionsView(database: environment.database, userId: environment.userIdString)
                 } label: {
-                    LabeledContent("Prescriptions", value: "Paste")
-                }
-                NavigationLink {
-                    ReportsListView()
-                } label: {
-                    LabeledContent("Reports", value: "Weekly")
+                    row("Prescriptions", "Paste a coach's audit")
                 }
             } header: {
                 OnyxSectionHeader("Targets", .fuel)
             }
 
             Section {
-                Picker("Weight units", selection: unitSystem) {
-                    Text("Kilograms").tag("kg")
-                    Text("Pounds").tag("lb")
+                Toggle(isOn: trackRpe) {
+                    Text("Track effort (RPE)")
+                    subLine("Progression reads it")
                 }
-                Picker("Week starts on", selection: weekStartDay) {
-                    Text("Sunday").tag(0)
-                    Text("Monday").tag(1)
+                Toggle(isOn: $warmupCalculator) {
+                    Text("Warm-up calculator")
+                    subLine("Ramp-up loads per card")
                 }
-            } header: {
-                OnyxSectionHeader("Units & display", .recover)
-            } footer: {
-                // Says what each DOES, not what it ought to. Week start is
-                // load-bearing — one `WeekWindow` cuts History, the Workout
-                // tab's This-week panel and the weekly export, so changing it
-                // re-labels every week in the app.
-                //
-                // ── AND WHY THERE IS NO "REDUCE MOTION" ROW (W1) ─────────────
-                // There was one. It wrote a value to the account, its own
-                // footer admitted "the native app does not read it yet", and
-                // the surface it named as honouring it — the web app — was
-                // retired at 3.0.0. A control that is not wired to anything is
-                // a rejection under 2.1 and a lie regardless.
-                //
-                // It is DELETED rather than wired, because the app already
-                // honours the SYSTEM setting: `accessibilityReduceMotion` is
-                // read in eight places (`TileFrame`, `DashboardGrid`,
-                // `SmartStackView`, `TodayCards`, `PulseSquares`,
-                // `PulseTabView`, `PulseDoms`, `CardioToast`). Settings →
-                // Accessibility → Motion is where iOS keeps this, and a second
-                // app-level copy of a system switch is a second answer to one
-                // question. The stored column is left alone; nothing reads it.
-                Text("A week runs \(weekSpanLabel) — History, this week's panel and the weekly export are all cut on it.")
-            }
-
-            Section {
-                // A door and not the controls themselves: applying a theme
-                // re-ids the app root, which would throw the user out of this
-                // screen mid-tap. `AppearanceView` says why in full.
-                NavigationLink {
-                    AppearanceView()
-                } label: {
-                    LabeledContent("Appearance", value: themeName)
-                }
-            } header: {
-                OnyxSectionHeader("Appearance", .train)
-            } footer: {
-                Text("Two colours, and the palette the rest of the app is derived from them. Presets, or pick your own.")
-            }
-
-            Section {
-                Toggle("Track effort (RPE)", isOn: trackRpe)
-                Toggle("Warm-up calculator", isOn: $warmupCalculator)
                 /* ── GYM MODE (§W6-B, decision 26) ──────────────────────────
                    On by default. When a workout is running, or a session is
                    due today and the clock is inside the window this person
                    usually trains in, the app opens on Train with the tab bar
                    out of the way and a Leave capsule to bring it back. Nothing
                    is hidden that one tap does not return. */
-                Toggle("Gym mode", isOn: $gymModeEnabled)
+                Toggle(isOn: $gymModeEnabled) {
+                    Text("Gym mode")
+                    subLine("Opens Train at lift time")
+                }
+            } header: {
+                OnyxSectionHeader("Logging", .train)
+            }
+
+            Section {
                 /* ── THE TWO FIGURES NOTHING ELSE COLLECTS ──────────────────
                    Every other number arrives on its own: the watch files the
                    steps, the scale the weight, the logger the sets. A fatigue
@@ -218,22 +194,62 @@ private struct SettingsForm: View {
                    keeps finding the same two gaps. Off until asked, because an
                    app that requests notification permission at launch gets
                    "Don't Allow" and can never ask again. */
-                Toggle("Log reminders", isOn: $remindersEnabled)
-                    .onChange(of: remindersEnabled) { _, on in
-                        armReminders(on) { remindersEnabled = false }
-                    }
+                Toggle(isOn: $remindersEnabled) {
+                    Text("Log reminders")
+                    subLine("Fatigue and waist check-ins")
+                }
+                .onChange(of: remindersEnabled) { _, on in
+                    armReminders(on) { remindersEnabled = false }
+                }
                 /* ── THE STACK, AT EACH SLOT'S TIME (App Store W5) ──────────
                    One switch for every supplement reminder. Each names what is
                    still due at that time, at the dose in force that day, and a
                    dose already ticked is not asked about. */
-                Toggle("Supplement reminders", isOn: $supplementRemindersEnabled)
-                    .onChange(of: supplementRemindersEnabled) { _, on in
-                        armReminders(on) { supplementRemindersEnabled = false }
-                    }
+                Toggle(isOn: $supplementRemindersEnabled) {
+                    Text("Supplement reminders")
+                    subLine("At each stack time")
+                }
+                .onChange(of: supplementRemindersEnabled) { _, on in
+                    armReminders(on) { supplementRemindersEnabled = false }
+                }
             } header: {
-                OnyxSectionHeader("Training", .train)
-            } footer: {
-                Text("Adds an RPE control to every logged set. Half of the double-progression rule reads it. The warm-up calculator adds a row of ramp-up loads to each card that can resolve a working weight. Log reminders ask for the day's fatigue slots and for the Thursday waist; supplement reminders arrive at each stack time. Both skip what you have already answered.")
+                OnyxSectionHeader("Reminders", .recover)
+            }
+
+            Section {
+                Picker(selection: unitSystem) {
+                    Text("Kilograms").tag("kg")
+                    Text("Pounds").tag("lb")
+                } label: {
+                    Text("Weight units")
+                    subLine("How loads are shown")
+                }
+                // Week start is load-bearing — one `WeekWindow` cuts History,
+                // the Workout tab's This-week panel and the weekly export, so
+                // the sub-line reads the choice back as the span it produces.
+                Picker(selection: weekStartDay) {
+                    Text("Sunday").tag(0)
+                    Text("Monday").tag(1)
+                } label: {
+                    Text("Week starts on")
+                    subLine("Weeks run \(weekSpanLabel)")
+                }
+                // ── AND WHY THERE IS NO "REDUCE MOTION" ROW (W1) ─────────────
+                // There was one. It wrote a value nothing read, and the app
+                // already honours the SYSTEM setting (`accessibilityReduceMotion`
+                // in eight places). A second app-level copy of a system switch
+                // is a second answer to one question.
+                //
+                // Appearance is a door and not the controls themselves: applying
+                // a theme re-ids the app root, which would throw the user out of
+                // this screen mid-tap. `AppearanceView` says why in full.
+                NavigationLink {
+                    AppearanceView()
+                } label: {
+                    row("Appearance", "Two colours, one palette", value: themeName)
+                }
+            } header: {
+                OnyxSectionHeader("Display", .recover)
             }
 
             // ── THE MANUAL CASCADE (W2, decision 11) ────────────────────────
@@ -241,16 +257,28 @@ private struct SettingsForm: View {
             // older one leaves a mark, and this is the one button that
             // rewrites the whole stored history from it.
             Section {
+                NavigationLink {
+                    ReportsListView()
+                } label: {
+                    row("Reports", "A write-up per week")
+                }
                 Button {
                     environment.recomputeHistory()
                 } label: {
-                    LabeledContent("Recompute history") {
+                    LabeledContent {
                         if environment.isRescoring {
                             ProgressView()
                         } else if environment.historyStale {
                             Text("Needed")
                                 .onyxType(.caption)
                                 .foregroundStyle(Color.onyx.danger)
+                        }
+                    } label: {
+                        Text("Recompute history")
+                        if let from = environment.historyStaleFrom {
+                            subLine("An edit from \(from) waits")
+                        } else {
+                            subLine("Rewrites stored scores")
                         }
                     }
                 }
@@ -259,12 +287,6 @@ private struct SettingsForm: View {
                 .accessibilityHint(environment.historyStale ? "An edit older than 120 days is waiting" : "Rewrites every stored daily score")
             } header: {
                 OnyxSectionHeader("History", .body)
-            } footer: {
-                if let from = environment.historyStaleFrom {
-                    Text("Something dated \(from) changed. Edits that old are not rescored automatically; this rewrites every score from there to today.")
-                } else {
-                    Text("Edits within the last 120 days rescore themselves. This rewrites every stored day from the oldest score to today.")
-                }
             }
 
             // ── ADMIN ONLY, AND FAILING CLOSED ──────────────────────────────
@@ -284,28 +306,32 @@ private struct SettingsForm: View {
                     NavigationLink {
                         SyncStatusView()
                     } label: {
-                        LabeledContent("Sync doctor", value: environment.sync.caption(at: .now) ?? "Never synced")
+                        row(
+                            "Sync doctor", "Phone against server",
+                            value: environment.sync.caption(at: .now) ?? "Never synced"
+                        )
                     }
                 } header: {
                     OnyxSectionHeader("Sync", .body)
-                } footer: {
-                    Text("What this device holds against what the server holds, table by table, and anything still waiting to get there.")
                 }
             }
 
             Section {
-                LabeledContent("App", value: "Onyx")
-                LabeledContent("Version", value: OnyxLinks.versionString)
+                row("Version", "Quote in a bug report", value: OnyxLinks.versionString)
                 // Support sits ABOVE the policy: it is the row a person in
                 // trouble is looking for, and the policy is the one a reviewer
                 // is. Both are `Link`, which opens Safari rather than an
                 // in-app browser — an app that renders arbitrary web content
                 // answers a different set of App Review questions, and neither
                 // of these pages is worth that.
-                Link("Support", destination: OnyxLinks.support)
-                    .accessibilityHint("Opens in Safari")
-                Link("Privacy Policy", destination: OnyxLinks.privacyPolicy)
-                    .accessibilityHint("Opens in Safari")
+                Link(destination: OnyxLinks.support) {
+                    row("Support", "Questions and bugs")
+                }
+                .accessibilityHint("Opens in Safari")
+                Link(destination: OnyxLinks.privacyPolicy) {
+                    row("Privacy Policy", "What is kept, never sold")
+                }
+                .accessibilityHint("Opens in Safari")
             } header: {
                 OnyxSectionHeader("About", .recover)
             } footer: {
@@ -320,6 +346,8 @@ private struct SettingsForm: View {
                 Text("Onyx is a training and recovery log, not a medical device. It does not diagnose, treat or monitor any condition — talk to a doctor before making a health decision.\n\nHealth data stays on this device and in your own private Onyx account. It is never sold, and never shared with anyone else.")
             }
 
+            // Unchanged by W7, rows and footer alike: forgiveness before
+            // minimalism. What deletion destroys is said here, before the tap.
             Section {
                 Button("Sign out", role: .destructive) { isSigningOut = true }
                 // App Store guideline 5.1.1(v): an account that can be created
@@ -406,6 +434,23 @@ private struct SettingsForm: View {
         }
     }
 
+    /// A title, its one-line sub-line, and the current value if it has one.
+    /// `Form` styles the label's second `Text` as the subtitle.
+    private func row(_ title: String, _ detail: String, value: String? = nil) -> some View {
+        LabeledContent {
+            if let value { Text(value) }
+        } label: {
+            Text(title)
+            subLine(detail)
+        }
+    }
+
+    /// Grey even inside a `Link` or `Button`, whose tint would otherwise dim it
+    /// to an accent-on-grey that reads as a second link and fails contrast.
+    private func subLine(_ text: String) -> Text {
+        Text(text).foregroundStyle(Color.onyx.textSecondary)
+    }
+
     /// The preset the live theme matches, or `Custom`.
     ///
     /// Derived rather than stored: the spec IS the theme, and a name kept
@@ -436,13 +481,13 @@ private struct SettingsForm: View {
         return "\(held.label) · \(kcal) kcal"
     }
 
-    /// `Monday to Sunday` — the setting read back as the span it produces,
+    /// `Monday–Sunday` — the setting read back as the span it produces,
     /// which is the thing being chosen. "Week starts on: Monday" leaves the
     /// reader to work out which Sunday a session then belongs to.
     private var weekSpanLabel: String {
         let window = WeekWindow(containing: model.today, goals: model.goals)
         let names = Calendar.current.weekdaySymbols
-        return "\(names[window.startDay]) to \(names[(window.startDay + 6) % 7])"
+        return "\(names[window.startDay])–\(names[(window.startDay + 6) % 7])"
     }
 
     // ── Bindings ────────────────────────────────────────────────────────────

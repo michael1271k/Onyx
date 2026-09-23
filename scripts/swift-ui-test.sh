@@ -6,7 +6,9 @@
 #
 # Its own derived-data path, NOT `shot-derived`: the screenshot loop installs
 # whatever it finds there, and a test build racing a shot run gives you either
-# "database is locked" or screenshots of the wrong code.
+# "database is locked" or screenshots of the wrong code. Two lanes running
+# `npm run check` at once collide on it the same way, so `UI_TEST_DERIVED`
+# moves it, as `SHOT_DERIVED` moves the shot build (App Store W7).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,7 +28,10 @@ DEVICE="${UI_TEST_DEVICE:-iPhone 15}"
 # for the UDID rather than `sed` on the whole line, so a line that carries no
 # UDID yields empty and the guard actually guards instead of passing a device
 # name through as an id.
-UDID="$(xcrun simctl list devices available | grep -m1 "$DEVICE (" | grep -oE '[0-9A-F-]{36}' || true)"
+# EXACT name, newest runtime. `grep -m1 "$DEVICE ("` took the first line that
+# merely STARTED with the name, so "iPhone 15" resolved to W4's
+# "iPhone 15 (W4 lane A 26.5)" and every run quietly moved to iOS 26.5.
+UDID="$(xcrun simctl list devices available | awk -v n="$DEVICE" '{ l = $0; sub(/^ +/, "", l); u = substr(l, length(n) + 3, 36); if (index(l, n " (") == 1 && u ~ /^[0-9A-F-]+$/ && length(u) == 36) print u }' | tail -1 || true)"
 if [ -z "$UDID" ]; then
   echo "No available simulator named '$DEVICE'." >&2
   echo "Installed: $(xcrun simctl list devices available | grep -oE 'iPhone [^(]*' | sort -u | tr '\n' ' ')" >&2
@@ -40,7 +45,7 @@ LOG="$(mktemp -t onyx-ui-test)"
 set +e
 xcodebuild test -project "$ROOT/native/Onyx.xcodeproj" -scheme Onyx \
   -destination "id=$UDID" -only-testing:OnyxUITests \
-  -derivedDataPath "$HOME/Library/Caches/onyx-swift/ui-test-derived" \
+  -derivedDataPath "${UI_TEST_DERIVED:-$HOME/Library/Caches/onyx-swift/ui-test-derived}" \
   CODE_SIGNING_ALLOWED=NO >"$LOG" 2>&1
 status=$?
 set -e
