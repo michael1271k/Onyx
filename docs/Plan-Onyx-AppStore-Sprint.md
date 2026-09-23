@@ -1999,3 +1999,7 @@ sweeps EVERY table every pass until a pass deletes nothing (bounded at ten):
 matches the hardened body only, and § 4 now expects `delete_triggers 1`. **The
 founder re-runs the file.**
 
+**Founder gate closed (2026-09-23).** Re-run of the hardened file, § 4:
+`t · t · f · t · f · t · 36 · 0 · 0 · 1` — exactly as expected. Live
+`delete_my_account()` is the hardened body.
+
