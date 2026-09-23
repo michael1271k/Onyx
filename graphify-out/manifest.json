@@ -3390,8 +3390,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790179976.8107092,
-    "ast_hash": "29b2c0d48807db433675080ca6cfc0d1",
+    "mtime": 1790186416.7164166,
+    "ast_hash": "58bc4f68167a36e42d25601beed7745e",
     "semantic_hash": ""
   },
   "scripts/check-swift.sh": {
@@ -3430,8 +3430,8 @@
     "semantic_hash": ""
   },
   "scripts/store-shots.sh": {
-    "mtime": 1788618337.9097445,
-    "ast_hash": "6696f599b537891d104bbaaadad4c1ca",
+    "mtime": 1790186416.7165277,
+    "ast_hash": "610d1c70e8e2146f77d81a31003c3bc3",
     "semantic_hash": ""
   },
   "scripts/sync-version.mjs": {
@@ -3450,13 +3450,13 @@
     "semantic_hash": ""
   },
   "docs/APP_STORE.md": {
-    "mtime": 1790179976.8050075,
-    "ast_hash": "d822cf7a3739b99bae302331f6f20fec",
+    "mtime": 1790186416.7148438,
+    "ast_hash": "6bae469f65134374603f323c0eb155b1",
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1790179976.8061118,
-    "ast_hash": "3049dddfc026633284aca29859a9f03f",
+    "mtime": 1790186416.715596,
+    "ast_hash": "b1d8e08c46b90a023badce8fb0052efb",
     "semantic_hash": ""
   },
   "docs/GIT.md": {
@@ -3485,8 +3485,8 @@
     "semantic_hash": ""
   },
   "native/project.yml": {
-    "mtime": 1790179976.8105092,
-    "ast_hash": "6f92cf16ac7c484bfd2d3692d9fc728e",
+    "mtime": 1790186416.7160952,
+    "ast_hash": "3fc6bb48ad7ea52ce776d9923dc2871e",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png": {
@@ -4320,7 +4320,7 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxData/Tests/OnyxDataTests/SeamBenchmarkTests.swift": {
-    "mtime": 1790077625.3391917,
+    "mtime": 1790183259.145302,
     "ast_hash": "039c95c152994c272167fa5cfa485378",
     "semantic_hash": ""
   },
@@ -4429,11 +4429,6 @@
     "ast_hash": "c7e51c41aaea9eaeaafd50e1e3d73534",
     "semantic_hash": ""
   },
-  "docs/Plan-Onyx-AppStore-Sprint.md": {
-    "mtime": 1790180029.8915248,
-    "ast_hash": "0c99d7df1db96d75906d568a6b448fcf",
-    "semantic_hash": ""
-  },
   "native/Onyx/Features/Exercises/ExercisePickerSheet.swift": {
     "mtime": 1790113045.610836,
     "ast_hash": "eefd3a43750afdc973cc963bbf75a4a8",
@@ -4500,8 +4495,8 @@
     "semantic_hash": ""
   },
   "docs/sql/w7-delete-my-account.sql": {
-    "mtime": 1790179976.8068655,
-    "ast_hash": "9c34c2f5350b63895bf36b2ba297b392",
+    "mtime": 1790180926.536047,
+    "ast_hash": "c4b24a71d1cce7c14945e409f9270746",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/GoogleG.imageset/Contents.json": {
@@ -4512,6 +4507,11 @@
   "native/Onyx/Resources/Assets.xcassets/GoogleG.imageset/GoogleG.svg": {
     "mtime": 1790179976.8089833,
     "ast_hash": "3d4544de1072c3f7573171ae068b36fe",
+    "semantic_hash": ""
+  },
+  "docs/Done/Plan-Onyx-AppStore-Sprint-Done.md": {
+    "mtime": 1790186476.1002443,
+    "ast_hash": "d7aef55ef15b259d5aa585a7eb193712",
     "semantic_hash": ""
   }
 }
