@@ -1846,37 +1846,6 @@ extension AppDatabase {
         }
     }
 
-    /// Is a workout actually IN PROGRESS on this date — an open session with
-    /// work in it?
-    ///
-    /// ── WHY THE SHELL NEEDS TO ASK AT LAUNCH ────────────────────────────────
-    /// `AppEnvironment.selectedTab` is in-memory and dies with the process, so
-    /// every relaunch resolves to `.today`. Get jetsammed three sets from the
-    /// end of a workout and the app comes back on the dashboard, with the
-    /// running session reachable only if you think to go and look for it. The
-    /// deck was never lost; the way back to it was.
-    ///
-    /// ── AND WHY "WITH WORK IN IT" IS PART OF THE QUESTION ───────────────────
-    /// `openSession` is look-up-or-create over `ended_at IS NULL`, so ANY
-    /// append after a close mints a second, empty row beside the closed one.
-    /// Routing on existence alone would send a person who finished this morning
-    /// to the Train tab every time they opened the app. `WorkoutWeek` draws its
-    /// "Resume workout" footer on exactly this test, and the shell agreeing
-    /// with it is the point — two answers to "is there a workout on" is how the
-    /// footer and the tab bar end up disagreeing.
-    public func liveWorkoutInProgress(date: String, userId: String) throws -> Bool {
-        try writer.read { db in
-            let open = try WorkoutSession
-                .filter(Column("user_id") == userId && Column("date") == date && Column("ended_at") == nil)
-                .fetchAll(db)
-            for session in open {
-                let sets = try WorkoutSet.filter(Column("session_id") == session.id).fetchAll(db)
-                if sets.contains(where: { SetTags.isWorkingSet($0.setType) }) { return true }
-            }
-            return false
-        }
-    }
-
     /// Find the unfinished session for a split, or open one.
     ///
     /// ── WHY IT IS LOOK-UP-OR-CREATE AND NOT CREATE ──────────────────────────

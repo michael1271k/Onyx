@@ -55,9 +55,6 @@ struct WorkoutTabView: View {
     /// The shelf of closed weeks (§W1 C). A sheet, and the only thing on this
     /// tab reached from a toolbar rather than from the page.
     @State private var libraryOpen = false
-    /// Whether the previous value of `session != nil` was true — see the
-    /// `onChange` that ends gym mode.
-    @State private var hadSession = false
     /// The session this tab is keeping, live or not. Survives the cover being
     /// dismissed — that is the whole reason it lives here.
     @State private var session: LoggerModel?
@@ -224,36 +221,6 @@ struct WorkoutTabView: View {
         // because its section became a button would be a setting that silently
         // does nothing.
         .toolbar {
-            // ── THE WAY OUT OF GYM MODE (§W6-B, decision 26) ────────────────
-            // Leading, where a back button would be: gym mode is a place the
-            // app was put and this is the way out of it, which is the same
-            // grammar. A capsule and not a glyph because it is the only
-            // control on the screen that changes what the WHOLE app is doing,
-            // and a bare chevron here would read as "back to the week".
-            if environment.gymMode {
-                ToolbarItem(placement: .topBarLeading) {
-                    // ── TEXT, AND NO GLYPH ──────────────────────────────────
-                    // A `Label` here renders as its ICON ALONE: the system
-                    // wraps a toolbar item in its own circular glass and
-                    // drops the title to fit, so the first shot of gym mode
-                    // had an unexplained chevron where the way out should be
-                    // — indistinguishable from a back button. A bare title
-                    // makes the system draw a pill and keep the word, and it
-                    // carries no second capsule of ours under the glass
-                    // (memory: `logger-ux-hotfix-sep10`).
-                    Button("Leave") {
-                        environment.gymMode = false
-                        // A REFUSAL and not a toggle: without this the next
-                        // foreground — or any theme pick, which re-ids the app
-                        // root — asks the clock again, gets the same yes, and
-                        // takes the bar away a second time.
-                        environment.gymModeDeclined = true
-                    }
-                    .tint(accent)
-                    .accessibilityLabel("Leave gym mode")
-                    .accessibilityHint("Shows the tab bar again")
-                }
-            }
             if shows(.pastWeeks) {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { libraryOpen = true } label: {
@@ -430,13 +397,6 @@ struct WorkoutTabView: View {
         // happened) lowers the flag rather than leaving the last value up.
         .onChange(of: session != nil, initial: true) { _, live in
             environment.publishSessionLive(live)
-            // Gym mode ends with the workout, finished or cancelled: both
-            // paths clear `session`, and neither of them is a tap on Leave.
-            // `initial: true` fires with `live == false` on a tab rebuilt with
-            // no model, which must NOT undo the launch door — hence the guard
-            // on a session having been there to lose.
-            if !live, hadSession { environment.gymMode = false }
-            hadSession = live
         }
         // ── WHAT THE WRIST DID (App Store W4) ───────────────────────────────
         // An end first, then an open — `WristNews` says why the order is the

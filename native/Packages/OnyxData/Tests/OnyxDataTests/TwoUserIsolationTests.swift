@@ -95,9 +95,8 @@ struct TwoUserIsolationTests {
             }
             #expect(observed.isEmpty, "the observation crossed accounts")
 
-            // liveSession / liveWorkoutInProgress — the unfinished one is mine.
+            // liveSession — the unfinished one is mine.
             #expect(try db.liveSession(dayKey: "legs_a", date: "2026-09-04", userId: me)?.id == mine.live)
-            #expect(try db.liveWorkoutInProgress(date: "2026-09-04", userId: me) == true)
 
             // sessionHistory / historySets — the whole ledger, and none of it theirs.
             let history = try db.sessionHistory(userId: me)

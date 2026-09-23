@@ -67,10 +67,11 @@ struct SignedInTabs: View {
     @State private var tabSwitch: Perf.Span?
     /// 0…1. The mesh behind every screen dims with it (§W5.2).
     @State private var battery: Double = 1
-    /// Gym mode (§W6-B, decision 26). Defaults ON; the You tab turns it off.
-    @AppStorage(GymModeSetting.key) private var gymModeEnabled = true
-    @Environment(\.scenePhase) private var scenePhase
 
+    /// Always Today on launch (overhaul W0: gym mode is deleted, and with it
+    /// the launch-time switch to Train). A tap, a deep link or the watch
+    /// opening a session (`AppEnvironment`) are the only ways onto Train.
+    ///
     /// `ONYX_START_TAB=nutrition` (DEBUG launch environment): open on a tab,
     /// for a gate that watches one tab react to a server change. A deep link
     /// from `simctl openurl` puts an "Open in Onyx?" alert over the screen
@@ -108,24 +109,6 @@ struct SignedInTabs: View {
             // Train root — see `WorkoutTabView` for why.
             SwiftUI.Tab("Train", systemImage: "figure.strengthtraining.traditional", value: Tab.train) {
                 NavigationStack { WorkoutTabView() }
-                    // ── GYM MODE HIDES THE BAR, IT DOES NOT LOCK THE APP ────
-                    // On the tab's CONTENT and not on the `TabView`: the
-                    // modifier is read by the container a view is presented
-                    // IN, so applied to the `TabView` itself it asks the
-                    // enclosing scene to hide a bar the scene does not own —
-                    // which is nothing, silently. The first shot of gym mode
-                    // photographed all five tabs still sitting there.
-                    //
-                    // Train alone is enough because gym mode always lands
-                    // here and, with the bar down, is the only tab reachable.
-                    // The Leave capsule in this screen's navigation bar
-                    // brings the others back, and a finish or a cancel clears
-                    // the flag on its own (`AppEnvironment.gymMode`).
-                    // The SETTING is read here as well as in `resolveGymMode`:
-                    // a reader who turns gym mode off in You while the flag is
-                    // up gets the bar back on the next frame, not on the next
-                    // launch.
-                    .toolbar(environment.gymMode && gymModeEnabled ? .hidden : .automatic, for: .tabBar)
             }
             SwiftUI.Tab("Nutrition", systemImage: "fork.knife", value: Tab.fuel) {
                 NavigationStack { NutritionTabView() }
@@ -138,7 +121,6 @@ struct SignedInTabs: View {
             }
         }
         .environment(\.onyxBatteryLevel, battery)
-        .animation(OnyxMotion.drawer, value: environment.gymMode)
         .onChange(of: environment.selectedTab) { _, _ in
             guard let span = tabSwitch else { return }
             tabSwitch = nil
@@ -165,36 +147,6 @@ struct SignedInTabs: View {
         //
         // `nil` restores the system tint, which is what Settings gets.
         .tint(Self.domain(for: selection.wrappedValue)?.accent)
-        // ── A WORKOUT IN PROGRESS OUTRANKS THE DASHBOARD ────────────────────
-        // `selectedTab` is in-memory (see `AppEnvironment`) — deliberately, so
-        // a theme rebuild cannot evict the reader — which also means it is
-        // EMPTY on every cold launch and `initialTab` answers `.today`. So an
-        // app terminated three sets from the end of a workout came back on the
-        // dashboard, and the deck it was still holding had to be gone looking
-        // for. The state survived the kill; the way back to it did not.
-        //
-        // Empty and only empty: the moment the reader has chosen a tab in this
-        // process this does nothing, so it cannot fight a deliberate tap, and a
-        // deep link (`onOpenURL`) writes `selectedTab` before this runs.
-        //
-        // ── AND SINCE W6 IT IS GYM MODE'S DOOR TOO (decision 26) ────────────
-        // The same question, widened: a workout already running, OR a session
-        // due today at an hour this person usually trains (`GymMode`). The
-        // read is DETACHED — it was on the main actor, on the launch path,
-        // which is the one place in this app where a transaction is measured
-        // in dropped frames.
-        .task { await resolveGymMode(canSwitchTab: true) }
-        // ── AND AGAIN ON EVERY FOREGROUND ───────────────────────────────────
-        // `resolveGymMode` both RAISES and LOWERS the flag, which is what ends
-        // gym mode in the three cases the Train tab cannot see: a session
-        // started and finished on the WATCH (this phone never held a
-        // `LoggerModel`, so its `onChange` never fires), the learned window
-        // simply closing, and a rest day that was a training day when the app
-        // was last opened.
-        .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
-            Task { await resolveGymMode(canSwitchTab: false) }
-        }
         // The battery the backgrounds read. Monitoring is off by default and
         // costs nothing to enable; an unknown level reads −1, which is the one
         // value that must NOT become a dimmed screen — a simulator, a preview
@@ -242,38 +194,6 @@ struct SignedInTabs: View {
         ) {
             if let model = environment.onboarding { OnboardingFlow(model: model) }
         }
-    }
-
-    /// Should the app be standing in a gym right now?
-    ///
-    /// One function, asked at launch and at every foreground, because the
-    /// answer can change in both directions and only one of those directions
-    /// has an event behind it. It never fights a deliberate tap: the tab is
-    /// only chosen when the reader has not chosen one in this process, and
-    /// `gymModeDeclined` — set by Leave — outranks everything until midnight.
-    private func resolveGymMode(canSwitchTab: Bool) async {
-        #if DEBUG
-        // The shot harness seeds `gymMode` directly (`gymModeEnvironment`)
-        // over an in-memory store with no sessions in it, so the honest answer
-        // here is always "no" — and this would lower the flag a moment after
-        // the screen appeared, which is how the AX5 shot of gym mode came back
-        // with the tab bar in it.
-        if PreviewHarness.requestedScreen != nil { return }
-        #endif
-        let database = environment.database
-        let today = LogicalDay.today()
-        let inputs = await Task.detached(priority: .userInitiated) { () -> GymModeInputs? in
-            try? database.gymModeInputs(userId: database.localUserId(), today: today)
-        }.value
-        guard let inputs else { return }
-        let due = inputs.isDue()
-        if canSwitchTab, environment.selectedTab.isEmpty, inputs.liveWorkout || due {
-            // Landing on Train with a workout running was the behaviour before
-            // gym mode existed, so it is NOT gated on the setting — that
-            // switch is about the tab bar.
-            selection.wrappedValue = .train
-        }
-        environment.gymMode = gymModeEnabled && due && !environment.gymModeDeclined
     }
 
     private static var batteryLevel: Double {

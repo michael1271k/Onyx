@@ -282,14 +282,6 @@ enum PreviewHarness {
         return environment
     }
 
-    /// The shell standing in a gym: Train selected, the bar hidden, Leave up.
-    @MainActor static func gymModeEnvironment() -> AppEnvironment {
-        let environment = AppEnvironment.preview
-        environment.selectedTab = "train"
-        environment.gymMode = true
-        return environment
-    }
-
     @MainActor @ViewBuilder
     static func view(_ screen: String) -> some View {
         let _ = applyRequestedTheme()
@@ -390,15 +382,6 @@ enum PreviewHarness {
         // A `TabView` mounts only the selected tab's content, so this is one
         // screen plus five icons, not five screens. Pair it with `SHOT_THEME`:
         // the point of the shot is that the icon moves when the palette does.
-        // ── GYM MODE, WHICH IS A STATE OF THE SHELL (§W6-B) ─────────────────
-        // `SignedInTabs` and not `WorkoutTabView`: the thing to photograph is
-        // the TAB BAR being gone, and a shot of the Train screen on its own
-        // cannot show the absence of something that was never in the frame.
-        // The flag is published directly, for the same reason
-        // `appearance-locked` publishes `isSessionLive` — the shot is of the
-        // state, not of the clock and the median that reach it.
-        case "gym-mode":
-            SignedInTabs().environment(gymModeEnvironment())
         case let s where s.hasPrefix("tabs"):
             SignedInTabs().environment(tabsEnvironment(s))
         case "you":
