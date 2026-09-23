@@ -41,10 +41,11 @@
 -- anyone remembering this file.
 --
 -- Order without the foreign-key graph: each pass deletes the caller's rows
--- from every table still pending; a table a foreign key holds (SQLSTATE
--- 23503) is retried on the next pass, once its children are gone. It stops
--- when every table is clear, or raises when a whole pass frees nothing — a
--- reference this function cannot clear, which then rolls the ENTIRE call back.
+-- from EVERY table; a table a foreign key holds (SQLSTATE 23503) is retried on
+-- the next pass, once its children are gone, and a row a trigger wrote back
+-- (see § 1d) is caught the same way. It stops on the first pass that deletes
+-- nothing, or raises when a pass frees nothing while something is still held,
+-- or after ten passes — and a raise rolls the ENTIRE call back.
 -- A half-deleted account with a live login is the one outcome worse than a
 -- failed delete.
 --
@@ -111,8 +112,10 @@ where n.nspname = 'public' and c.relkind in ('r', 'p')
   and a.attname = 'user_id' and not a.attisdropped
 order by 1;
 
--- § 1d. DELETE triggers on those tables. Expected: zero rows. One that WRITES
--- into a table the sweep already cleared would leave that row behind.
+-- § 1d. DELETE triggers on those tables. Expected, 2026-09-23: ONE row —
+-- `nutrition_entries.trg_sync_daily_macros`, which recomputes `daily_logs`.
+-- The function's repeat pass is what makes it harmless; a NEW row here is worth
+-- reading before relying on the delete.
 select t.tgrelid::regclass as table_name, t.tgname, pg_catalog.pg_get_triggerdef(t.oid) as definition
 from pg_catalog.pg_trigger t
 join pg_catalog.pg_class c on c.oid = t.tgrelid
@@ -129,7 +132,7 @@ select p.prosecdef as security_definer,
        p.proconfig as settings,
        pg_catalog.pg_get_function_result(p.oid) as returns,
        p.prosrc ~ 'notion_exports' as names_dropped_table,
-       p.prosrc ~ 'pg_attribute' as is_this_file
+       p.prosrc ~ 'reappearing' as is_this_file
 from pg_catalog.pg_proc p
 join pg_catalog.pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public' and p.proname = 'delete_my_account';
@@ -144,11 +147,12 @@ set search_path = ''
 as $$
 declare
   uid uuid := auth.uid();
-  pending text[];
+  swept text[];
   held text[];
   t text;
   freed boolean;
   n bigint;
+  passes int := 0;
 begin
   -- Without this an anonymous call would run every delete with
   -- `user_id = null`: nothing today, everything the day a column goes nullable.
@@ -157,17 +161,24 @@ begin
   end if;
 
   select coalesce(array_agg(c.relname::text order by c.relname), '{}')
-    into pending
+    into swept
   from pg_catalog.pg_class c
   join pg_catalog.pg_namespace ns on ns.oid = c.relnamespace
   join pg_catalog.pg_attribute a on a.attrelid = c.oid
   where ns.nspname = 'public' and c.relkind in ('r', 'p')
     and a.attname = 'user_id' and not a.attisdropped;
 
+  -- EVERY table, EVERY pass, until a pass deletes nothing. A trigger can write
+  -- a row back into a table this loop already cleared —
+  -- `nutrition_entries.trg_sync_daily_macros` recomputes `daily_logs` on each
+  -- delete, and `daily_logs` sorts first — so "every table was cleared once"
+  -- is not "the account is gone". Bounded: a trigger that keeps writing rows
+  -- back is a fault, and it raises rather than spins.
   loop
+    passes := passes + 1;
     held := '{}';
     freed := false;
-    foreach t in array pending loop
+    foreach t in array swept loop
       begin
         execute format('delete from public.%I where user_id = $1', t) using uid;
         get diagnostics n = row_count;
@@ -177,11 +188,13 @@ begin
         held := held || t;
       end;
     end loop;
-    exit when cardinality(held) = 0;
+    exit when not freed and cardinality(held) = 0;
     if not freed then
       raise exception 'delete_my_account: rows in % are still referenced', held;
     end if;
-    pending := held;
+    if passes >= 10 then
+      raise exception 'delete_my_account: rows keep reappearing after % passes', passes;
+    end if;
   end loop;
 
   -- Last, and only once every row above is gone: the identity itself. The
@@ -199,7 +212,7 @@ grant execute on function public.delete_my_account() to authenticated;
 -- Expected: security_definer t · search_path_empty t · names_dropped_table f ·
 -- is_this_file t · anon_can_call f · authenticated_can_call t ·
 -- tables_swept 36 · missed_references 0 · non_uuid_user_ids 0 ·
--- delete_triggers 0. Anything else: send the row back before relying on it.
+-- delete_triggers 1 (see § 1d). Anything else: send the row back first.
 with swept as (
   select c.oid, a.atttypid
   from pg_catalog.pg_class c
@@ -211,7 +224,7 @@ with swept as (
 select p.prosecdef as security_definer,
        p.proconfig = array['search_path=""'] as search_path_empty,
        p.prosrc ~ 'notion_exports' as names_dropped_table,
-       p.prosrc ~ 'pg_attribute' as is_this_file,
+       p.prosrc ~ 'reappearing' as is_this_file,
        pg_catalog.has_function_privilege('anon', p.oid, 'execute') as anon_can_call,
        pg_catalog.has_function_privilege('authenticated', p.oid, 'execute') as authenticated_can_call,
        (select count(*) from swept) as tables_swept,

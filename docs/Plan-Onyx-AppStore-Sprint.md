@@ -1987,3 +1987,15 @@ gate (`docs/sql/w7-delete-my-account.sql`) and the Supabase settings in
 `docs/APP_STORE.md` §8 are open; W8's end-to-end "delete the account" step
 cannot pass until the SQL is pasted.
 
+**Founder gate, after the merge (2026-09-23).** The first paste came back
+`delete_triggers 1` — `nutrition_entries.trg_sync_daily_macros`, AFTER
+INSERT/UPDATE/DELETE, recomputing `daily_logs`. The first W7 body swept each
+table ONCE, alphabetically, so `daily_logs` was cleared before
+`nutrition_entries` and a trigger that writes the day back leaves a row
+holding `auth.users` — reproduced on the PG17 fixture: `violates foreign key
+constraint "daily_logs_user_id_fkey"`, whole call rolled back. The body now
+sweeps EVERY table every pass until a pass deletes nothing (bounded at ten):
+0 rows left, `auth.users` gone, the other user untouched. `is_this_file`
+matches the hardened body only, and § 4 now expects `delete_triggers 1`. **The
+founder re-runs the file.**
+

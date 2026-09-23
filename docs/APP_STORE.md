@@ -295,10 +295,11 @@ launch. The < 1 s cold-launch number needs Instruments on a device — Gate 0.
 2. **Run `docs/sql/w7-delete-my-account.sql`** in the Supabase SQL editor. The
    editor shows only a run's last result, so first select and run § 1a–§ 1d
    and § 2 one at a time (read-only): 36 tables, zero missed references,
-   `uuid` everywhere, zero DELETE triggers, and write down § 2's
+   `uuid` everywhere, one DELETE trigger (`nutrition_entries.trg_sync_daily_macros`,
+   which the function's repeat pass handles), and write down § 2's
    `names_dropped_table` (true = deletion was broken until now). Then run the
    whole file; its last result is § 4, one row that must read
-   `t · t · f · t · f · t · 36 · 0 · 0 · 0`.
+   `t · t · f · t · f · t · 36 · 0 · 0 · 1`.
 3. **Supabase → Authentication → Sign In / Providers → allow new users to sign
    up.** Live reads `disable_signup: true` (2026-09-23). Email confirmation is
    off live (`mailer_autoconfirm: true`), which `AppEnvironment.signUp`'s
