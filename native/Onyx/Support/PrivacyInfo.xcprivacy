@@ -1,5 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The phone app. `docs/APP_STORE.md` §3 answers App Store Connect from THIS
+  file; the two must say the same thing.
+
+  Health     HealthKit reads (`HealthCatalogue.readTypes`, each type pinned
+             to the screen that draws it by `HealthScopeTests`) that
+             sync into the account: the daily log, sleep, body composition,
+             nutrition and its micronutrients, imported cardio.
+  Fitness    The training log, and the HKWorkout + active-energy sample the
+             phone writes for a phone-only session (`WorkoutWriter`).
+  Email      The sign-in address.
+
+  App Store W6 (7.15.0) re-audited the scope against these categories and
+  none moved: nine dietary micros requested-but-unread since the web era are
+  now read (Health, synced inside `nutrition_entries.micros`), seven more that
+  nothing read left the request, and the two new
+  derived readings — off-wrist minutes and Apple's one-minute heart-rate
+  recovery — never leave the device, so they are not "collected".
+
+  UserDefaults  CA92.1  the App Group suite, read by the app and the widgets.
+  FileTimestamp C617.1  GRDB stats `onyx.sqlite` and its -wal on open.
+  DiskSpace     E174.1  SQLite checks free space before a write.
+-->
 <plist version="1.0">
 <dict>
 	<key>NSPrivacyTracking</key>

@@ -1695,6 +1695,22 @@ func chargeCaption(_ s: OnyxSnapshot?) -> String? {
   OnyxSnapshot.clockTime(s?.sleep.startTime).map { "charged from \($0)" }
 }
 
+/// The watch was off the wrist and readiness lost a signal to it (App Store
+/// W6). Every readiness face either shows the reading or says this — a verdict
+/// built from four signals must not look like one built from five.
+func offWristNote(_ s: OnyxSnapshot?) -> OffWristNote? { s?.readiness?.offWrist }
+
+/// A watch with a slash, beside the caption, on the face too small for words.
+struct OffWristMark: View {
+  let note: OffWristNote
+  var body: some View {
+    Image(systemName: "applewatch.slash")
+      .font(OnyxWidgetType.face(9, weight: .semibold))
+      .foregroundStyle(Color.onyx.textSecondary)
+      .accessibilityLabel(note.sentence)
+  }
+}
+
 /// Small · the ring, the numeral, the word.
 struct RecoveryChargeFace: View {
   let entry: OnyxTileEntry
@@ -1707,6 +1723,9 @@ struct RecoveryChargeFace: View {
     VStack(alignment: .leading, spacing: 3) {
       HStack(spacing: 4) {
         Caption("RECOVERY", color: accent)
+        // Beside the caption, not in the trailing corner: the corner is the
+        // Onyx mark's, and the first shot drew the two on top of each other.
+        if let note = offWristNote(s) { OffWristMark(note: note) }
         Spacer(minLength: 0)
         if entry.isStale { StaleTag(age: entry.age) }
       }
@@ -1783,9 +1802,13 @@ struct WellbeingLedgerFace: View {
           BigValue(value: s?.score.map { "\($0)" }, size: 26, color: Color.onyx.textPrimary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        Text(chargeCaption(s) ?? "no bedtime logged")
+        // W6: the off-wrist line takes the charge caption's place — a
+        // bedtime the watch never saw is the one caption this face cannot
+        // truthfully print.
+        Text(offWristNote(s)?.short ?? chargeCaption(s) ?? "no bedtime logged")
           .font(OnyxWidgetType.face(8)).foregroundStyle(Color.onyx.textSecondary)
-          .lineLimit(1).minimumScaleFactor(0.8)
+          .lineLimit(1).minimumScaleFactor(0.7)
+          .accessibilityLabel(offWristNote(s)?.sentence ?? chargeCaption(s) ?? "no bedtime logged")
       }
       .frame(width: 92, alignment: .leading)
 
@@ -1930,11 +1953,14 @@ struct WellbeingFace: View {
       if let readiness = s?.readiness {
         // The label is the hero's own word now; repeating it here would be the
         // same verdict twice on one face. What a Large owes over a Medium is
-        // the REASON, which nothing else on the tile says.
-        Text(readiness.reason)
+        // the REASON, which nothing else on the tile says — and when the watch
+        // was off the wrist (W6), the reason is that it was built from fewer
+        // signals than it would have been.
+        Text(readiness.offWrist?.sentence ?? readiness.reason)
           .font(OnyxWidgetType.face(10))
           .foregroundStyle(Color.onyx.textSecondary)
           .lineLimit(2)
+          .minimumScaleFactor(0.85)
       } else {
         // The verdict needs a battery to weigh against, so its absence is a real
         // state rather than an error — and saying so is better than a gap where

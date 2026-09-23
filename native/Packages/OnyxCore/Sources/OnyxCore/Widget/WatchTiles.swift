@@ -109,6 +109,10 @@ public struct WatchTiles: Codable, Sendable, Equatable {
     /// characters on a 40 pt face.
     public let proteinG: Int?
     public let proteinGoalG: Int?
+    /// Set only when the watch was off the wrist and readiness lost a signal
+    /// to it (App Store W6) — the snapshot's `readiness.offWrist`, carried.
+    /// Optional, so a payload from an older phone still decodes.
+    public let offWrist: OffWristNote?
 
     public init(
         date: String, battery: Int? = nil, score: Int? = nil,
@@ -120,7 +124,8 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         stressIndex: Double? = nil, sorenessCount: Int? = nil,
         week: [WeekDay]? = nil, medianBedtime: String? = nil, lastBedtime: String? = nil,
         weekSets: Int? = nil, weekVolumeKg: Double? = nil,
-        proteinG: Int? = nil, proteinGoalG: Int? = nil
+        proteinG: Int? = nil, proteinGoalG: Int? = nil,
+        offWrist: OffWristNote? = nil
     ) {
         self.date = date
         self.battery = battery
@@ -145,6 +150,7 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         self.weekVolumeKg = weekVolumeKg
         self.proteinG = proteinG
         self.proteinGoalG = proteinGoalG
+        self.offWrist = offWrist
     }
 
     enum CodingKeys: String, CodingKey {
@@ -160,6 +166,7 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         // timeline of every complication that reads it.
         case weekSets = "ws", weekVolumeKg = "wv"
         case proteinG = "p", proteinGoalG = "pg"
+        case offWrist = "ow"
     }
 
     /// The projection. ONE place cuts the snapshot down, so the phone's
@@ -192,7 +199,8 @@ public struct WatchTiles: Codable, Sendable, Equatable {
             weekSets: s.week.sets,
             weekVolumeKg: s.week.volumeKg,
             proteinG: s.macros.proteinG.map { Int($0.rounded()) },
-            proteinGoalG: s.macros.proteinGoalG.map { Int($0.rounded()) }
+            proteinGoalG: s.macros.proteinGoalG.map { Int($0.rounded()) },
+            offWrist: s.readiness?.offWrist
         )
     }
 
@@ -242,7 +250,7 @@ public struct WatchTiles: Codable, Sendable, Equatable {
             stressIndex: stressIndex, sorenessCount: sorenessCount,
             week: week, medianBedtime: medianBedtime, lastBedtime: lastBedtime,
             weekSets: weekSets, weekVolumeKg: weekVolumeKg,
-            proteinG: proteinG, proteinGoalG: proteinGoalG
+            proteinG: proteinG, proteinGoalG: proteinGoalG, offWrist: offWrist
         )
     }
 

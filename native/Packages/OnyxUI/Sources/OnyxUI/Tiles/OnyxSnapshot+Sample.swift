@@ -361,6 +361,43 @@ public extension OnyxSnapshot {
       deficitDays: nil)
   }()
 
+  /// The morning after a night the watch spent on its charger (App Store W6).
+  ///
+  /// ── A SYNTHETIC GAP, THROUGH THE REAL DERIVATION ────────────────────────
+  /// Not a hand-written note: a heart-rate series sampled every five minutes
+  /// across the overnight window, with a hole from 22:00 to 04:00, is run
+  /// through `WristCoverage.offWristMinutes`, and the result goes into the
+  /// same `ScoringInputs` → `OffWristNote.make` the phone's builder runs. No
+  /// night was recorded; the day's HRV, resting HR and active energy were.
+  /// The note the faces draw is whatever that arithmetic says.
+  static let sampleOffWrist: OnyxSnapshot = {
+    let s = sample
+    let window = (from: sampleDate.addingTimeInterval(-(11 * 3600 + 15 * 60)), to: sampleDate)
+    let hole = (from: window.from.addingTimeInterval(1 * 3600), to: window.from.addingTimeInterval(7 * 3600))
+    let readings = stride(from: window.from, to: window.to, by: 300).filter { $0 < hole.from || $0 >= hole.to }
+    var inputs = ScoringInputs(sleepHours: 0, activeCal: 480, restingHR: 52, hrvMs: 54)
+    inputs.offWristMin = WristCoverage.offWristMinutes(readings: readings, from: window.from, to: window.to, openEnded: true)
+    let note = OffWristNote.make(inputs)
+    let r = s.readiness
+    return OnyxSnapshot(
+      date: s.date, generatedAt: s.generatedAt, scope: s.scope, battery: s.battery, score: s.score,
+      sleep: Sleep(minutes: nil, deepMin: nil, remMin: nil, coreMin: nil, awakeMin: nil, score: nil,
+                   startTime: nil, endTime: nil, goalMin: s.sleep.goalMin, trend: s.sleep.trend,
+                   medianBedtime: s.sleep.medianBedtime),
+      weight: s.weight, macros: s.macros, water: s.water, steps: s.steps,
+      workout: s.workout, week: s.week, weekPrev: s.weekPrev, records: s.records, e1rm: s.e1rm,
+      muscleFocus: s.muscleFocus, today: s.today, streak: s.streak, context: s.context, cardio: s.cardio,
+      calendar: s.calendar, volumeTrend: s.volumeTrend, body: s.body,
+      scores: Scores(sleep: nil, nutrition: s.scores?.nutrition, activity: s.scores?.activity,
+                     workout: s.scores?.workout, recovery: s.scores?.recovery),
+      readiness: r.map { Readiness(level: $0.level, label: $0.label, color: $0.color, reason: $0.reason, offWrist: note) },
+      vitals: s.vitals,
+      consistency: s.consistency, deficit: s.deficit, trajectory: s.trajectory,
+      batteryStack: s.batteryStack, bodyComp: s.bodyComp, coach: s.coach,
+      weekRings: s.weekRings, soreness: s.soreness, stress: s.stress,
+      deficitDays: s.deficitDays)
+  }()
+
   /// The same fixture with today's session FINISHED.
   ///
   /// ── WHY THE DONE STATE NEEDED A FIXTURE OF ITS OWN ──────────────────────
@@ -370,6 +407,7 @@ public extension OnyxSnapshot {
   /// therefore the half of that tile no contact sheet has ever shown. It is
   /// also where the session's calories and mean heart rate landed, so a layout
   /// fault in it would have shipped unseen. Same argument as
+
   /// `sampleEmptySeries` one property up, one axis over.
   static let sampleLogged: OnyxSnapshot = {
     let s = sample

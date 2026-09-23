@@ -112,6 +112,9 @@ public struct ExportDay: Codable, Equatable, Sendable {
     public var restingHrBaseline: Double?
     public var hrvBaseline: Double?
     public var batteryPct: Double?
+    /// Minutes of the night window the watch was off the wrist (W6) — the
+    /// battery input `wrist_coverage` holds. Absent unless measured.
+    public var offWristMin: Double?
     public var readiness: ExportReadiness?
     public var waterMl: Double?
     public var supplementsTaken: Double?

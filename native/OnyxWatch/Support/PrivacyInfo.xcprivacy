@@ -23,6 +23,10 @@
   and the sets logged here are training data), Linked to the account they sync
   into, and used for App Functionality only. Email is NOT here: the watch has
   no auth surface — it inherits a session established on the phone.
+
+  W6 (7.15.0) re-audited the watch's HealthKit scope: SHARE the workout type,
+  READ workouts, heart rate and active energy (`WorkoutSessionController`).
+  Unchanged, and no category moved.
 -->
 <plist version="1.0">
 <dict>

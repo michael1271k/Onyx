@@ -186,6 +186,78 @@
           "kind": "floor",
           "group": "Other",
           "fromStack": true
+        },
+        {
+          "key": "zinc",
+          "label": "Zinc",
+          "target": 11,
+          "unit": "mg",
+          "kind": "floor",
+          "group": "Minerals",
+          "fromStack": false
+        },
+        {
+          "key": "iodine",
+          "label": "Iodine",
+          "target": 150,
+          "unit": "mcg",
+          "kind": "floor",
+          "group": "Minerals",
+          "fromStack": false
+        },
+        {
+          "key": "vitaminA",
+          "label": "Vitamin A",
+          "target": 900,
+          "unit": "mcg",
+          "kind": "floor",
+          "group": "Vitamins",
+          "fromStack": false
+        },
+        {
+          "key": "vitaminB6",
+          "label": "Vitamin B6",
+          "target": 1.3,
+          "unit": "mg",
+          "kind": "floor",
+          "group": "Vitamins",
+          "fromStack": false
+        },
+        {
+          "key": "vitaminE",
+          "label": "Vitamin E",
+          "target": 15,
+          "unit": "mg",
+          "kind": "floor",
+          "group": "Vitamins",
+          "fromStack": false
+        },
+        {
+          "key": "vitaminK",
+          "label": "Vitamin K",
+          "target": 120,
+          "unit": "mcg",
+          "kind": "floor",
+          "group": "Vitamins",
+          "fromStack": false
+        },
+        {
+          "key": "biotin",
+          "label": "Biotin",
+          "target": 30,
+          "unit": "mcg",
+          "kind": "floor",
+          "group": "Vitamins",
+          "fromStack": false
+        },
+        {
+          "key": "cholesterol",
+          "label": "Cholesterol",
+          "target": 300,
+          "unit": "mg",
+          "kind": "ceiling",
+          "group": "Macros",
+          "fromStack": false
         }
       ]
     }

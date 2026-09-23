@@ -243,22 +243,22 @@ private struct NutrientCell: View {
     }
 
     private var figures: String {
-        let goal = "\(NutritionFormat.whole(target.target)) \(target.unit)"
+        let goal = "\(NutritionFormat.amount(target.target)) \(target.unit)"
         guard let total else { return target.kind == .floor ? "aim \(goal)" : "under \(goal)" }
-        return "\(NutritionFormat.whole(total)) / \(goal)"
+        return "\(NutritionFormat.amount(total)) / \(goal)"
     }
 
     private var spoken: String {
         let direction = target.kind == .floor ? "at least" : "at most"
-        let goal = "\(direction) \(NutritionFormat.whole(target.target)) \(target.unit)"
+        let goal = "\(direction) \(NutritionFormat.amount(target.target)) \(target.unit)"
         guard let total else {
             return target.fromStack
                 ? "not measured — the stack has not delivered it yet, \(goal)"
                 : "not measured, \(goal)"
         }
-        var parts = ["\(NutritionFormat.whole(total)) \(target.unit)"]
+        var parts = ["\(NutritionFormat.amount(total)) \(target.unit)"]
         if let stack, stack > 0, (amount ?? 0) > 0 {
-            parts.append("\(NutritionFormat.whole(stack)) of it from the stack")
+            parts.append("\(NutritionFormat.amount(stack)) of it from the stack")
         } else if target.fromStack {
             parts.append("from the stack")
         }

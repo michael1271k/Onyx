@@ -65,6 +65,9 @@ struct TelemetryCard: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     @State private var reading: SessionTelemetry.Reading?
+    /// Apple's one-minute recovery (W6) — its own read, so a cached series
+    /// draws without waiting on Health for it.
+    @State private var recovery: Int?
     @State private var names: [String: String] = [:]
     @State private var loaded = false
     /// The bpm scale, shown on a tap of the plot.
@@ -98,6 +101,7 @@ struct TelemetryCard: View {
             reading = next
             loaded = true
             onLoad?(!(next?.isEmpty ?? true))
+            if next?.isEmpty == false { recovery = await telemetry.recoveryBpm(sessionId: sessionId) }
         }
     }
 
@@ -112,6 +116,8 @@ struct TelemetryCard: View {
     private func caption(_ reading: SessionTelemetry.Reading) -> String? {
         var parts: [String] = []
         if let peak = reading.maxBpm { parts.append("Peak \(peak) bpm") }
+        // Apple's one-minute recovery (W6) — the drop, so it reads as one.
+        if let drop = recovery { parts.append("−\(drop) bpm in 1 min") }
         if let kcal { parts.append("\(kcal) kcal") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -120,6 +126,7 @@ struct TelemetryCard: View {
         var parts: [String] = []
         if let a = avg(reading) { parts.append("average \(a) beats per minute") }
         if let p = reading.maxBpm { parts.append("peak \(p)") }
+        if let drop = recovery { parts.append("heart rate fell \(drop) beats per minute in the first minute after") }
         if let kcal { parts.append("\(kcal) kilocalories") }
         let order = labelled(reading).map { "\($0.number) \(shortName(for: $0.segment.exerciseId))" }
         if !order.isEmpty { parts.append("movements in order: " + order.joined(separator: ", ")) }

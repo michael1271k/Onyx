@@ -205,6 +205,25 @@ manifest is its own rejection.
 The extension carries its **own** manifest: the required-reason check runs per
 Mach-O binary at upload, so the app's does not cover `OnyxWidgets.appex`.
 
+**The HealthKit scope behind "Health" and "Fitness"** (re-audited in 7.15.0,
+App Store W6 — the four manifests' comments say the same):
+
+| | Phone | Watch |
+|---|---|---|
+| **Reads** | 45 types — `HealthCatalogue.readTypes`: 41 daily metrics (activity, heart, body, sleep-window HRV, 24 dietary incl. 18 micronutrients), sleep analysis, workouts, resting energy (per cardio bout), 1-minute heart-rate recovery (per session). `HealthScopeTests` pins every one to the screen that draws it | workouts, heart rate, active energy |
+| **Writes** | the workout type and active energy (`WorkoutWriter`, a session no watch recorded) | the workout type; the live builder attaches heart rate and energy |
+| **Leaves the device** | the daily log, sleep, body composition, nutrition and its micros, imported cardio — all **Health** or **Fitness** | the training log, via the phone |
+| **Never leaves the device** | off-wrist minutes (`wrist_coverage`), 1-minute recovery, the session heart-rate series | — |
+
+No category changed in 7.15.0. Sixteen types had been requested and never
+read since the web era: nine dietary micros are now read and drawn (Health,
+already declared), the other seven left the request (flights, move time,
+walking heart rate, height, UV, mono- and polyunsaturated fat). The two new
+derived readings — off-wrist minutes and 1-minute recovery — stay on the
+device, so they are not "collected". Background delivery
+is **not** requested — the entitlement is a commented Gate-0 block in
+`project.yml`, and Health is read on foreground only.
+
 ---
 
 ## 4. Review notes
@@ -224,7 +243,8 @@ Paste into **App Review Information → Notes**:
 > It carries several months of training, nutrition, sleep and body data, so
 > every tab, chart and widget has content on first launch.
 >
-> Apple Health: the app asks for **read** access on first foreground and works
+> Apple Health: the app asks to **read** Health data, and to **write** the
+> strength workouts logged on the phone, on first foreground — and works
 > fully without it — the demo account's data is already on the server, so you
 > can decline the Health prompt and still review every screen. Health data is
 > used only to compute the readiness, recovery and energy-balance figures shown
@@ -293,7 +313,7 @@ Against `capacitor-apple-review-preflight`'s rule set. Every row answered.
 | `design/sign_in_with_apple` | **N/A.** No third-party or social login. Email + password to a first-party server only, which does not trigger 4.8. |
 | `entitlements/unused_entitlements` | **Pass.** Two entitlements, both used: `com.apple.developer.healthkit` (`HealthSync.requestAuthorization`) and the App Group (the shared GRDB file the widgets read). No `.access`, no `.background-delivery`. |
 | `privacy/privacy_manifest` | **Pass.** `PrivacyInfo.xcprivacy` in both bundles; verified present in the Release build, not just in the repo. |
-| `privacy/unnecessary_data` | **Pass.** Health read scope is exactly `HealthCatalogue` plus sleep analysis, and every type feeds a figure on screen. No contacts, no location, no camera, no photos, no ATT. |
+| `privacy/unnecessary_data` | **Pass — since 7.15.0, and not before.** Until App Store W6 the read scope carried sixteen web-era types no code read (flights, height, UV, nine micros…), so this row's old "Pass" was false. The scope is now exactly `HealthCatalogue.readTypes`, and `HealthScopeTests` (in `npm run swift:data`, which `npm run check` does not run) fails if a type is added without naming the screen that draws it. No contacts, no location, no camera, no photos, no ATT. |
 | **5.1.1(v) account deletion** | **N/A, and it is the row most likely to be argued.** The guideline binds apps that *support account creation*; this one does not. `SignInView` is sign-in only — email and password against an account provisioned server-side — with no sign-up field, no OAuth, and no path in the binary that creates a user. §4's review notes say so in the first sentence, which is where a reviewer looks. **If that is ever challenged, or the moment a sign-up screen appears, this becomes a hard reject** and the fix is a `security definer` RPC that deletes the caller's rows and their `auth.users` row, called from a destructive row under Sign out. Deleting an auth user needs the service-role key, so it cannot be done from the client — it is server DDL, and server DDL in this project is pasted by hand. |
 | `metadata/accurate_metadata` | **Open** until §2 is filled in. The description must not promise the Watch app — that is 1.1. |
 | `metadata/apple_trademark` | **Pass** as long as §2 says "Apple Health" and "Home Screen", never "iOnyx", "for iPhone" in the name, or an Apple logo in a screenshot. |

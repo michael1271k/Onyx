@@ -398,6 +398,7 @@ private extension AppDatabase {
     static func microsBundle(_ payload: HealthPayload) -> JSONText? {
         let keys: [HealthKey] = [
             .sugar, .sodium, .potassium, .calcium, .iron, .magnesium, .vitaminC, .vitaminD, .satFat,
+            .zinc, .iodine, .vitaminA, .vitaminB6, .vitaminB12, .vitaminE, .vitaminK, .biotin, .cholesterol,
         ]
         var micros: [String: Double] = [:]
         for key in keys {

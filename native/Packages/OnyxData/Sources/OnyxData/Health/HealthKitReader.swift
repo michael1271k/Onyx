@@ -456,7 +456,10 @@ public struct HealthKitReader: HealthReading {
         case "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
             return .secondUnit(with: .milli)
         case "HKQuantityTypeIdentifierRestingHeartRate",
-             "HKQuantityTypeIdentifierHeartRate":
+             "HKQuantityTypeIdentifierHeartRate",
+             // A DROP in bpm, stored as a positive rate — 28 means the heart
+             // fell 28 beats per minute in the minute after the workout.
+             "HKQuantityTypeIdentifierHeartRateRecoveryOneMinute":
             return HKUnit.count().unitDivided(by: .minute())
         case "HKQuantityTypeIdentifierRespiratoryRate":
             return HKUnit.count().unitDivided(by: .minute())
@@ -484,8 +487,22 @@ public struct HealthKitReader: HealthReading {
              "HKQuantityTypeIdentifierDietaryCalcium",
              "HKQuantityTypeIdentifierDietaryIron",
              "HKQuantityTypeIdentifierDietaryMagnesium",
-             "HKQuantityTypeIdentifierDietaryVitaminC":
+             "HKQuantityTypeIdentifierDietaryVitaminC",
+             "HKQuantityTypeIdentifierDietaryZinc",
+             "HKQuantityTypeIdentifierDietaryVitaminB6",
+             "HKQuantityTypeIdentifierDietaryVitaminE",
+             "HKQuantityTypeIdentifierDietaryCholesterol":
             return HKUnit.gramUnit(with: .milli)
+        case "HKQuantityTypeIdentifierDietaryIodine",
+             "HKQuantityTypeIdentifierDietaryVitaminA",
+             "HKQuantityTypeIdentifierDietaryVitaminB12",
+             "HKQuantityTypeIdentifierDietaryVitaminK",
+             "HKQuantityTypeIdentifierDietaryBiotin":
+            // Micrograms, the unit their targets are written in. Falling to
+            // the `default` below would read them in GRAMS — a 900 µg vitamin
+            // A day stored as 0.0009, the exact wrong-but-plausible failure
+            // the file header warns about.
+            return HKUnit.gramUnit(with: .micro)
         case "HKQuantityTypeIdentifierDietaryVitaminD":
             // Micrograms. `HealthUnits.vitaminDToIU` converts on the way into
             // the micros bundle, because every target in the app is in IU.

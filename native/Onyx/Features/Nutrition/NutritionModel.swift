@@ -574,6 +574,12 @@ enum NutritionFormat {
         value.formatted(.number.precision(.fractionLength(0)))
     }
 
+    /// A nutrient amount: whole above ten, one decimal below — B6's 1.3 mg
+    /// floor and B12's 2.4 µg printed as "1" and "2" (W6).
+    static func amount(_ value: Double) -> String {
+        abs(value) < 10 ? value.formatted(.number.precision(.fractionLength(0...1))) : whole(value)
+    }
+
     /// `1.8` — litres to one decimal, which is the precision of the thing.
     static func litres(_ ml: Double) -> String {
         (ml / 1000).formatted(.number.precision(.fractionLength(1)))
