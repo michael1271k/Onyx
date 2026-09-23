@@ -1556,3 +1556,18 @@ merged build.**
   close-out (no WatchConnectivity on that runtime). The **26.5 pair is kept** —
   the only pair on this machine where the link works — and
   `docs/SIMULATORS.md` now says how to drive it and what it cannot deliver.
+
+### Close-out
+
+| | |
+|---|---|
+| Version | **7.14.0** (71400), `version:check` in sync on `main`. Not 7.12.0: W5 landed first as 7.13.0, and a lower number lowers the build number App Store Connect requires to rise. W6 → 7.15.0, W7 → 7.16.0 in the table and prompts above |
+| Changelog | `docs/CHANGELOG.md` → `[7.14.0] — Start on one, the other follows` |
+| Merged | `main` (W5, 7.13.0) merged into the branch first — one conflict, the migration id: W5's `v35.dosePeriods` kept, this wave's tombstones renumbered **`v36.sessionTombstones`** — then every gate re-run on the merged, bumped tree, then `99017376` → `main`, no-ff |
+| Branch | `wave/4-session-sync` deleted locally. It was never pushed, so there is no remote branch. Worktree removed |
+| Cache purged | **15.03 GB freed** — `onyx-swift` 15 G (both lanes' leftovers, as W5's close-out asked) + SwiftPM 282 M → 0; `DerivedData` was already empty |
+| Simulators | The iOS 27 lane-A pair was deleted. The **26.5 pair is kept, shut down** — the only one on this machine that carries WatchConnectivity (`docs/SIMULATORS.md`) |
+
+**Cost the next wave inherits:** every cache is empty, so the first `npm run
+check`, `swift:core` or `swift:data` in W6/W7 is a cold build. The 26.5 pair
+needs a boot and, per fresh install, one Health grant on the watch.
