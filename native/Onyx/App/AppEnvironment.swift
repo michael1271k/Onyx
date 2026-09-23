@@ -473,12 +473,17 @@ public final class AppEnvironment {
         // session's interval means the watch's own workout is coming,
         // whether or not a set was ever ticked there.
         let lastBpmAt = watchBridge.lastBpmAt
+        // And since App Store W4 the wrist SAYS so: it follows a phone-started
+        // session with no set logged there and no rest to echo a rate from,
+        // and saves its own workout when this phone finishes.
+        let wristJoined = watchBridge.joined.contains(sessionId)
         Task.detached(priority: .utility) {
             #if os(iOS)
             if let session = try? database.session(id: sessionId, userId: userId),
                let events = try? database.setEvents(sessionId: sessionId),
                let device = try? database.deviceId() {
-                let watchWasLive = lastBpmAt.map { at in session.startedAt.map { at >= $0 } ?? false } ?? false
+                let watchWasLive = wristJoined
+                    || lastBpmAt.map { at in session.startedAt.map { at >= $0 } ?? false } ?? false
                 let decision = await WorkoutWriter.decide(
                     session: session, events: events, localDeviceId: device, watchWasLive: watchWasLive,
                     reader: Self.healthReader, ownBundleId: Bundle.main.bundleIdentifier ?? ""
@@ -535,6 +540,12 @@ public final class AppEnvironment {
         // queued one from a watch that has been waiting for this phone — is
         // received with nothing to run.
         watchBridge.onWaterQueued = { [weak self] in self?.drainPendingWater() }
+        // A workout started on the wrist lands on the Train tab, where the
+        // tab itself presents the logger over it (App Store W4) — the phone
+        // following the watch the way the watch now follows the phone.
+        watchBridge.onSessionOpened = { [weak self] in self?.selectedTab = "train" }
+        // A wrist-finished session gets what a phone-finished one gets.
+        watchBridge.onSessionClosed = { [weak self] in self?.sessionFinished(sessionId: $0) }
         watchBridge.start()
         authTask = Task { [weak self] in
             guard let self else { return }

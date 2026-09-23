@@ -86,6 +86,15 @@ public enum RescoreDoor {
 
     /// Create the TEMP table and triggers on `db` — the writer connection,
     /// once per open. Idempotent (`IF NOT EXISTS`).
+    ///
+    /// ── THE TRIGGER BODIES SAY `rescore_touched`, NOT `temp.rescore_touched` ─
+    /// SQLite forbids a schema-qualified table as the TARGET of an INSERT,
+    /// UPDATE or DELETE inside a trigger, and only recent builds relax that
+    /// for TEMP triggers. The iOS/watchOS 27 runtimes carry one of those; the
+    /// 26.5 runtimes do not, and there `install` threw on open and every
+    /// launch was "Store unavailable" (found in App Store W4, on a watchOS 26.5
+    /// simulator). Unqualified is the same table: a TEMP trigger resolves an
+    /// unqualified name in `temp` first, and nothing else is called this.
     static func install(_ db: Database) throws {
         try db.execute(sql: """
             CREATE TEMP TABLE IF NOT EXISTS rescore_touched (
@@ -105,7 +114,7 @@ public enum RescoreDoor {
                 try db.execute(sql: """
                     CREATE TEMP TRIGGER IF NOT EXISTS rescore_\(table)_\(verb.lowercased())
                     AFTER \(verb) ON \(table) \(when) BEGIN
-                        INSERT INTO temp.rescore_touched (date, kind, mirror)
+                        INSERT INTO rescore_touched (date, kind, mirror)
                         VALUES (\(row).\(column), '\(kind)', \(origin));
                     END;
                     """)
@@ -116,7 +125,7 @@ public enum RescoreDoor {
                 try db.execute(sql: """
                     CREATE TEMP TRIGGER IF NOT EXISTS rescore_\(table)_\(verb.lowercased())
                     AFTER \(verb) ON \(table) BEGIN
-                        INSERT INTO temp.rescore_touched (date, kind, mirror)
+                        INSERT INTO rescore_touched (date, kind, mirror)
                         SELECT date, 'session', \(origin) FROM workout_sessions WHERE id = \(row).session_id;
                     END;
                     """)

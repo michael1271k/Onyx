@@ -1,6 +1,7 @@
 #if canImport(WatchConnectivity)
 import Foundation
 import OnyxCore
+import os
 import WatchConnectivity
 
 /// The phone↔watch link.
@@ -32,6 +33,7 @@ import WatchConnectivity
 /// | `updateApplicationContext` | the schedule context and the signed-in user | ONE slot, replaced by the newest, delivered on next wake even if the app was never launched. It is STATE, and a queue of stale states is worse than one current one. |
 /// | `transferUserInfo` | `SetEvent`s | queued, persisted across relaunch and reboot, FIFO, delivered when the counterpart is not running. The delivery guarantee a set needs. |
 /// | `sendMessage` | the pencil claim, and the live rest timer | immediate, needs reachability — which is correct: a rest timer that arrives four minutes late is noise, and a pencil claim that cannot reach the other device should fall back to the log's own resolution. |
+/// | `transferUserInfo` | a session opening, finishing or being discarded (W4) | the events' own FIFO — see `send(session:)`. An open (and a join) is ALSO messaged when reachable; a finish never is, or it could overtake queued sets. |
 ///
 /// `transferUserInfo` for a set and `sendMessage` for a timer is not a
 /// preference. `sendMessage` fails outright when the counterpart is unreachable
@@ -65,6 +67,9 @@ public final class WatchLink: NSObject, Sendable {
         /// SAME mailbox, drained by the same `drainPendingWater` through the
         /// same `addWaterGlass`. One row, one code path, two devices.
         case water(Double)
+        /// A session opened, finished or discarded on the other device (App
+        /// Store W4). Both directions. Hand to `AppDatabase.receiveSession`.
+        case session(SessionPulse)
     }
 
     /// A payload key. Free functions rather than a `Codable` envelope because
@@ -82,9 +87,32 @@ public final class WatchLink: NSObject, Sendable {
         static let context = "context"
         static let rest = "rest"
         static let water = "water"
+        static let session = "session"
     }
 
     private let onInbound: @Sendable (Inbound) -> Void
+
+    /// Queued transfers asked for before `WCSession` finished activating.
+    ///
+    /// ── A SEND IN THE FIRST MOMENT WAS A SEND INTO NOTHING (W4) ─────────────
+    /// `active()` answers nil until activation completes, and every send
+    /// returned quietly on nil. For a rest pulse that is the right loss. For
+    /// the session's OPEN it was the whole session: the watch's Start tapped
+    /// in the first moment after a cold launch would never reach the phone,
+    /// and the phone's store would refuse every set logged into it for the
+    /// rest of the workout. So queued sends wait here, and
+    /// `activationDidCompleteWith` hands them over in the order they were
+    /// asked for. The newest application context waits here too: a sign-in
+    /// push in that first moment was dropped the same way, and the watch sat
+    /// on "Open Onyx on your iPhone" until something else pushed. A lock and
+    /// not an actor: this type is `Sendable` and every caller is synchronous.
+    private let unsent = OSAllocatedUnfairLock(initialState: Unsent())
+
+    private struct Unsent: Sendable {
+        var transfers: [(kind: String, payload: Data)] = []
+        /// One slot, like the channel it is for.
+        var context: Data?
+    }
 
     /// - Parameter onInbound: called on WatchConnectivity's own queue, NOT the
     ///   main actor. The host hops if it needs to; `ingest` is a database write
@@ -126,9 +154,45 @@ public final class WatchLink: NSObject, Sendable {
     /// silently dropped, and that is the correct behaviour: the events are in
     /// the local log and the outbox, and Supabase is the durable path.
     public func send(events: [SetEvent]) {
-        guard !events.isEmpty, let wc = active() else { return }
-        guard let data = try? OnyxJSON.encoder.encode(events) else { return }
-        wc.transferUserInfo([Key.kind: Kind.events, Key.payload: data])
+        guard !events.isEmpty, let data = try? OnyxJSON.encoder.encode(events) else { return }
+        queue(Kind.events, data)
+    }
+
+    /// `transferUserInfo`, or held until activation — see `unsent`. A session
+    /// that is ACTIVATED with nowhere to send (no watch paired, no app on it)
+    /// drops, as it always has: there is no counterpart to wait for.
+    private func queue(_ kind: String, _ payload: Data) {
+        guard WCSession.isSupported() else { return }
+        if let wc = active() {
+            // Whatever was held goes FIRST: a set sent the instant activation
+            // completes must not overtake the session open queued before it.
+            drainUnsent()
+            wc.transferUserInfo([Key.kind: kind, Key.payload: payload])
+            return
+        }
+        hold { $0.transfers.append((kind, payload)) }
+    }
+
+    /// Keep a send for `activationDidCompleteWith`. Stored unconditionally,
+    /// then drained at once if activation has in fact completed — a check
+    /// made first could see "pending", lose the race to the delegate, and
+    /// drop the send. The drain drops what it cannot deliver, so a phone with
+    /// no watch never accumulates anything here.
+    private func hold(_ store: @Sendable (inout Unsent) -> Void) {
+        unsent.withLock(store)
+        if WCSession.default.activationState == .activated { drainUnsent() }
+    }
+
+    private func drainUnsent() {
+        let held = unsent.withLock { held in
+            defer { held = Unsent() }
+            return held
+        }
+        guard let wc = active() else { return }
+        if let context = held.context {
+            try? wc.updateApplicationContext([Key.kind: Kind.context, Key.payload: context])
+        }
+        for item in held.transfers { wc.transferUserInfo([Key.kind: item.kind, Key.payload: item.payload]) }
     }
 
     /// Tell the other device who holds the pencil.
@@ -188,6 +252,40 @@ public final class WatchLink: NSObject, Sendable {
         return true
     }
 
+    /// Tell the other device a session opened, finished or was discarded
+    /// (App Store W4).
+    ///
+    /// ── THE EVENTS' OWN QUEUE, ALWAYS ───────────────────────────────────────
+    /// `transferUserInfo` is FIFO, and the events ride it. So an open queued
+    /// before the first set is delivered before it — the row is the events'
+    /// foreign key — and a finish queued after the last set is delivered after
+    /// it. A finish sent as a message could overtake queued sets (three logged
+    /// with the phone in a locker, then Finish in range) and the phone would
+    /// close the session, and push its totals, without them.
+    ///
+    /// ── AND AN OPEN IS ALSO A MESSAGE ───────────────────────────────────────
+    /// The open is the one phase somebody is waiting on — Start on the phone,
+    /// raise the wrist — so it also goes by `sendMessage` when the other side
+    /// is reachable. That copy can arrive before OR after the queued one (a
+    /// message that wakes the other app can be handed over after the queue
+    /// it finds waiting), and the receiver is built for both: a second open
+    /// changes nothing, and an open for a session discarded in between is
+    /// refused by its tombstone (`AppDatabase.receiveSession`, v35). A join is
+    /// messaged too; it creates nothing a late copy could revive.
+    ///
+    /// Seen on a paired simulator (W4): a message reached the running
+    /// counterpart within about a second, while the simulator's daemon did not
+    /// hand a queued transfer to a running app — the app found it at its next
+    /// launch. Apple documents both as delivered to a running app; on this
+    /// machine only the message half could be photographed.
+    public func send(session pulse: SessionPulse) {
+        guard let data = try? OnyxJSON.encoder.encode(pulse) else { return }
+        queue(Kind.session, data)
+        if pulse.phase == .open || pulse.phase == .joined, let wc = active(), wc.isReachable {
+            wc.sendMessage([Key.kind: Kind.session, Key.payload: data], replyHandler: nil) { _ in }
+        }
+    }
+
     /// Replace the watch's copy of "who is signed in and what is today".
     ///
     /// PHONE SIDE ONLY in practice — the watch has no plan resolution of its
@@ -198,8 +296,9 @@ public final class WatchLink: NSObject, Sendable {
     /// Throws only for an unencodable context, which would be a programming
     /// error; a failed *delivery* is not an error here, it is Tuesday.
     public func send(context: WatchContext) {
-        guard let wc = active() else { return }
-        guard let data = try? OnyxJSON.encoder.encode(context) else { return }
+        guard WCSession.isSupported(), let data = try? OnyxJSON.encoder.encode(context) else { return }
+        guard let wc = active() else { return hold { $0.context = data } }
+        drainUnsent()
         try? wc.updateApplicationContext([Key.kind: Kind.context, Key.payload: data])
     }
 
@@ -246,6 +345,14 @@ public final class WatchLink: NSObject, Sendable {
             // a malformed transfer dies — quietly, like every other kind here.
             guard let ml = message[Key.payload] as? Double, ml > 0 else { return }
             onInbound(.water(ml))
+        case Kind.session:
+            // Logged, unlike the other kinds' quiet drops: a pulse that does
+            // not decode is a session the other device will never follow.
+            guard let data, let pulse = try? OnyxJSON.decoder.decode(SessionPulse.self, from: data) else {
+                return Logger(subsystem: "app.onyx.link", category: "wire")
+                    .error("a session pulse arrived and did not decode")
+            }
+            onInbound(.session(pulse))
         default:
             return
         }
@@ -258,7 +365,9 @@ extension WatchLink: WCSessionDelegate {
 
     public func session(
         _ session: WCSession, activationDidCompleteWith state: WCSessionActivationState, error: (any Error)?
-    ) {}
+    ) {
+        if state == .activated { drainUnsent() }
+    }
 
     public func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         receive(message)

@@ -2,7 +2,7 @@ import Foundation
 import OnyxCore
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The two values that cross between the phone and the watch.
+// The values that cross between the phone and the watch.
 //
 // ── WHY THEY ARE NOT IN `WatchLink.swift` ────────────────────────────────────
 // That file is fenced `#if canImport(WatchConnectivity)`, because the framework
@@ -116,6 +116,57 @@ public struct WatchContext: Codable, Sendable, Equatable {
             pool.append(exercise)
         }
         self.swapPool = pool.isEmpty ? nil : pool
+    }
+}
+
+/// A session opening, finishing or being thrown away on the other device
+/// (App Store W4).
+///
+/// ── IT CARRIES THE ROW, BECAUSE THE EVENTS NEED ONE ─────────────────────────
+/// `set_events.session_id` is a foreign key to `workout_sessions`. The watch
+/// has no Supabase to pull a session row from, and before this the link
+/// carried events and nothing else — so every set the other device logged was
+/// refused by the receiving store's constraint (a `try?` on the wrist). A
+/// signal saying "a workout started" would not have fixed that. The row's
+/// identity travels, the receiver inserts it under the SAME id
+/// (`AppDatabase.receiveSession`), and the events behind it have a parent.
+///
+/// ── ONE TYPE FOR EVERY PHASE, AND WHY ───────────────────────────────────────
+/// A finish and a discard both have to name a row the receiver may never
+/// have seen, so they carry the same fields an open does. One struct and a
+/// phase is one decoder for the version-skew story `WatchContext` tells.
+public struct SessionPulse: Codable, Sendable, Equatable {
+    public enum Phase: String, Codable, Sendable {
+        case open, finished, discarded
+        /// Watch → phone only: "my `HKWorkoutSession` is running for this
+        /// session". Sent on every adoption whose workout session actually
+        /// started, and it never creates a row — see `PhoneWatchBridge.joined`
+        /// for the duplicate `HKWorkout` it prevents.
+        case joined
+    }
+
+    public var phase: Phase
+    public var sessionId: String
+    public var userId: String
+    public var dayKey: String?
+    public var date: String
+    public var startedAt: Date?
+    /// The sender's finish instant. Nil on an open and a discard.
+    public var endedAt: Date?
+    /// The rest the last movement prescribed, for `closeSession`'s long-idle
+    /// guard — the one input to `duration_min` the receiver cannot read off
+    /// its own copy of the log. Nil takes the default, as it does locally.
+    public var restTargetSec: Double?
+
+    public init(_ session: WorkoutSession, phase: Phase, restTargetSec: Double? = nil) {
+        self.phase = phase
+        self.sessionId = session.id
+        self.userId = session.userId
+        self.dayKey = session.dayKey
+        self.date = session.date
+        self.startedAt = session.startedAt
+        self.endedAt = phase == .finished ? session.endedAt : nil
+        self.restTargetSec = restTargetSec
     }
 }
 

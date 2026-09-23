@@ -40,6 +40,21 @@ struct RescoreDoorTests {
         }
     }
 
+    /// The triggers are what `AppDatabase` installs on every open, so a
+    /// statement one SQLite refuses is a store that never opens there. The
+    /// 26.5 runtimes' SQLite refuses `INSERT INTO temp.x` inside a trigger;
+    /// the macOS one this suite runs on accepts it, so the SQL is read back
+    /// rather than trusted to fail here (App Store W4).
+    @Test("no trigger body names its target with a schema — older SQLite refuses to open the store")
+    func triggerTargetsAreUnqualified() throws {
+        let db = try store()
+        let bodies = try db.writer.read { conn in
+            try String.fetchAll(conn, sql: "SELECT sql FROM sqlite_temp_master WHERE type = 'trigger'")
+        }
+        #expect(!bodies.isEmpty, "the door installed no triggers — this test is reading the wrong schema")
+        #expect(bodies.allSatisfy { !$0.lowercased().contains("into temp.") })
+    }
+
     // MARK: - The facts the door reports
 
     @Test("a past-dated write reports its date, once per commit")
