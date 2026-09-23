@@ -1967,3 +1967,23 @@ admin-only and the harness is not an admin, so it was not photographed.
   Logging share the tint colour; Sign out is as red as Delete account (the
   brief said keep the destructive rows as they are); Recompute history has
   no confirmation.
+
+### Close-out
+
+| | |
+|---|---|
+| Version | **7.16.0** (71600), `version:check` in sync on `main`. The execution prompt said 7.15.0; W6 landed first as 7.15.0, and the plan's table already had W7 at 7.16.0 |
+| Changelog | `docs/CHANGELOG.md` → `[7.16.0] — Three ways in, and a way out that works` |
+| Merged | `main` (W6, 7.15.0) merged into the branch first — one conflict, `docs/APP_STORE.md`: W7's rewrite kept, W6's HealthKit scope table, its Health review-note sentence and its `unnecessary_data` verdict folded in, line numbers re-read after W6 moved `project.yml` by two. Every gate above ran on the merged, bumped tree; then `be32d774` → `main`, no-ff, and `main`'s tree equals the gated branch's |
+| Branch | `wave/7-auth-store` deleted locally. It was never pushed, so there is no remote branch. Worktree `../onyx-lane-b` removed; the lane's own simulator `iPhone 15 (W7 lane B)` deleted |
+| Cache purged | **15.59 GB freed** — `onyx-swift` 13 G (both lanes' leftovers, as W6's close-out asked) + `DerivedData` 1.9 G + SwiftPM 282 M → 0 (DerivedData 8 M, recreated by a running tool) |
+
+**Cost W8 inherits:** every cache is empty — the first `npm run check`,
+`swift:core` or `swift:data` is a cold build. `native-shot.sh`,
+`swift-ui-test.sh` and `watch-shot.sh` now resolve simulators by EXACT name,
+newest runtime; `npm run swift:ui` takes `UI_TEST_DERIVED`. `OnyxTests` fails
+exactly W1's nine names with no crashes — a crash in it is new. The founder
+gate (`docs/sql/w7-delete-my-account.sql`) and the Supabase settings in
+`docs/APP_STORE.md` §8 are open; W8's end-to-end "delete the account" step
+cannot pass until the SQL is pasted.
+
