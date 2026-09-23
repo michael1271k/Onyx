@@ -1780,3 +1780,20 @@ re-shot. `nutrients` (default + AX5) — the eight new rows, "aim 1.3 mg" and
 - **VO₂max and the daily average heart rate** reach only the weekly export.
   Kept: the export is a user-facing document. A reviewer who reads "shown on
   a screen" literally could argue otherwise.
+
+### Close-out
+
+| | |
+|---|---|
+| Version | **7.15.0** (71500), `version:check` in sync on `main`. The execution prompt said 7.14.0 — W4's number; the plan's table already had W6 at 7.15.0 |
+| Changelog | `docs/CHANGELOG.md` → `[7.15.0] — When the watch was off your wrist, it says so` |
+| Merged | `61c2a315` → `main`, no-ff. `main` had not moved since the branch was cut (`a4d2085a`), so the merged tree is the tree every gate above ran on |
+| Branch | `wave/6-health` deleted locally. It was never pushed, so there is no remote branch. Worktree `../onyx-lane-a` removed |
+| Cache purged | **13.1 GB freed, and only Lane A's own** — `onyx-swift` 26 G → 13 G (`laneA-w6-*`, `shot-w6`, and the default `check-watch` / `ui-test-derived` this lane's `npm run check` used). W7 is live in `../onyx-lane-b`, so its `laneB-*` caches, the shared `OnyxUI-*`, SwiftPM (282 M) and `DerivedData` (1.9 G, a build of the primary checkout this lane did not make) were left. W7's close-out purges them |
+
+**What W7 inherits:** `main` is 7.15.0, so W7 takes **7.16.0**. `docs/APP_STORE.md`
+§3, one sentence of §4 and the §7 `unnecessary_data` row changed here; W7's
+end-to-end rewrite should keep them. `native/project.yml` changed only in the
+phone's `NSHealthUpdateUsageDescription` text and its comment, plus the version
+— no structural edit, but it is a textual conflict for a lane that also bumps
+the version: regenerate, never hand-merge.
