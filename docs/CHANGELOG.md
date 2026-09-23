@@ -44,6 +44,58 @@ _Nothing yet._
 
 ---
 
+## [8.1.0] — 2026-09-23 · The contract wave: eight stones, fixed inks, and the watch wire
+
+Wave 0 of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`). It lays the
+token and wire contract the three parallel lanes build on; the faces, the
+watch dashboard and the summary redesign land in 8.2.0–8.4.0.
+
+### iPhone app
+- **Eight appearance presets replace nine.** Slate (default), Lagoon, Sage,
+  Iris, Clay, Ochre, Moss, Rosewood — muted, ≥ 35° apart on the hue wheel,
+  every domain ramp ≥ 4.5:1 on black. An existing pick migrates once to its
+  nearest stone (Ion→Slate, Ember→Clay, Solstice→Ochre, Meridian→Lagoon,
+  Aurora→Sage, Vesper→Iris, Glacier→Lagoon, Verdigris→Moss, Nocturne→Rosewood).
+  The Appearance grid still draws the old layout; 8.2.0 redraws it.
+- **Some inks never change with the theme now:** water is always blue
+  (`4A9BD6`), heart rate is always red (`E5484D`), the sleep stages are one
+  fixed deep→core→REM→awake ramp, and the sixteen muscle colours are one fixed
+  anatomical palette. Documented as a two-column table in `OnyxInk`.
+- **Protein, carbs, fat, calories and micronutrients follow the theme
+  subtly** (35 % of the accent's shift, chroma capped) instead of turning
+  fully with it. Calories now share the carbs ink everywhere, including the
+  kcal bar, the seven-day kcal series and the macro editor.
+- **Gym mode is gone.** The app no longer opens on Train inside a start-time
+  window, the tab bar no longer hides, and the "Leave" button, the Settings
+  toggle and the launch heuristic are deleted. A cold launch always lands on
+  Today; a session opened from the watch still switches to Train.
+
+### Apple Watch app
+- No visible change. The watch now saves Slate when the phone has not sent a
+  theme yet. The wire gains `WatchContext.session` (lifecycle) and an
+  `EffortPulse` message channel; both are decoded and ignored until 8.4.0.
+
+### Changed
+- `OnyxThemeSpec.default` is Slate; `OnyxThemeSpec.origin` keeps the Ion pair
+  the domain hexes were measured against.
+- New OnyxCore types `SessionMasthead` and `EffortBand`; new OnyxData types
+  `SessionLifecycle` and `EffortPulse`, all additive and covered by golden
+  JSON round-trips.
+
+### Removed
+- `GymModeSetting`, `GymMode`, `GymModeReader`, `AppDatabase.liveWorkoutInProgress`,
+  the `gym-mode` harness screen.
+
+### Notes
+- The wave's "every macro pair ≥ ΔE 3" test bound was unreachable under its own
+  constraints (closest pair caps at 2.5 at weight 0.35); the test asserts
+  1.5–12. Raising the weight is a founder call recorded in the plan.
+- Nutrition inks no longer react to cut/bulk/deload phase offsets. Open for
+  8.2.0.
+- OnyxTests: the same nine baseline names fail, no new ones.
+
+---
+
 ## [8.0.0] — 2026-09-23 · Ready for the App Store
 
 Wave 8, the close-out of the App Store sprint, and the version the first
