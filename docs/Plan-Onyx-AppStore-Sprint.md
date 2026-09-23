@@ -1797,3 +1797,173 @@ end-to-end rewrite should keep them. `native/project.yml` changed only in the
 phone's `NSHealthUpdateUsageDescription` text and its comment, plus the version
 — no structural edit, but it is a textual conflict for a lane that also bumps
 the version: regenerate, never hand-merge.
+
+---
+
+## W7 — Auth, Settings, preflight (7.16.0, Lane B)
+
+### What shipped
+
+- **(a) Sign in with Apple and Google**, beside email/password (`SignInView`).
+  - **Apple.** `SignInWithAppleButton` asks for email only, with a SHA-256
+    nonce. The identity token and the RAW nonce go to
+    `supabase.auth.signInWithIdToken` (`AppEnvironment.signInWithApple`).
+  - **Google.** `supabase.auth.signInWithOAuth(provider: .google, redirectTo:
+    onyx://auth-callback)`: Supabase's own OAuth page in an
+    `ASWebAuthenticationSession`, PKCE. No Google SDK, no new URL scheme — the
+    session catches the callback, `onOpenURL` never sees it.
+  - **One attempt path** (`run`) for all three doors: busy state, the reserved
+    error band, the haptic and the VoiceOver announcement. Cancelling Apple's
+    sheet or Google's page is silent. The system's own error text for both (an
+    NSError domain and code) is replaced by a sentence.
+  - **Parity (4.8 / HIG).** Apple first, Google second, both white capsules of
+    one `@ScaledMetric` height, so they grow together with Dynamic Type —
+    capped at AX1, past which Google's title had to shrink and Apple's never
+    grows. The Google mark is sized to Apple's glyph.
+  - **Deleting the account stops sync first** (`deleteAccount`): the
+    coordinator is stopped before the RPC, `isDeletingAccount` holds off the
+    `startSync` a token refresh would otherwise run mid-delete, `signOut` then
+    has nothing to drain (it used to push the outbox AFTER the account was
+    gone), and a failed delete gets a fresh coordinator.
+  - **The `applesignin` entitlement stays commented** (`project.yml:129`).
+- **(b) Account deletion.** `docs/sql/w7-delete-my-account.sql` — see
+  "falsified" 1. Proved on a local PostgreSQL 17 cluster, founder gate to
+  paste.
+- **(c) Settings.** Regrouped by what a control changes — Plan (+ Weekly set
+  volume), Targets, Logging, Reminders (both switches), Display (units, week
+  start, Appearance), History (+ Reports), Sync (admin), About, account. Every
+  row is a title and one grey sub-line: the existing `LabeledContent` label,
+  given a second `Text` (`row(_:_:value:)`), and the same two-`Text` label on
+  every `Toggle` and `Picker`. Footers went from seven to two — the medical
+  disclaimer and the deletion warning, both word for word. The "App: Onyx" row
+  is gone (the Version row is the same fact). Values are primary ink: when one
+  drops under its sub-line it must not read as a second description.
+- **(d) Preflight.** `docs/APP_STORE.md` rewritten end to end: version and
+  line numbers, account deletion **Pass** (not N/A) with its founder gate,
+  `design/sign_in_with_apple` in scope, subscriptions N/A (ships free), W6's
+  HealthKit scope kept, the review notes, and a founder checklist in order.
+  The privacy manifest, `site/privacy/` and §3 gained **Name** (Google) and
+  **User ID** (every account always had one; never declared).
+
+### What the code falsified about the brief
+
+1. **"Account deletion already ships" was half true, and the untrue half is
+   the server.** Git holds exactly one body for `delete_my_account()` (Phase 3
+   E6, `docs/sql/e6-auth-deletion.sql`, last at `ebb78142^`). It names 32
+   tables by hand; four of them (`notion_exports`, `notion_credentials`,
+   `widget_tokens`, `body_measurements`) were dropped by the W1 cleanup of
+   2026-09-10, whose own § 0 said not to drop them while this function named
+   them. PL/pgSQL resolves a table at run time, so that body fails on its tenth
+   statement — reproduced on the PG17 fixture: `relation
+   "public.notion_exports" does not exist`, whole call rolled back. It also
+   misses seven newer tables, one of which (`set_events`) references
+   `workout_sessions`. The live body could not be read from this machine
+   (PostgREST shows only that `/rpc/delete_my_account` exists, no arguments;
+   the Management API route was refused in this session), so the file's § 2
+   asks the database which body it is before replacing it.
+2. **"All 34 mirrored tables" is 36.** Every exposed `public` table carries
+   `user_id`; an independent `schema-truth-checker` pass agreed (36, the same
+   six foreign keys, the four dropped tables absent). The new function reads
+   the list from `pg_catalog` at call time, so the number stops mattering.
+3. **Sign-up is off live.** `GET /auth/v1/settings` reads `disable_signup:
+   true`, `external: {email: true}` only, `mailer_autoconfirm: true`. So the
+   in-app "Create an account" fails today, and so would the first Apple or
+   Google sign-in of any new user. The E6 memory listed this as a founder
+   Dashboard item in 2026-09; it is still open. `AppEnvironment.signUp`'s
+   comment says confirmation is ON; live says it is off.
+4. **Google sign-in collects a name.** GoTrue asks Google for `email
+   profile` and stores the name on `auth.users`. The app never reads it, but it
+   is collected — so the app's `PrivacyInfo.xcprivacy`, the privacy page and
+   `APP_STORE.md` §3 all gained Name. Apple is asked for email only.
+5. **The email field's focus-on-appear hid the new doors.** The keyboard it
+   raised covered Apple and Google on arrival. Removed; a tap on the field
+   still raises AutoFill.
+
+### Defects found and fixed that the brief did not name
+
+- **The shot and UI-test scripts had moved to iOS 26.5.** `grep -m1 "iPhone 15 ("`
+  matched W4's `iPhone 15 (W4 lane A 26.5)` first. All three scripts now match
+  the name exactly and take the newest runtime.
+- **Two lanes' `npm run check` lock one build database.** This wave's first
+  `check` died in `swift:ui` with `database is locked` while W6 ran its own.
+  `swift-ui-test.sh` takes `UI_TEST_DERIVED` now.
+- **AX5: Google outgrew Apple.** Apple's button ignores Dynamic Type and sizes
+  its title off its height; Google's label tripled and clipped. One scaled
+  height for both.
+- **A sub-line inside a `Link` or `Button` inherited the tint** — dim indigo on
+  grey, reading as a second link. `subLine` pins it to `textSecondary`.
+- **"The bundle does not run on this machine" (W4) was an isolation trap.**
+  Six `SessionTableTests` crashed the host on `main` too (proved on a temp
+  worktree of `83fe7f01`: the same 15 failures as this branch). The crash
+  report reads `dispatch_assert_queue` ← `swift_task_isCurrentExecutor` ←
+  `SetRow.layout` — a `View`'s main-actor static called from a nonisolated
+  suite. `@MainActor` on the suite; `OnyxTests` is back to exactly W1's nine.
+- **Rescore-at-the-door died at the first hourly token refresh** (since
+  5.0.0). `prepareStore` runs on every session event and cancelled the door
+  observer each time; only `startSync` beside a NEW coordinator put it back.
+  Only an erase shuts it now.
+- **Two concurrent full scheme runs on one simulator clobber each other's host
+  app** (same bundle id). This lane's runs moved to its own
+  `iPhone 15 (W7 lane B)`; the first run, beside W6's, was discarded.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| `npm run check` | **Every step passed on the final merged tree**, run step by step with lane paths because W6 held the default ones (`UI_TEST_DERIVED`, a lane `check-watch` path): `version:check` 7.16.0 in sync, types, body, atlas, mirror, doms, report, `swift:ui` **42/42**, watch build exit 0. One earlier run was killed by editing `swift-ui-test.sh` while bash was reading it — self-inflicted, re-run clean |
+| `npm run swift:core` | **736/736** (138 suites), lane scratch path |
+| `npm run swift:data` | **768/768** (94 suites) run alone. In the full scheme run beside the check chain, the known `SeamBenchmarkTests` timing test failed once, as in W3–W6 |
+| Full `Onyx` scheme (own `iPhone 15 (W7 lane B)`, iOS 27) | **No new failures** — 1749 tests. `OnyxTests`: exactly W1's nine names, all expectation failures, **no crashes** (after the `@MainActor` fix; before it, six `SessionTableTests` crashed on `main` too). `OnyxDataTests`: the Gate-0 Keychain test + the seam timing flake. OnyxCore 736/736, OnyxUI 42/42 |
+| code-reviewer | 0 critical, 1 medium (token refresh restarting sync mid-delete), 6 low, 1 pre-existing high (the door observer) — **all fixed** |
+| architect-reviewer | 1 high (delete RPC raced the running sync), 3 medium/low-medium — fixed or recorded below |
+| schema-truth-checker | independent PostgREST pass agreed: 36 tables, all with `user_id`; six FKs; the four dropped tables absent; live body unreadable |
+| ui-ux-designer | 13 findings on the screenshots; the in-scope ones fixed (values as state, mark size, AX1 cap, disabled contrast, "·" wrap, sub-line wording, copyable version, centred wraps, 44 pt link) |
+| Deletion SQL | local PostgreSQL 17, run twice (idempotent): § 4 row `t · t · f · t · f · t · 36 · 0 · 0 · 0`; caller's rows gone from all 36 + `auth.users`, other user untouched; `anon` → permission denied; null uid → raised; a held row → whole call rolled back; the E6 body → `relation "public.notion_exports" does not exist` |
+
+**Live URLs** (`curl -I`, 2026-09-23):
+
+```
+https://onyx-health-fitness.netlify.app/privacy/  HTTP/2 200
+https://onyx-health-fitness.netlify.app/support/  HTTP/2 200
+```
+
+**Screenshots** (iPhone 15, iOS 27, reviewed): the sign-in screen with all
+three options at the default size and at AX5 (top and scrolled), and every
+Settings section at both sizes, paged top to bottom. The Sync section is
+admin-only and the harness is not an admin, so it was not photographed.
+
+### Which auth paths were compiled but NOT exercised
+
+- **Sign in with Apple — not exercised at all.** The entitlement is parked, so
+  the sheet cannot succeed on this machine (AuthorizationError 1000), and the
+  live project has no Apple provider.
+- **Sign in with Google — not exercised.** The live project has no Google
+  provider and `onyx://auth-callback` is not on its redirect allow-list; the
+  PKCE exchange, the `access_denied` cancel mapping and the
+  `signup_disabled` message are read from supabase-swift's source, not seen.
+- **A first sign-in that creates an account (any door) — not exercised.** Live
+  `disable_signup` is true.
+- **Deletion — the app half compiled, the server half proved only on PG17.**
+  Neither the new `deleteAccount` ordering nor the live RPC was run against
+  Supabase; the delete button was not tapped.
+- **Email sign-in** is unchanged in behaviour; its path now goes through `run`
+  and was compiled, not driven.
+
+### Left open
+
+- **Founder:** paste `docs/sql/w7-delete-my-account.sql` (§8 step 2 of
+  `APP_STORE.md`); allow sign-ups; after Gate 0, the Apple and Google provider
+  setup and the redirect URL (§8 steps 3–6).
+- **Sign in with Apple token revocation on deletion** — needs the team key and
+  an Edge Function; a founder decision (architect: read
+  `currentUser.identities` at delete time, re-ask Apple for a fresh code).
+- **No password reset.** An email account that forgets its password has no way
+  back from this screen. Needs a reset redirect, like Google's.
+- **No "signed in as" row.** Three doors make "which account am I in" a real
+  question (Apple's private relay address especially).
+- **The watch keeps the last context after a deletion** (architect) —
+  `signOut` never clears it. W8's end-to-end deletion step should check.
+- **Pre-existing, seen in review, not changed:** the section headers Plan and
+  Logging share the tint colour; Sign out is as red as Delete account (the
+  brief said keep the destructive rows as they are); Recompute history has
+  no confirmation.
