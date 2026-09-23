@@ -420,3 +420,74 @@ Branch `onyx/w6-closeout`, version **9.0.0**.
 5. Weekly export JSON has no `restActualSec`; markdown golden unchanged except that field.
 6. Supplements: search "Thorne" as brand → pick a product → sheet prefilled with per-ingredient micros; airplane mode → manual sheet with notice.
 7. Gates: `npm run check` green on `main`; OnyxTests failing names ⊆ baseline 9; `npm run version:check` at 9.0.0; `graphify update .` committed.
+
+---
+
+## Wave record — W0
+
+Branch `onyx/w0-contract` (Opus 5.5, worktree `.claude/worktrees/agent-a9e6c75dd16d19e7e`), four commits on `4c2d5d2b`: `93acc087` theme/ink/nutrition, `8b8b578f` wire types, `f1be8139` gym-mode deletion, `4f57b2f1` shot-review fix. Version NOT bumped (merger takes 8.1.0).
+
+**Path correction.** `OnyxTheme` and its presets live in **OnyxUI** (`DesignSystem/OnyxTheme.swift`), not OnyxCore; only `OnyxThemeSpec`/`OKLCH` are Core. Tasks 1–3 share two files, so they landed as one commit.
+
+### Final preset hexes (chroma 0.90, lift 0, every one its own `normalised()`)
+| | Primary | Secondary | OKLCH L / C / h (primary) | on black |
+|---|---|---|---|---|
+| Slate (default) | `6A7FAF` (draft `6479A8`) | `C09A63` | 0.60 / 0.078 / 265.9 | 5.27 |
+| Lagoon | `4F8FA0` | `C98A6B` | 0.614 / 0.070 / 217.0 | 5.77 |
+| Sage | `6E9A80` | `C9A05C` | 0.647 / 0.062 / 158.2 | 6.60 |
+| Iris | `8A73AE` (draft `7D6BA6`) | `C4986E` | 0.60 / 0.091 / 301.6 | 5.14 |
+| Clay | `B5705A` | `6E9A9A` | 0.614 / 0.094 / 38.4 | 5.43 |
+| Ochre | `B39250` | `6A83A8` | 0.676 / 0.094 / 83.3 | 7.14 |
+| Moss | `7F8F4E` | `A87A8F` | 0.622 / 0.091 / 120.5 | 5.94 |
+| Rosewood | `AC6886` (draft `A66280`) | `7A9A8A` | 0.60 / 0.095 / 352.4 | 5.08 |
+
+**What the guard forced.** Slate (L 0.579), Rosewood (0.581) and Iris (0.569) sat under the L 0.60 floor → lifted to 0.60, hue and chroma kept. The drafted Iris (h 297.5) sat **32.0°** from Slate and broke `presetPrimariesStayThirtyFiveDegreesApart` — no lightness change fixes a hue gap, so Iris moved **+4° to h 301.6** (35.7° from Slate, 50.8° from Rosewood). Every secondary was already in the box. The hue-circle contrast sweep passes unchanged, and a new per-preset assertion checks every domain start/end ≥ 4.5:1 for the eight as shipped.
+
+**Default vs origin.** `OnyxThemeSpec.default` is Slate; a new `OnyxThemeSpec.origin` keeps the Ion/Solar pair the 24 domain hexes were measured against, and `OnyxTheme.derive` rotates against `origin`. `migrateLegacy` (called by `apply(json:)` for drawing and written back once by `load`) maps: Ion→Slate, Ember→Clay, Solstice→Ochre, Meridian→Lagoon, Aurora→Sage, Vesper→Iris, Glacier→Lagoon, Verdigris→Moss, Nocturne→Rosewood.
+
+### Weighted nutrition (Q19) — and the ΔE the brief asked for
+Implemented as `OKLCHConvert.toward` — the step is taken along the **Oklab chord** from the default ink to its fully-turned self (weight 0.35, C ≤ 0.12, L kept), not as `0.35 × Δh` of hue rotation. Measured: plain angle scaling has a seam at ±180° from Slate (Ochre +175° → +61°, Moss −145° → −51°, 40° apart on the wheel but 112° after scaling) and gave protein **ΔE 2.5–19.2** — past the ≤ 12 bound. The chord is linear in weight and seamless. All inks move by the **primary's** shift (the secondaries bunch: row 1's four are golds within 30°, so a secondary-keyed carbs ink could not move). Pairwise Oklab ΔE×100 across the eight, as shipped:
+
+| ink | default hex | closest pair | widest pair |
+|---|---|---|---|
+| protein | `DA7E7A` | 2.4 (Slate/Iris) | 8.1 (Iris/Moss) |
+| carbs = calories | `C09A63` | 1.9 (Sage/Moss) | 6.1 (Iris/Moss) |
+| fat | `A0A3D4` | 1.6 (Slate/Iris) | 5.0 (Sage/Rosewood) |
+| micro (new) | `D98BB3` | 2.2 (Ochre/Moss) | 7.5 (Lagoon/Clay) |
+
+**The brief's "≥ 3 for every pair" is arithmetically unreachable** under its own constraints: with weight 0.35, C ≤ 0.12 and primaries ≥ 35° apart, the closest pair is at most 0.35 × 2·0.12·sin(17.5°) = 2.5 for ANY dampened derivation, and fat/carbs sit at C 0.07–0.085. The test asserts ≤ 12 (recognisable) and ≥ 1.5 (no two presets collapse), with the reason in a comment. Raising the floor to 3 needs weight ≈ 0.7 or chroma ≥ 0.14 on every macro — a founder call.
+
+### Semantic ink table
+`OnyxInk.Themed` {`accent`, `train`, `selection`, `mesh`} and `OnyxInk.Fixed` {`water 4A9BD6`, `heart E5484D`, `sleepDeep 4B4A8A`, `sleepCore 7B76B8`, `sleepREM B8B3E0`, `sleepAwake`=textSecondary, `sleep` ramp, `good`, `record`, `muscle(_:)`}, doc-commented as a two-column table in `OnyxTokens.swift`. `Color.onyx.water` → Fixed.water; `OnyxSleepStage` → the fixed ramp; `muscle()`/`muscleFamily()` → the fixed `defaultMuscleHex` (the theme's per-muscle dictionary is gone). `Color.onyx.micro` is new; `calories` now equals `carbs`.
+
+### Wire types (additive)
+OnyxCore: `SessionMasthead` (init enforces a 6-point `hrSpark` or empty; `spark(_:)` buckets ≥ 6 samples into means, < 6 by nearest sample) and `EffortBand(rpe:)`. OnyxData: `SessionLifecycle` as optional `WatchContext.session` (own `Phase` — no `joined`), `EffortPulse` (band defaults from rpe), `WatchLink.Inbound.effort`, `Kind.effort = "effort"`, `send(effort:)` (message-only, no caller), decode branch, and `break` handlers in `PhoneWatchBridge` and `WatchModel`. Golden JSON tests in `WatchPayloadTests` (whole-second dates) + an old-context-without-`session` test.
+
+### Gym mode — deleted
+Files removed: `native/Onyx/Features/Shell/GymModeSetting.swift`, `native/Packages/OnyxCore/Sources/OnyxCore/Training/GymMode.swift`, `native/Packages/OnyxCore/Tests/OnyxCoreTests/GymModeTests.swift`, `native/Packages/OnyxData/Sources/OnyxData/Training/GymModeReader.swift`. Code removed: `RootView.resolveGymMode` + its `.task`/scene-phase calls + tab-bar hide + `.animation`, `AppEnvironment.gymMode`/`gymModeDeclined` (and their resets at sign-out/midnight), `WorkoutTabView` Leave button + `hadSession` lowering, Settings → Logging toggle, `PreviewHarness` `gym-mode` case + environment, the `gym-mode` entry in `scripts/native-shot.sh`, and `AppDatabase.liveWorkoutInProgress` (its only production caller was the launch door; two test references dropped). `TodayModel.minuteOfDay` inlined the two-line clock read it borrowed from `GymMode`. Docs: one line in `docs/COMPACTION_AUDIT.md`. **Behaviour change:** a cold launch with a workout still open now lands on Today, not Train (that was pre-gym-mode behaviour folded into the same door); the watch-opened hook still follows the wrist onto Train.
+
+### Gates
+- `npm run check` — green (version, types, body, atlas, mirror, doms, report, `swift:ui` 45/45, `check:watch` BUILD SUCCEEDED).
+- `npm run swift:core` 734/734 (after GymModeTests deletion); `npm run swift:data` 772/772 (one run hit the known `SeamBenchmarkTests` nutrition flake; clean on re-run).
+- iOS app (generic) and watch app builds green.
+- OnyxTests on iPhone 15 `B5C31206…`: 203 tests, 21 issues, **exactly the 9 baseline names** — History weeks ×2, Live Stats fixture ×2 (really `SessionSummaryHotfixTests`), Session summary hotfix ×3, Workout week ×2. OnyxDataTests on the sim: the Gate-0 Keychain blob test + the seam-benchmark flake. **No new names.**
+- `invariant-auditor` on the colour-math commit: clean.
+- `graphify update .` run (outputs left uncommitted for the merger, per the shared-file rule).
+
+### Screenshots reviewed (default size, Slate / Clay / Iris): appearance, today, today-sheet (sleep), train, session, fuel
+- Water bar: `4A9BD6` blue in all three. Sleep sheet half-ring and legend: identical deep→core→REM→awake in all three.
+- Muscle chips on the session masthead: identical in Clay and Iris (fixed palette).
+- What changed colour vs 8.0.0: every accent (Slate is bluer and quieter than Ion); protein/carbs/fat/micro now drift only slightly per theme; water no longer follows `body.end`; sleep stages no longer follow the Lunar ramp.
+- Round 1 finding, fixed (`4f57b2f1`): under Clay the kcal bar, the seven-day kcal series and `MacroEditSheet`'s kcal field were TEAL — they read `OnyxDomain.fuel` (the theme's secondary at full rotation) while the macros moved 35%. Now `Color.onyx.calories`. The Appearance footer claimed a theme moves "all sixteen muscles" — rewritten. Round 2 re-shot fuel + appearance in Clay: clean.
+- Appearance still draws the old 3-column grid with 8 swatches and "Even" under every name — expected, Lane B redraws it.
+
+### Open calls for the lanes
+1. **ΔE floor** (above): ≥ 3 is unreachable at weight 0.35 / C ≤ 0.12; founder decides whether to raise weight or macro chroma.
+2. **Nutrition inks ignore the phase offset** (cut/bulk/deload no longer mute them) — they read the default theme's hexes, not the reacted ramps. Lane B: say if a deload should mute them.
+3. **Micro ink `D98BB3` is a new hex** (muted orchid). Lane B/C: `NutrientsView` still uses good/danger/fuel — adopt `Color.onyx.micro` for the nutrient's own ink.
+4. **Other `OnyxDomain.fuel` call sites** that mean "calories" may remain outside Nutrition (widgets' calorie faces, `FocusFace(.calories)`, `NutritionTabView:381` estimated-day ink). Lane B owns the faces.
+5. `sleepDeep` is 2.6:1 on black — a fill only, never a text ink (Lane B's `DepthArc` legend must use text tokens).
+6. `WatchLink.receive(.effort)` has no unit test — `receive` is internal and no OnyxTests target has `@testable import OnyxData`; the payload decode is covered by the golden. Lane A adds one with the sender.
+7. `WatchContext.session` has no sender yet (Lane A). The watch still saves `next.theme ?? .default` — `.default` is now Slate.
+8. `AppearanceView` prose still describes nine presets / a 3×3 grid in comments — Lane B's rewrite.
+9. Commit trailer: this wave's commits carry the session's `Claude Opus 5.5` co-author line (the builder's model), not the `Fable 5.1` line the brief named.
