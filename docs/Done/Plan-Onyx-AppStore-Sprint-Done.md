@@ -2098,3 +2098,18 @@ item. The founder's list is `docs/APP_STORE.md` §8 and the changelog's
 "Still needs the founder": Gate 0, allowing sign-ups, the Apple and Google
 providers, token revocation on deletion, the recover-accent colour call,
 `HKHealthStore.startWatchApp`, and a phone-added movement on the watch's deck.
+
+### Close-out
+
+| | |
+|---|---|
+| Version | **8.0.0** (80000), `version:check` in sync on `main` |
+| Changelog | `docs/CHANGELOG.md` → `[8.0.0] — Ready for the App Store` |
+| Merged | `e4204111` → `main`, no-ff. `main` had not moved since the branch was cut (`05789543`), so the merged tree is the one every gate above ran on — apart from `store-shots.sh`'s shutdown line and docs |
+| Branch | `wave/8-final` deleted locally; never pushed. No `wave/*` branch exists locally or on `origin`; one worktree (the primary). `git branch -a`: `main`, `origin/main` (and `origin/HEAD`, the remote's pointer to it) |
+| Cache purged | **14.88 GB freed** — `onyx-swift` 12.76 G + `DerivedData` 1.85 G + SwiftPM 0.27 G + `native/__store__` 0.01 G → 0 (`DerivedData` 8 M, recreated by a running tool). `native/__screenshots__` and `native/graphify-out/` were already absent |
+| Simulators | `iPhone 17 Pro Max` and `iPhone 17 Pro` (iOS 27.0) kept, shut down — 2.4 GB each — so the next `store-shots.sh` run is warm. Every other simulator shut down; the 26.5 pair (W4) kept |
+| Pushed | `git push origin main` — `origin/main` from `cbac4221` (W1's baseline commit; nothing in this sprint had been pushed) to this close-out |
+
+**The App Store sprint is closed.** Two follow-ups were spun off rather than
+fixed inside a close-out: History's "Week 0" and the nutrition seam assertion.
