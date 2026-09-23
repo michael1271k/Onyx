@@ -142,12 +142,17 @@ struct DoseHistoryStoreTests {
     @Test("v35 adds the column to a store built before it, and keeps its rows")
     func migrationAltersAnExistingStore() throws {
         let queue = try DatabaseQueue()
-        try AppDatabase.migrator.migrate(queue, upTo: "v34.sessionTelemetry")
+        // The simulator's DEBUG migrator wipes a store whose schema differs
+        // from the one its migrations build — which the dropped column below
+        // is, on purpose. Off, so this is the phone's upgrade and not a wipe.
+        var migrator = AppDatabase.migrator
+        migrator.eraseDatabaseOnSchemaChange = false
+        try migrator.migrate(queue, upTo: "v34.sessionTelemetry")
         try queue.write { db in
             try db.execute(sql: "ALTER TABLE custom_supplements DROP COLUMN dose_periods")
             try db.execute(sql: "INSERT INTO custom_supplements (id, user_id, name, dose) VALUES ('c1', 'u1', 'Zinc', '15 mg')")
         }
-        try AppDatabase.migrator.migrate(queue)
+        try migrator.migrate(queue)
         let row = try queue.read { try CustomSupplementRow.fetchOne($0, key: "c1") }
         #expect(row?.dose == "15 mg")
         #expect(row?.dosePeriods == nil)
