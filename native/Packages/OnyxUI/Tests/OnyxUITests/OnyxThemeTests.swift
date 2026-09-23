@@ -11,38 +11,33 @@ import OnyxCore
 @MainActor
 struct OnyxThemeTests {
 
-    @Test("the default spec reproduces every default colour, bit for bit")
-    func defaultIsIdentity() {
-        let theme = OnyxTheme(spec: .default)
+    private func preset(_ name: String) -> OnyxThemeSpec {
+        OnyxTheme.presets.first { $0.name == name }!.spec
+    }
+
+    @Test("the origin spec reproduces every default domain colour, bit for bit")
+    func originIsIdentity() {
+        let theme = OnyxTheme(spec: .origin)
         for d in OnyxDomain.allCases {
             let hex = OnyxDomain.defaultDomainHex[d]!
             #expect(theme.start[d] == Color(hex: hex.start), "\(d) start")
             #expect(theme.end[d] == Color(hex: hex.end), "\(d) end")
         }
-        for m in LandmarkMuscle.allCases {
-            #expect(theme.muscle[m] == Color(hex: Color.onyx.defaultMuscleHex[m]!), "\(m)")
-        }
-        // And the process boots on it.
+        // And the process boots on the DEFAULT, which is Slate — not the origin.
         #expect(OnyxTheme.current.spec == .default)
-        #expect(OnyxTheme.current.start == theme.start)
-        #expect(OnyxTheme.current.end == theme.end)
-        #expect(OnyxTheme.current.muscle == theme.muscle)
+        #expect(OnyxTheme.presets.first?.name == "Slate")
     }
 
-    @Test("the sixteen muscles stay sixteen colours under any quarter turn")
-    func musclesStayDistinct() {
-        for delta in [0.0, 90, 180, 270] {
-            let rotated = LandmarkMuscle.allCases.map {
-                OKLCHConvert.rotate(Color.onyx.defaultMuscleHex[$0]!, byDegrees: delta)
-            }
-            #expect(Set(rotated).count == rotated.count, "Δ \(delta)")
-        }
-    }
-
-    @Test("every preset keeps the four domain accents and the sixteen muscles apart")
-    func presetsKeepDomainsApart() {
-        #expect(OnyxTheme.presets.count == 9)
+    @Test("the Stone eight, in grid order, with Slate first")
+    func presetsAreTheStoneEight() {
+        #expect(OnyxTheme.presets.map(\.name) == ["Slate", "Lagoon", "Sage", "Iris",
+                                                  "Clay", "Ochre", "Moss", "Rosewood"])
         #expect(OnyxTheme.presets.first?.spec == .default)
+    }
+
+    @Test("every preset keeps the four domain accents apart and is its own normalised value")
+    func presetsKeepDomainsApart() {
+        #expect(OnyxTheme.presets.count == 8)
         for preset in OnyxTheme.presets {
             // Identity, not idempotence: the literals in the table ARE the
             // normalised values, so the source shows what ships.
@@ -50,24 +45,106 @@ struct OnyxThemeTests {
             let theme = OnyxTheme(spec: preset.spec)
             let accents = OnyxDomain.allCases.map { theme.start[$0]!.description }
             #expect(Set(accents).count == accents.count, "\(preset.name)")
-
-            // ── AND THE MUSCLES, PER PRESET ────────────────────────────────
-            // `musclesStayDistinct` proves the property for four quarter
-            // turns, which is a fact about the ROTATION. What ships is this
-            // fixed table, and a preset whose Δp folded two muscles onto one
-            // colour would draw a sixteen-row legend with fifteen hues in it
-            // and pass every other test in this file.
-            let muscles = LandmarkMuscle.allCases.map { theme.muscle[$0]!.description }
-            #expect(muscles.count == 16, "\(preset.name): the atlas is sixteen muscles")
-            #expect(Set(muscles).count == muscles.count, "\(preset.name) muscles")
         }
+    }
+
+    @Test("the sixteen muscles are the fixed anatomical palette under every preset")
+    func musclesAreFixed() {
+        // Decision Q18: the theme tints chrome, never anatomy. Chest is the
+        // same coral in Slate and in Rosewood, so a legend learned once holds.
+        defer { OnyxTheme.apply(json: "") }
+        for preset in OnyxTheme.presets {
+            OnyxTheme.set(preset.spec)
+            for m in LandmarkMuscle.allCases {
+                #expect(Color.onyx.muscle(m) == Color(hex: Color.onyx.defaultMuscleHex[m]!), "\(preset.name) \(m)")
+            }
+            let families = MuscleFamily.allCases.map { Color.onyx.muscleFamily($0).description }
+            #expect(Set(families).count == families.count, "\(preset.name) families")
+        }
+        #expect(Set(Color.onyx.defaultMuscleHex.values).count == 16)
+    }
+
+    @Test("water, heart and the sleep ramp never move with the theme")
+    func fixedInksAreFixed() {
+        defer { OnyxTheme.apply(json: "") }
+        for preset in OnyxTheme.presets {
+            OnyxTheme.set(preset.spec)
+            #expect(Color.onyx.water == Color(hex: 0x4A9BD6), "\(preset.name) water")
+            #expect(OnyxInk.Fixed.water == Color(hex: 0x4A9BD6))
+            #expect(OnyxInk.Fixed.heart == Color(hex: 0xE5484D))
+            #expect(OnyxInk.Fixed.heart == Color.onyx.danger)
+            #expect(OnyxSleepStage.deep.color == Color(hex: 0x4B4A8A), "\(preset.name) deep")
+            #expect(OnyxSleepStage.core.color == Color(hex: 0x7B76B8), "\(preset.name) core")
+            #expect(OnyxSleepStage.rem.color == Color(hex: 0xB8B3E0), "\(preset.name) rem")
+            #expect(OnyxSleepStage.awake.color == Color.onyx.textSecondary)
+            #expect(OnyxInk.Fixed.sleep == OnyxSleepStage.allCases.map(\.color))
+            #expect(OnyxInk.Fixed.good == Color.onyx.good)
+            #expect(OnyxInk.Fixed.record == Color.onyx.record)
+        }
+    }
+
+    @Test("the themed half of the ink table follows the theme")
+    func themedInksFollow() {
+        defer { OnyxTheme.apply(json: "") }
+        OnyxTheme.set(preset("Clay"))
+        #expect(OnyxInk.Themed.accent == Color(hex: preset("Clay").primary))
+        #expect(OnyxInk.Themed.train.start == OnyxDomain.train.start)
+        #expect(OnyxInk.Themed.train.end == OnyxDomain.train.end)
+        #expect(OnyxInk.Themed.selection == OnyxDomain.train.accent)
+        #expect(OnyxInk.Themed.mesh == OnyxDomain.allCases.map(\.accent))
+    }
+
+    // MARK: - Nutrition, weighted (Q19)
+
+    /// ΔE in Oklab × 100 between two resolved colours.
+    private func deltaE(_ a: Color, _ b: Color) -> Double {
+        func lab(_ c: Color) -> (Double, Double, Double) {
+            let o = OKLCHConvert.oklch(fromHex: c.onyxHex)
+            return (o.l, o.c * cos(o.h * .pi / 180), o.c * sin(o.h * .pi / 180))
+        }
+        let (l1, a1, b1) = lab(a), (l2, a2, b2) = lab(b)
+        return 100 * ((l1 - l2) * (l1 - l2) + (a1 - a2) * (a1 - a2) + (b1 - b2) * (b1 - b2)).squareRoot()
+    }
+
+    @Test("the nutrition inks move with the theme, but only a little")
+    func nutritionIsWeighted() {
+        defer { OnyxTheme.apply(json: "") }
+        let inks: [(String, () -> Color)] = [
+            ("protein", { Color.onyx.protein }), ("carbs", { Color.onyx.carbs }),
+            ("fat", { Color.onyx.fat }), ("calories", { Color.onyx.calories }),
+            ("micro", { Color.onyx.micro }),
+        ]
+        for (name, read) in inks {
+            var colours: [(String, Color)] = []
+            for preset in OnyxTheme.presets {
+                OnyxTheme.set(preset.spec)
+                colours.append((preset.name, read()))
+                #expect(OKLCHConvert.oklch(fromHex: read().onyxHex).c <= OnyxThemeSpec.nutritionMaxChroma + 0.005,
+                        "\(preset.name) \(name) chroma")
+            }
+            var low = Double.infinity, high = 0.0
+            for i in colours.indices {
+                for j in colours.indices where j > i {
+                    let d = deltaE(colours[i].1, colours[j].1)
+                    low = min(low, d)
+                    high = max(high, d)
+                }
+            }
+            // ≤ 12: still recognisably the same ink in all eight. The brief's
+            // ≥ 3 floor is arithmetically out of reach at weight 0.35 / C ≤
+            // 0.12 with primaries 35° apart (see the W0 wave record); 1.5 is
+            // what the chord derivation guarantees — no two presets collapse.
+            #expect(high <= 12, "\(name): widest pair ΔE \(high)")
+            #expect(low >= 1.5, "\(name): closest pair ΔE \(low)")
+        }
+        // Calories are the Atwater sum and wear the carbs ink.
+        OnyxTheme.set(preset("Moss"))
+        #expect(Color.onyx.calories == Color.onyx.carbs)
+        #expect(Color.onyx.carbs == Color(hex: preset("Moss").weighted(weight: OnyxThemeSpec.nutritionWeight).secondary))
     }
 
     @Test("the six chart series stay six colours under every preset")
     func seriesStayDistinctUnderEveryPreset() {
-        // `Chart kit`'s distinctness test runs in parallel with this suite and
-        // may read `series` while a test here holds a preset; the property has
-        // to be true under every theme, not just the default.
         defer { OnyxTheme.apply(json: "") }
         for preset in OnyxTheme.presets {
             OnyxTheme.set(preset.spec)
@@ -79,12 +156,11 @@ struct OnyxThemeTests {
 
     @Test("a non-default spec moves train and fuel and drags the rest with them")
     func derivation() {
-        let ember = OnyxTheme.presets.first { $0.name == "Ember" }!.spec
-        let theme = OnyxTheme(spec: ember)
-        #expect(theme.start[.train] == Color(hex: ember.primary))
-        #expect(theme.start[.fuel] == Color(hex: ember.secondary))
+        let clay = preset("Clay")
+        let theme = OnyxTheme(spec: clay)
+        #expect(theme.start[.train] == Color(hex: clay.primary))
+        #expect(theme.start[.fuel] == Color(hex: clay.secondary))
         #expect(theme.end[.train] != Color(hex: OnyxDomain.defaultDomainHex[.train]!.end))
-        #expect(theme.muscle[.chest] != Color(hex: Color.onyx.defaultMuscleHex[.chest]!))
     }
 
     @Test("the derived statics follow a theme change instead of freezing at first read")
@@ -95,45 +171,33 @@ struct OnyxThemeTests {
         let carbs = Color.onyx.carbs
         let fat = Color.onyx.fat
         let calories = Color.onyx.calories
+        let micro = Color.onyx.micro
         let series0 = Color.onyx.series[0]
 
-        OnyxTheme.current = OnyxTheme(spec: OnyxTheme.presets.first { $0.name == "Ember" }!.spec)
+        OnyxTheme.current = OnyxTheme(spec: preset("Clay"))
         #expect(Color.onyx.protein != protein)
         #expect(Color.onyx.carbs != carbs)
         #expect(Color.onyx.fat != fat)
         #expect(Color.onyx.calories != calories)
+        #expect(Color.onyx.micro != micro)
         #expect(Color.onyx.series[0] != series0)
     }
 
     @Test("an out-of-range spec is normalised on the way in, never rendered raw")
-    func appliedSpecsAreNormalised() throws {
+    func appliedSpecsAreNormalised() {
         defer { OnyxTheme.apply(json: "") }
         let raw = OnyxThemeSpec(primary: 0x101020, secondary: 0xFF0000)
         #expect(raw.normalised() != raw)
-        let json = try #require(String(data: JSONEncoder().encode(raw), encoding: .utf8))
-
-        OnyxTheme.apply(json: json)
+        // `set` is the door the watch and the shot harness use with a pair in
+        // hand; it normalises and does not snap to a preset.
+        OnyxTheme.set(raw)
         #expect(OnyxTheme.current.spec == raw.normalised())
-
-        let suite = "onyx.theme.tests.normalised"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(json, forKey: OnyxTheme.key)
-        OnyxTheme.apply(json: "")
-        OnyxTheme.load(defaults)
-        #expect(OnyxTheme.current.spec == raw.normalised())
-
-        OnyxTheme.apply(json: "")
-        OnyxTheme.save(raw, to: defaults)
-        #expect(OnyxTheme.current.spec == raw.normalised())
-        let stored = try #require(defaults.string(forKey: OnyxTheme.key))
-        #expect(try JSONDecoder().decode(OnyxThemeSpec.self, from: Data(stored.utf8)) == raw.normalised())
     }
 
     @Test("apply, load and save move the current theme; corrupt or empty means default")
     func plumbing() {
         defer { OnyxTheme.apply(json: "") }
-        let ember = OnyxTheme.presets.first { $0.name == "Ember" }!.spec
+        let clay = preset("Clay")
 
         OnyxTheme.apply(json: "")
         #expect(OnyxTheme.current.spec == .default)
@@ -145,66 +209,77 @@ struct OnyxThemeTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.removeObject(forKey: OnyxTheme.key)
 
-        OnyxTheme.save(ember, to: defaults)
-        #expect(OnyxTheme.current.spec == ember)
+        OnyxTheme.save(clay, to: defaults)
+        #expect(OnyxTheme.current.spec == clay)
         // The static tokens follow — this is the whole point.
-        #expect(OnyxDomain.train.start == Color(hex: ember.primary))
-        #expect(OnyxDomain.fuel.accent == Color(hex: ember.secondary))
-        #expect(Color.onyx.muscle(.chest) != Color(hex: Color.onyx.defaultMuscleHex[.chest]!))
+        #expect(OnyxDomain.train.start == Color(hex: clay.primary))
+        #expect(OnyxDomain.fuel.accent == Color(hex: clay.secondary))
         let json = defaults.string(forKey: OnyxTheme.key)!
         #expect(json.contains("\"primary\""))
 
         OnyxTheme.apply(json: "")
         #expect(OnyxTheme.current.spec == .default)
         OnyxTheme.load(defaults)
-        #expect(OnyxTheme.current.spec == ember)
+        #expect(OnyxTheme.current.spec == clay)
         OnyxTheme.apply(json: json)
-        #expect(OnyxTheme.current.spec == ember)
+        #expect(OnyxTheme.current.spec == clay)
 
         defaults.set("garbage", forKey: OnyxTheme.key)
         OnyxTheme.load(defaults)
         #expect(OnyxTheme.current.spec == .default)
     }
 
-    // MARK: - The mood knob (W3)
+    // MARK: - The legacy migration (W0)
 
-    @Test("an old two-key blob keeps its theme and lands on the neutral knob")
-    func oldBlobSurvivesTheNewKeys() throws {
+    @Test("a legacy blob lands on the nearest Stone preset by hue")
+    func legacyBlobsMigrate() {
+        // The nine 8.0.0 presets, as they were stored.
+        let ion = OnyxThemeSpec(primary: 0x6B78F0, secondary: 0xE3A650)
+        let ember = OnyxThemeSpec(primary: 0xE8734A, secondary: 0x01B677, chroma: 0.90, lift: -0.02)
+        #expect(OnyxTheme.migrateLegacy(ion) == preset("Slate"))
+        #expect(OnyxTheme.migrateLegacy(ember) == preset("Clay"))
+        // A current preset passes through as itself.
+        for p in OnyxTheme.presets {
+            #expect(OnyxTheme.migrateLegacy(p.spec) == p.spec, "\(p.name)")
+        }
+    }
+
+    @Test("an old two-key blob still decodes, then load migrates it once and writes it back")
+    func oldBlobMigratesOnLoad() throws {
         defer { OnyxTheme.apply(json: "") }
         // The literal shape every install written before W3 holds at
-        // `OnyxTheme.key`: two keys, no chroma, no lift. The hexes are
-        // interpolated rather than written out in decimal — `UInt32` encodes as
-        // a JSON number, and a hand-converted one is a digit waiting to be
-        // wrong about which theme this test is even asserting.
-        let old = "{\"primary\":\(0xE57255),\"secondary\":\(0x32B36E)}"
-        #expect(!old.contains("chroma") && !old.contains("lift"))
-
+        // `OnyxTheme.key`: two keys, no chroma, no lift — Ion's pair.
+        let old = "{\"primary\":\(0x6B78F0),\"secondary\":\(0xE3A650)}"
         let decoded = try JSONDecoder().decode(OnyxThemeSpec.self, from: Data(old.utf8))
-        #expect(decoded.primary == 0xE57255)
-        #expect(decoded.secondary == 0x32B36E)
+        #expect(decoded.primary == 0x6B78F0)
         #expect(decoded.chroma == 1)
         #expect(decoded.lift == 0)
 
-        // And the path that actually runs on launch. `apply` swallows a decode
-        // failure into `.default`, so a synthesized `Decodable` would have made
-        // this assertion read Ion — silently, on every themed install.
-        OnyxTheme.apply(json: old)
-        #expect(OnyxTheme.current.spec.primary == 0xE57255)
-        #expect(OnyxTheme.current.spec != .default)
-        #expect(OnyxTheme.current.spec.chroma == 1)
-        #expect(OnyxTheme.current.spec.lift == 0)
+        let suite = "onyx.theme.tests.legacy"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(old, forKey: OnyxTheme.key)
+        OnyxTheme.load(defaults)
+        #expect(OnyxTheme.current.base == preset("Slate"))
+        let stored = try #require(defaults.string(forKey: OnyxTheme.key))
+        #expect(try JSONDecoder().decode(OnyxThemeSpec.self, from: Data(stored.utf8)) == preset("Slate"))
+
+        // The render path snaps too, so the app root never draws a dead theme
+        // in the frame before anything calls `load`.
+        OnyxTheme.apply(json: "{\"primary\":\(0xE8734A),\"secondary\":\(0x01B677)}")
+        #expect(OnyxTheme.current.base == preset("Clay"))
     }
 
-    @Test("the neutral knob is today's palette; a turned one is not")
-    func theKnobIsNeutralAtTheDefaultAndLiveOtherwise() {
-        // Spelled out rather than relying on the memberwise default: this is
-        // the property `defaultIsIdentity` depends on.
-        #expect(OnyxThemeSpec.default.chroma == 1)
-        #expect(OnyxThemeSpec.default.lift == 0)
+    // MARK: - The mood knob
 
-        let neutral = OnyxTheme(spec: .default)
-        let muted = OnyxTheme(spec: OnyxThemeSpec(primary: OnyxThemeSpec.default.primary,
-                                                  secondary: OnyxThemeSpec.default.secondary,
+    @Test("the neutral knob on the origin is the measured palette; a turned one is not")
+    func theKnobIsNeutralAtTheOriginAndLiveOtherwise() {
+        #expect(OnyxThemeSpec.origin.chroma == 1)
+        #expect(OnyxThemeSpec.origin.lift == 0)
+
+        let neutral = OnyxTheme(spec: .origin)
+        let muted = OnyxTheme(spec: OnyxThemeSpec(primary: OnyxThemeSpec.origin.primary,
+                                                  secondary: OnyxThemeSpec.origin.secondary,
                                                   chroma: 0.6, lift: -0.06))
         // The two CHOSEN accents do not move, by design.
         #expect(muted.start[.train] == neutral.start[.train])
@@ -214,7 +289,6 @@ struct OnyxThemeTests {
         #expect(muted.end[.fuel] != neutral.end[.fuel])
         #expect(muted.start[.body] != neutral.start[.body])
         #expect(muted.start[.recover] != neutral.start[.recover])
-        #expect(muted.muscle[.chest] != neutral.muscle[.chest])
     }
 
     /// Contrast of an sRGB hex against `Color.onyx.base`, which is true black.
@@ -229,31 +303,14 @@ struct OnyxThemeTests {
 
     @Test("no knob puts a themed ink under AA, anywhere a user can go")
     func theKnobCannotBreakTheContrastFloor() {
-        // ── WHY THIS SWEEPS THE HUE CIRCLE AND NOT THE PRESET TABLE ─────────
-        // The first version of this test swept the nine presets' own hues and
-        // passed with the defect in place. The failing band is 114°–160° of
-        // primary rotation — warm-yellow primaries — and NO preset sits there.
-        // But the Appearance screen has a `ColorPicker`, so every hue in the
-        // guard box is somewhere a user can go, and the reachable worked
-        // example is `0xE3A650`: the app's OWN Solar accent, on which
-        // `normalised()` is the identity.
-        //
-        // ── AND WHY IT SWEEPS CHROMA INSTEAD OF PINNING IT ──────────────────
-        // The first version also pinned `chroma: 0.6`, on the reasoning that
-        // the lowest saturation was the harshest case. Measured, it is the
-        // SAFEST: lowering chroma at fixed L moves a colour toward the neutral
-        // of that lightness, which on black is 5.3:1. The failing column is
-        // chroma 0.9–1.0.
-        //
-        // ── AND WHY IT READS `end` ──────────────────────────────────────────
-        // `OnyxDomain.body.end` is the ink of the LEAN SOFT TISSUE numeral on
-        // two widget faces and `fuel.end` is `Color.onyx.protein`. An "end" is
-        // not decoration in this app, and a test that only looked at `start`
-        // could not see that.
+        // Sweeps the hue circle, not the preset table: the failing band of the
+        // first version (warm-yellow primaries) held no preset and the test
+        // passed with the defect in place. Chroma is swept too — the failing
+        // column was 0.9–1.0 — and `end` is read because `body.end` carries a
+        // numeral on two widget faces.
         let aa = 4.5
         var worst = (ratio: Double.infinity, what: "")
         for degrees in stride(from: 0.0, to: 360.0, by: 10) {
-            // Both corners of the guard box, at the chroma ceiling.
             for lightness in [0.60, 0.78] {  // the guard box's own corners
                 let primary = OKLCHConvert.hex(from: OKLCH(l: lightness, c: 0.20, h: degrees))
                 let secondary = OKLCHConvert.hex(from: OKLCH(l: lightness, c: 0.20, h: (degrees + 120).truncatingRemainder(dividingBy: 360)))
@@ -276,28 +333,12 @@ struct OnyxThemeTests {
             }
         }
         #expect(worst.ratio >= aa, "worst themed ink is \(worst.ratio):1 at \(worst.what)")
-    }
-
-    @Test("the sixteen muscles keep their lightness ladder under every knob")
-    func theMusclesTakeChromaButNeverLift() {
-        // The ladder IS the family ramp — five legs stepping 0.830 … 0.569 —
-        // and Calves sits 0.03 of L above AA with nothing to give. A lift would
-        // either flatten the ladder or drop Calves under the floor.
+        // And the eight presets as they ship, every ink that carries text.
         for preset in OnyxTheme.presets {
-            let dp = OKLCHConvert.hue(ofHex: preset.spec.primary)
-                - OKLCHConvert.hue(ofHex: OnyxThemeSpec.default.primary)
-            for lift in [-0.06, 0.0, 0.06] {
-                let spec = OnyxThemeSpec(primary: preset.spec.primary,
-                                         secondary: preset.spec.secondary,
-                                         chroma: 0.6, lift: lift)
-                let theme = OnyxTheme(spec: spec)
-                for m in LandmarkMuscle.allCases {
-                    let mine = OKLCHConvert.oklch(fromHex: theme.muscle[m]!.onyxHex).l
-                    let plain = OKLCHConvert.oklch(
-                        fromHex: OKLCHConvert.rotate(Color.onyx.defaultMuscleHex[m]!, byDegrees: dp)
-                    ).l
-                    #expect(abs(mine - plain) < 0.02, "\(preset.name) lift \(lift) \(m): \(plain) → \(mine)")
-                }
+            let theme = OnyxTheme(spec: preset.spec)
+            for domain in OnyxDomain.allCases {
+                #expect(onBlack(theme.start[domain]!.onyxHex) >= aa, "\(preset.name) \(domain).start")
+                #expect(onBlack(theme.end[domain]!.onyxHex) >= aa, "\(preset.name) \(domain).end")
             }
         }
     }
@@ -322,13 +363,8 @@ struct OnyxThemeTests {
         #expect(nan.chroma == 1)
         #expect(nan.lift == 0)
 
-        // ── THE SLIDER'S OWN ARITHMETIC ─────────────────────────────────────
-        // `Slider(value:in:step:)` snaps to `lowerBound + n × step` in binary
-        // floating point, so the Terracotta position on the lift slider is
-        // −0.019999999999999997. `AppearanceView` lights a chip by
-        // `draft == preset.spec`, an exact comparison, so without the rounding
-        // in `bounded` a user could drag a slider onto a preset's own value and
-        // watch its chip stay dark.
+        // Rounded onto the two-decimal grid, so a value produced by binary
+        // floating-point steps still compares equal to a preset's literal.
         let slid = OnyxThemeSpec(primary: OnyxThemeSpec.default.primary,
                                  secondary: OnyxThemeSpec.default.secondary,
                                  chroma: 0.6 + 10 * 0.02, lift: -0.06 + 4 * 0.01).normalised()
@@ -340,12 +376,8 @@ struct OnyxThemeTests {
 
     @Test("no two presets read as the same theme")
     func presetPrimariesStayThirtyFiveDegreesApart() {
-        // The claim `OnyxTheme.presets` has made in prose since W3, now
-        // enforced. It was written by hand against five themes and W2 replaced
-        // four of them; two of the drafted hues broke it (Verdigris 19.9° from
-        // Aurora, Nocturne 11.0° from Ion) and only a re-solve caught it,
-        // because nothing failed. PRIMARIES only — a secondary is derived at
-        // h + 120° and two themes may legitimately share one.
+        // PRIMARIES only — two themes may legitimately share a secondary family.
+        // W0 moved Iris +4° (drafted 7D6BA6 at h 297.5 sat 32° from Slate).
         let hues = OnyxTheme.presets.map { (name: $0.name, h: OKLCHConvert.hue(ofHex: $0.spec.primary)) }
         for i in hues.indices {
             for j in hues.indices where j > i {
@@ -358,7 +390,7 @@ struct OnyxThemeTests {
 
     @Test("a training block moves the derived palette and never the pick")
     func phaseMovesTheDerivedPaletteAndNotThePick() {
-        let pick = OnyxTheme.presets.first { $0.name == "Meridian" }!.spec
+        let pick = preset("Lagoon")
 
         // `peak` and nil are the identity — the app before this existed.
         #expect(pick.reacting(to: nil) == pick)
@@ -376,8 +408,6 @@ struct OnyxThemeTests {
         for preset in OnyxTheme.presets {
             #expect(preset.spec.reacting(to: .deload).chroma <= preset.spec.chroma, "\(preset.name)")
         }
-        // Clamped like any other spec: a knob already at the floor cannot be
-        // pushed under it by a block.
         let quiet = OnyxThemeSpec(primary: pick.primary, secondary: pick.secondary, chroma: 0.62, lift: -0.05)
         #expect(quiet.reacting(to: .cut).chroma == OnyxThemeSpec.chromaScale.lowerBound)
         #expect(quiet.reacting(to: .cut).lift == OnyxThemeSpec.liftOffset.lowerBound)
@@ -388,9 +418,6 @@ struct OnyxThemeTests {
         #expect(blocked.start[.train] == plain.start[.train])
         #expect(blocked.start[.fuel] == plain.start[.fuel])
         #expect(blocked.start[.body] != plain.start[.body])
-        #expect(blocked.muscle[.chest] != plain.muscle[.chest])
-        // And the theme still knows which preset it is — `SettingsTabView` and
-        // the Appearance grid both match on `base`.
         #expect(blocked.base == pick)
         #expect(blocked.spec != pick)
     }
@@ -401,84 +428,49 @@ struct OnyxThemeTests {
         let suite = "onyx.theme.tests.phase"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let pick = OnyxTheme.presets.first { $0.name == "Glacier" }!.spec
+        let pick = preset("Sage")
 
         defaults.set(PhaseKind.deload.rawValue, forKey: OnyxTheme.phaseKey)
         OnyxTheme.save(pick, to: defaults)
         #expect(OnyxTheme.current.base == pick)
         #expect(OnyxTheme.current.spec == pick.reacting(to: .deload))
 
-        // THE TRAP: what was persisted is the PICK. Storing the reacted spec
-        // would bake the deload into the theme and then react to it a second
-        // time on the next launch.
         let stored = try #require(defaults.string(forKey: OnyxTheme.key))
         #expect(try JSONDecoder().decode(OnyxThemeSpec.self, from: Data(stored.utf8)) == pick)
 
-        // A cold read of both keys lands in the same place.
         OnyxTheme.apply(json: "")
         OnyxTheme.load(defaults)
         #expect(OnyxTheme.current.base == pick)
         #expect(OnyxTheme.current.spec == pick.reacting(to: .deload))
 
-        // The block ends; the theme is the pick again, bit for bit.
         defaults.removeObject(forKey: OnyxTheme.phaseKey)
         OnyxTheme.load(defaults)
         #expect(OnyxTheme.current.spec == pick)
         #expect(OnyxTheme.current.base == pick)
 
-        // An unknown value in the key is "no block", never a decode failure
-        // that resets the theme.
         defaults.set("marathon", forKey: OnyxTheme.phaseKey)
         OnyxTheme.load(defaults)
         #expect(OnyxTheme.current.spec == pick)
     }
 
-    @Test("every preset's mood word is the mood its numbers describe")
-    func everyPresetSaysWhatItsKnobDoes() {
-        // The grid prints this under each name and the two sliders that used to
-        // say it in numbers are gone, so a word that did not track the column
-        // would be the only lie on the screen.
-        let words = Dictionary(uniqueKeysWithValues: OnyxTheme.presets.map { ($0.name, $0.spec.moodWord) })
-        #expect(words["Ion"] == "Vivid")
-        #expect(words["Vesper"] == "Muted")
-        #expect(words["Nocturne"] == "Muted")
-        #expect(words["Glacier"] == "Bright")
-        #expect(words["Ember"] == "Deep")
-        #expect(words["Meridian"] == "Even")
-        // Five words for nine themes, and every one of them earns its branch.
-        #expect(Set(words.values).count == 5)
-    }
-
-    @Test("every preset declares a knob inside the published ranges")
+    @Test("every preset declares the Stone knob: chroma 0.85–0.95, lift 0")
     func presetKnobsAreInRange() {
         for preset in OnyxTheme.presets {
-            #expect(OnyxThemeSpec.chromaScale.contains(preset.spec.chroma), "\(preset.name) chroma")
-            #expect(OnyxThemeSpec.liftOffset.contains(preset.spec.lift), "\(preset.name) lift")
+            #expect((0.85...0.95).contains(preset.spec.chroma), "\(preset.name) chroma")
+            #expect(preset.spec.lift == 0, "\(preset.name) lift")
+            #expect(preset.spec.moodWord == "Even", "\(preset.name) mood word")
         }
-        // The mood knob has to EARN the column: at least one preset each side
-        // of neutral, or the two sliders are a setting nobody can see.
-        #expect(OnyxTheme.presets.contains { $0.spec.lift < 0 })
-        #expect(OnyxTheme.presets.contains { $0.spec.lift > 0 })
-        #expect(OnyxTheme.presets.contains { $0.spec.chroma < 0.8 })
     }
 }
 
-/// `Color` → 8-bit sRGB hex, for the two tests below that MEASURE a resolved
+/// `Color` → 8-bit sRGB hex, for the tests above that MEASURE a resolved
 /// colour rather than compare it.
 ///
-/// This used to be `Color.onyxHex` in `OnyxTheme.swift`, shipped so a
-/// `ColorPicker` could write a spec. W2 deleted the pickers, and with them the
-/// only non-test caller — but the contrast sweep and the muscle-ladder test
-/// both need a number out of a `Color`, so the conversion moved here.
-///
-/// ── THE TWO WAYS THIS GOES WRONG ────────────────────────────────────────────
 /// `Color.Resolved` is EXTENDED-RANGE sRGB, and its `red`/`green`/`blue` are
 /// already gamma-ENCODED — `linearRed` and friends are the linear ones, and
-/// quantising those instead turns Ion (`0x6B78F0`) into `0x2530DE`: not a
-/// subtle shift, a different, darker colour. So: the encoded components,
-/// clamped before the multiply, and ROUNDED rather than truncated — measured,
-/// truncation loses 63 of the 256 levels to a one-LSB error after a round trip.
-/// Same order as `OKLCHConvert.hex(from:)`.
+/// quantising those instead turns Ion (`0x6B78F0`) into `0x2530DE`. So: the
+/// encoded components, clamped before the multiply, and ROUNDED rather than
+/// truncated. Same order as `OKLCHConvert.hex(from:)`.
 private extension Color {
     var onyxHex: UInt32 {
         let c = resolve(in: EnvironmentValues())

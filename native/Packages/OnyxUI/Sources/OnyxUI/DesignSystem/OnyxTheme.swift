@@ -9,14 +9,14 @@ import OnyxCore
 /// runs when the theme changes, not when a view draws.
 ///
 /// ── THE DERIVATION RULE ──────────────────────────────────────────────────────
-/// Δp = hue(primary) − hue(default primary); Δs likewise for the secondary.
+/// Δp = hue(primary) − hue(ORIGIN primary); Δs likewise for the secondary.
 /// `train.start` IS the primary and `fuel.start` IS the secondary; every other
-/// default hex — train's end, fuel's end, both body and recover stops, all
-/// sixteen muscles — is the DEFAULT hex rotated by Δp (Δs for fuel) at its own
-/// L and C. Body and Recover therefore keep their measured offsets from Train
-/// rather than round ones. Under the default spec both deltas are exactly zero,
-/// `OKLCHConvert.rotate` short-circuits, and every colour is the original
-/// literal, bit for bit — the tests hold that line.
+/// domain stop — train's end, fuel's end, both body and recover stops — is the
+/// origin hex rotated by Δp (Δs for fuel) at its own L and C. Body and Recover
+/// therefore keep their measured offsets from Train rather than round ones.
+/// Under `OnyxThemeSpec.origin` both deltas are exactly zero, `rotate`
+/// short-circuits, and every stop is the original literal, bit for bit — the
+/// tests hold that line. What the theme does NOT drive is `OnyxInk.Fixed`.
 ///
 /// ── AND WHAT THE MOOD KNOB MOVES (W3) ────────────────────────────────────────
 /// `spec.chroma` and `spec.lift` run AFTER the rotation, and they do not reach
@@ -44,12 +44,17 @@ import OnyxCore
 ///     faces. Measured, a Solar primary at chroma 1.0 and lift −0.06 put it at
 ///     4.46:1 before this floor existed.
 ///
-///   · THE SIXTEEN MUSCLES take the CHROMA SCALE ONLY, never the lift. Measured,
-///     the palette's own lightness ladder IS the family ramp — the five legs run
-///     0.830, 0.766, 0.699, 0.636, 0.569 in even steps — and Calves already sits
-///     at 4.99:1, 0.03 of L above AA. A lift either flattens the ladder (if
-///     floored) or drops Calves under the floor (if not). Muting or saturating
-///     the data palette is the whole mood the knob owes them.
+///   · THE SIXTEEN MUSCLES are not themed at all (overhaul W0, decision Q18).
+///     They are the fixed anatomical palette in `Color.onyx.defaultMuscleHex`,
+///     so Chest is one coral in every theme and a legend learned once holds.
+///     Until 8.0.0 they rotated with the primary and took the chroma knob.
+///
+///   · THE NUTRITION INKS (protein, carbs, fat, calories, micros) move by a
+///     FRACTION of the theme's hue shift — `OnyxThemeSpec.weighted`, weight
+///     `nutritionWeight`, chroma ≤ `nutritionMaxChroma`, lightness kept
+///     (decision Q19). They read from the DEFAULT theme's own nutrition hexes,
+///     not from this theme's domain ramps, so the trio is recognisable in all
+///     eight and ignores the phase offset.
 ///
 /// Under chroma 1.0 / lift 0.0 `OKLCHConvert.mood` short-circuits exactly as
 /// `rotate` does, so the default palette is still the original literals.
@@ -76,52 +81,79 @@ public struct OnyxTheme: Sendable {
     public let base: OnyxThemeSpec
     let start: [OnyxDomain: Color]
     let end: [OnyxDomain: Color]
-    let muscle: [LandmarkMuscle: Color]
+    /// The five nutrition inks under this theme — see `Nutrition`.
+    let nutrition: Nutrition
+
+    /// Protein, carbs, fat and micros; calories wear carbs (Atwater sum).
+    struct Nutrition: Sendable {
+        let protein: Color
+        let carbs: Color
+        let fat: Color
+        let micro: Color
+    }
 
     public init(spec: OnyxThemeSpec, base: OnyxThemeSpec? = nil) {
         self.spec = spec
         self.base = base ?? spec
-        // `origin` and not `base`: `base` is now a property of this type, and a
-        // local of the same name reading the DEFAULT spec is one shadow away
-        // from a palette rotated against the wrong zero.
-        let origin = OnyxThemeSpec.default
+        let hexes = Self.derive(spec)
+        start = hexes.start.mapValues { Color(hex: $0) }
+        end = hexes.end.mapValues { Color(hex: $0) }
+
+        let w = OnyxThemeSpec.nutritionWeight
+        let origin = Self.defaultNutritionHex
+        nutrition = Nutrition(
+            protein: Color(hex: spec.weighted(origin.protein, weight: w)),
+            carbs: Color(hex: spec.weighted(weight: w).secondary),
+            fat: Color(hex: spec.weighted(origin.fat, weight: w)),
+            micro: Color(hex: spec.weighted(origin.micro, weight: w))
+        )
+    }
+
+    /// The eight domain stops as hexes — the derivation itself, separate from
+    /// the `Color`s so the default theme's nutrition hexes can be read from it.
+    ///
+    /// Rotates against `OnyxThemeSpec.origin` (Ion/Solar, where the default
+    /// hexes were measured), never against `.default` (Slate, the preset a
+    /// fresh install picks) — see the note on `.default`.
+    static func derive(_ spec: OnyxThemeSpec) -> (start: [OnyxDomain: UInt32], end: [OnyxDomain: UInt32]) {
+        let origin = OnyxThemeSpec.origin
         let dp = OKLCHConvert.hue(ofHex: spec.primary) - OKLCHConvert.hue(ofHex: origin.primary)
         let ds = OKLCHConvert.hue(ofHex: spec.secondary) - OKLCHConvert.hue(ofHex: origin.secondary)
 
-        var start: [OnyxDomain: Color] = [:]
-        var end: [OnyxDomain: Color] = [:]
+        var start: [OnyxDomain: UInt32] = [:]
+        var end: [OnyxDomain: UInt32] = [:]
         /// Rotate onto this theme's hue, then apply the mood knob.
-        func moved(_ hex: UInt32, _ delta: Double, lift: Bool) -> UInt32 {
-            OKLCHConvert.mood(
-                OKLCHConvert.rotate(hex, byDegrees: delta),
-                chroma: spec.chroma,
-                lift: lift ? spec.lift : 0
-            )
+        func moved(_ hex: UInt32, _ delta: Double) -> UInt32 {
+            OKLCHConvert.mood(OKLCHConvert.rotate(hex, byDegrees: delta), chroma: spec.chroma, lift: spec.lift)
         }
 
         for domain in OnyxDomain.allCases {
             let hex = OnyxDomain.defaultDomainHex[domain]!
             let delta = domain == .fuel ? ds : dp
             switch domain {
-            case .train: start[domain] = Color(hex: spec.primary)
-            case .fuel:  start[domain] = Color(hex: spec.secondary)
+            case .train: start[domain] = spec.primary
+            case .fuel:  start[domain] = spec.secondary
             // A derived ACCENT: back through the contrast guard, because this
             // one tints section headers and gauges.
-            default:     start[domain] = Color(hex: OnyxThemeSpec.guarded(moved(hex.start, delta, lift: true)))
+            default:     start[domain] = OnyxThemeSpec.guarded(moved(hex.start, delta))
             }
-            end[domain] = Color(hex: OnyxThemeSpec.floored(moved(hex.end, delta, lift: true)))
+            end[domain] = OnyxThemeSpec.floored(moved(hex.end, delta))
         }
-        self.start = start
-        self.end = end
-
-        var muscle: [LandmarkMuscle: Color] = [:]
-        for m in LandmarkMuscle.allCases {
-            // Chroma only. The sixteen carry their own lightness ladder and
-            // Calves sits 0.03 of L above AA — see the note above the type.
-            muscle[m] = Color(hex: moved(Color.onyx.defaultMuscleHex[m]!, dp, lift: false))
-        }
-        self.muscle = muscle
+        return (start, end)
     }
+
+    /// The nutrition inks as the DEFAULT theme draws them — the fixed point
+    /// every other theme moves a fraction away from. Protein is Slate's
+    /// `fuel.end` and fat Slate's `recover.start`, exactly the stops they were
+    /// under 8.0.0's derivation; carbs/calories are Slate's secondary (read via
+    /// `weighted(weight:)`). Micros had no ink of their own before W0 —
+    /// `NutrientsView` borrowed good/danger/fuel — so theirs is the one new
+    /// hex: a muted orchid (L 0.73, C 0.11, h 348), clear of coral protein,
+    /// the abs-core magenta and the fixed water blue.
+    static let defaultNutritionHex: (protein: UInt32, fat: UInt32, micro: UInt32) = {
+        let slate = derive(.default)
+        return (slate.end[.fuel]!, slate.start[.recover]!, 0xD98BB3)
+    }()
 
     /// The ramp a domain takes under THIS theme rather than under `current`.
     ///
@@ -179,8 +211,41 @@ public struct OnyxTheme: Sendable {
 
     /// JSON at `key`, read through the block at `phaseKey` → `current`.
     /// Missing or corrupt → the default.
+    ///
+    /// A blob from before the Stone presets is migrated here, ONCE: the
+    /// nearest preset is drawn and written back, so the next read finds a
+    /// preset and the migration is a no-op from then on.
     @MainActor public static func load(_ defaults: UserDefaults) {
-        apply(json: defaults.string(forKey: key) ?? "", phase: phase(in: defaults))
+        let json = defaults.string(forKey: key) ?? ""
+        if let stored = decode(json), migrateLegacy(stored) != stored {
+            save(migrateLegacy(stored), to: defaults)
+            return
+        }
+        apply(json: json, phase: phase(in: defaults))
+    }
+
+    /// A stored spec whose primary is not one of the eight presets' → the
+    /// preset whose primary hue is nearest (shortest way round). A current
+    /// preset passes through untouched, whatever its knob.
+    ///
+    /// Why snap at all: 8.0.0 shipped nine presets (Ion … Nocturne) and no
+    /// custom picker, so every stored blob IS one of those nine — and none of
+    /// them is a Stone preset. Left alone they would draw a theme the grid
+    /// cannot select and Settings would name "Custom". Ion → Slate, Ember →
+    /// Clay, Solstice → Ochre, Meridian → Lagoon, Aurora → Sage, Vesper →
+    /// Iris, Glacier → Lagoon, Verdigris → Moss, Nocturne → Rosewood.
+    public static func migrateLegacy(_ spec: OnyxThemeSpec) -> OnyxThemeSpec {
+        if presets.contains(where: { $0.spec.primary == spec.primary }) { return spec }
+        let hue = OKLCHConvert.hue(ofHex: spec.primary)
+        func distance(_ other: OnyxThemeSpec) -> Double {
+            let d = abs(hue - OKLCHConvert.hue(ofHex: other.primary)).truncatingRemainder(dividingBy: 360)
+            return min(d, 360 - d)
+        }
+        return presets.min { distance($0.spec) < distance($1.spec) }!.spec
+    }
+
+    private static func decode(_ json: String) -> OnyxThemeSpec? {
+        try? JSONDecoder().decode(OnyxThemeSpec.self, from: Data(json.utf8))
     }
 
     /// Persist the CHOSEN spec, then make the reacted one current.
@@ -200,9 +265,11 @@ public struct OnyxTheme: Sendable {
     }
 
     /// `load` from a string — what an `@AppStorage` observer hands over. Empty
-    /// or unreadable → the default.
+    /// or unreadable → the default. A legacy blob is DRAWN migrated here (the
+    /// app root calls this before `load` ever runs) but only `load` writes the
+    /// migration back.
     @MainActor public static func apply(json: String, phase: PhaseKind? = nil) {
-        set((try? JSONDecoder().decode(OnyxThemeSpec.self, from: Data(json.utf8))) ?? .default, phase: phase)
+        set(decode(json).map(migrateLegacy) ?? .default, phase: phase)
     }
 
     /// The one writer — the app root and the watch call it with a spec in
@@ -221,54 +288,34 @@ public struct OnyxTheme: Sendable {
         current = OnyxTheme(spec: reacted, base: base)
     }
 
-    /// Nine named pairs for Settings; the first is the default.
+    /// The eight Stone presets (overhaul W0, decision Q17), in the Appearance
+    /// grid's order: row 1 Slate · Lagoon · Sage · Iris, row 2 Clay · Ochre ·
+    /// Moss · Rosewood. Slate is `OnyxThemeSpec.default` and stays first —
+    /// `SettingsTabView` names a theme by matching `base` against this table.
     ///
-    /// Secondaries sit 120° from their primaries. Every literal is already
-    /// inside the contrast guard — `OnyxThemeTests` asserts `normalised()` is
-    /// the identity on each — so the source shows exactly what ships.
+    /// Every literal is its own `normalised()` value (`OnyxThemeTests`), so the
+    /// source shows exactly what ships. Muted, low-chroma primaries (OKLCH C
+    /// 0.06–0.10) on a uniform knob — chroma 0.90, lift 0 — so every preset's
+    /// mood word is "Even"; the mood lives in the hue now, not in the knob.
     ///
-    /// ── HOW THESE NUMBERS WERE ARRIVED AT ───────────────────────────────────
-    /// Not by eye. Each pair was SOLVED with `OKLCHConvert.hex(from:)` from a
-    /// chosen (L, C, h) inside the guard box, its secondary emitted from the
-    /// SAME (L, C) at h + 120°, and both round-trips checked to be
-    /// `normalised()` fixed points before they were written down. The nine
-    /// primaries are spread around the hue circle with a minimum separation of
-    /// 35° — measured pairwise, not assumed from the list order — so no two
-    /// themes read as the same theme. The tightest pair that ships is Aurora
-    /// against Verdigris at 36.1°.
-    ///
-    /// ── AND WHY TWO OF THE FOUR NEW ONES ARE NOT THE COLOUR THEIR NAME SAYS ─
-    /// W2's brief drafted Verdigris at h 169.8° (a blue-green) and Nocturne at
-    /// h 286.3° (a violet). Neither hue is legal: 169.8° sits 19.9° from Aurora
-    /// and 22.9° from Meridian, and 286.3° sits 11.0° from Ion and 28.9° from
-    /// Vesper — and the gaps those five leave (42.8° between Aurora and
-    /// Meridian, 39.9° between Ion and Vesper) are too narrow to hold a tenth
-    /// hue at all. With the five kept themes fixed, the hue circle has exactly
-    /// two openings left: 113.8° and 352.0°. Verdigris took the first (a green
-    /// — which is what the pigment is) and Nocturne the second, which is a
-    /// deep rose rather than a night violet. The names are the founder's; the
-    /// spacing is the rule. Renaming Nocturne, or freeing the violet band by
-    /// retiring Vesper, are both one-line changes here.
-    ///
-    /// ── AND WHY ION CANNOT BE DROPPED ───────────────────────────────────────
-    /// It IS `OnyxThemeSpec.default`. `AppearanceView` offers "Reset to Ion",
-    /// and `SettingsTabView` names the current theme by MATCHING the live
-    /// `base` spec against this array — so an install that never chose a theme
-    /// would read "Custom" the moment Ion left the table. It stays first.
-    ///
-    /// The chroma/lift column is the mood, and `OnyxThemeSpec.moodWord` is what
-    /// the grid prints from it: Vesper and Nocturne are pulled deep and grey,
-    /// Solstice, Aurora and Glacier are lifted, and Ion is the neutral knob,
-    /// which is what makes it bit-for-bit today's palette.
+    /// ── WHAT THE GUARD FORCED, MEASURED ────────────────────────────────────
+    /// The founder's draft hexes stand except three primaries that sat under
+    /// the guard's L 0.60 floor and one hue that broke the 35° rule:
+    ///   · Slate    6479A8 (L 0.579) → 6A7FAF, L lifted to 0.60, hue kept;
+    ///   · Rosewood A66280 (L 0.581) → AC6886, L lifted to 0.60, hue kept;
+    ///   · Iris     7D6BA6 (L 0.569, h 297.5) → 8A73AE, L 0.60 AND h 301.6 —
+    ///     the draft sat 32.0° from Slate; +4° clears 35° (35.7°) and still
+    ///     leaves 50.8° to Rosewood.
+    /// Every secondary was already inside the box. The tightest pair that
+    /// ships is Slate/Iris at 35.7°.
     public static let presets: [(name: String, spec: OnyxThemeSpec)] = [
-        ("Ion",        OnyxThemeSpec.default),
-        ("Solstice",   OnyxThemeSpec(primary: 0xE5A323, secondary: 0x30C8CC, chroma: 0.94, lift:  0.03)),
-        ("Meridian",   OnyxThemeSpec(primary: 0x19BCB9, secondary: 0xC18BDE, chroma: 0.86, lift:  0.00)),
-        ("Aurora",     OnyxThemeSpec(primary: 0x31D96D, secondary: 0x9CB4FE, chroma: 1.00, lift:  0.05)),
-        ("Vesper",     OnyxThemeSpec(primary: 0xAA72C2, secondary: 0xBA7F14, chroma: 0.72, lift: -0.04)),
-        ("Ember",      OnyxThemeSpec(primary: 0xE8734A, secondary: 0x01B677, chroma: 0.90, lift: -0.02)),
-        ("Glacier",    OnyxThemeSpec(primary: 0x5FB3E8, secondary: 0xE38BA8, chroma: 0.80, lift:  0.04)),
-        ("Verdigris",  OnyxThemeSpec(primary: 0xA6AF4B, secondary: 0x46B2E8, chroma: 0.85, lift:  0.00)),
-        ("Nocturne",   OnyxThemeSpec(primary: 0xD95D9B, secondary: 0x939718, chroma: 0.70, lift: -0.05)),
+        ("Slate",    OnyxThemeSpec.default),
+        ("Lagoon",   OnyxThemeSpec(primary: 0x4F8FA0, secondary: 0xC98A6B, chroma: 0.90, lift: 0)),
+        ("Sage",     OnyxThemeSpec(primary: 0x6E9A80, secondary: 0xC9A05C, chroma: 0.90, lift: 0)),
+        ("Iris",     OnyxThemeSpec(primary: 0x8A73AE, secondary: 0xC4986E, chroma: 0.90, lift: 0)),
+        ("Clay",     OnyxThemeSpec(primary: 0xB5705A, secondary: 0x6E9A9A, chroma: 0.90, lift: 0)),
+        ("Ochre",    OnyxThemeSpec(primary: 0xB39250, secondary: 0x6A83A8, chroma: 0.90, lift: 0)),
+        ("Moss",     OnyxThemeSpec(primary: 0x7F8F4E, secondary: 0xA87A8F, chroma: 0.90, lift: 0)),
+        ("Rosewood", OnyxThemeSpec(primary: 0xAC6886, secondary: 0x7A9A8A, chroma: 0.90, lift: 0)),
     ]
 }
