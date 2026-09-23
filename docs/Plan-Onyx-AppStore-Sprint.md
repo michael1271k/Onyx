@@ -1712,3 +1712,71 @@ it, so this table cannot drift silently again.
   floors are never flagged); seven permanent "not reported by the food
   source" lines per export are now one; "from 1 signals"; the accessory
   sub-line truncated before it shrank, and VoiceOver read a bare "3 of 5".
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| `npm run check` (incl. `swift:ui` 42/42, `check:watch`) | **PASSED**, exit 0 — on the reviewed tree, and again on the version-bumped tree that merged |
+| `npm run swift:core` | **PASSED** — 736/736 (720 + 16 new) |
+| `npm run swift:data` | **767/768 in the full run**; the one issue is the known `W6 seam benchmarks` timing test, which passed alone (4/4). 768 = 752 + 16 new |
+| Full `Onyx` scheme suite (iPhone 15, iOS 27) | **No new failures** — exactly W1's baseline: OnyxTests 11 issues on the same 9 names; OnyxDataTests the Gate-0 Keychain test plus the seam timing test (failed once more alone while the other lane was building, then **4/4 twice** alone); OnyxCore 736/736; OnyxUI 42/42 |
+| invariant-auditor | Clean on the stable tree: battery quality stays in [0,1], charge in [55,100], drain budget untouched, nil is v9, rescore no-op holds, ghost guard intact, no scorer reads `NutrientTargets`. (Its one "violation" was this wave's refactor caught mid-edit.) |
+| code-reviewer, architect-reviewer | 2 high, 3 medium and every low fixed — listed under "Defects"; the single-rule refactor is the architect's design |
+
+**HealthKit — what was proved and what was only compiled.** An unsigned
+simulator build has no HealthKit, and no read in this wave was run against a
+real Health store:
+
+- **Proved by tests against fake readers and a real in-memory store:** the
+  nine micros reach `nutrition_entries.micros` under the grid's keys at two
+  decimals; the read scope equals the surface table; a six-hour hole becomes a
+  365-minute coverage row, nothing for a phone with no watch, and batch lag
+  is not an absence; the battery charges from HRV/RHR on an unmeasured night
+  and v9 otherwise; the snapshot, the watch payload and the export carry it;
+  a store below v37 scores instead of throwing; the recovery read takes a
+  sample inside `[end − 2, end + 10 min)` and nothing else.
+- **Compiled only:** every `HKHealthStore` query this wave adds or widens —
+  the nine dietary statistics queries and their units, the heart-rate series
+  over the overnight window, `HeartRateRecoveryOneMinute`. Whether Apple writes
+  a recovery sample after a THIRD-PARTY strength `HKWorkoutSession` (this
+  app's watch) is **not known** — the brief says it does; nothing here could
+  check it before Gate 0.
+
+**Screenshots** (iPhone 15, iOS 27, signed ad-hoc, reviewed):
+`widgets-offwrist` — every readiness face over `OnyxSnapshot.sampleOffWrist`,
+a synthetic heart-rate series with a 22:00 → 04:00 hole run through the real
+derivation: Large reads "Your watch was off your wrist for 6 h — readiness is
+from 3 signals, not 5."; Medium "off wrist 6 h · 3 of 5"; Small the
+watch-slash mark; the accessory "Readiness 81 · 3 of 5". The first shot put
+the Small mark under the Onyx corner mark; moved beside the caption and
+re-shot. `nutrients` (default + AX5) — the eight new rows, "aim 1.3 mg" and
+"aim 2.4 mcg" printing their decimals.
+
+### Left open
+
+- **Readiness consumers that show the reading and not the sentence:** the
+  Pulse hero (SCORE / BATTERY from `daily_scores`), Today's `NowStrip`
+  (the day score), the watch's training-day score chip, and the circular and
+  inline accessories (which show the battery, not readiness). The brief's
+  "show the reading" arm covers them — the battery they show is no longer a
+  zero-hour reading — but none of them says why a signal is missing.
+  `TodayFeedBuilder` also drops `offWrist` converting to `ReadinessResult`;
+  nothing draws that value today.
+- **Only today and yesterday are measured.** An erased store keeps no older
+  `wrist_coverage`, so a rescore of an older off-wrist night falls back to
+  v9 and pushes that score (`ponytail:` at `v37`).
+- **The overnight window is fixed hours** (local 21:00 → 09:00). A shift
+  worker's night is outside it; the upgrade is the athlete's own bedtime
+  offsets (`ponytail:` at `HealthSync.overnight`).
+- **Low Power Mode** thins background heart rate and may read as off-wrist;
+  `WristCoverage.offWristGap` (30 min) is the knob.
+- **Sync cost:** nine more micros × three queries and one overnight
+  heart-rate read per day synced — roughly half again the foreground Health
+  work. Cheap in absolute terms; the by-source query could be limited to
+  doubted totals if a profile ever says so.
+- **`APP_STORE.md`** — §3, §4's one sentence and §7's `unnecessary_data` row
+  were edited here; W7 rewrites the file end to end and inherits them.
+- **VO₂max and the daily average heart rate** reach only the weekly export.
+  Kept: the export is a user-facing document. A reviewer who reads "shown on
+  a screen" literally could argue otherwise.
