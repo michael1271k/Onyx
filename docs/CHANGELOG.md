@@ -44,6 +44,129 @@ _Nothing yet._
 
 ---
 
+## [8.0.0] — 2026-09-23 · Ready for the App Store
+
+Wave 8, the close-out of the App Store sprint, and the version the first
+submission carries. W8 itself adds no feature. This section is the sprint read
+surface by surface: what each part of Onyx does at 8.0.0 that it did not at
+7.8.1. The detail is in 7.9.0 – 7.16.0 below; 7.12.0 was never shipped (W4 took
+7.14.0 because W5 landed first).
+
+**Why MAJOR.** It is the first build a reviewer sees. The app now depends on
+two server changes the founder applied by hand (`custom_supplements.dose_periods`
+and the new `delete_my_account()`), and sign-in has three doors instead of one.
+
+### iPhone app
+- **Sign in with Apple and Sign in with Google**, beside email and password.
+  Written and compiled, **not verified on a device** until the Developer
+  Program is bought (7.16.0).
+- **Settings is regrouped by what each control changes**, and every row says
+  what it does in one grey line. The Reduce Motion row that did nothing is
+  gone; the app follows the system setting (7.9.0, 7.16.0).
+- **Deleting the account works.** The server function it calls had been
+  broken since 2026-09-10; the new one finds every table itself, and the app
+  stops syncing before it deletes (7.16.0).
+- **Add a movement mid-session.** It opens with that movement's last working
+  set from any split (7.11.0).
+- **The heart-rate chart waits until you tap Avg HR**, in one colour, and
+  shows Apple's one-minute heart-rate recovery. Hevy's version of the same
+  workout is one line, not a question (7.11.0, 7.15.0).
+- **Start a workout here and the watch follows**; start on the watch and the
+  Train tab follows. Finish or discard on either and the other hears (7.14.0).
+- **A supplement dose change starts today.** Past days keep the dose they were
+  taken at. Supplement reminders are new, and ask permission only when turned
+  on (7.13.0).
+- **Nine more nutrients** in Nutrients (zinc, iodine, vitamins A, B6, E, K,
+  biotin, cholesterol, and B12 from food) (7.15.0).
+- **A night the watch never saw is no longer a night of zero sleep**, and
+  readiness says when the watch was off your wrist (7.15.0).
+- **Apple Health asks for 45 types, not 51**, and every one is drawn
+  somewhere (7.15.0).
+
+### Apple Watch app
+- **Opens on a four-page dashboard with colour** (Start, Today, Train, Fuel).
+  A rest day shows readiness, battery and sleep instead of the words "Rest
+  day" (7.10.0).
+- **Follows a workout started on the phone within seconds**, before any set is
+  logged, and its running workout session is what keeps the set screen up
+  when you raise your wrist (7.14.0).
+- **Sets logged on one device reach the other.** They were refused before,
+  silently, because the session never travelled first (7.14.0).
+- The two live-session screens held longest no longer burn a bright capsule in
+  always-on (7.10.0). The rest-day hero carries the off-wrist note (7.15.0).
+
+### Home Screen widgets
+- **Draw a tile**, not Apple's "Please adopt containerBackground API"
+  placeholder (7.9.0).
+- The Recovery tile says when the watch was off your wrist, at all three sizes
+  (7.15.0).
+
+### Lock Screen and watch complications
+- The readiness accessory reads "Readiness 81 · 3 of 5" on a night the watch
+  was off your wrist (7.15.0).
+
+### Weekly export
+- Each day prints the supplement dose in force that day and names the day a
+  dose changed; an archived item stops appearing after its archive date
+  (7.13.0).
+- Names the new nutrients it could not find, and replays the off-wrist night so
+  its recomputed battery matches the stored one (7.15.0).
+
+### Server (Supabase) — both applied by the founder
+- `custom_supplements.dose_periods` (`docs/sql/w5-dose-periods.sql`) (7.13.0).
+- The hardened `delete_my_account()` (`docs/sql/w7-delete-my-account.sql`),
+  verified live 2026-09-23 (7.16.0).
+
+### App Store submission
+- `docs/APP_STORE.md` rewritten against the binary; the four privacy manifests
+  and the privacy page match the Health scope and declare Name and User ID
+  (7.15.0, 7.16.0). At 8.0.0 its account-deletion row is **Closed**.
+- **`scripts/store-shots.sh` creates the iPhone 17 Pro Max and iPhone 17 Pro
+  simulators it shoots on** when they are missing, instead of failing, and
+  shuts each one down after its set (8.0.0). Only `iPhone 15` existed on this
+  machine; with both new phones booting side by side, nine of twelve shots came
+  back black. The twelve 8.0.0 shots (six screens at 1320 × 2868 and
+  1206 × 2622) all draw real screens.
+
+### Changed
+- `docs/Plan-Onyx-AppStore-Sprint.md` → `docs/Done/Plan-Onyx-AppStore-Sprint-Done.md`,
+  with W8's summary.
+
+### Removed
+- Every `wave/*` branch and worktree. Caches, derived data,
+  `native/__screenshots__` and `native/__store__` purged (all regenerate).
+
+### Still needs the founder
+- **Gate 0 — the $99 Developer Program:** App Group signing (widgets with
+  data), Sign in with Apple, associated domains, HealthKit background
+  delivery, the upload, and every on-device check.
+- **Supabase:** allow sign-ups (live `disable_signup: true`), then the Apple and
+  Google providers and the `onyx://auth-callback` redirect.
+- **Colour:** the heart-rate chart uses `OnyxDomain.recover.accent`, which is
+  lavender, not red — a one-line change if red is wanted.
+
+### Notes
+- **Gates on the 8.0.0 tree:** `npm run check` passed (cold); `swift:core`
+  736/736; `swift:data` 767/768; the full `Onyx` scheme (iPhone 15, iOS 27,
+  1749 tests) has **no new failures against W1's baseline** — `OnyxTests`
+  fails exactly W1's nine test names with no crash, `OnyxDataTests` only the
+  Gate-0 Keychain test.
+- **The one `swift:data` issue is `SeamBenchmarkTests`' nutrition case**, which
+  compares two reads that differ by one database transaction (~0 ms of 7–15)
+  and so fails about one run in two even alone. Pre-existing, reported by every
+  wave since; left for its own fix.
+- **History titles every past week "Week 0"** — visible in the store
+  screenshot. `HistoryWeeks.capsules` never passes the plan's week-zero anchor
+  to `WeekWindow`; two of the nine baseline `OnyxTests` failures are this. Not
+  fixed here; do not upload `history.png` until it is.
+- **Not run:** the sprint's end-to-end pass (fresh install, new account, a
+  session on each device, delete the account). Live sign-up is off, the only
+  account is the founder's, widgets cannot read data before Gate 0, and the
+  simulator pair cannot deliver queued watch transfers. Each piece was proved
+  by the wave that built it.
+
+---
+
 ## [7.16.0] — 2026-09-23 · Three ways in, and a way out that works
 
 Wave 7 of the App Store sprint (Lane B). Briefed as 7.15.0; W6 landed first as
