@@ -699,12 +699,9 @@ public final class AppEnvironment {
     /// "Synced just now" caption. A declined permission is silent — absent
     /// metrics render as "—" downstream.
     private func startSync(userID: UUID) {
-        guard coordinator == nil else { return }
+        guard coordinator == nil, !isDeletingAccount else { return }
         let userId = OnyxJSON.canonicalUserID(userID)
-        let coordinator = SyncCoordinator(
-            database: database, client: supabase, userId: userId,
-            health: HealthSync(database: database, reader: Self.healthReader, userId: userId)
-        )
+        let coordinator = makeCoordinator(userId: userId)
         self.coordinator = coordinator
         // ── WHY IT HANGS OFF AUTH, LIKE THE COORDINATOR ─────────────────────
         // Every score it writes is keyed by `user_id`, and a queue that
@@ -783,6 +780,16 @@ public final class AppEnvironment {
             self.startObservers()
             #endif
         }
+    }
+
+    /// True while `deleteAccount` runs — see there.
+    private var isDeletingAccount = false
+
+    private func makeCoordinator(userId: String) -> SyncCoordinator {
+        SyncCoordinator(
+            database: database, client: supabase, userId: userId,
+            health: HealthSync(database: database, reader: Self.healthReader, userId: userId)
+        )
     }
 
     /// The cardio bouts Apple Health holds for one logical day.
@@ -985,6 +992,44 @@ public final class AppEnvironment {
         try await supabase.auth.signIn(email: email, password: password)
     }
 
+    // ── SIGN IN WITH APPLE AND GOOGLE (App Store W7) ────────────────────────
+    // WRITTEN, NOT VERIFIED ON A DEVICE. Both end in the same session the email
+    // path makes, so `authStateChanges` and `prepareStore` treat all three
+    // alike — nothing downstream knows which door was used.
+    //
+    // Three switches sit outside this file, and each fails closed:
+    //  · `com.apple.developer.applesignin` is PARKED in `project.yml` (Gate 0).
+    //    Until it is back, Apple's sheet fails with AuthorizationError 1000.
+    //  · Supabase → Auth → Providers: Apple (client id = this bundle id) and
+    //    Google (a Google Cloud OAuth client) are both OFF in the live project.
+    //  · Supabase → Auth → URL Configuration must allow `authCallback`, or
+    //    Google's redirect lands on the Site URL and never returns here.
+    //
+    // App Review 4.8: Google makes Apple mandatory. Both, or neither.
+
+    /// Apple hands the app an identity token; Supabase verifies it against the
+    /// SHA-256 of `nonce` that went into the request. `nonce` is the RAW value.
+    public func signInWithApple(idToken: String, nonce: String) async throws {
+        try await supabase.auth.signInWithIdToken(
+            credentials: OpenIDConnectCredentials(provider: .apple, idToken: idToken, nonce: nonce)
+        )
+    }
+
+    /// Google through Supabase's own OAuth page in an `ASWebAuthenticationSession`
+    /// (PKCE), not Google's SDK — so no reversed-client-id URL scheme, and the
+    /// callback is caught by the session, never by `onOpenURL`.
+    public func signInWithGoogle() async throws {
+        try await supabase.auth.signInWithOAuth(provider: .google, redirectTo: Self.authCallback)
+    }
+
+    /// The OAuth return address, on the `onyx` scheme `project.yml` already
+    /// registers for widget links. `ASWebAuthenticationSession` catches it
+    /// before the app is asked to open anything, and `RootView.onOpenURL` never
+    /// hands a URL to `supabase.auth.handle(_:)` — keep it that way: an email
+    /// or magic-link handler added later must not forward every `onyx://` URL,
+    /// or a link from anywhere could deliver a session.
+    static let authCallback = URL(string: "onyx://auth-callback")!
+
     /// Create an account. Returns `true` when the email still needs confirming.
     ///
     /// Email confirmation is ON in the project, so the usual result is a user
@@ -1012,8 +1057,39 @@ public final class AppEnvironment {
     /// conditional on it, deliberately: signing out after a FAILED delete would
     /// leave the user with no session, no local data and an account still on
     /// the server, and no way to retry from this phone.
+    ///
+    /// ── SYNC STOPS FIRST (App Store W7) ─────────────────────────────────────
+    /// A push that lands while the server deletes can hold the final
+    /// `auth.users` delete on a foreign key (the whole call rolls back), and
+    /// `signOut`'s drain would otherwise push the outbox AFTER the account is
+    /// gone, as a user that no longer exists. So the coordinator is stopped
+    /// before the RPC, and `signOut` then finds nothing to drain — the rows
+    /// were being deleted anyway. `stop()` is final, so a failed delete gets a
+    /// fresh coordinator: the account is still there, and so is its sync.
+    ///
+    /// `isDeletingAccount` keeps it stopped: a token refresh during the RPC
+    /// re-runs the auth loop, and `startSync`'s only other guard is the
+    /// coordinator this has just dropped.
     public func deleteAccount() async throws {
-        try await supabase.rpc("delete_my_account").execute()
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        if let coordinator {
+            self.coordinator = nil
+            await coordinator.stop()
+        }
+        do {
+            try await supabase.rpc("delete_my_account").execute()
+        } catch {
+            if case .signedIn(let userID) = auth, coordinator == nil {
+                let fresh = makeCoordinator(userId: OnyxJSON.canonicalUserID(userID))
+                coordinator = fresh
+                Task {
+                    await self.syncNow(reason: .foreground)
+                    await fresh.startRealtime(client: self.supabase)
+                }
+            }
+            throw error
+        }
         await signOut()
     }
 
@@ -1024,6 +1100,17 @@ public final class AppEnvironment {
     /// itself failed — the one case a sign-in must not proceed.
     private func prepareStore(for userID: UUID) -> Bool {
         let userId = OnyxJSON.canonicalUserID(userID)
+        // ── ONLY AN ERASE SHUTS THE DOOR (found in App Store W7) ────────────
+        // The auth loop calls this on EVERY event that carries a session,
+        // token refreshes included — hourly. Cancelling the door observer on
+        // those left rescore-at-the-door dead for the rest of the process,
+        // because `startSync` only installs it beside a NEW coordinator. The
+        // same account, or an empty store, has nothing to erase: leave it be.
+        // An unreadable store takes the old path, which fails closed.
+        if case .success(let owner) = Result(catching: { try database.knownUserId() }),
+           owner == nil || owner == userId {
+            return true
+        }
         // The previous account's door must not hear this erase: every deleted
         // row would report its date, and the stale mark below is one key, not
         // one per account. Same order as `signOut`.

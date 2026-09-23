@@ -61,6 +61,31 @@
 			<key>NSPrivacyCollectedDataTypePurposes</key>
 			<array><string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string></array>
 		</dict>
+		<!-- App Store W7: Google sign-in. Supabase requests Google's `email profile`
+		     scopes and keeps the name on the account record. Apple is asked for
+		     email only. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeName</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array><string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string></array>
+		</dict>
+		<!-- Every row is stored against the account's id, and Apple and Google
+		     sign-in add the provider's account id to the same record. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array><string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string></array>
+		</dict>
 	</array>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>

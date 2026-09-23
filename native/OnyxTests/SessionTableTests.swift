@@ -20,15 +20,12 @@ import OnyxUI
 /// Everything else this wave changed is a colour, a position or a font, which
 /// a screenshot answers faster than an assertion can.
 ///
-/// ── THIS BUNDLE DOES NOT RUN ON THE DEVELOPMENT MACHINE (W4) ────────────────
-/// Measured, not assumed: on a PRISTINE `main` checkout with a fresh
-/// derived-data path, `xcodebuild test -only-testing:OnyxTests/SessionTableTests`
-/// starts all five of the tests that predate W4 and finishes none of them —
-/// each one takes the app host down with `Test crashed with signal trap`, the
-/// runner restarts twice, and the summary reads "0 tests". The same five pass
-/// as pure functions; `SetRow.layout(_:)` has no branch that can trap. The
-/// fault is in the host, not in the suite, and it is why `npm run check` runs
-/// `OnyxUITests` and not this bundle.
+/// ── THE "HOST FAULT" WAS AN ISOLATION TRAP (found in App Store W7) ─────────
+/// W4 measured these tests taking the app host down with a signal trap and
+/// put it down to the host. The crash report says otherwise:
+/// `dispatch_assert_queue` ← `swift_task_isCurrentExecutor` ← `SetRow.layout`.
+/// `SetRow` is a `View`, so `layout(_:)` is main-actor; the suite was not, and
+/// Swift Testing ran it on the cooperative pool. The suite is `@MainActor` now.
 ///
 /// So the assertions below are written to be READ as much as run, and the half
 /// of W4 that does not need an app host — `MuscleMap.cardioMovers` and the
@@ -39,6 +36,7 @@ import OnyxUI
 /// `OnyxTheme.current`, and Swift Testing runs a suite's tests
 /// concurrently by default — so a trap in one of them reported against
 /// whichever test happened to have logged its start line first.
+@MainActor
 @Suite("Session ledger — which table a card draws", .serialized)
 struct SessionTableTests {
 
