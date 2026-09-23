@@ -200,7 +200,7 @@ struct TodayFace: View {
       if compact {
         headline
       } else {
-        Link(destination: OnyxLink.workout ?? OnyxLink.home!) {
+        FaceLink(OnyxLink.workout ?? OnyxLink.home) {
           HStack(alignment: .firstTextBaseline, spacing: 6) {
             headline
             Spacer(minLength: 4)
@@ -547,7 +547,7 @@ struct TodayLargeFace: View {
     VStack(alignment: .leading, spacing: 10) {
       Register(title: "TODAY", accent: mono ? .white : accent) {
         TodayHeader(entry: entry, mono: mono, branded: true)
-        Link(destination: OnyxLink.workout ?? OnyxLink.home!) {
+        FaceLink(OnyxLink.workout ?? OnyxLink.home) {
           HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(s?.workout.label ?? "—")
               .font(OnyxWidgetType.face(24, weight: .bold))
@@ -852,12 +852,7 @@ struct MonthGrid: View {
                   // Large only — a Small gets exactly one tap target, which
                   // stays the face's `widgetURL` — so this is wrapped rather
                   // than replaced, and the Small keeps working as before.
-                  if let url = OnyxLink.day(day.d) {
-                    Link(destination: url) {
-                      DayCell(day: day, isToday: day.d == today, mono: mono, size: cell,
-                              outside: !OnyxSnapshot.sameMonth(day.d, as: today))
-                    }
-                  } else {
+                  FaceLink(OnyxLink.day(day.d)) {
                     DayCell(day: day, isToday: day.d == today, mono: mono, size: cell,
                             outside: !OnyxSnapshot.sameMonth(day.d, as: today))
                   }

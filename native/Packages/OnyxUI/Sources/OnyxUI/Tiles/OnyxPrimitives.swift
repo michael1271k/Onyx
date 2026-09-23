@@ -76,6 +76,35 @@ public extension EnvironmentValues {
     get { self[OnyxTileFamilyKey.self] }
     set { self[OnyxTileFamilyKey.self] = newValue }
   }
+
+  /// True where a face is drawn inside the app (the Today grid and its
+  /// sheets), false on the Home Screen. A face's sub-region `Link`s are for
+  /// WidgetKit; in the app the tile's own `Button` owns the tap, and a live
+  /// `Link` inside it won the touch and switched tabs over `onyx://` instead
+  /// of opening the sheet (decision Q9).
+  @Entry var onyxInApp: Bool = false
+}
+
+/// A face's sub-region link: a `Link` on the Home Screen, plain content in
+/// the app (`onyxInApp`) or when the destination did not resolve — a nil URL
+/// must still render, a placeholder entry has no date.
+struct FaceLink<Label: View>: View {
+  let destination: URL?
+  @ViewBuilder let label: () -> Label
+  @Environment(\.onyxInApp) private var inApp
+
+  init(_ destination: URL?, @ViewBuilder label: @escaping () -> Label) {
+    self.destination = destination
+    self.label = label
+  }
+
+  var body: some View {
+    if let destination, !inApp {
+      Link(destination: destination, label: label)
+    } else {
+      label()
+    }
+  }
 }
 
 /// The three Home Screen sizes, collapsed out of `WidgetFamily`.
@@ -189,6 +218,10 @@ struct Caption: View {
     Text(text)
       .font(OnyxWidgetType.face(10, weight: .heavy)).tracking(1.5)
       .foregroundStyle(color)
+      // A register caption never breaks mid-word: "RECOVE / RY" beside a
+      // stale tag on the Recovery Medium (B1 shot). It shrinks instead.
+      .lineLimit(1)
+      .minimumScaleFactor(0.7)
   }
 }
 

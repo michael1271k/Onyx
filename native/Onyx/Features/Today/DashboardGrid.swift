@@ -27,10 +27,6 @@ import OnyxUI
 /// know. Both routes call `Dashboard.canStack`, so they cannot disagree.
 struct DashboardGrid: View {
     @Bindable var model: TodayModel
-    /// Raised by whichever stack currently owns a drag; `TodayTabView` reads it
-    /// as `.scrollDisabled`. See `SmartStackView`'s header for why the scroll
-    /// has to be switched off rather than merely out-prioritised.
-    @Binding var paging: String?
     let onOpen: (WidgetId) -> Void
 
     @State private var mergeTarget: String?
@@ -49,10 +45,11 @@ struct DashboardGrid: View {
     static let mergeHold: Duration = .milliseconds(600)
 
     var body: some View {
-        VStack(spacing: Self.gap) {
+        let phases = SmartStackView.phases(model.visibleSlots)
+        return VStack(spacing: Self.gap) {
             ForEach(Self.rows(model.visibleSlots)) { row in
                 HStack(alignment: .top, spacing: Self.gap) {
-                    ForEach(row.slots, id: \.id) { slot in tile(slot) }
+                    ForEach(row.slots, id: \.id) { slot in tile(slot, phase: phases[slot.id] ?? 0) }
                     // A lone small keeps its neighbour cell empty — sequential
                     // placement, like the web's CSS grid, never pulls a later
                     // small up past a medium.
@@ -120,11 +117,15 @@ struct DashboardGrid: View {
     }
 
     @ViewBuilder
-    private func tile(_ slot: StackSlot) -> some View {
+    private func tile(_ slot: StackSlot, phase: TimeInterval) -> some View {
         let tier = Dashboard.heightTier(slot.size)
         TileFrame(
             slot: slot, up: upFace(slot), editing: model.editing,
             onTap: {
+                // A sideways swipe on a stack ends on the button's touch-up;
+                // it paged the stack and must not also open a sheet.
+                guard !model.touch.isSwipe() else { return }
+                model.touch.stamp()
                 if model.editing { if slot.items.count > 1 { model.sheet = .stack(slot.id) } }
                 else { onOpen(upFace(slot)) }
             },
@@ -135,11 +136,12 @@ struct DashboardGrid: View {
                 SmartStackView(
                     slot: slot, entry: model.entry,
                     paused: model.editing || !model.isActive,
+                    phase: phase,
                     face: Binding(
                         get: { min(faces[slot.id] ?? 0, max(0, slot.items.count - 1)) },
                         set: { faces[slot.id] = $0 }
                     ),
-                    paging: $paging
+                    touch: model.touch
                 )
             } else {
                 OnyxTile.face(slot.items[0], entry: model.entry)

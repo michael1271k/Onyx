@@ -11,9 +11,9 @@ import OnyxUI
 /// · Edit mode is the iOS jiggle, entered by long-press and left by Done. There
 ///   is no Edit BUTTON: a permanent control for a mode you enter by touching the
 ///   thing you want to edit is the web app's affordance, not the phone's.
-/// · Stacks are a paging carousel, swiped vertically, with page dots. It owns
-///   its own gesture and switches this screen's scroll off for the length of a
-///   swipe — see `SmartStackView`.
+/// · Stacks are a paging carousel, swiped SIDEWAYS (orthogonal to this
+///   screen's scroll) or stepped by tapping the page dots — see
+///   `SmartStackView`.
 /// · No desktop layout, no trend strip, no sidebar: one column, one surface.
 /// · The screen opens on one row — score, battery, today's session — and the
 ///   verdict is said once, in the coach card, rather than twice.
@@ -41,11 +41,6 @@ struct TodayTabView: View {
     /// nothing. `.task(id:)` starts it when it exists.
     @State private var quickLog: DayModel?
     @State private var showQuickLog = false
-    /// The stacked tile currently being swiped, if any. Both this screen and the
-    /// stack page vertically, so one of them has to yield for the length of a
-    /// drag; `SmartStackView`'s header has the whole argument, including why
-    /// this is the slot's id rather than a flag.
-    @State private var paging: String?
     /// The week the "Week N is complete" banner opened, once its replay has
     /// landed. `item:` and not `isPresented:`, for the reason `WorkoutTabView`
     /// spells out over the same sheet: a sheet whose content is `if let` over a
@@ -78,6 +73,10 @@ struct TodayTabView: View {
             }
         }
         .onyxScreen(.recover)
+        // The faces' sub-region `Link`s are the Home Screen's; in the app the
+        // tile's own button owns the tap. Set at the root so the sheets this
+        // screen presents inherit it too.
+        .environment(\.onyxInApp, true)
         .task {
             if resolved == nil {
                 resolved = seeded ?? TodayModel(database: environment.database, userId: environment.userIdString)
@@ -112,7 +111,7 @@ struct TodayTabView: View {
                     WeeklySummaryCTA(weekStart: feed.lastWeekStart) { openWrap(feed.lastWeekStart) }
                         .disabled(openingWrap)
                 }
-                DashboardGrid(model: model, paging: $paging) { open($0, model) }
+                DashboardGrid(model: model) { open($0, model) }
                 if model.editing { WidgetGallery(model: model) }
                 if let feed = model.feed {
                     GoalBoardRow(board: feed.goalBoard)
@@ -124,7 +123,9 @@ struct TodayTabView: View {
             }
             .padding(OnyxSpace.l)
         }
-        .scrollDisabled(paging != nil)
+        // Any touch on the page holds every stack's rotation for
+        // `GridTouch.hold` — a face must not turn over under a reading thumb.
+        .onScrollPhaseChange { _, _ in model.touch.stamp() }
         // §5.1: the hairline is the sync's whole visual budget. It sits at the
         // top of the CONTENT, not in the nav bar, because a bar that changes
         // height when a sync starts moves the screen under the reader's thumb.

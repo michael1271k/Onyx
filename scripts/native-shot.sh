@@ -72,6 +72,11 @@ xcrun simctl bootstatus "$UDID" -b >/dev/null
 # ── The build ──────────────────────────────────────────────────────────────
 # Never `-sdk iphoneos`: it drags a watch AppIcon check into an iPhone-only
 # project and fails on an asset that does not exist.
+# `SHOT_SKIP_BUILD=1` reuses the app the LAST run installed — for shooting the
+# same build under a second and third `SHOT_THEME` without paying a rebuild
+# (and a cold first launch) per theme. Only after a run in this same session
+# built it: the installed app is otherwise whatever was there last.
+if [ -z "${SHOT_SKIP_BUILD:-}" ]; then
 echo "Building…"
 (cd "$ROOT/native" && xcodegen generate >/dev/null)
 # `SHOT_SIGN=1` signs ad hoc so the entitlements are EMBEDDED (W5). An
@@ -91,6 +96,7 @@ xcodebuild -project "$ROOT/native/Onyx.xcodeproj" \
 
 APP="$DERIVED/Build/Products/Debug-iphonesimulator/Onyx.app"
 xcrun simctl install "$UDID" "$APP"
+fi
 
 # ── THE WARM-UP LAUNCH, AND WHY IT IS NOT PARANOIA ─────────────────────────
 # The FIRST launch after an install is slower than every one after it — the

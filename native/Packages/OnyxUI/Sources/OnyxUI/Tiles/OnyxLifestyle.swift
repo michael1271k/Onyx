@@ -269,9 +269,9 @@ struct CalorieLedgerFace: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      Link(destination: OnyxLink.nutrition ?? OnyxLink.home!) { heroColumn }
+      FaceLink(OnyxLink.nutrition ?? OnyxLink.home) { heroColumn }
       Hairline(vertical: true)
-      Link(destination: OnyxLink.home ?? OnyxLink.nutrition!) { ledgerColumn }
+      FaceLink(OnyxLink.home ?? OnyxLink.nutrition) { ledgerColumn }
     }
   }
 
@@ -409,7 +409,7 @@ struct WaterLedgerFace: View {
       // face's root `widgetURL` still covers this half.
       heroColumn
       Hairline(vertical: true)
-      Link(destination: OnyxLink.progress ?? OnyxLink.home!) { weekColumn }
+      FaceLink(OnyxLink.progress ?? OnyxLink.home) { weekColumn }
     }
   }
 

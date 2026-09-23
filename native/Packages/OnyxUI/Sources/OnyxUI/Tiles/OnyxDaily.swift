@@ -111,12 +111,8 @@ public struct DailyView: View {
   /// A cell, linked if the destination resolved. A nil URL must still render —
   /// a placeholder entry has no date and the widget still has to draw.
   @ViewBuilder
-  private func quadrant<Content: View>(_ url: URL?, @ViewBuilder content: () -> Content) -> some View {
-    if let url {
-      Link(destination: url) { content().frame(maxWidth: .infinity, alignment: .leading) }
-    } else {
-      content().frame(maxWidth: .infinity, alignment: .leading)
-    }
+  private func quadrant<Content: View>(_ url: URL?, @ViewBuilder content: @escaping () -> Content) -> some View {
+    FaceLink(url) { content().frame(maxWidth: .infinity, alignment: .leading) }
   }
 }
 

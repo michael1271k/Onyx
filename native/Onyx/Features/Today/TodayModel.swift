@@ -58,6 +58,9 @@ final class TodayModel {
         didSet { if isActive, !oldValue { layout = ranked(stored) } }
     }
     var sheet: TodaySheet?
+    /// The grid's last touch, shared by every stack on it — not observed, so a
+    /// scroll does not re-render the grid. See `GridTouch`.
+    @ObservationIgnored let touch = GridTouch()
 
     /// A preview hands in a feed and skips the builder — no mirror to read.
     private let seededFeed: TodayFeed?
@@ -292,11 +295,6 @@ final class TodayModel {
         apply(Dashboard.addWidget(layout, id))
     }
 
-    /// Connect a stack, or disconnect it (W7, A9).
-    func setLinked(_ slotId: String, _ linked: Bool) {
-        apply(Dashboard.setLinked(layout, slotId: slotId, linked))
-    }
-
     private func apply(_ next: DashboardLayout) {
         // ── NEVER PUSH A LAYOUT THIS OBJECT HAS NOT READ ────────────────────
         // See `hasLoaded`. The edit is refused outright rather than applied
@@ -338,4 +336,33 @@ enum TodaySheet: Identifiable, Hashable {
         case .session(let s): "session-\(s)"
         }
     }
+}
+
+/// The Today grid's touch clock (B1, decisions Q9/Q10).
+///
+/// Two readers. Every stack's rotation asks `quiet` at its beat: a face never
+/// turns over within `hold` of any touch anywhere on the grid — a scroll, a
+/// tap, a swipe on another stack. And the tile's `Button` asks `isSwipe`
+/// before opening a sheet: a sideways swipe on a stack ends on the same
+/// touch-up the button fires on. (A vertical drag is a scroll, and UIKit
+/// cancels the button for that; a sideways one moves nothing under it.)
+final class GridTouch {
+    static let hold: TimeInterval = 3
+    /// How long after a swipe's release a touch-up still belongs to it.
+    static let swipeTail: TimeInterval = 0.35
+
+    private(set) var at = Date.distantPast
+    private(set) var swiping = false
+    private var swipeEnded = Date.distantPast
+
+    func stamp(_ now: Date = .now) { at = now }
+
+    func swipe(_ on: Bool, now: Date = .now) {
+        swiping = on
+        if !on { swipeEnded = now }
+        at = now
+    }
+
+    func quiet(_ now: Date = .now) -> Bool { now.timeIntervalSince(at) >= Self.hold }
+    func isSwipe(_ now: Date = .now) -> Bool { swiping || now.timeIntervalSince(swipeEnded) < Self.swipeTail }
 }

@@ -324,7 +324,7 @@ struct RecordLedgerFace: View {
         VStack(spacing: 4) {
           ForEach(Array(records.prefix(3).enumerated()), id: \.element.id) { index, record in
             if index > 0 { Hairline() }
-            Link(destination: OnyxLink.exercises ?? OnyxLink.home!) {
+            FaceLink(OnyxLink.exercises ?? OnyxLink.home) {
               TrophyFace(record: record, mono: mono, compact: true)
             }
           }
@@ -389,7 +389,7 @@ struct RecordGridFace: View {
       } else {
         VStack(spacing: 5) {
           ForEach(records) { record in
-            Link(destination: OnyxLink.exercises ?? OnyxLink.home!) {
+            FaceLink(OnyxLink.exercises ?? OnyxLink.home) {
               RecordRow(record: record, mono: mono)
             }
           }
