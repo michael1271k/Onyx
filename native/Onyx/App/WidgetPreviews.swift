@@ -446,6 +446,34 @@ enum WidgetPreviews {
         .background(Color.onyx.base)
     }
 
+    // MARK: - Off the wrist (App Store W6)
+
+    /// Every readiness face over `OnyxSnapshot.sampleOffWrist` — a night
+    /// window with a six-hour hole in its heart-rate series, run through the
+    /// real derivation. The Recovery tile at its three sizes, then the
+    /// accessory the Lock Screen, the watch's Today page and its complication
+    /// all draw.
+    static var offWristPage: some View {
+        let entry = OnyxTileEntry(date: OnyxSnapshot.sampleDate, snapshot: .sampleOffWrist)
+        let tiles = WatchTiles(OnyxSnapshot.sampleOffWrist)
+        func cell<V: View>(_ id: String, _ family: WidgetFamily, _ view: V) -> Cell {
+            Cell(id: "offwrist-\(id)", family: family, content: AnyView(view))
+        }
+        let rows: [[Cell]] = [
+            [cell("small", .systemSmall, BodyView(entry: entry, focus: .wellbeing)),
+             cell("acc", .accessoryRectangular, OnyxTile.accessory(.recovery, family: .accessoryRectangular, tiles: tiles))],
+            [cell("medium", .systemMedium, BodyView(entry: entry, focus: .wellbeing))],
+            [cell("large", .systemLarge, BodyView(entry: entry, focus: .wellbeing))],
+        ]
+        return VStack(spacing: 6) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in rowView(row) }
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.onyx.base)
+    }
+
     /// `widgets` → everything, scrolling. `widgets-3` → page 3 at 1:1.
     /// `widgets-activity` → the running workout's own surfaces.
     @ViewBuilder
@@ -462,6 +490,8 @@ enum WidgetPreviews {
             islandPage
         } else if screen == "widgets-nudge" {
             ActivityNudgeHarness()
+        } else if screen == "widgets-offwrist" {
+            offWristPage
         } else {
         let page = Int(screen.dropFirst("widgets-".count))
         if let page, pages.indices.contains(page) {

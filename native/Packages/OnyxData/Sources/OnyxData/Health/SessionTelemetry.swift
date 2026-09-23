@@ -135,6 +135,29 @@ public actor SessionTelemetry {
         )
     }
 
+    /// The window Apple's recovery sample must START in to belong to this
+    /// session: from two minutes before the finish (the two devices' clocks)
+    /// to ten after. Tight on purpose — a run ended twenty minutes later
+    /// writes its own recovery, and it is not this session's.
+    static let recoveryWindow: (before: TimeInterval, after: TimeInterval) = (120, 600)
+
+    /// Apple's one-minute heart-rate recovery after a FINISHED session, in bpm
+    /// dropped (App Store W6). Its own read, beside `reading`, not inside it:
+    /// Apple writes the sample a minute or more after the finish, so it is
+    /// never cached — and a cached series must not wait on Health for it.
+    /// Nil for no sample (the ordinary answer for a phone-only session) and
+    /// for a session still open.
+    public func recoveryBpm(sessionId: String) async -> Int? {
+        guard let end = sessionRow(sessionId)?.endedAt, reader.isAvailable,
+              let bpm = try? await reader.quantity(
+                HealthCatalogue.heartRateRecoveryIdentifier, reduce: .latest,
+                start: end.addingTimeInterval(-Self.recoveryWindow.before),
+                end: end.addingTimeInterval(Self.recoveryWindow.after)),
+              bpm.isFinite, bpm > 0
+        else { return nil }
+        return Int(bpm.rounded())
+    }
+
     /// A CACHED series, cut against the session's current markers.
     private func recut(samples: [HRSample], sessionId: String) -> (segments: [HRSegment], avgBpm: Int?, maxBpm: Int?) {
         guard let session = sessionRow(sessionId),

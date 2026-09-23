@@ -1571,3 +1571,52 @@ merged build.**
 **Cost the next wave inherits:** every cache is empty, so the first `npm run
 check`, `swift:core` or `swift:data` in W6/W7 is a cold build. The 26.5 pair
 needs a boot and, per fresh install, one Health grant on the watch.
+
+---
+
+## W6 — HealthKit audit, unread types, off-wrist (7.15.0, Lane A)
+
+### The audit — every type, where it is asked for, where it shows
+
+**Authorization is requested in three places, not the brief's three:**
+
+| Site | Share | Read |
+|---|---|---|
+| `HealthKitReader.requestAuthorization` (`HealthKitReader.swift:48`), reached from onboarding "Connect Health" (`AppEnvironment.swift:864`) and from `HealthSync.requestAuthorization` (`HealthSync.swift:37`) before every `syncRecent` | iOS: `workoutType`, `activeEnergyBurned` (`shareTypes`, `:40`) | `HealthCatalogue.readTypes` — **45** after this wave (was 51) |
+| `WorkoutSessionController.requestAuthorization` (watch; the call is at **`:113`**, not `:100`), from `WatchModel.swift:406` | `workoutType` | `workoutType`, `heartRate`, `activeEnergyBurned` |
+| `TelemetrySeed.swift:46` — `#if DEBUG` and `--onyx-telemetry-seed` only | `heartRate`, `activeEnergyBurned`, `workoutType` | the same three |
+
+`HealthObservers.swift` registers background observers but asks for nothing and
+is compiled only under `ONYX_ADP`, which no build sets.
+
+**Read, phone** (`R` = read into a column, `L` = read live, never stored):
+
+| Type | | Lands in | Surfaces |
+|---|---|---|---|
+| StepCount | R | `daily_logs.steps`, `daily_metrics.steps` | Pulse Steps, Steps tile/sheet, History week, activity score, watch complication |
+| DistanceWalkingRunning | R | `daily_logs.distance_m`, `cardio_logs.distance_m` | Steps tile km, Steps + Vitals sheets, cardio rows |
+| ActiveEnergyBurned | R+W | `daily_logs.active_energy`, `daily_metrics.active_cal`, session/cardio kcal | Pulse Active, Body Trends, Steps tile, deficit ledger, battery activity drain, session Calories |
+| AppleExerciseTime | R | `training_minutes` + `exercise_minutes` | Body Trends Training |
+| AppleStandTime | R | `standing_minutes`, `stand_hours` | Pulse Stand, Body Trends |
+| HeartRateVariabilitySDNN | R (day + bed window) | `hrv_ms`, `hrv_overnight` | Pulse HRV, Body Trends, Vitals tile, readiness, stress index |
+| RestingHeartRate | R | `avg_rest_heart_rate`, `daily_metrics.rest_hr` | Pulse Resting HR, Vitals tile, readiness, stress |
+| HeartRate | R + L | `avg_heart_rate`, `session_telemetry` (local) | session heart-rate panel, Avg HR cells, cardio HR, **wrist coverage (new)**. The daily mean itself is export-only |
+| VO2Max | R | `vo2max` | **export only** — kept: the export is a user-facing document |
+| RespiratoryRate, OxygenSaturation, AppleSleepingWristTemperature | R | their columns | Pulse Vitals, Vitals tile/sheet, Body Trends |
+| BodyMass, BodyFatPercentage, LeanBodyMass, BodyMassIndex | R + L | `daily_logs`, `body_composition` | Scale square, Composition tile, Body Trends, InBody sheet |
+| TimeInDaylight | R | `time_in_daylight_min` | Body Trends Daylight |
+| DietaryEnergy/Protein/Carbs/FatTotal/Water/Fiber | R | `nutrition_entries`, water rows | Nutrition ring and macros, Water row/tile, Nutrients grid (fibre) |
+| Dietary Sugar, Sodium, Potassium, Calcium, Iron, Magnesium, VitaminC, VitaminD, FatSaturated | R | `nutrition_entries.micros` | Nutrients grid, Week report, export |
+| **Dietary Zinc, Iodine, VitaminA, VitaminB6, VitaminB12, VitaminE, VitaminK, Biotin, Cholesterol** | **R (new)** | `nutrition_entries.micros` | **Nutrients grid** — eight new target rows, B12 already had one |
+| SleepAnalysis | R | `sleep_sessions` | Sleep card, Sleep/Bedtime tiles, readiness, stress |
+| Workout | R + W | `cardio_logs`, the own-workout metrics | cardio import, Workout tab, Hevy line, `WorkoutWriter.decide` |
+| BasalEnergyBurned | L | `cardio_logs.total_kcal` | cardio sheet Total energy, Week report |
+| **HeartRateRecoveryOneMinute** | **L (new)** | never stored | **session heart-rate panel** caption ("−28 bpm in 1 min") |
+
+**Removed from the read scope — no code read them, no screen drew them:**
+FlightsClimbed, AppleMoveTime, WalkingHeartRateAverage, Height, UVExposure,
+DietaryFatMonounsaturated, DietaryFatPolyunsaturated. **Written:** phone —
+`HKWorkout` + active energy (`WorkoutWriter`), no heart rate; watch — the
+`HKWorkoutSession`'s workout, with heart rate and energy attached by its
+builder. `HealthScopeTests` now pins every read type to the screen that draws
+it, so this table cannot drift silently again.

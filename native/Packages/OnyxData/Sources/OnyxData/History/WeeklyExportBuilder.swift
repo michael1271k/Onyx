@@ -607,6 +607,9 @@ public struct WeeklyExportBuilder: Sendable {
         /// days, from the 49 days behind each — `readinessHistory`, the same
         /// door the scorer reads through.
         var readinessByDate: [String: ExportReadiness]
+        /// `wrist_coverage` over the week (W6) — the battery input the
+        /// Derived block has to replay.
+        var offWrist: [String: Double]
         var customs: [CustomSupplement]
         var volumeOverrides: [LandmarkMuscle: Double]
         /// Week 0 → the exported week, for the trend ledger.
@@ -803,6 +806,7 @@ public struct WeeklyExportBuilder: Sendable {
                 readinessByDate: Dictionary(uniqueKeysWithValues: try ExportSpan(start: weekStart, end: weekEnd).dates.map { date in
                     (date, ExportReadiness(signals: Readiness.signals(try AppDatabase.readinessHistory(db, userId: userId, date: date))))
                 }),
+                offWrist: try AppDatabase.offWristByDate(db, userId: userId, from: weekStart, to: weekEnd),
                 customs: try CustomSupplementRow.filter(user).order(Column("created_at"), Column("id")).fetchAll(db).map(Self.custom),
                 volumeOverrides: volumeOverrides,
                 ledgerLogs: ledgerLogs, ledgerNutrition: ledgerNutrition, ledgerSessions: ledgerSessions,
@@ -959,6 +963,8 @@ public struct WeeklyExportBuilder: Sendable {
             // column of noise that says nothing happened six times a week, and the
             // reader has to scan it anyway to find the one row that matters.
             if l?.sleepInaccurate == true { fields["sleepInaccurate"] = true }
+            // Present only when measured (W6), for the same reason.
+            if let off = d.offWrist[date] { fields["offWristMin"] = off }
             return try make(fields)
         }
     }

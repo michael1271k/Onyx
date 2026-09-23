@@ -191,17 +191,15 @@ targets:
           fill in the charts and Home Screen widgets. Nothing is read that you
           do not allow, and your data is stored only on this device and in your
           own private Onyx account.
-        # Not written today — `HealthKitReader` requests `toShare: []`, and the
-        # sheet only ever shows the half being asked for, so this string is
-        # currently never displayed. It is declared ahead of the Watch client
-        # (1.1), which saves its strength sessions back. Declaring it early
-        # prevents no prompt (the WRITE prompt is triggered by a non-empty
-        # `toShare:`, not by this key) — it just means the plist is already
-        # right when that call lands.
+        # Displayed since 7.6.0: `HealthKitReader.shareTypes` asks to write the
+        # workout type and active energy, and `WorkoutWriter` saves an
+        # HKWorkout with an energy sample for a session no watch recorded. The
+        # phone writes NO heart rate (W6 audit) — the watch's builder does, and
+        # its own string below says so — so this one does not claim it.
         NSHealthUpdateUsageDescription: >-
-          Onyx saves the strength workouts you log — their duration, active
-          energy and heart rate — back to Apple Health, so the training you do
-          here appears alongside the rest of your activity rings.
+          Onyx saves the strength workouts you log — their duration and active
+          energy — back to Apple Health, so the training you do here appears
+          alongside the rest of your activity rings.
         # Substituted from Secrets.xcconfig at build time.
         ONYX_SUPABASE_URL: $(ONYX_SUPABASE_URL)
         ONYX_SUPABASE_ANON_KEY: $(ONYX_SUPABASE_ANON_KEY)

@@ -126,8 +126,16 @@ public enum WeeklyExport {
 
     static let implausibleFloorMultiple = 2.5
 
+    /// Floors a real diet clears 2.5 times over (W6): a cup of spinach is
+    /// ~890 µg of vitamin K, a sweet potato ~1,400 µg of vitamin A, a
+    /// 170 g-protein day over 3 mg of B6. The multiple was tuned on a food app
+    /// filing calcium twice; on these it would throw out real days and pull
+    /// the weekly mean down. Never flagged.
+    static let unflaggedFloors: Set<String> = ["vitaminA", "vitaminB6", "vitaminE", "vitaminK", "biotin", "iodine", "zinc"]
+
     static func implausible(_ t: NutrientTarget, food: Double, stack: Double) -> Bool {
         if t.kind == .ceiling { return false }
+        if unflaggedFloors.contains(t.key) { return false }
         if stack > 0 { return false }
         return t.target > 0 && food > t.target * implausibleFloorMultiple
     }
@@ -1853,11 +1861,23 @@ public enum WeeklyExport {
             // §2 and §4, and a second line saying they are missing is the same
             // gap twice. This clause exists for the minerals and vitamins,
             // which appear nowhere else if nothing reports them.
+            // ── ONE LINE FOR THE NUTRIENTS THE SOURCE NEVER REPORTS (W6) ────
+            // Seven floors arrived in W6, and most food apps report iodine and
+            // biotin never — seven lines a week saying so would be permanent
+            // noise. A nutrient silent on EVERY fed day is named in one line;
+            // a nutrient silent on some days keeps its own, because that one
+            // is a gap in a source that does report it.
+            var never: [String] = []
             for t in NutrientTargets.all where t.kind == .floor && !t.fromStack && t.group != "Macros" {
                 let silent = fedDays.filter { ($0.nutrientsFood?[t.key] ?? 0) <= 0 }
                 guard !silent.isEmpty else { continue }
+                if silent.count == fedDays.count { never.append(t.label); continue }
                 anomalies.append("\(t.label) not reported by the food source on "
                     + "\(silent.count) of \(fedDays.count) day\(fedDays.count == 1 ? "" : "s") with food logged")
+            }
+            if !never.isEmpty {
+                anomalies.append("not reported by the food source on any of the \(fedDays.count) "
+                    + "day\(fedDays.count == 1 ? "" : "s") with food logged: " + never.joined(separator: ", "))
             }
         }
         /* A bout whose only timestamp is the moment the ledger learned of it.

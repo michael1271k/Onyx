@@ -173,7 +173,10 @@ public enum Derived {
                 sleepGoalHours: input.sleepGoalHours ?? 8,
                 hrvZ: r?.hrvZ, rhrZ: r?.rhrZ, acwr: r?.acwr, strainZ: r?.strainZ,
                 domsSeverity: soreness, sleepOnsetTrouble: onsetTrouble,
-                fatigueLevel: latest?.level
+                fatigueLevel: latest?.level,
+                // The scorer's off-wrist fact (W6), or this recompute and the
+                // stored battery disagree on every night the watch never saw.
+                offWristMin: d.offWristMin
             )
             let q = Battery.sleepQualityParts(signals)
             let load = Battery.loadParts(signals)

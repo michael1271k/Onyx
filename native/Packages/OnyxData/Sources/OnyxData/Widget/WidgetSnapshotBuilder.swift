@@ -263,7 +263,12 @@ public struct WidgetSnapshotBuilder: Sendable {
         let readiness: OnyxSnapshot.Readiness? = {
             guard wantsBody, let battery else { return nil }
             let r = Readiness.compute(sleepScore: scores.sleep, recoveryScore: scores.recovery, batteryPct: Double(battery))
-            return OnyxSnapshot.Readiness(level: r.level.rawValue, label: r.label, color: r.color, reason: r.reason)
+            // ── SAY WHY A SIGNAL IS MISSING (App Store W6) ──────────────────
+            // Only when the watch was off the wrist AND that cost a signal;
+            // otherwise the verdict is the verdict. The live score's own note,
+            // so the sentence and the battery beside it read one set of inputs.
+            return OnyxSnapshot.Readiness(level: r.level.rawValue, label: r.label, color: r.color, reason: r.reason,
+                                          offWrist: live?.offWrist)
         }()
 
         // ── The W12 series ────────────────────────────────────────────────
@@ -676,6 +681,9 @@ public struct WidgetSnapshotBuilder: Sendable {
         let total: Int
         let battery: Int
         let components: OnyxCore.ScoreComponents
+        /// Off the wrist and a signal lost to it (W6) — decided from the same
+        /// inputs the battery above was computed from.
+        let offWrist: OffWristNote?
     }
 
     /// `refreshTodayScore` without the write: the same inputs the app scores
@@ -707,7 +715,10 @@ public struct WidgetSnapshotBuilder: Sendable {
         let components = Score.daily(inputs)
         guard let total = components.totalScore else { return nil }
         let battery = Battery.computeBattery(inputs, hoursAwake: hoursAwake)
-        return LiveScore(total: Int(total.rounded()), battery: Int(battery.currentPct.rounded()), components: components)
+        return LiveScore(
+            total: Int(total.rounded()), battery: Int(battery.currentPct.rounded()), components: components,
+            offWrist: OffWristNote.make(inputs)
+        )
     }
 
     // MARK: - The W12 series
