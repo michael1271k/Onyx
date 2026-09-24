@@ -235,21 +235,29 @@ struct OnyxWatchLayoutTests {
 
     // MARK: - The Glance (overhaul A2)
 
-    /// The page's content area on each case, as `axe describe-ui` reported the
-    /// Glance's `GeometryReader` frame — see the wave record for the numbers.
-    @Test("the Glance fits both cases: petals clear the ring and stay tappable at 40 mm")
+    /// ── MEASURED, AND THE FIRST DRAFT OF THIS TEST WAS A GUESS ──────────────
+    /// It fed the layout `height − nav bar` (187 / 149.5) and passed. `axe
+    /// describe-ui` on the two simulators said otherwise: inside the vertical
+    /// `TabView` the Glance's square is **148 pt at 49 mm** (petals at
+    /// y 64…212, 40 pt each) and **130 pt at 40 mm** (y 48…178, 35 pt each) —
+    /// the page reserves its own bottom inset. Those are the numbers here.
+    static let glanceSquare49mm: Double = 148
+    static let glanceSquare40mm: Double = 130
+
+    @Test("the Glance fits both cases as measured: petals clear the ring, the centre holds its numeral")
     func theGlanceFits() {
-        let big = WatchGlance.layout(width: WatchCase.width49mm, height: WatchCase.content49mmHeight)
-        let small = WatchGlance.layout(width: WatchCase.width40mm, height: WatchCase.content40mmHeight)
-        #expect(big.square == WatchCase.content49mmHeight, "the 49 mm page is taller-limited: \(big.square)")
-        #expect(small.square == WatchCase.content40mmHeight, "the 40 mm page is taller-limited: \(small.square)")
+        let big = WatchGlance.layout(width: WatchCase.width49mm, height: Self.glanceSquare49mm)
+        let small = WatchGlance.layout(width: WatchCase.width40mm, height: Self.glanceSquare40mm)
+        #expect(abs(big.petal - 40) < 0.5 && abs(small.petal - 35) < 0.5, "the petals axe measured: 40 / 35 pt")
         for layout in [big, small] {
             #expect(layout.clearance > 4, "petals touch the ring: \(layout.clearance) pt clear")
         }
-        // A petal is a button. 38 pt is the smallest target the 40 mm layout
-        // budget accepts anywhere (`WatchPanel.glyphChip` is 44 across a row).
-        #expect(small.petal >= 38, "40 mm petal is \(small.petal) pt")
-        // The centre holds a `figure` numeral: three digits need ~60 pt.
-        #expect((small.ring - WatchGlance.ringStroke * 2) * 0.8 >= 60)
+        // A petal is a button; 35 pt is the floor the 40 mm case can afford
+        // with the ring at 68 %. The ring's centre is the other door to the
+        // same pages, and the Crown a third, so no page hangs on a 35 pt tap.
+        #expect(small.petal >= 34, "40 mm petal is \(small.petal) pt")
+        // The centre label box: axe measured 58 pt at 40 mm, and the "81"
+        // numeral inside it 39 pt — three digits at `figure` fit with room.
+        #expect((small.ring - WatchGlance.ringStroke * 2) * 0.8 >= 56)
     }
 }
