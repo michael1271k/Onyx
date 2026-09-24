@@ -42,16 +42,18 @@ extension SessionReplay.Input {
         var sets: [SessionReplay.SetMark] = []
         for (m, exercise) in report.exercises.enumerated() {
             // `records` is keyed by set NUMBER, which the two sides of a pair
-            // share — so a number's records go on its first row only, or a
-            // unilateral record is flashed twice (11 flashes under a masthead
-            // that said 9, in the first shot).
+            // share, and holds each side's won axes — while the engine counts
+            // an axis once per set. So a number's DISTINCT axes go on its first
+            // row only, or a unilateral record is flashed twice (11 flashes
+            // under a masthead that said 9, in the first shot).
             var credited = Set<Int>()
             for set in exercise.detail.sets {
                 let number = Int(set.setNumber)
+                let axes = Set((exercise.records[number] ?? []).map(\.axis))
                 sets.append(SessionReplay.SetMark(
                     movement: m,
                     at: clocks["\(exercise.detail.exerciseId)|\(number)"],
-                    records: credited.insert(number).inserted ? (exercise.records[number]?.count ?? 0) : 0
+                    records: credited.insert(number).inserted ? axes.count : 0
                 ))
             }
         }

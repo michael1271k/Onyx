@@ -196,7 +196,7 @@ public struct ReplayCaption: View {
         Group {
             if frame.settle > 0 || (frame.currentMovement == nil && frame.trackProgress >= 1) {
                 summary
-            } else if let m = frame.currentMovement {
+            } else if let m = frame.currentMovement, timeline.movements.indices.contains(m) {
                 Text(timeline.movements[m].name)
                     .foregroundStyle(timeline.ink(m))
             } else {

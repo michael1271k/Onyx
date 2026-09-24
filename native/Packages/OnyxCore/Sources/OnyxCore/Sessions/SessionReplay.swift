@@ -25,7 +25,10 @@ import Foundation
 // (a movement's segment is half its share of the work, half its sets). Both grow at the
 // same rate — the track reaches `x` at `0.6·D·x` — and a dot at `x` drops at
 // `0.2·D + x·(0.6·D − drop)`, which is never earlier. That inequality is the
-// whole reason a dot always lands on something already drawn.
+// whole reason a dot always lands on something already drawn — the track's
+// PROGRESS, that is: a series that begins late (the watch joined at 30 %)
+// has no ink before its first sample, and an early set drops onto the empty
+// stretch at its own time rather than onto a trace that was never measured.
 // ─────────────────────────────────────────────────────────────────────────────
 
 public enum SessionReplay {
@@ -226,6 +229,8 @@ public enum SessionReplay {
     // MARK: - Building
 
     public static func timeline(_ input: Input, duration: Double = SessionReplay.duration) -> Timeline {
+        // A zero length would divide every phase by zero.
+        let duration = max(duration, 0.1)
         let span = input.end.timeIntervalSince(input.start)
         let trace = span > 0 ? resample(input.samples, start: input.start, span: span) : []
         let mode: Mode = trace.count >= 2 ? .trace : .tonnage

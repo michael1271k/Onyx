@@ -296,7 +296,17 @@ enum ReplayExporter {
         writer.startSession(atSourceTime: .zero)
 
         let frames = Int(item.timeline.duration * Double(fps))
+        // Any exit that is not a finished file — a dismissed share sheet
+        // (cancellation), a render or append failure — leaves no writer
+        // running and no half-written file behind (review).
+        defer {
+            if writer.status == .writing {
+                writer.cancelWriting()
+                try? FileManager.default.removeItem(at: out)
+            }
+        }
         for i in 0..<frames {
+            try Task.checkCancellation()
             while !input.isReadyForMoreMediaData {
                 try await Task.sleep(for: .milliseconds(4))
             }
@@ -304,18 +314,17 @@ enum ReplayExporter {
             guard let image = renderer(item, format: .stories, at: t).cgImage,
                   let pool = adaptor.pixelBufferPool,
                   let buffer = pixelBuffer(from: image, pool: pool)
-            else {
-                writer.cancelWriting()
-                throw Failure.render
-            }
+            else { throw Failure.render }
             guard adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(i), timescale: fps)) else {
-                writer.cancelWriting()
                 throw Failure.writer(writer.error?.localizedDescription ?? "append \(i)")
             }
             // One frame per turn: the share sheet is on this actor too.
             await Task.yield()
         }
         input.markAsFinished()
+        // The last (settled) frame is held to the 10 s mark instead of being
+        // a zero-length sample at 9.97 s.
+        writer.endSession(atSourceTime: CMTime(value: CMTimeValue(frames), timescale: fps))
         await writer.finishWriting()
         guard writer.status == .completed else {
             throw Failure.writer(writer.error?.localizedDescription ?? "finishWriting")
