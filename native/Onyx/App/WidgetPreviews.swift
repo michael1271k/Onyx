@@ -310,22 +310,11 @@ enum WidgetPreviews {
     /// matters, because the trailing column of `WorkoutCurrentSet` and the four
     /// controls of `WorkoutRestBand` are competing for it.
     private static func islandExpanded(_ state: OnyxWorkoutAttributes.ContentState) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                OnyxMark(size: 12, tint: Color.onyx.day(state.dayKey), opacity: 1)
-                WorkoutElapsed(state: state, startedAt: Date().addingTimeInterval(-45 * 60))
-                Spacer(minLength: 8)
-                // Mirrors the real `.trailing` region, which carries the muscle
-                // tag since W2 — it used to print `9/22` twelve points above
-                // `WorkoutTotals`' own "9/22 sets".
-                WorkoutMuscleTag(token: state.primaryMuscle)
-            }
-            WorkoutTotals(state: state)
-            WorkoutCurrentSet(state: state)
-            if let countdown = restCountdown(state.restEndsAt, total: state.restTotalSec) {
-                WorkoutRestBand(countdown: countdown, state: state, showsSkip: false)
-            }
-        }
+        // The shipped view (B3): `OnyxWidgets.swift` puts exactly this in the
+        // one full-width region and leaves the camera flanks empty.
+        WorkoutIslandExpanded(
+            title: "Delts & Arms", startedAt: Date().addingTimeInterval(-45 * 60), state: state
+        )
         .padding(10)
         .frame(width: 340, alignment: .leading)
         .background {
@@ -344,8 +333,10 @@ enum WidgetPreviews {
     /// branches exist. What is still a stand-in here is the ARRANGEMENT — the
     /// mark, the spacer and the capsule — which is what this page is for.
     private static func islandCompact(_ state: OnyxWorkoutAttributes.ContentState) -> some View {
+        // Leading = the clock, trailing = heart + bpm (B3, challenge C8) —
+        // both the shipped `Shared/` views.
         HStack(spacing: 4) {
-            OnyxMark(size: 14, tint: Color.onyx.day(state.dayKey), opacity: 1)
+            WorkoutClock(state: state, startedAt: Date().addingTimeInterval(-45 * 60))
             Spacer(minLength: 12)
             WorkoutCompactTrailing(state: state)
         }
