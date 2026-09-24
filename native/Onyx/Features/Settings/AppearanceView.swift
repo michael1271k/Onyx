@@ -35,7 +35,10 @@ struct AppearanceView: View {
         Form {
             Section {
                 AppearancePreview(theme: OnyxTheme(spec: draft))
-                    .listRowInsets(EdgeInsets(top: OnyxSpace.m, leading: OnyxSpace.m, bottom: OnyxSpace.m, trailing: OnyxSpace.m))
+                    // The preview IS a slab; the Form row must not draw a
+                    // second card around it (B3 shot).
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
             }
             Section {
                 presets
@@ -106,6 +109,11 @@ struct AppearanceView: View {
                 .foregroundStyle(selected ? Color.onyx.textPrimary : Color.onyx.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
+                // Capped: eight names in ~76 pt columns scaled by eight
+                // different factors at AX5 sat on eight baselines and
+                // truncated "Rose…" (B3 shot). The swatch carries the choice;
+                // VoiceOver reads the full name.
+                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .contentShape(Rectangle())
@@ -170,7 +178,7 @@ private struct StoneSwatch: View {
             .clipShape(shape)
             if selected {
                 Image(systemName: "checkmark")
-                    .font(.footnote.weight(.bold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(Color.onyx.textPrimary)
                     .padding(4)
                     .background(Circle().fill(Color.onyx.slab))
@@ -226,6 +234,8 @@ private struct AppearancePreview: View {
         }
         .padding(OnyxSpace.m)
         .onyxGlass(.tile)
+        // A picture of a tile: tiles cap their type, so the picture does too.
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Preview of the selected theme")
     }

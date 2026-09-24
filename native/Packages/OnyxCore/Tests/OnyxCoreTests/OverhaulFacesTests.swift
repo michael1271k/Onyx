@@ -34,6 +34,11 @@ struct OverhaulFacesTests {
         ]
         let top = KeyMicro.top(totals: totals)
         #expect(top.map(\.key) == ["potassium", "sodium", "calcium"])
+        // Far OVER a floor is a good day, not a callout: 400 % iron must not
+        // push the 41 % potassium out.
+        var rich = totals
+        rich["iron"] = 40
+        #expect(KeyMicro.top(totals: rich, limit: 1).first?.key == "potassium")
         #expect(abs(top[0].pct - 1394.0 / 3400) < 1e-9)
         #expect(top[0].name == "Potassium")
         #expect(KeyMicro.top(totals: totals, limit: 2).count == 2)

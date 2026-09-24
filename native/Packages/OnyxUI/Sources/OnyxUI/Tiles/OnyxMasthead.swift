@@ -77,7 +77,7 @@ public struct OnyxMasthead: View {
           ForEach(Array(figures(.subheadline).enumerated()), id: \.offset) { $0.element }
         }
         grid(.subheadline)
-        grid(.caption)
+        grid(.caption, shrinks: true)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -101,8 +101,10 @@ public struct OnyxMasthead: View {
     }
   }
 
-  private func grid(_ style: Font.TextStyle) -> some View {
-    let cells = Array(figures(style).enumerated())
+  /// `shrinks` is the last tier: `ViewThatFits` uses it even when it does not
+  /// fit, so its figures give up size instead of spilling (code review).
+  private func grid(_ style: Font.TextStyle, shrinks: Bool = false) -> some View {
+    let cells = Array(figures(style, shrinks: shrinks).enumerated())
     return Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
       ForEach(Array(stride(from: 0, to: cells.count, by: 2)), id: \.self) { i in
         GridRow {
@@ -115,27 +117,29 @@ public struct OnyxMasthead: View {
 
   /// The figures that exist — a session with no heart rate or no record
   /// simply has fewer, rather than a "—" holding a cell.
-  private func figures(_ style: Font.TextStyle) -> [AnyView] {
+  private func figures(_ style: Font.TextStyle, shrinks: Bool = false) -> [AnyView] {
     var out: [AnyView] = []
     if let clock {
-      out.append(AnyView(Figure(symbol: "clock", tint: Color.onyx.textSecondary, style: style) {
+      out.append(AnyView(Figure(symbol: "clock", tint: Color.onyx.textSecondary, style: style, shrinks: shrinks) {
         switch clock {
         case .elapsed(let seconds): Text(Self.duration(seconds))
-        case .running(let since): Text(since, style: .timer)
+        // A `.timer` text has no stable ideal width; reserve one so the
+        // tier choice does not flip as the digits change.
+        case .running(let since): Text(since, style: .timer).frame(minWidth: 44, alignment: .leading)
         case .frozen(let text): Text(text)
         }
       }))
     }
     if let tonnage {
-      out.append(AnyView(Figure(symbol: "scalemass", tint: Color.onyx.textSecondary, style: style) { Text(tonnage) }))
+      out.append(AnyView(Figure(symbol: "scalemass", tint: Color.onyx.textSecondary, style: style, shrinks: shrinks) { Text(tonnage) }))
     }
     if let bpm {
-      out.append(AnyView(Figure(symbol: "heart.fill", tint: OnyxInk.Fixed.heart, style: style) {
+      out.append(AnyView(Figure(symbol: "heart.fill", tint: OnyxInk.Fixed.heart, style: style, shrinks: shrinks) {
         Text("\(bpm)") + Text(bpmIsAverage ? " avg" : " bpm").foregroundStyle(Color.onyx.textSecondary)
       }))
     }
     if prCount > 0 {
-      out.append(AnyView(Figure(symbol: "trophy.fill", tint: OnyxInk.Fixed.record, style: style) {
+      out.append(AnyView(Figure(symbol: "trophy.fill", tint: OnyxInk.Fixed.record, style: style, shrinks: shrinks) {
         Text(prCount == 1 ? "PR" : "\(prCount) PRs")
       }))
     }
@@ -150,7 +154,12 @@ public struct OnyxMasthead: View {
 
   private var spoken: String {
     var parts = [name.isEmpty ? "Session" : name]
-    if case .elapsed(let s)? = clock { parts.append("\(max(0, s) / 60) minutes") }
+    switch clock {
+    case .elapsed(let s)?: parts.append("\(max(0, s) / 60) minutes")
+    case .running?: parts.append("in progress")
+    case .frozen(let text)?: parts.append("paused at \(text)")
+    case nil: break
+    }
     if let tonnage { parts.append(tonnage) }
     if let bpm { parts.append(bpmIsAverage ? "average heart rate \(bpm)" : "heart rate \(bpm)") }
     if prCount > 0 { parts.append(prCount == 1 ? "1 record" : "\(prCount) records") }
@@ -163,9 +172,18 @@ private struct Figure<Value: View>: View {
   let symbol: String
   let tint: Color
   let style: Font.TextStyle
+  var shrinks = false
   @ViewBuilder let value: () -> Value
 
   var body: some View {
+    if shrinks {
+      row.lineLimit(1).minimumScaleFactor(0.7)
+    } else {
+      row.fixedSize()
+    }
+  }
+
+  private var row: some View {
     HStack(spacing: 4) {
       Image(systemName: symbol)
         .font(.system(style, weight: .semibold))
@@ -177,6 +195,5 @@ private struct Figure<Value: View>: View {
         .foregroundStyle(Color.onyx.textPrimary)
         .lineLimit(1)
     }
-    .fixedSize()
   }
 }

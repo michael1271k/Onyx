@@ -117,12 +117,13 @@ struct TodayModelTests {
         touch.stamp(t0)
         #expect(!touch.quiet(t0.addingTimeInterval(2.9)))
         #expect(touch.quiet(t0.addingTimeInterval(3)))
-        #expect(!touch.isSwipe(t0))
-        touch.swipe(true, now: t0)
-        #expect(touch.isSwipe(t0.addingTimeInterval(5)), "a swipe in flight is never a tap")
-        touch.swipe(false, now: t0)
-        #expect(touch.isSwipe(t0.addingTimeInterval(0.2)))
-        #expect(!touch.isSwipe(t0.addingTimeInterval(0.5)))
+        #expect(!touch.isSwipe("a", t0))
+        touch.swipe("a", true, now: t0)
+        #expect(touch.isSwipe("a", t0.addingTimeInterval(5)), "a swipe in flight is never a tap")
+        #expect(!touch.isSwipe("b", t0), "a swipe on one stack never swallows a neighbour's tap")
+        touch.swipe("a", false, now: t0)
+        #expect(touch.isSwipe("a", t0.addingTimeInterval(0.2)))
+        #expect(!touch.isSwipe("a", t0.addingTimeInterval(0.5)))
     }
 
     // MARK: - W2: the rotation clock

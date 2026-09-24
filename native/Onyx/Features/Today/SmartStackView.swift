@@ -180,7 +180,7 @@ struct SmartStackView: View {
         .onChange(of: held) { _, on in
             guard !on else { return }
             // A cancelled gesture never reaches `onEnded`; this always runs.
-            if touch.swiping { touch.swipe(false) }
+            if touch.swiping == slot.id { touch.swipe(slot.id, false) }
             if drag != 0 { withAnimation(turn) { drag = 0 } }
         }
         .onChange(of: face) { _, _ in
@@ -222,7 +222,7 @@ struct SmartStackView: View {
                 }
                 guard Self.takes(value.translation) || origin != nil else { return }
                 let from = origin ?? value.translation.width
-                if origin == nil { origin = from; touch.swipe(true) }
+                if origin == nil { origin = from; touch.swipe(slot.id, true) }
                 touchedAt = .now
                 let d = value.translation.width - from
                 // One page of travel each way, and only where there is a face
@@ -246,7 +246,7 @@ struct SmartStackView: View {
                 // the commit threshold, and this clamp stops it stepping off.
                 let next = min(max(face + step, 0), slot.items.count - 1)
                 touchedAt = .now
-                touch.swipe(false)
+                touch.swipe(slot.id, false)
                 withAnimation(turn) {
                     face = next
                     drag = 0

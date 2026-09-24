@@ -25,9 +25,10 @@ public struct KeyMicro: Codable, Sendable, Equatable, Identifiable {
     /// all — `NutrientTargets.isMet` treats nil as "nothing measured it", never
     /// as zero, and so does this.
     ///
-    /// Deviation is |share − 1| for a floor, and only the OVERAGE for a
-    /// ceiling: 40 % of the sodium ceiling is a good day, not the most
-    /// remarkable nutrient on it (the first test run picked exactly that).
+    /// Deviation is the SHORTFALL for a floor and the OVERAGE for a ceiling —
+    /// the direction that is a problem. 40 % of the sodium ceiling is a good
+    /// day (the first test run picked exactly that), and so is 400 % of the
+    /// vitamin C floor (code review): neither is the nutrient worth a glance.
     /// Ties keep the table's own order, so the pick is stable across refreshes.
     public static func top(
         totals: [String: Double],
@@ -37,7 +38,7 @@ public struct KeyMicro: Codable, Sendable, Equatable, Identifiable {
         let eligible: [(index: Int, off: Double, micro: KeyMicro)] = targets.enumerated().compactMap { index, t in
             guard t.group != "Macros", !t.fromStack, t.target > 0, let total = totals[t.key] else { return nil }
             let pct = total / t.target
-            let off = t.kind == .ceiling ? max(0, pct - 1) : abs(pct - 1)
+            let off = t.kind == .ceiling ? max(0, pct - 1) : max(0, 1 - pct)
             return (index, off, KeyMicro(key: t.key, name: t.label, pct: pct))
         }
         return eligible.sorted { a, b in a.off != b.off ? a.off > b.off : a.index < b.index }

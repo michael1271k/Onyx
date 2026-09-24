@@ -124,7 +124,7 @@ struct DashboardGrid: View {
             onTap: {
                 // A sideways swipe on a stack ends on the button's touch-up;
                 // it paged the stack and must not also open a sheet.
-                guard !model.touch.isSwipe() else { return }
+                guard !model.touch.isSwipe(slot.id) else { return }
                 model.touch.stamp()
                 if model.editing { if slot.items.count > 1 { model.sheet = .stack(slot.id) } }
                 else { onOpen(upFace(slot)) }

@@ -346,23 +346,34 @@ enum TodaySheet: Identifiable, Hashable {
 /// before opening a sheet: a sideways swipe on a stack ends on the same
 /// touch-up the button fires on. (A vertical drag is a scroll, and UIKit
 /// cancels the button for that; a sideways one moves nothing under it.)
+@MainActor
 final class GridTouch {
     static let hold: TimeInterval = 3
     /// How long after a swipe's release a touch-up still belongs to it.
     static let swipeTail: TimeInterval = 0.35
 
     private(set) var at = Date.distantPast
-    private(set) var swiping = false
+    /// The slot a swipe is on, or was on until `swipeEnded` — per slot, so a
+    /// swipe on one stack never swallows a tap on its neighbour (review).
+    private(set) var swiping: String?
+    private var lastSwiped: String?
     private var swipeEnded = Date.distantPast
 
     func stamp(_ now: Date = .now) { at = now }
 
-    func swipe(_ on: Bool, now: Date = .now) {
-        swiping = on
-        if !on { swipeEnded = now }
+    func swipe(_ slotId: String, _ on: Bool, now: Date = .now) {
+        if on {
+            swiping = slotId
+        } else if swiping == slotId || swiping == nil {
+            swiping = nil
+            lastSwiped = slotId
+            swipeEnded = now
+        }
         at = now
     }
 
     func quiet(_ now: Date = .now) -> Bool { now.timeIntervalSince(at) >= Self.hold }
-    func isSwipe(_ now: Date = .now) -> Bool { swiping || now.timeIntervalSince(swipeEnded) < Self.swipeTail }
+    func isSwipe(_ slotId: String, _ now: Date = .now) -> Bool {
+        swiping == slotId || (lastSwiped == slotId && now.timeIntervalSince(swipeEnded) < Self.swipeTail)
+    }
 }

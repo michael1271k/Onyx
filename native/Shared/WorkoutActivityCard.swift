@@ -430,7 +430,7 @@ struct WorkoutClock: View {
     var body: some View {
         Group {
             if state.isPaused == true {
-                Text(state.elapsed ?? "")
+                Text(state.elapsed ?? "—")
                     .foregroundStyle(Color.onyx.textTertiary)
             } else {
                 Text(state.timerOrigin ?? startedAt, style: .timer)
@@ -453,7 +453,7 @@ extension OnyxMasthead {
         self.init(
             name: title,
             clock: state.isPaused == true
-                ? .frozen(state.elapsed ?? "")
+                ? state.elapsed.map { .frozen($0) }
                 : .running(since: state.timerOrigin ?? startedAt),
             tonnage: state.volume.isEmpty ? nil : state.volume,
             bpm: state.bpm, prCount: state.prsThisSession,
