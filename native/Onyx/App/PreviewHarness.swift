@@ -141,6 +141,29 @@ enum PreviewHarness {
 
     static let previewUser = "00000000-0000-0000-0000-000000000001"
 
+    static let dsldHits: [DSLD.Hit] = [
+        .init(id: "323076", brand: "Thorne", product: "Basic Nutrients 2/Day", form: "Capsule", serving: "2 Capsule(s)"),
+        .init(id: "291772", brand: "Thorne", product: "Basic Nutrients 2/Day", form: "Capsule", serving: nil, offMarket: true),
+        .init(id: "28427", brand: "Thorne Research", product: "Basic Nutrients 2/Day", form: "Capsule", serving: nil, offMarket: true),
+        .init(id: "253226", brand: "KAL", product: "Magnesium Glycinate 400", form: "Tablet or Pill", serving: nil),
+        .init(id: "33919", brand: "Vinco's", product: "Magnesium Glycinate", form: "Powder", serving: nil),
+    ]
+
+    static let dsldLabel: DSLD.Label? = {
+        func row(_ name: String, _ amount: Double, _ unit: String, _ dv: Double?) -> String {
+            #"{"name": "\#(name)", "quantity": [{"quantity": \#(amount), "unit": "\#(unit)", "dailyValueTargetGroup": [{"percent": \#(dv.map { "\($0)" } ?? "null")}]}]}"#
+        }
+        let rows = [
+            row("Vitamin A", 1.05, "mg", 117), row("Vitamin C", 250, "mg", 278), row("Vitamin D", 50, "mcg", 250),
+            row("Vitamin E", 16.5, "mg", 110), row("Vitamin K", 400, "mcg", 333), row("Thiamine", 50, "mg", 4167),
+            row("Vitamin B6", 20, "mg", 1176), row("Folate", 667, "mcg DFE", 167), row("Vitamin B12", 600, "mcg", 25000),
+            row("Magnesium", 20, "mg", 5), row("Zinc", 15, "mg", 136), row("Selenium", 200, "mcg", 364),
+            row("Boron", 2, "mg", nil), row("Lutein", 140, "mcg", nil),
+        ].joined(separator: ",")
+        let json = #"{"id": 323076, "fullName": "Basic Nutrients 2/Day", "brandName": "Thorne", "physicalState": {"langualCodeDescription": "Capsule"}, "servingSizes": [{"minQuantity": 2, "maxQuantity": 2, "unit": "Capsule(s)"}], "ingredientRows": [\#(rows)]}"#
+        return try? JSONDecoder().decode(DSLD.Label.self, from: Data(json.utf8))
+    }()
+
     /// A store that already holds one of the names in the seeded paste, so the
     /// preview shot shows a duplicate being recognised rather than only the
     /// happy path.
@@ -411,6 +434,18 @@ enum PreviewHarness {
             SignedInTabs().environment(tabsEnvironment(s))
         case "you":
             NavigationStack { SettingsTabView(seeded: model) }.environment(AppEnvironment.preview)
+        // ── OVERHAUL C3: the label-database import, with NO network ─────────
+        // Results as a product search for "basic nutrients" answered, and the
+        // label itself (an excerpt of DSLD 323076, Thorne "Basic Nutrients
+        // 2/Day" — the full response is OnyxCore's decoder fixture).
+        case "stack-import", "stack-import-label":
+            DSLDImportView(
+                onAdd: { _ in }, onManual: { _ in },
+                seed: .init(query: "basic nutrients", hits: Self.dsldHits,
+                            label: screen == "stack-import-label" ? Self.dsldLabel : nil)
+            )
+            .environment(AppEnvironment.preview)
+            .preferredColorScheme(.dark)
         case "train", "train-done", "train-pending", "train-cardio", "train-empty", "train-week", "train-wrap", "train-wrap-large",
              "train-wrap-deload", "train-report-large", "train-monday", "train-library", "train-library-open",
              // W4: the weekly report the wrap sheet became, seeded — the one

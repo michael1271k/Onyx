@@ -134,15 +134,10 @@ private struct SettingsForm: View {
                 } label: {
                     row("Import exercises", "Add a movement list")
                 }
-            } header: {
-                OnyxSectionHeader("Plan", .train)
-            }
-
-            Section {
                 NavigationLink {
                     LeversView(model: model)
                 } label: {
-                    row("Levers", "Calories and macros", value: leverSummary)
+                    row("Levers", model.heldBy.map { "Held by \($0.label)" } ?? "Your own numbers", value: leverSummary)
                 }
                 NavigationLink {
                     BodyTargetsView(model: model)
@@ -158,23 +153,19 @@ private struct SettingsForm: View {
                     row("Prescriptions", "Paste a coach's audit")
                 }
             } header: {
-                OnyxSectionHeader("Targets", .fuel)
+                OnyxSectionHeader("Plan & targets", .train)
             }
+            .settingsRows()
 
             Section {
                 Toggle(isOn: trackRpe) {
-                    Text("Track effort (RPE)")
+                    Text("Track effort (RPE)").font(.subheadline)
                     subLine("Progression reads it")
                 }
                 Toggle(isOn: $warmupCalculator) {
-                    Text("Warm-up calculator")
+                    Text("Warm-up calculator").font(.subheadline)
                     subLine("Ramp-up loads per card")
                 }
-            } header: {
-                OnyxSectionHeader("Logging", .train)
-            }
-
-            Section {
                 /* ── THE TWO FIGURES NOTHING ELSE COLLECTS ──────────────────
                    Every other number arrives on its own: the watch files the
                    steps, the scale the weight, the logger the sets. A fatigue
@@ -184,7 +175,7 @@ private struct SettingsForm: View {
                    app that requests notification permission at launch gets
                    "Don't Allow" and can never ask again. */
                 Toggle(isOn: $remindersEnabled) {
-                    Text("Log reminders")
+                    Text("Log reminders").font(.subheadline)
                     subLine("Fatigue and waist check-ins")
                 }
                 .onChange(of: remindersEnabled) { _, on in
@@ -195,22 +186,23 @@ private struct SettingsForm: View {
                    still due at that time, at the dose in force that day, and a
                    dose already ticked is not asked about. */
                 Toggle(isOn: $supplementRemindersEnabled) {
-                    Text("Supplement reminders")
+                    Text("Supplement reminders").font(.subheadline)
                     subLine("At each stack time")
                 }
                 .onChange(of: supplementRemindersEnabled) { _, on in
                     armReminders(on) { supplementRemindersEnabled = false }
                 }
             } header: {
-                OnyxSectionHeader("Reminders", .recover)
+                OnyxSectionHeader("Logging & reminders", .train)
             }
+            .settingsRows()
 
             Section {
                 Picker(selection: unitSystem) {
                     Text("Kilograms").tag("kg")
                     Text("Pounds").tag("lb")
                 } label: {
-                    Text("Weight units")
+                    Text("Weight units").font(.subheadline)
                     subLine("How loads are shown")
                 }
                 // Week start is load-bearing — one `WeekWindow` cuts History,
@@ -221,7 +213,7 @@ private struct SettingsForm: View {
                     Text("Sunday").tag(0)
                     Text("Monday").tag(1)
                 } label: {
-                    Text("Week starts on")
+                    Text("Week starts on").font(.subheadline)
                     subLine("Cuts History and the weekly export")
                 }
                 // ── AND WHY THERE IS NO "REDUCE MOTION" ROW (W1) ─────────────
@@ -238,15 +230,10 @@ private struct SettingsForm: View {
                 } label: {
                     row("Appearance", "Theme colours for the whole app", value: themeName)
                 }
-            } header: {
-                OnyxSectionHeader("Display", .recover)
-            }
-
-            // ── THE MANUAL CASCADE (W2, decision 11) ────────────────────────
-            // Past edits within 120 days rescore themselves at the door. An
-            // older one leaves a mark, and this is the one button that
-            // rewrites the whole stored history from it.
-            Section {
+                // ── THE MANUAL CASCADE (W2, decision 11) ────────────────────────
+                // Past edits within 120 days rescore themselves at the door. An
+                // older one leaves a mark, and this is the one button that
+                // rewrites the whole stored history from it.
                 NavigationLink {
                     ReportsListView()
                 } label: {
@@ -264,7 +251,7 @@ private struct SettingsForm: View {
                                 .foregroundStyle(Color.onyx.danger)
                         }
                     } label: {
-                        Text("Recompute history")
+                        Text("Recompute history").font(.subheadline)
                         if let from = environment.historyStaleFrom {
                             subLine("An edit from \(from) waits")
                         } else {
@@ -276,8 +263,9 @@ private struct SettingsForm: View {
                 .accessibilityLabel("Recompute history")
                 .accessibilityHint(environment.historyStale ? "An edit older than 120 days is waiting" : "Rewrites every stored daily score")
             } header: {
-                OnyxSectionHeader("History", .body)
+                OnyxSectionHeader("Display & history", .recover)
             }
+            .settingsRows()
 
             // ── ADMIN ONLY, AND FAILING CLOSED ──────────────────────────────
             // The Sync doctor is a diagnostic: per-table row counts, cursors,
@@ -306,15 +294,12 @@ private struct SettingsForm: View {
                 }
             }
 
+            // About and the account are ONE section (overhaul Q20): two
+            // groups of three rows each paid a header, a footer and 16 pt of
+            // gap for what reads as one closing block.
             Section {
                 row("Version", "Quote in a bug report", value: OnyxLinks.versionString)
                     .textSelection(.enabled)
-                // Support sits ABOVE the policy: it is the row a person in
-                // trouble is looking for, and the policy is the one a reviewer
-                // is. Both are `Link`, which opens Safari rather than an
-                // in-app browser — an app that renders arbitrary web content
-                // answers a different set of App Review questions, and neither
-                // of these pages is worth that.
                 Link(destination: OnyxLinks.support) {
                     row("Support", "Questions and bugs")
                 }
@@ -323,34 +308,18 @@ private struct SettingsForm: View {
                     row("Privacy Policy", "What is kept, never sold")
                 }
                 .accessibilityHint("Opens in Safari")
-            } header: {
-                OnyxSectionHeader("About", .recover)
-            } footer: {
-                // The medical sentence is FIRST because it is the one App Review
-                // looks for (guideline 1.4.1). Onyx reads HRV, resting heart
-                // rate, SpO₂ and respiratory rate out of HealthKit and tells
-                // you what it thinks they mean — "an early fatigue or
-                // under-recovery signal" — which is interpretation, and
-                // interpretation without this line is what the guideline is
-                // about. It measures nothing itself; that is the half of 1.4.1
-                // that would be a hard reject.
-                Text("Onyx is a training and recovery log, not a medical device. It does not diagnose, treat or monitor any condition — talk to a doctor before making a health decision.\n\nHealth data stays on this device and in your own private Onyx account. It is never sold, and never shared with anyone else.")
-            }
-
-            // Unchanged by W7, rows and footer alike: forgiveness before
-            // minimalism. What deletion destroys is said here, before the tap.
-            Section {
                 Button("Sign out", role: .destructive) { isSigningOut = true }
-                // App Store guideline 5.1.1(v): an account that can be created
-                // in the app has to be deletable in the app — not by email, not
-                // through a web form, here.
                 Button("Delete account", role: .destructive) { isDeleting = true }
                     .disabled(isDeletingNow)
+            } header: {
+                OnyxSectionHeader("About & account", .recover)
             } footer: {
-                Text("Deleting your account removes every workout, night and reading from Onyx's servers and from this device. It cannot be undone.")
+                Text("Onyx is a training and recovery log, not a medical device: it does not diagnose, treat or monitor any condition — talk to a doctor before a health decision. Your data stays on this device and in your private account, never sold or shared. Deleting the account erases it everywhere and cannot be undone.")
             }
+            .settingsRows()
         }
         .onyxFormBackground()
+        .settingsDensity()
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: scenePhase) { _, phase in
@@ -435,11 +404,15 @@ private struct SettingsForm: View {
         LabeledContent {
             if let value {
                 Text(value)
-                    .fontWeight(.medium)
+                    .font(.subheadline).fontWeight(.medium)
                     .foregroundStyle(Color.onyx.textPrimary)
+                    // One line: a value that wrapped under its label (Levers)
+                    // cost the row a third line.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
         } label: {
-            Text(title)
+            Text(title).font(.subheadline)
             subLine(detail)
         }
     }
@@ -447,7 +420,7 @@ private struct SettingsForm: View {
     /// Grey even inside a `Link` or `Button`, whose tint would otherwise dim it
     /// to an accent-on-grey that reads as a second link and fails contrast.
     private func subLine(_ text: String) -> Text {
-        Text(text).foregroundStyle(Color.onyx.textSecondary)
+        Text(text).font(.footnote).foregroundStyle(Color.onyx.textSecondary)
     }
 
     /// The preset the live theme matches, or `Custom`.
@@ -474,10 +447,10 @@ private struct SettingsForm: View {
     }
 
     /// `Baseline · 1,955 kcal`, or the release and the date it ends.
+    /// The kcal alone: who holds the numbers moved to the detail line, so the
+    /// value fits beside its label instead of wrapping onto a third line.
     private var leverSummary: String {
-        let kcal = model.shownGoals.calorie.formatted(.number.precision(.fractionLength(0)))
-        guard let held = model.heldBy else { return "My own numbers\u{00A0}· \(kcal) kcal" }
-        return "\(held.label)\u{00A0}· \(kcal) kcal"
+        "\(model.shownGoals.calorie.formatted(.number.precision(.fractionLength(0)))) kcal"
     }
 
     // ── Bindings ────────────────────────────────────────────────────────────

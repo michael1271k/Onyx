@@ -585,6 +585,7 @@ public struct CustomSupplementRow: Codable, FetchableRecord, PersistableRecord, 
     public var doseUnit: String?
     public var sortOrder: Int?
     public var dosePeriods: JSONText?
+    public var otherIngredients: JSONText?
 
     public enum CodingKeys: String, CodingKey {
         case id
@@ -602,6 +603,7 @@ public struct CustomSupplementRow: Codable, FetchableRecord, PersistableRecord, 
         case doseUnit = "dose_unit"
         case sortOrder = "sort_order"
         case dosePeriods = "dose_periods"
+        case otherIngredients = "other_ingredients"
     }
 
     public init(
@@ -619,7 +621,8 @@ public struct CustomSupplementRow: Codable, FetchableRecord, PersistableRecord, 
         doseAmount: Double? = nil,
         doseUnit: String? = nil,
         sortOrder: Int? = nil,
-        dosePeriods: JSONText? = nil
+        dosePeriods: JSONText? = nil,
+        otherIngredients: JSONText? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -636,6 +639,7 @@ public struct CustomSupplementRow: Codable, FetchableRecord, PersistableRecord, 
         self.doseUnit = doseUnit
         self.sortOrder = sortOrder
         self.dosePeriods = dosePeriods
+        self.otherIngredients = otherIngredients
     }
 }
 
@@ -2092,6 +2096,7 @@ extension AppDatabase {
                 t.column("dose_unit", .text)
                 t.column("sort_order", .integer)
                 t.column("dose_periods", .text)
+                t.column("other_ingredients", .text)
             }
             try db.create(table: "fatigue_logs") { t in
                 t.primaryKey("id", .text)
