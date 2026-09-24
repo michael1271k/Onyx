@@ -31,7 +31,12 @@ public actor DSLDClient {
     public enum Failure: Error, Equatable {
         case status(Int)
         case offline
+        /// A 200 that is not JSON — a captive portal, a CDN interstitial.
+        case notJSON
     }
+
+    /// One client for the app, so its memory cache outlives a sheet.
+    public static let shared = DSLDClient()
 
     private let session: URLSession
     private let cacheDirectory: URL?
@@ -139,6 +144,8 @@ public actor DSLDClient {
                 let (body, response) = try await session.data(for: request)
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 200
                 if (200..<300).contains(status) {
+                    // Never cache a page that is not JSON for a week.
+                    guard (try? JSONSerialization.jsonObject(with: body)) != nil else { throw Failure.notJSON }
                     memory[url] = (now(), body)
                     writeDisk(url, body)
                     return body
@@ -154,6 +161,8 @@ public actor DSLDClient {
                 try await Task.sleep(nanoseconds: Self.backoff[attempt] * 1_000_000)
             }
         }
+        // Offline after the week is up: an old label beats no label.
+        if let stale = readDisk(url, ignoringAge: true) { return stale.data }
         throw lastError
     }
 
@@ -167,11 +176,11 @@ public actor DSLDClient {
         return cacheDirectory?.appendingPathComponent(digest + ".json")
     }
 
-    private func readDisk(_ url: URL) -> (at: Date, data: Data)? {
+    private func readDisk(_ url: URL, ignoringAge: Bool = false) -> (at: Date, data: Data)? {
         guard let file = file(url),
               let attributes = try? FileManager.default.attributesOfItem(atPath: file.path),
               let modified = attributes[.modificationDate] as? Date,
-              now().timeIntervalSince(modified) < Self.ttl,
+              ignoringAge || now().timeIntervalSince(modified) < Self.ttl,
               let data = try? Data(contentsOf: file)
         else { return nil }
         return (modified, data)

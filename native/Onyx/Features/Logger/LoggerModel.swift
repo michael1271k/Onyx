@@ -697,7 +697,10 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// Cards appended while EDITING (overhaul C2), by card id, with whether
     /// their plan was appended to `day` too. Discard takes them back out: once
     /// the revert has voided their sets they describe nothing.
-    private var addedWhileEditing: [(cardId: ObjectIdentifier, appendedPlan: Bool)] = []
+    /// Keyed by `canonicalKey`, recorded by `addExercise` alone: `attach
+    /// (editing:)` also appends cards (the session's own off-plan movements)
+    /// and those are not the sitting's to take away.
+    private var addedWhileEditing: [(key: String, appendedPlan: Bool)] = []
 
     private let userId: String
 
@@ -1322,7 +1325,10 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         guard !trimmed.isEmpty else { return nil }
         let key = canonicalKey(trimmed)
         if let already = exercises.first(where: { canonicalKey($0.name) == key }) { return already }
-        return appendCard(named: trimmed, exerciseId: exerciseId)
+        let planned = day.exercises.contains { canonicalKey($0.name) == key }
+        let card = appendCard(named: trimmed, exerciseId: exerciseId)
+        if isEditing { addedWhileEditing.append((key, !planned)) }
+        return card
     }
 
     /// One card, appended at the bottom of the deck.
@@ -1344,7 +1350,6 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     private func appendCard(named name: String, exerciseId: String? = nil) -> ExerciseState {
         let key = canonicalKey(name)
         let plan: ProgramExercise
-        var appendedPlan = false
         if let known = day.exercises.first(where: { canonicalKey($0.name) == key }) {
             plan = known
         } else {
@@ -1352,7 +1357,6 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             starting.exerciseId = exerciseId
             plan = starting.programExercise
             day.exercises.append(plan)
-            appendedPlan = true
         }
         // The narrow lookup, and only where the day's seed has nothing to say.
         // Never on an edit deck: `lastWorkingSet` has no date bound, so on a
@@ -1365,18 +1369,17 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         let prescribed = plan.sets(for: phase)
         let card = ExerciseState(plan: plan, rows: seedRows(plan, count: prescribed > 0 ? prescribed : plan.sets))
         exercises.append(card)
-        if isEditing { addedWhileEditing.append((ObjectIdentifier(card), appendedPlan)) }
         return card
     }
 
     /// Discard's other half: the cards this sitting added leave the deck, and
     /// a plan they brought leaves `day` with them.
     private func dropCardsAddedWhileEditing() {
+        // By KEY, and the plan goes whether or not a card is still on the
+        // deck: a phase switch can drop the card and mint another.
         for added in addedWhileEditing {
-            guard let index = exercises.firstIndex(where: { ObjectIdentifier($0) == added.cardId }) else { continue }
-            let key = canonicalKey(exercises[index].plan.name)
-            exercises.remove(at: index)
-            if added.appendedPlan { day.exercises.removeAll { canonicalKey($0.name) == key } }
+            exercises.removeAll { canonicalKey($0.name) == added.key }
+            if added.appendedPlan { day.exercises.removeAll { canonicalKey($0.name) == added.key } }
         }
         addedWhileEditing = []
     }

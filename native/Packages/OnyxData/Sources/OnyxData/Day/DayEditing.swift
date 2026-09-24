@@ -412,6 +412,17 @@ public extension AppDatabase {
     /// decide what is already there; subscribing to a stream for a question
     /// asked once per launch would leave an observation open for the life of
     /// the sync.
+    /// Whether any Health-imported WALK carries a key — the only rows the
+    /// treadmill relabel (overhaul C2) could ever change.
+    func hasImportedWalks(userId: String) throws -> Bool {
+        try writer.read { db in
+            try Bool.fetchOne(db, sql: """
+                SELECT EXISTS(SELECT 1 FROM cardio_logs
+                WHERE user_id = ? AND kind = 'walk' AND from_healthkit = 1 AND hk_uuid IS NOT NULL)
+                """, arguments: [userId]) ?? false
+        }
+    }
+
     func cardioRows(userId: String, date: String) throws -> [CardioLogRow] {
         try writer.read { db in
             try CardioLogRow

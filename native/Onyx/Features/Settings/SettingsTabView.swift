@@ -132,12 +132,13 @@ private struct SettingsForm: View {
                 NavigationLink {
                     ExerciseImportView(database: environment.database, userId: userId)
                 } label: {
-                    row("Import exercises", "Add a movement list")
+                    row("Import exercises", "Add a movement list", oneLine: true)
                 }
                 NavigationLink {
                     LeversView(model: model)
                 } label: {
-                    row("Levers", model.heldBy.map { "Held by \($0.label)" } ?? "Your own numbers", value: leverSummary)
+                    row("Levers", model.heldBy.map { "Held by \($0.label)" } ?? "Your own numbers", value: leverSummary,
+                        keepDetail: model.heldBy != nil)
                 }
                 NavigationLink {
                     BodyTargetsView(model: model)
@@ -202,9 +203,10 @@ private struct SettingsForm: View {
                     Text("Kilograms").tag("kg")
                     Text("Pounds").tag("lb")
                 } label: {
+                    // One line (Q20): the picker shows the unit it sets.
                     Text("Weight units").font(.subheadline)
-                    subLine("How loads are shown")
                 }
+                .accessibilityHint("How loads are shown")
                 // Week start is load-bearing — one `WeekWindow` cuts History,
                 // the Workout tab's This-week panel and the weekly export, so
                 // the sub-line says what the choice cuts (the picker already
@@ -237,7 +239,7 @@ private struct SettingsForm: View {
                 NavigationLink {
                     ReportsListView()
                 } label: {
-                    row("Reports", "A write-up per week")
+                    row("Reports", "A write-up per week", oneLine: true)
                 }
                 Button {
                     environment.recomputeHistory()
@@ -301,11 +303,11 @@ private struct SettingsForm: View {
                 row("Version", "Quote in a bug report", value: OnyxLinks.versionString)
                     .textSelection(.enabled)
                 Link(destination: OnyxLinks.support) {
-                    row("Support", "Questions and bugs")
+                    row("Support", "Questions and bugs", oneLine: true)
                 }
                 .accessibilityHint("Opens in Safari")
                 Link(destination: OnyxLinks.privacyPolicy) {
-                    row("Privacy Policy", "What is kept, never sold")
+                    row("Privacy Policy", "What is kept, never sold", oneLine: true)
                 }
                 .accessibilityHint("Opens in Safari")
                 Button("Sign out", role: .destructive) { isSigningOut = true }
@@ -314,7 +316,7 @@ private struct SettingsForm: View {
             } header: {
                 OnyxSectionHeader("About & account", .recover)
             } footer: {
-                Text("Onyx is a training and recovery log, not a medical device: it does not diagnose, treat or monitor any condition — talk to a doctor before a health decision. Your data stays on this device and in your private account, never sold or shared. Deleting the account erases it everywhere and cannot be undone.")
+                Text("Onyx is a training log, not a medical device — talk to a doctor before a health decision. Your data is never sold or shared; deleting the account erases it everywhere and cannot be undone.")
             }
             .settingsRows()
         }
@@ -400,8 +402,15 @@ private struct SettingsForm: View {
     /// The value is primary ink, not the platform's grey: when it does not fit
     /// beside a sub-line it drops UNDER it (every value row at AX5, two at the
     /// default size), and grey-under-grey read as one paragraph.
-    private func row(_ title: String, _ detail: String, value: String? = nil) -> some View {
-        LabeledContent {
+    /// A row whose VALUE already answers what it is (`Onyx-5 · Cut`, `62 kg`)
+    /// drops its detail line to VoiceOver's hint: one line, not two (overhaul
+    /// Q20 — the second line on every row was most of the screen's height).
+    /// `keepDetail` for a detail that says something the value cannot.
+    /// `oneLine` for a link whose title says it all (Support, Privacy).
+    private func row(_ title: String, _ detail: String, value: String? = nil, keepDetail: Bool = false,
+                     oneLine: Bool = false) -> some View {
+        let showsDetail = (value == nil || keepDetail) && !oneLine
+        return LabeledContent {
             if let value {
                 Text(value)
                     .font(.subheadline).fontWeight(.medium)
@@ -413,8 +422,9 @@ private struct SettingsForm: View {
             }
         } label: {
             Text(title).font(.subheadline)
-            subLine(detail)
+            if showsDetail { subLine(detail) }
         }
+        .accessibilityHint(showsDetail ? "" : detail)
     }
 
     /// Grey even inside a `Link` or `Button`, whose tint would otherwise dim it

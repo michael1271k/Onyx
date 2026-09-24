@@ -84,6 +84,23 @@ struct DSLDTests {
         #expect(p.otherIngredients == ["Magnesium Glycinate", "Vitamin A"])
     }
 
+    @Test("DSLD's spelled-out units convert: Gram(s), Milligram(s), µg")
+    func spelledUnits() {
+        #expect(DSLD.convert(5, from: "Gram(s)", to: "mg", key: "creatine") == 5000)
+        #expect(DSLD.convert(200, from: "Milligram(s)", to: "mg", key: "theanine") == 200)
+        #expect(DSLD.convert(25, from: "µg", to: "mcg", key: "vitaminB12") == 25)
+        #expect(DSLD.convert(10, from: "Microgram(s)", to: "mcg", key: "biotin") == 10)
+        #expect(DSLD.convert(1, from: "Serving(s)", to: "mg", key: "creatine") == nil)
+    }
+
+    @Test("an unknown serving unit leaves the dose blank rather than calling it mg")
+    func unknownServingUnit() throws {
+        let json = #"{"id": 1, "fullName": "Drops", "brandName": "X", "servingSizes": [{"minQuantity": 30, "unit": "Drop(s)"}], "ingredientRows": []}"#
+        let p = DSLD.prefill(try JSONDecoder().decode(DSLD.Label.self, from: Data(json.utf8)))
+        #expect(p.doseUnit == nil)
+        #expect(p.doseAmount == nil)
+    }
+
     @Test("a product search page decodes its hits and its count")
     func searchPage() throws {
         let page = try JSONDecoder().decode(DSLD.Page.self, from: fixture("dsld-search"))

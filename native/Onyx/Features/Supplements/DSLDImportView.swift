@@ -29,7 +29,7 @@ struct DSLDImportView: View {
     let onAdd: (DSLD.Prefill) -> Void
     /// The manual path, with whatever name was typed.
     let onManual: (String) -> Void
-    var client = DSLDClient()
+    var client = DSLDClient.shared
     /// Harness only: results and a label to show without the network.
     var seed: Seed? = nil
 
@@ -56,14 +56,6 @@ struct DSLDImportView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    Picker("Search by", selection: $mode) {
-                        ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                }
                 if failed { notice }
                 if let brand { brandHeader(brand) }
                 results
@@ -72,6 +64,17 @@ struct DSLDImportView: View {
             .onyxScreen(.fuel)
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
                         prompt: mode == .product ? "Product, e.g. magnesium glycinate" : "Brand, e.g. Thorne")
+            // Pinned under the search field, not a list row: the row sat
+            // 60 pt below the field behind a section gap (shot round 1), and
+            // `searchScopes` only shows while the field is focused (round 2).
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Picker("Search by", selection: $mode) {
+                    ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, OnyxSpace.l)
+                .padding(.vertical, OnyxSpace.s)
+            }
             .navigationTitle("Label database")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -201,13 +204,18 @@ struct DSLDImportView: View {
                 hits = []
             } else {
                 let offset = more ? hits.count : 0
+                let asked = (text, brand)
                 let page: DSLD.Page
                 if let brand {
                     page = try await client.products(brand: brand, from: offset)
                 } else {
                     page = try await client.searchProducts(text, from: offset)
                 }
-                hits = more ? hits + page.hits : page.hits
+                // A reply for a query that has since changed is dropped, and a
+                // page that overlaps the last one adds only what is new.
+                guard asked == (query.trimmingCharacters(in: .whitespaces), brand) else { return }
+                let seen = Set(hits.map(\.id))
+                hits = more ? hits + page.hits.filter { !seen.contains($0.id) } : page.hits
                 total = page.total
             }
             failed = false
@@ -224,7 +232,12 @@ struct DSLDImportView: View {
 
     static var canScan: Bool {
         #if canImport(VisionKit)
-        DataScannerViewController.isSupported && DataScannerViewController.isAvailable
+        // Hidden until the app declares the camera: without
+        // `NSCameraUsageDescription` iOS kills the app the moment the scanner
+        // asks. The key is a request in the Lane C wave record (Info.plist is
+        // not this lane's), so the button appears the day it lands.
+        Bundle.main.object(forInfoDictionaryKey: "NSCameraUsageDescription") != nil
+            && DataScannerViewController.isSupported && DataScannerViewController.isAvailable
         #else
         false
         #endif
@@ -260,11 +273,14 @@ private struct BarcodeScanner: UIViewControllerRepresentable {
             isHighlightingEnabled: true
         )
         scanner.delegate = context.coordinator
-        try? scanner.startScanning()
         return scanner
     }
 
-    func updateUIViewController(_ controller: DataScannerViewController, context: UIViewControllerRepresentableContext<BarcodeScanner>) {}
+    /// Started once it is on screen; `startScanning` from `make` can throw
+    /// before the view is in a window, which left a black scanner.
+    func updateUIViewController(_ controller: DataScannerViewController, context: UIViewControllerRepresentableContext<BarcodeScanner>) {
+        if !controller.isScanning { try? controller.startScanning() }
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator(onCode: onCode) }
 
@@ -299,6 +315,7 @@ struct DSLDLabelView: View {
 
     @State private var label: DSLD.Label?
     @State private var failed = false
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         List {
@@ -354,20 +371,38 @@ struct DSLDLabelView: View {
 
     /// Name · amount unit · %DV, and a dot when it counts toward the micros.
     private func ingredient(_ row: DSLD.Label.IngredientRow, mapped: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
-            Circle()
-                .fill(mapped ? Color.onyx.accent(.fuel) : Color.clear)
-                .frame(width: 6, height: 6)
-                .accessibilityHidden(true)
-            Text(row.name).onyxType(.body).foregroundStyle(Color.onyx.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: OnyxSpace.s)
-            Text([row.amount.map(Self.number), row.unit].compactMap { $0 }.joined(separator: " "))
-                .onyxType(.caption).onyxNumeral().foregroundStyle(Color.onyx.textSecondary)
-            if let dv = row.percentDV {
-                Text("\(Self.number(dv))%")
-                    .onyxType(.caption).onyxNumeral().foregroundStyle(Color.onyx.textTertiary)
-                    .frame(minWidth: 44, alignment: .trailing)
+        let amount = [row.amount.map(Self.number), row.unit].compactMap { $0 }.joined(separator: " ")
+        let dv = row.percentDV.map { "\(Self.number($0))%" }
+        let dot = Circle()
+            .fill(mapped ? Color.onyx.accent(.fuel) : Color.clear)
+            .frame(width: 6, height: 6)
+            .accessibilityHidden(true)
+        // At the accessibility sizes a name, an amount and a %DV cannot share
+        // a line — "Vit-ami-n A" (shot round 1) — so the figures go under it.
+        return Group {
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
+                        dot
+                        Text(row.name).onyxType(.secondary).foregroundStyle(Color.onyx.textPrimary)
+                    }
+                    Text([amount, dv].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                        .onyxType(.caption).onyxNumeral().foregroundStyle(Color.onyx.textSecondary)
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
+                    dot
+                    Text(row.name).onyxType(.secondary).foregroundStyle(Color.onyx.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: OnyxSpace.s)
+                    Text(amount)
+                        .onyxType(.caption).onyxNumeral().foregroundStyle(Color.onyx.textSecondary)
+                        .lineLimit(1)
+                    Text(dv ?? "")
+                        .onyxType(.caption).onyxNumeral().foregroundStyle(Color.onyx.textTertiary)
+                        .lineLimit(1)
+                        .frame(minWidth: 56, alignment: .trailing)
+                }
             }
         }
         .accessibilityElement(children: .combine)

@@ -324,6 +324,12 @@ enum PreviewHarness {
             UIApplication.shared.connectedScenes
                 .compactMap { $0 as? UIWindowScene }.flatMap(\.windows).forEach(walk)
             if let s = tallest {
+                // A List/Form ESTIMATES the rows it has not laid out, so walk
+                // to the bottom until the real height stops moving.
+                for _ in 0..<6 {
+                    s.setContentOffset(CGPoint(x: 0, y: max(0, s.contentSize.height - s.bounds.height + s.adjustedContentInset.bottom)), animated: false)
+                    try? await Task.sleep(for: .milliseconds(300))
+                }
                 let visible = s.bounds.height - s.adjustedContentInset.top - s.adjustedContentInset.bottom
                 print("ONYXMEASURE content=\(s.contentSize.height) container=\(visible)")
             }

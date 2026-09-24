@@ -192,7 +192,9 @@ public enum DSLD {
     public static func prefill(_ label: Label) -> Prefill {
         let serving = label.servingSizes.first
         let unit = serving.flatMap { doseUnit($0.unit) }
-        let amount = serving?.minQuantity
+        // No amount without a unit the sheet can hold: "30 Drop(s)" must not
+        // land as "30 mg" under the sheet's default unit.
+        let amount = unit == nil ? nil : serving?.minQuantity
         // Micros are per ONE unit of a count dose — `doseUnits` multiplies back.
         let perUnit = (unit?.isCount == true) ? max(amount ?? 1, 1) : 1
         var micros: [String: Double] = [:]
@@ -253,7 +255,12 @@ public enum DSLD {
     static func convert(_ value: Double, from raw: String?, to target: String, key: String) -> Double? {
         guard let raw else { return nil }
         // `mcg DFE`, `mcg RAE` are mcg — the qualifier says how it was counted.
-        let unit = raw.lowercased().split(separator: " ").first.map(String.init) ?? ""
+        // DSLD also spells units out: `Gram(s)`, `Milligram(s)`, `Microgram(s)`.
+        let word = raw.lowercased().split(separator: " ").first.map(String.init) ?? ""
+        let unit = word.hasPrefix("microgram") ? "mcg"
+            : word.hasPrefix("milligram") ? "mg"
+            : word.hasPrefix("gram") ? "g"
+            : word
         let mcg: [String: Double] = ["g": 1_000_000, "mg": 1_000, "mcg": 1, "µg": 1, "ug": 1]
         if target == "IU" {
             if unit == "iu" { return value }

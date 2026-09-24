@@ -220,6 +220,24 @@ struct SessionEditModeTests {
     /// The edit deck offers "Add a movement" now. A set logged on it is a real
     /// set of THIS session (not a new one), and Discard takes it — and its
     /// card — back out.
+    /// `attach(editing:)` appends a card for every logged movement the deck
+    /// does not name — the SESSION's own. Discard must not take those away.
+    @Test("Discard keeps a session's own off-plan movement on the deck")
+    func discardKeepsRestoredCards() throws {
+        let database = try store()
+        try database.seedRows { db in
+            try Exercise(id: "ex-thrust", name: "Hip Thrust").insert(db)
+            try WorkoutSet(
+                id: "set-thrust", sessionId: Self.sessionId, exerciseId: "ex-thrust",
+                setIndex: 4, weightKg: 80, reps: 10, setType: "normal", exerciseOrder: 5, foldOrder: 3
+            ).insert(db)
+        }
+        let model = try attached(database)
+        #expect(model.exercises.contains { $0.name == "Hip Thrust" })
+        #expect(model.cancelEdit() == true)
+        #expect(model.exercises.contains { $0.name == "Hip Thrust" }, "a movement the session holds is not the sitting's to remove")
+    }
+
     @Test("a movement added while editing persists, and Discard removes it")
     func addedMovementPersistsAndReverts() throws {
         let database = try store()

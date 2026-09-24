@@ -636,3 +636,45 @@ extension CardioIngestTests {
             .first { $0.id == "old2" }?.kind == CardioImport.walk)
     }
 }
+
+extension CardioIngestTests {
+
+    /// Review fixes: the door's extra days never re-import, and a pass Health
+    /// answered with nothing leaves the door open for the next one.
+    @Test("the treadmill door neither re-imports old bouts nor closes on a silent Health")
+    func treadmillDoorIsCareful() async throws {
+        let db = try store()
+        let key = "treadmill-door-test-\(UUID().uuidString)"
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        let old = calendar.date(byAdding: .day, value: -30, to: now)!
+        let oldDay = LogicalDayISO.string(old, calendar: calendar)
+        try db.addCardio(CardioLogRow(
+            id: "kept", userId: user, date: oldDay, kind: CardioImport.walk,
+            durationMin: 30, fromHealthkit: true, createdAt: old, hkUuid: "kept-uuid"))
+
+        // Health answers nothing: no relabel, and the door stays open.
+        _ = try await HealthSync(database: db, reader: Wrist(bouts: []), userId: user)
+            .syncCardioBouts(now: now, calendar: calendar, days: 2, doorKey: key)
+        #expect(!UserDefaults.standard.bool(forKey: key))
+
+        // Health answers with a bout the athlete had deleted a month ago: it
+        // is NOT re-imported by the door's extra days.
+        var deleted = bout(hour: 7, minutes: 30)
+        deleted.start = old.addingTimeInterval(5 * 3600)
+        deleted.end = deleted.start.addingTimeInterval(1800)
+        _ = try await HealthSync(database: db, reader: Wrist(bouts: [deleted]), userId: user)
+            .syncCardioBouts(now: now, calendar: calendar, days: 2, doorKey: key)
+        #expect(try db.cardioRows(userId: user, date: oldDay).map(\.id) == ["kept"])
+        #expect(UserDefaults.standard.bool(forKey: key))
+    }
+
+    @Test("with no imported walk on the ledger the door closes without a scan")
+    func treadmillDoorClosesWhenNothingToDo() async throws {
+        let db = try store()
+        let key = "treadmill-door-test-\(UUID().uuidString)"
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        _ = try await HealthSync(database: db, reader: Wrist(bouts: []), userId: user)
+            .syncCardioBouts(now: now, calendar: calendar, days: 2, doorKey: key)
+        #expect(UserDefaults.standard.bool(forKey: key))
+    }
+}
