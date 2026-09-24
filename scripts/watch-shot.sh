@@ -66,6 +66,8 @@ screen_env() {
     restday) echo "ONYX_WATCH_SCREEN=restday" ;;
     banner)  echo "ONYX_WATCH_SCREEN=banner" ;;
     join)    echo "ONYX_WATCH_SCREEN=join" ;;
+    glance)  echo "ONYX_WATCH_SCREEN=glance" ;;
+    pulse)   echo "ONYX_WATCH_SCREEN=pulse" ;;
     # ⚠️ ONLY HONEST AS THE FIRST SCREEN OF A RUN, AFTER AN UNINSTALL. It has
     # no environment, so it draws whatever `WatchContextCache` is holding — and
     # every other screen in this list seeds one. Shot after `start` it comes
@@ -204,7 +206,7 @@ shoot() {
 
   case "$env" in
     UNKNOWN)
-      echo "  unknown screen '$screen' — known: start restday banner join nophone set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget" >&2; return 1 ;;
+      echo "  unknown screen '$screen' — known: start restday banner join glance pulse nophone set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget" >&2; return 1 ;;
     NOT_REACHABLE)
       echo "  '$screen' has no launch hook yet: it is presented by navigation" >&2
       echo "  inside a live session. Add a case to WatchModel.DebugScreen and a" >&2
@@ -227,6 +229,11 @@ shoot() {
   # 3.2 treats an EMPTY array expansion as an unbound variable and aborts. The
   # `start` screen needs no environment at all, so the empty case is the first
   # one this loop meets.
+  # `SHOT_THEME=<preset>` (overhaul A2): the palette rides the seeded
+  # context, as the phone's does, and the PNG carries the name.
+  [ -n "${SHOT_THEME:-}" ] && env="$env ONYX_WATCH_THEME=$SHOT_THEME"
+  local file="$OUT/$screen${SHOT_THEME:+-$SHOT_THEME}.png"
+
   local prefixed=()
   for pair in $env; do prefixed+=("SIMCTL_CHILD_${pair}"); done
   # ── CHECKED EXPLICITLY, BECAUSE errexit IS OFF IN HERE ────────────────
@@ -274,15 +281,15 @@ shoot() {
     done
     sleep 1
   fi
-  if ! xcrun simctl io "$UDID" screenshot --type=png "$OUT/$screen.png" >/dev/null; then
+  if ! xcrun simctl io "$UDID" screenshot --type=png "$file" >/dev/null; then
     echo "  screenshot failed" >&2
     return 1
   fi
-  echo "  $OUT/$screen.png"
+  echo "  $file"
 }
 
 read -ra SCREENS <<< "$SCREEN"
-[ "$SCREEN" = "all" ] && SCREENS=(start restday banner join set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget)
+[ "$SCREEN" = "all" ] && SCREENS=(glance start restday banner join pulse set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget)
 
 status=0
 for s in ${SCREENS[@]+"${SCREENS[@]}"}; do

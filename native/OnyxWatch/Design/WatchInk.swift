@@ -28,12 +28,19 @@ import SwiftUI
 /// The watch is pure black and flat fills. That is not a downgrade — pure black
 /// is the one token that is MORE right here than on the phone, because the case
 /// bezel is black and the app bleeds into it.
+///
+/// ── EVERY TOKEN IS COMPUTED (overhaul A2) ───────────────────────────────────
+/// They were `static let`, which Swift evaluates ONCE, on first read — so a
+/// theme the phone pushed mid-run never reached any of them, and only
+/// `day(_:)`, the one function here, followed it. Each is a computed read of
+/// the token table now; the app root re-ids on a theme change
+/// (`WatchModel.themeKey`) so every view reads them again.
 enum WatchInk {
 
     /// Everything you are meant to read.
-    static let primary = Color.onyx.textPrimary
+    static var primary: Color { Color.onyx.textPrimary }
     /// Labels, units, and the set position. Never a number you act on.
-    static let secondary = Color.onyx.textSecondary
+    static var secondary: Color { Color.onyx.textSecondary }
 
     /// The commit colour.
     ///
@@ -43,15 +50,15 @@ enum WatchInk {
     /// those are mid-luminance indigos and oranges, and at 40 mm against black a
     /// tick has to read as one thing from a metre away. Green on black inks at
     /// roughly 9:1 and nothing else in the app is green.
-    static let commit = Color.onyx.good
+    static var commit: Color { Color.onyx.good }
     /// Ink ON the commit colour. Black, not white: the green is light.
-    static let onCommit = Color.onyx.base
+    static var onCommit: Color { Color.onyx.base }
 
-    static let danger = Color.onyx.danger
-    static let record = Color.onyx.record
+    static var danger: Color { Color.onyx.danger }
+    static var record: Color { Color.onyx.record }
 
     /// The one background. See the type header.
-    static let ground = Color.onyx.base
+    static var ground: Color { Color.onyx.base }
 
     /// The split's colour. A FUNCTION, not a `let`, for the reason the header
     /// gives about themes: a stored property freezes at first read, and the
@@ -68,9 +75,9 @@ enum WatchInk {
 
     /// A filled control that is not the tick — the RPE rungs, the deck rows.
     /// Flat, because a material over black costs a blur pass to arrive here.
-    static let fill = Color.white.opacity(0.10)
+    static var fill: Color { Color.white.opacity(0.10) }
     /// The same, pressed or selected.
-    static let fillActive = Color.white.opacity(0.18)
+    static var fillActive: Color { Color.white.opacity(0.18) }
 }
 
 // MARK: - Always-on

@@ -27,6 +27,16 @@ struct OnyxWatchApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                // ── A PUSHED THEME REPAINTS THE WHOLE WRIST (overhaul A2) ───
+                // `WatchInk` is computed now, but a view only re-reads it when
+                // it re-renders, and nothing it observes changes with the
+                // palette. Re-identifying the root on the theme is the one
+                // line that makes every view draw again. It is safe mid-session
+                // because the phone refuses a theme change during a workout
+                // (`AppearanceView` locks, `publishPhase` waits) — and a
+                // re-id costs only view state: the session, the rest cover
+                // and the deck all live on the model.
+                .id(model.themeKey)
                 .environment(model)
                 // `.task` rather than `.onAppear`: opening the store, activating
                 // WatchConnectivity and asking HealthKit for authorization are
@@ -164,7 +174,7 @@ struct OnyxWatchApp: App {
                             // `seedDebugContext(restDay:)`. It falls through to
                             // page one, which is where the rest-day hero is.
                             model.seedDebugContext(restDay: true)
-                        case .start, .dashboard, .train, .fuel:
+                        case .start, .dashboard, .train, .fuel, .glance, .pulse:
                             // ── THE CONTEXT, WHICH AUTOSTART USUALLY SEEDS ──
                             // These three are the only screens reached with
                             // `ONYX_WATCH_AUTOSTART` OFF, and the seed above

@@ -243,6 +243,12 @@ final class PhoneWatchBridge {
     /// number moved, and the watch would open on "Open Onyx on your iPhone"
     /// between two pushes.
     func send(userId: String, today: String, schedule: ScheduleContext, tiles: WatchTiles?) {
+        var tiles = tiles
+        // The Next Dose complication's reading (overhaul Lane A, decision Q5):
+        // the snapshot the tiles are cut from carries no supplement schedule,
+        // so the stack is read here, where the push is assembled.
+        let isTraining = !(tiles?.restDay ?? false)
+        tiles?.nextDose = nextDose(today: today, isTraining: isTraining)
         var context = WatchContext(
             userId: userId, today: today, schedule: resolved(schedule),
             // The wrist wears what the phone wears. The watch has no
@@ -337,6 +343,22 @@ final class PhoneWatchBridge {
         word = Word(userId: pulse.userId, lifecycle: lifecycle)
         log.notice("lifecycle \(lifecycle.phase.rawValue, privacy: .public) \(lifecycle.sessionId, privacy: .public)")
         if let onLifecycleChanged { onLifecycleChanged() } else { pushLifecycle() }
+    }
+
+    /// The next timed slot of today's stack, through the same resolver the
+    /// Stack screen draws (`customSlotsForDate` → `stackForDate`), so the
+    /// complication and the phone cannot name different doses. Read once per
+    /// push — a small table, and pushes are throttled to one per 30 s.
+    private func nextDose(today: String, isTraining: Bool, now: Date = Date()) -> WatchTiles.NextDose? {
+        guard let rows = try? database.read({ db in try CustomSupplementRow.fetchAll(db) }), !rows.isEmpty else { return nil }
+        let active = Supplements.active(rows.map(AppDatabase.custom), on: today)
+        let weekday = ISODate.weekday(today) ?? 0
+        let slots = Supplements.stackForDate(
+            Supplements.customSlotsForDate(active, on: today, weekday: weekday, isTraining: isTraining),
+            isTraining: isTraining, weekday: weekday
+        )
+        let clock = Calendar.current.dateComponents([.hour, .minute], from: now)
+        return .next(in: slots, date: today, nowMinutes: (clock.hour ?? 0) * 60 + (clock.minute ?? 0))
     }
 
     /// The split's own name for the banner — the deck's label, else the key

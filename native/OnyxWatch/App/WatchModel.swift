@@ -208,7 +208,7 @@ final class WatchModel {
     /// `dashboard` is W4's, and it is the last name `watch-shot.sh` refused
     /// (W1 left it named as unreachable and said so by name rather than
     /// photographing `StartView` under its filename).
-    enum DebugScreen: String { case start, restday, rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget, banner, join }
+    enum DebugScreen: String { case start, restday, rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget, banner, join, glance, pulse }
     var debugScreen: DebugScreen?
     #endif
 
@@ -502,6 +502,30 @@ final class WatchModel {
         applyLifecycle()
         rejoinLiveSession()
         Task { try? await workout.requestAuthorization() }
+        startMidnightClock()
+    }
+
+    private var midnight: Task<Void, Never>?
+
+    /// Reload every complication at this watch's own 00:00 (overhaul A2).
+    ///
+    /// The timelines carry a midnight entry of their own; this is for the case
+    /// the system spends it late, and for the day-scoped faces the app itself
+    /// draws. A continuous-clock sleep, so a deadline passed while suspended
+    /// fires on the way back in. One reload a day — the budget does not notice.
+    private func startMidnightClock() {
+        guard midnight == nil else { return }
+        midnight = Task { [weak self] in
+            while !Task.isCancelled {
+                let now = Date()
+                let next = Calendar.current.nextDate(
+                    after: now, matching: DateComponents(hour: 0, minute: 0, second: 0), matchingPolicy: .nextTime
+                ) ?? now.addingTimeInterval(3600)
+                try? await Task.sleep(until: .now + .seconds(next.timeIntervalSince(now) + 1), clock: .continuous)
+                guard self != nil else { return }
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        }
     }
 
     /// Rejoin the session already in progress, if there is one.
@@ -1260,6 +1284,14 @@ final class WatchModel {
         context?.tiles?.addingWater(pendingWaterMl)
     }
 
+    /// The palette the phone last sent, as an identity for the app root
+    /// (`OnyxWatchApp` re-ids on it so the computed `WatchInk` is read again).
+    /// `OnyxThemeSpec` is not `Hashable`; its four numbers are the identity.
+    var themeKey: String {
+        let spec = context?.theme ?? .default
+        return "\(spec.primary)-\(spec.secondary)-\(spec.chroma)-\(spec.lift)"
+    }
+
     /// Write the running session where the complication extension can read it,
     /// and tell WidgetKit twice.
     ///
@@ -1319,6 +1351,13 @@ final class WatchModel {
         // a watch; spending two on an unchanged card is how the live one
         // stops updating. See `LiveWorkoutSnapshot.sameReading`.
         guard !next.sameReading(as: lastPublished) else { return }
+        // The Heart Rate complication's reading (overhaul A2), on the same
+        // de-duped beat as the card — never per sample, which would spend the
+        // reload budget the card needs.
+        if let bpm = next.bpm, bpm != lastPublished?.bpm {
+            LastHeartRate(bpm: bpm, at: Date()).save()
+            WidgetCenter.shared.reloadTimelines(ofKind: LastHeartRate.widgetKind)
+        }
         lastPublished = next
         next.save()
         WidgetCenter.shared.reloadTimelines(ofKind: LiveWorkoutSnapshot.widgetKind)
@@ -1824,6 +1863,10 @@ extension WatchModel {
                     ]),
                 ]
             ),
+            // `ONYX_WATCH_THEME=<preset>` (overhaul A2): the palette arrives
+            // the way the phone's does, on the context, so a themed shot runs
+            // the ordinary theme path rather than a second one.
+            theme: Self.debugTheme,
             // The complications' numbers, spelled out for the same reason the
             // deck is: `OnyxSnapshot.sample` is behind OnyxUI's iOS fence.
             // Saved to the suite below exactly as a real arrival is, so the
@@ -1839,7 +1882,11 @@ extension WatchModel {
                 // W4's four. Without them the Train page photographs "No
                 // volume yet" and the Fuel page falls back to the kcal line
                 // — both real states, and neither the one under review.
-                weekSets: 84, weekVolumeKg: 12_430, proteinG: 118, proteinGoalG: 185
+                weekSets: 84, weekVolumeKg: 12_430, proteinG: 118, proteinGoalG: 185,
+                // Lane A's macro bar and Next Dose — without them the Fuel
+                // page photographs the no-bar fallback.
+                carbsG: 176, fatG: 52,
+                nextDose: WatchTiles.NextDose(name: "Magnesium +2", at: Date().addingTimeInterval(3 * 3600))
             ),
             // The phone's lifecycle word (overhaul A1) — the `banner` and
             // `join` shots seed one; every other screen has none.
@@ -1847,9 +1894,18 @@ extension WatchModel {
         )
         WatchContextCache.save(next)
         next.tiles?.save()
+        // What `receive(.context)` does with the palette, so the root re-ids
+        // (`themeKey`) onto it.
+        OnyxTheme.save(next.theme ?? .default, to: WatchTiles.defaults())
         WidgetCenter.shared.reloadAllTimelines()
         context = next
         resolveDay()
+    }
+
+    /// The preset named by `ONYX_WATCH_THEME`, or nil (the default palette).
+    static var debugTheme: OnyxThemeSpec? {
+        guard let name = ProcessInfo.processInfo.environment["ONYX_WATCH_THEME"] else { return nil }
+        return OnyxTheme.presets.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }?.spec
     }
 
     /// The phone's lifecycle word for the `banner` and `join` shots (overhaul

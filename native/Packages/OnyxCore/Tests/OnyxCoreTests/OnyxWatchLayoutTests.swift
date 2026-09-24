@@ -232,4 +232,24 @@ struct OnyxWatchLayoutTests {
         #expect(WatchDashboard.fits(rows: 0) == false)
         #expect(WatchDashboard.overflow(rows: 0) == 0)
     }
+
+    // MARK: - The Glance (overhaul A2)
+
+    /// The page's content area on each case, as `axe describe-ui` reported the
+    /// Glance's `GeometryReader` frame — see the wave record for the numbers.
+    @Test("the Glance fits both cases: petals clear the ring and stay tappable at 40 mm")
+    func theGlanceFits() {
+        let big = WatchGlance.layout(width: WatchCase.width49mm, height: WatchCase.content49mmHeight)
+        let small = WatchGlance.layout(width: WatchCase.width40mm, height: WatchCase.content40mmHeight)
+        #expect(big.square == WatchCase.content49mmHeight, "the 49 mm page is taller-limited: \(big.square)")
+        #expect(small.square == WatchCase.content40mmHeight, "the 40 mm page is taller-limited: \(small.square)")
+        for layout in [big, small] {
+            #expect(layout.clearance > 4, "petals touch the ring: \(layout.clearance) pt clear")
+        }
+        // A petal is a button. 38 pt is the smallest target the 40 mm layout
+        // budget accepts anywhere (`WatchPanel.glyphChip` is 44 across a row).
+        #expect(small.petal >= 38, "40 mm petal is \(small.petal) pt")
+        // The centre holds a `figure` numeral: three digits need ~60 pt.
+        #expect((small.ring - WatchGlance.ringStroke * 2) * 0.8 >= 60)
+    }
 }
