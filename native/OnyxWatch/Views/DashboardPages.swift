@@ -130,7 +130,7 @@ struct DashboardView: View {
         .onChange(of: model.debugScreen, initial: true) { _, screen in
             let wanted: DashboardPage? = switch screen {
             case .glance: .glance
-            case .start, .restday, .banner, .join, .train: .train
+            case .start, .restday, .banner, .join, .replay, .train: .train
             case .dashboard: .today
             case .pulse: .pulse
             case .fuel: .fuel

@@ -208,7 +208,7 @@ final class WatchModel {
     /// `dashboard` is W4's, and it is the last name `watch-shot.sh` refused
     /// (W1 left it named as unreachable and said so by name rather than
     /// photographing `StartView` under its filename).
-    enum DebugScreen: String { case start, restday, rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget, banner, join, glance, pulse, restband }
+    enum DebugScreen: String { case start, restday, rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget, banner, join, glance, pulse, restband, replay }
     var debugScreen: DebugScreen?
     #endif
 
@@ -399,6 +399,55 @@ final class WatchModel {
             return .banner(try? store.sessionMasthead(sessionId: row.id, userId: context.userId, name: day?.label ?? "Workout"))
         }
         return door
+    }
+
+    /// Today's finished session, replayed (overhaul W5) — the banner's tap.
+    ///
+    /// Built from what the WRIST has: the phone's masthead (its six-point
+    /// spark stands in for the series — each point is the mean of one sixth of
+    /// the session, so it is placed at that sixth's centre) and whatever of the
+    /// session's log this store holds (a phone-only session has none, and the
+    /// replay is then the trace alone). Records are not re-detected here: the
+    /// PR engine replays the whole ledger, which lives on the phone; the
+    /// masthead's trophy count is still on the banner behind the replay.
+    func replayTimeline(_ summary: SessionMasthead) -> SessionReplay.Timeline {
+        let start = summary.startedAt
+        let span = Double(max(summary.durationSec, 60))
+        let samples = summary.hrSpark.enumerated().map { i, bpm in
+            HRSample(at: start.addingTimeInterval(span * (Double(i) + 0.5) / Double(summary.hrSpark.count)),
+                     bpm: Int(bpm.rounded()))
+        }
+        var movements: [SessionReplay.Movement] = []
+        var marks: [SessionReplay.SetMark] = []
+        if let store, let context, let id = context.session?.sessionId,
+           let rows = try? store.sets(sessionId: id, userId: context.userId), !rows.isEmpty {
+            var clocks: [String: Date] = [:]
+            for event in (try? store.setEvents(sessionId: id)) ?? [] {
+                guard case .append(let set) = event.body else { continue }
+                let key = "\(set.exerciseId)|\(set.setIndex)"
+                if clocks[key].map({ event.createdAt < $0 }) ?? true { clocks[key] = event.createdAt }
+            }
+            let names = Dictionary(planDeck.flatMap { plan in Self.identities(of: plan).map { ($0, plan.name) } },
+                                   uniquingKeysWith: { first, _ in first })
+            var order: [String] = []
+            for row in rows where !order.contains(row.exerciseId) { order.append(row.exerciseId) }
+            for (m, exerciseId) in order.enumerated() {
+                let own = rows.filter { $0.exerciseId == exerciseId }.sorted { $0.setIndex < $1.setIndex }
+                movements.append(.init(
+                    name: names[exerciseId] ?? "Movement",
+                    tonnageKg: SessionVolume.sessionVolumeKg(own.map {
+                        VolumeSet(weightKg: $0.weightKg, reps: Double($0.reps), side: $0.side == "left" ? "L" : $0.side == "right" ? "R" : $0.side,
+                                  pairId: $0.pairId, setType: $0.setType)
+                    })
+                ))
+                marks += own.map { .init(movement: m, at: clocks["\(exerciseId)|\($0.setIndex)"]) }
+            }
+        }
+        return SessionReplay.timeline(
+            .init(masthead: summary, start: start, end: start.addingTimeInterval(span),
+                  samples: samples, movements: movements, sets: marks),
+            duration: SessionReplay.watchDuration
+        )
     }
 
     /// Follow the session the phone is logging.

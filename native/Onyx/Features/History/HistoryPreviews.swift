@@ -70,6 +70,10 @@ enum HistoryPreviews {
         switch screen {
         case "session":
             NavigationStack { SessionDetailView(sessionId: lastSession) }.environment(environment())
+        // Overhaul W5: the share files for a session with no heart rate — the
+        // tonnage bar instead of the trace.
+        case "session-share-bars":
+            ReplayShareHarness(sessionId: lastSession).environment(environment())
         case "session-ledger":
             // The same page, parked at the bottom. Half of §5.4 is the ledger,
             // and a shot of the top half reviews only the half that fits.

@@ -25,6 +25,8 @@ struct SessionBannerView: View {
     let summary: SessionMasthead?
 
     @State private var isOfferingAnother = false
+    /// The replay, frozen at the tap (overhaul W5).
+    @State private var replay: SessionReplay.Timeline?
 
     private var name: String {
         summary?.name ?? model.day?.label ?? model.dashboardTiles?.todayLabel ?? "Workout"
@@ -65,12 +67,29 @@ struct SessionBannerView: View {
         .accessibilityElement(children: .combine)
         .accessibilityHint(model.day == nil ? "" : "Touch and hold to start another workout")
         .accessibilityAction(named: "Start another workout") { offerAnother() }
+        .accessibilityAction(named: "Replay") { openReplay() }
+        // A tap is the replay; the long press stays the deliberate "another".
+        .onTapGesture(perform: openReplay)
         .onLongPressGesture(minimumDuration: 0.6) { offerAnother() }
+        .sheet(isPresented: Binding(get: { replay != nil }, set: { if !$0 { replay = nil } })) {
+            if let replay {
+                ReplayView(timeline: replay, dayInk: WatchInk.day(model.day?.key))
+            }
+        }
         .confirmationDialog("Start another workout?", isPresented: $isOfferingAnother, titleVisibility: .visible) {
             Button("Start another") { model.beginSession(another: true) }
             Button("Cancel", role: .cancel) {}
         }
         .dimmedWhenLuminanceReduced()
+        #if DEBUG
+        // The shot loop cannot tap: `ONYX_WATCH_SCREEN=replay` opens it.
+        .onAppear { if model.debugScreen == .replay { openReplay() } }
+        #endif
+    }
+
+    private func openReplay() {
+        guard let summary else { return }
+        replay = model.replayTimeline(summary)
     }
 
     private func offerAnother() {

@@ -161,14 +161,14 @@ struct OnyxWatchApp: App {
                             // input is a face whose truncation nobody has
                             // reviewed.
                             model.seedDebugSets(3)
-                        case .banner, .join:
+                        case .banner, .join, .replay:
                             // ── THE PHONE'S LIFECYCLE, SEEDED (overhaul A1) ─
                             // The same context every dashboard shot gets,
                             // with a finished or a live session on it — what
                             // `pushLifecycle` sends. Page one then draws the
                             // banner, or Start turned into Join, through
                             // `frontDoor` exactly as a real push would.
-                            model.seedDebugContext(session: WatchModel.debugLifecycle(screen == .banner ? .finished : .open))
+                            model.seedDebugContext(session: WatchModel.debugLifecycle(screen == .join ? .open : .finished))
                         case .restday:
                             // The same seed with today unscheduled — see
                             // `seedDebugContext(restDay:)`. It falls through to
