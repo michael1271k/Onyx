@@ -197,14 +197,20 @@ struct PitcherHandle: Shape {
 /// Water is fixed blue (`OnyxInk.Fixed.water`) in every theme. The level is
 /// the day against its goal; the meniscus is a 2 pt lighter band on the
 /// surface so a quarter-full pitcher reads as water and not as a shaded foot.
-struct PitcherFigure: View {
+public struct PitcherFigure: View {
   let ml: Double?
   let goalMl: Double?
   var monochrome = false
 
+  public init(ml: Double?, goalMl: Double?, monochrome: Bool = false) {
+    self.ml = ml
+    self.goalMl = goalMl
+    self.monochrome = monochrome
+  }
+
   private var ink: Color { monochrome ? .white : Color.onyx.water }
 
-  var body: some View {
+  public var body: some View {
     GeometryReader { geo in
       // The figure keeps its own proportion (4:5) inside whatever it is given.
       let h = min(geo.size.height, geo.size.width * 1.25)
