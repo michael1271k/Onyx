@@ -14,11 +14,19 @@ import OnyxCore
 /// In `Accessory/` because it is unfenced: the watch app links OnyxUI for
 /// watchOS and this is the one folder both platforms compile.
 public extension EffortBand {
+    ///
+    /// ── MIXED FROM TWO FIXED TOKENS, NOT NEW HEXES ──────────────────────────
+    /// Raw colour lives in the token files only (`TokenDisciplineTests`), and
+    /// this folder is not one. The warm band is the record gold walked toward
+    /// the heart red: a quarter of the way is amber (gold-adjacent but not the
+    /// PR gold, which `Color.onyx.effort` rightly refuses to share), past half
+    /// is clay, all the way is failure. Fixed in every theme, because both ends
+    /// are. Request for W6: lift these two into `OnyxInk.Fixed` by name.
     var ink: Color {
         switch self {
         case .steady: OnyxInk.Themed.accent
-        case .hard: Color(hex: 0xE3A23B)
-        case .veryHard: Color(hex: 0xC8694B)
+        case .hard: OnyxInk.Fixed.record.mix(with: OnyxInk.Fixed.heart, by: 0.25)
+        case .veryHard: OnyxInk.Fixed.record.mix(with: OnyxInk.Fixed.heart, by: 0.6)
         case .failure: OnyxInk.Fixed.heart
         }
     }
