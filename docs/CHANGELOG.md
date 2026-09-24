@@ -44,6 +44,60 @@ _Nothing yet._
 
 ---
 
+## [8.3.0] — 2026-09-24 · The summary on one screen, the treadmill by its name, labels from the database
+
+Lane C of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record
+"Lane C"). Logger, session summary, Settings and Supplements.
+
+### iPhone app
+- **Session summary is a bento**, not a scroll: shared masthead (name,
+  duration, tonnage, heart rate in red, PR trophies), an inline heart-rate
+  strip with no numbers and no legend (tap a segment for the exercise, its
+  average bpm and duration), a two-column grid of exercise chips with SF
+  Symbol glyphs, muscle-focus pills, and Progression behind one button.
+  Measured 2,465 pt → 511 pt on a 393 pt phone (623 pt with the strip).
+- **Deltas are tinted numerals** — better in the theme accent, worse in
+  secondary text, a hairline under a PR — no more red/green triangles, and
+  the empty delta line under every set is gone.
+- **Heart rate is red everywhere:** chart, Avg HR cell, live hero, Live Stats.
+- **Treadmill is Treadmill.** A HealthKit walk with the indoor flag imports as
+  the new `treadmill` cardio kind; the warm-up card and the manual cardio sheet
+  say so; a one-time backfill relabels the last 90 days of indoor walks.
+- **Editing a finished session:** "Add a movement" is available; Discard on
+  an untouched sitting closes the editor (it used to sit there); discarding
+  the post-workout edit returns you to Train.
+- **Settings is compact:** subheadline titles, footnote detail, tighter rows
+  and section spacing, About and account in one section. 1,689 pt → 1,114 pt.
+- **Supplements: "Add from label database".** Search the NIH Dietary
+  Supplement Label Database by product or by brand (barcode scan optional,
+  for when you have the bottle); pick a label and the editor is prefilled
+  with name, form, serving and per-ingredient micronutrients. Unmapped
+  ingredients are kept on the item. Offline or slow → the manual sheet with a
+  notice. The client talks to `api.ods.od.nih.gov` (the documented host sits
+  behind a browser check).
+
+### Weekly export
+- `restActualSec` is gone from the JSON and AI exports; rest is the plan's
+  target only. The Markdown legend line changed in all eight goldens.
+
+### Server (Supabase) — the founder applies this before importing a label
+```sql
+alter table public.custom_supplements add column if not exists other_ingredients jsonb;
+```
+
+### Changed
+- Local migration `v38.otherIngredients`; `NSCameraUsageDescription` added.
+- Mini player and PR sheet lose their drop shadows (Stone cards have none).
+
+### Notes
+- Open: unmapped ingredients are stored but not yet printed in the export; a
+  count→mass dose change before saving an imported item does not rescale its
+  micronutrients; a cardio-only session has no headline number.
+- OnyxTests: the same baseline names (ten on this simulator — one is
+  date-dependent), none new.
+
+---
+
 ## [8.2.0] — 2026-09-24 · Faces: tiles you can scroll past, the sleep ring returns, stone and glass
 
 Lane B of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record

@@ -1643,27 +1643,11 @@ public enum WeeklyExport {
                 let meta = line([
                     prescribed,
                     (prescribed == nil || !restatesWindow) ? window.map { "target \($0)" } : nil,
-                    // MEASURED against planned. `restActualSec` is the mean gap
-                    // the logger timed between commits and it has been carried
-                    // on every exercise since U-wave with no reader at all —
-                    // which made the one intensity variable the document could
-                    // not see the one the athlete changes most often.
+                    // The plan's rest — the only rest the document states
+                    // (overhaul Q16). The ±15 s timer nudges are visual only
+                    // and `actual_rest_sec` is a commit-to-commit gap, not a
+                    // rest interval, so neither reaches the payload.
                     val(ex.restTargetSec).map { "rest \($0) s" },
-                    /* ── `actual rest` IS SUPPRESSED, ON PURPOSE ──────────────
-                       `workout_sets.actual_rest_sec` is the gap between two log
-                       COMMITS, which is what the logger can see and not what
-                       the athlete rested: a set entered while the next one is
-                       already under way reads 1 s, and a set entered after a
-                       phone call reads 304 s. Neither is a rest interval, and a
-                       document that prints them invites the audit to read a
-                       fabricated variable as an intensity choice.
-
-                       ponytail: the intended figure is the rest TARGET plus
-                       whatever the timer was extended by on the day (90 s + 15
-                       added = 105). The timer knows both; nothing stores the
-                       extension yet. Restore this line the moment
-                       `workout_sets` carries it — `restActualSec` stays on the
-                       payload so the builder half does not have to be rebuilt. */
                     (ex.primaryMuscles?.isEmpty == false) ? "trains \(ex.primaryMuscles!.joined(separator: ", "))" : nil,
                     indirect.isEmpty ? nil : "indirect \(indirect.joined(separator: ", "))",
                     ex.sets.isEmpty ? "no sets logged" : nil,
@@ -1956,7 +1940,7 @@ public enum WeeklyExport {
                 + " · only direct work can earn OVER; only the total can fall UNDER",
             "absence    a field with nothing behind it is OMITTED, never zeroed"
                 + " · — is a recorded blank in a table · none is an empty list"
-                + " · actual rest is withheld until the timer stores the extension it measured",
+                + " · rest is the plan's target; the timer's ±15 s nudges are not recorded",
         ])
 
         // ── 9 · PASTE-BACK ────────────────────────────────────────────────────

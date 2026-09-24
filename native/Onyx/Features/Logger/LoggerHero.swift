@@ -297,7 +297,7 @@ struct LoggerHero: View {
             HStack(spacing: 3) {
                 Image(systemName: "heart.fill")
                     .imageScale(.small)
-                    .foregroundStyle(Color.onyx.danger)
+                    .foregroundStyle(OnyxInk.Fixed.heart)
                 Text("\(liveBpm)")
                     .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
                     .foregroundStyle(Color.onyx.textPrimary)

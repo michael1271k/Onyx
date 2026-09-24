@@ -1218,14 +1218,7 @@ public struct WeeklyExportBuilder: Sendable {
             let orderSource = everyMovementTimed ? "performed" : (everyMovementIndexed ? "index" : "logged")
 
             var byName: [String: [String: Any]] = [:]
-            /// Every MEASURED gap, per movement. Unmeasured sets contribute
-            /// nothing rather than a zero — a mean over "the sets we timed" is
-            /// a fact, a mean that counts untimed sets as instant is not.
-            var restsByName: [String: [Int]] = [:]
             for r in mine {
-                if let rest = r.actualRestSec, rest > 0 {
-                    restsByName[r.exerciseName, default: []].append(rest)
-                }
                 if byName[r.exerciseName] == nil {
                     let window = Ceilings.repWindow(for: r.exerciseName, dayKey: s.dayKey, program: program, phase: phase)
                     let rest = RestTargets.programRestSec(for: r.exerciseName, dayKey: s.dayKey, program: program, phase: phase)
@@ -1318,14 +1311,6 @@ public struct WeeklyExportBuilder: Sendable {
                     e["topKg"] = top == 0 ? NSNull() : top
                 }
                 byName[r.exerciseName] = e
-            }
-
-            // The mean measured rest, folded in once the sets are all counted.
-            // `jsRound` and not `rounded()`: every other figure in this builder
-            // rounds the way JavaScript does, and byte parity is the gate.
-            for (name, rests) in restsByName where !rests.isEmpty {
-                byName[name]?["restActualSec"] =
-                    jsRound(Double(rests.reduce(0, +)) / Double(rests.count))
             }
 
             let credits = PrEngine.volumeCredits(mine.map {

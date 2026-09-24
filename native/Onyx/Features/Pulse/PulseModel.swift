@@ -1021,7 +1021,8 @@ final class DayModel {
     func addSupplement(
         name: String, dose: String, doseAmount: Double? = nil, doseUnit: String? = nil,
         time: String?, days: [Int],
-        color: String?, form: String?, notes: String?, trainingOnly: Bool
+        color: String?, form: String?, notes: String?, trainingOnly: Bool,
+        micros: [String: Double]? = nil, otherIngredients: [String]? = nil
     ) -> Bool {
         let schedule = CustomSchedule(
             days: days.isEmpty ? nil : days,
@@ -1035,7 +1036,10 @@ final class DayModel {
                 color: color, form: (form ?? "").isEmpty ? nil : form,
                 time: (time ?? "").isEmpty ? nil : time,
                 schedule: schedule,
-                doseAmount: doseAmount, doseUnit: doseUnit
+                // A label import's payload (overhaul C3); nil by hand.
+                micros: (micros ?? [:]).isEmpty ? nil : micros,
+                doseAmount: doseAmount, doseUnit: doseUnit,
+                otherIngredients: otherIngredients
             )
         }
     }

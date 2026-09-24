@@ -234,7 +234,9 @@ struct WorkoutTabView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
         .navigationDestination(item: $summary) { id in
-            SessionDetailView(sessionId: id)
+            // The summary this tab pushed after a finish pops itself once its
+            // edit cover closes, so an edit from here ends on Train (C2).
+            SessionDetailView(sessionId: id, dismissToTrain: { summary = nil })
         }
         // The whole page, in its own stack so its toolbar and its own
         // navigation still work inside the sheet.
@@ -670,7 +672,12 @@ struct WorkoutTabView: View {
                     .navigationTransition(.zoom(sourceID: Self.doneTransitionID, in: zoom))
             } label: {
                 if let header = doneHeader, header.id == id {
-                    SessionHeaderCard(header: header, totals: summary)
+                    SessionHeaderCard(header: header, totals: summary, masthead: SessionMasthead(
+                        name: header.label,
+                        durationSec: Int(jsRound((minutes ?? 0) * 60)),
+                        tonnageKg: volumeKg, avgBpm: nil, prCount: prCount,
+                        hrSpark: [], startedAt: Date()
+                    ))
                 } else {
                     // The header is a career-wide read; the label, the four
                     // numbers and the day's three muscles are all on the
@@ -1308,7 +1315,7 @@ struct WorkoutTabView: View {
         // "131.0", which reads as a precision the sensor does not have.
         if let hr = bout.avgHr, hr > 0 {
             tags.append(.init("\(jsIntegerString(jsRound(hr))) bpm",
-                              symbol: "heart.fill", tint: Color.onyx.cardio))
+                              symbol: "heart.fill", tint: OnyxInk.Fixed.heart))
         }
         // The app's own glyph for "this came from Apple Health", and the
         // session page's own words for it.

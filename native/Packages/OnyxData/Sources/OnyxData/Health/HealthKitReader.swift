@@ -322,6 +322,15 @@ public struct HealthKitReader: HealthReading {
         .highIntensityIntervalTraining: CardioImport.hiit,
     ]
 
+    /// The kind a workout is filed under, reading the one metadata key that
+    /// splits a kind: an INDOOR walk is a treadmill (overhaul C2). Outdoor, or
+    /// a writer that never stamped the key, stays a walk — the key's absence
+    /// is not evidence of a treadmill. Every other activity ignores it.
+    static func cardioKind(_ type: HKWorkoutActivityType, indoor: Bool?) -> String? {
+        if type == .walking, indoor == true { return CardioImport.treadmill }
+        return cardioKinds[type]
+    }
+
     /// The distance type a given activity records against.
     ///
     /// HealthKit files distance under the LIMB doing the work, so asking a bike
@@ -385,7 +394,10 @@ public struct HealthKitReader: HealthReading {
             start: workout.startDate,
             end: workout.endDate,
             isLifting: liftingTypes.contains(workout.workoutActivityType),
-            cardioKind: cardioKinds[workout.workoutActivityType],
+            cardioKind: cardioKind(
+                workout.workoutActivityType,
+                indoor: workout.metadata?[HKMetadataKeyIndoorWorkout] as? Bool
+            ),
             distanceM: distance,
             activeKcal: energy,
             avgHr: hr,

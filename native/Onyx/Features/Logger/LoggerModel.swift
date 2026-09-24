@@ -694,6 +694,13 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// reverted, and a button that looks live and does nothing is worse than no
     /// button. See `cancelEdit`.
     private(set) var editWatermarked = false
+    /// Cards appended while EDITING (overhaul C2), by card id, with whether
+    /// their plan was appended to `day` too. Discard takes them back out: once
+    /// the revert has voided their sets they describe nothing.
+    /// Keyed by `canonicalKey`, recorded by `addExercise` alone: `attach
+    /// (editing:)` also appends cards (the session's own off-plan movements)
+    /// and those are not the sitting's to take away.
+    private var addedWhileEditing: [(key: String, appendedPlan: Bool)] = []
 
     private let userId: String
 
@@ -1318,7 +1325,10 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         guard !trimmed.isEmpty else { return nil }
         let key = canonicalKey(trimmed)
         if let already = exercises.first(where: { canonicalKey($0.name) == key }) { return already }
-        return appendCard(named: trimmed, exerciseId: exerciseId)
+        let planned = day.exercises.contains { canonicalKey($0.name) == key }
+        let card = appendCard(named: trimmed, exerciseId: exerciseId)
+        if isEditing { addedWhileEditing.append((key, !planned)) }
+        return card
     }
 
     /// One card, appended at the bottom of the deck.
@@ -1360,6 +1370,18 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         let card = ExerciseState(plan: plan, rows: seedRows(plan, count: prescribed > 0 ? prescribed : plan.sets))
         exercises.append(card)
         return card
+    }
+
+    /// Discard's other half: the cards this sitting added leave the deck, and
+    /// a plan they brought leaves `day` with them.
+    private func dropCardsAddedWhileEditing() {
+        // By KEY, and the plan goes whether or not a card is still on the
+        // deck: a phase switch can drop the card and mint another.
+        for added in addedWhileEditing {
+            exercises.removeAll { canonicalKey($0.name) == added.key }
+            if added.appendedPlan { day.exercises.removeAll { canonicalKey($0.name) == added.key } }
+        }
+        addedWhileEditing = []
     }
 
     // MARK: - Warm-up rungs (W6)
@@ -2149,15 +2171,18 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     func cancelEdit() -> Bool {
         guard let store, let sessionId, isEditing, editWatermarked else { return false }
         do {
-            // ── THE OUTCOME IS THE ANSWER TO "DID ANYTHING CHANGE" ──────────
-            // `revertSessionEdits` answers nil for a session with nothing to
-            // undo. Nil is not a failure — but it is not a success either, and
-            // the caller DISMISSES on a `true`. Reporting one here would close
-            // the screen telling the athlete their session was restored, after
-            // a dialog promised exactly that and nothing happened.
+            // ── NIL IS "NOTHING TO UNDO", AND THE SCREEN STILL CLOSES (C2) ──
+            // `revertSessionEdits` answers nil for a sitting that changed
+            // nothing, and its contract says so in as many words: "Nil is not
+            // a failure, and the caller should still close the screen on it".
+            // This returned false there, so Discard on an untouched editor did
+            // nothing at all — no banner, no dismissal, the mark still up. The
+            // store has already cleared the mark on that path.
             guard try store.revertSessionEdits(sessionId: sessionId, userId: userId) != nil else {
+                editWatermarked = false
+                dropCardsAddedWhileEditing()
                 storeError = nil
-                return false
+                return true
             }
             // The mark is NOT cleared here. `revertSessionEdits` re-writes it at
             // the clock as it now stands, deliberately — see its own note —
@@ -2186,6 +2211,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             // argues against — and it would be wrong the moment a compensating
             // event did anything the deck could not predict.
             try restoreLoggedSets()
+            dropCardsAddedWhileEditing()
             refreshLivePrs()
             storeError = nil
             return true
