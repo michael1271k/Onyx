@@ -378,7 +378,7 @@ private struct AdherenceDots: View {
 
     private func colour(_ day: NutritionDay) -> Color {
         if ExceptionDay.isException(day.exception) { return OnyxDomain.recover.accent }
-        if day.estimated { return OnyxDomain.fuel.start }
+        if day.estimated { return Color.onyx.calories }
         return day.isTracked ? Color.onyx.good : Color.onyx.textTertiary
     }
 

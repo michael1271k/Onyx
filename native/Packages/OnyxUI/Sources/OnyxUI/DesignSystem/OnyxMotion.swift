@@ -54,11 +54,18 @@ public enum OnyxMotion {
 /// event — `.onTapGesture` does not, which is why nothing here uses one.
 public struct OnyxPressStyle: ButtonStyle {
     public var scale: CGFloat = 0.96
+    /// Brighten the surface a touch while pressed — for a large surface (a
+    /// dashboard tile) where a 3 % shrink alone is easy to miss under a thumb.
+    public var highlight: Bool = false
 
-    public init(scale: CGFloat = 0.96) { self.scale = scale }
+    public init(scale: CGFloat = 0.96, highlight: Bool = false) {
+        self.scale = scale
+        self.highlight = highlight
+    }
 
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .brightness(highlight && configuration.isPressed ? 0.06 : 0)
             .scaleEffect(configuration.isPressed ? scale : 1)
             .animation(OnyxMotion.press, value: configuration.isPressed)
             // The whole frame stays hittable while it shrinks; without this a

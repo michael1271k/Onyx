@@ -112,7 +112,7 @@ public struct WeekRingsView: View {
     HStack(spacing: size == .small ? 4 : 6) {
       if size != .small {
         Text(row.label)
-          .font(OnyxWidgetType.face(8, weight: .heavy)).tracking(1)
+          .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .heavy) }.tracking(1)
           .foregroundStyle(Color.onyx.textSecondary)
           .frame(width: 38, alignment: .leading)
       }
@@ -126,7 +126,7 @@ public struct WeekRingsView: View {
       }
       Spacer(minLength: 0)
       Text(size == .small ? "\(count(row))" : "\(count(row))/\(days.count)")
-        .font(OnyxWidgetType.figure(size == .small ? 10 : 12))
+        .onyxWidgetFont { OnyxWidgetType.figure((size == .small ? 10 : 12) * $0) }
         .foregroundStyle(Color.onyx.textPrimary)
     }
     .accessibilityElement(children: .ignore)
@@ -144,7 +144,7 @@ public struct WeekRingsView: View {
       if size != .small { Color.clear.frame(width: 38, height: 1) }
       ForEach(days) { day in
         Text(OnyxSnapshot.weekdayInitial(day.date))
-          .font(OnyxWidgetType.face(9, weight: day.date == entry.snapshot?.date ? .heavy : .regular))
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: day.date == entry.snapshot?.date ? .heavy : .regular) }
           .foregroundStyle(day.date == entry.snapshot?.date ? Color.onyx.textPrimary : Color.onyx.textTertiary)
           .frame(width: size == .small ? 11 : 13)
       }

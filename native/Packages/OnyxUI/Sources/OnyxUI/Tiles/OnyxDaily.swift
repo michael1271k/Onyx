@@ -111,12 +111,8 @@ public struct DailyView: View {
   /// A cell, linked if the destination resolved. A nil URL must still render —
   /// a placeholder entry has no date and the widget still has to draw.
   @ViewBuilder
-  private func quadrant<Content: View>(_ url: URL?, @ViewBuilder content: () -> Content) -> some View {
-    if let url {
-      Link(destination: url) { content().frame(maxWidth: .infinity, alignment: .leading) }
-    } else {
-      content().frame(maxWidth: .infinity, alignment: .leading)
-    }
+  private func quadrant<Content: View>(_ url: URL?, @ViewBuilder content: @escaping () -> Content) -> some View {
+    FaceLink(url) { content().frame(maxWidth: .infinity, alignment: .leading) }
   }
 }
 
@@ -130,7 +126,7 @@ private struct FuelQuadrant: View {
   let snapshot: OnyxSnapshot?
   let mono: Bool
 
-  private var accent: Color { mono ? .white : OnyxDomain.fuel.accent }
+  private var accent: Color { mono ? .white : Color.onyx.calories }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
@@ -138,7 +134,7 @@ private struct FuelQuadrant: View {
       HStack(alignment: .firstTextBaseline, spacing: 3) {
         BigValue(value: snapshot?.macros.kcal.map { "\(Int($0.rounded()))" }, size: 20, color: Color.onyx.textPrimary)
         Text(snapshot?.macros.kcalGoal.map { "/ \(Int($0.rounded()))" } ?? "kcal")
-          .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
       }
       // Three micro-rails rather than three numbers: at this size the SHAPE of
       // the macro split is readable where the figures are not.
@@ -162,7 +158,7 @@ private struct MacroPip: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
-      Text(letter).font(OnyxWidgetType.face(7, weight: .bold)).foregroundStyle(Color.onyx.textSecondary)
+      Text(letter).onyxWidgetFont { OnyxWidgetType.face(7 * $0, weight: .bold) }.foregroundStyle(Color.onyx.textSecondary)
       Rail(progress: OnyxSnapshot.progress(value, goal), color: color, height: 3)
     }
   }
@@ -181,7 +177,7 @@ private struct WaterQuadrant: View {
         BigValue(value: snapshot?.water.ml.map { String(format: "%.1f", $0 / 1000) },
                  size: 20, color: Color.onyx.textPrimary)
         Text(snapshot?.water.goalMl.map { "/ \(String(format: "%.1f", $0 / 1000)) L" } ?? "L")
-          .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
       }
       Rail(progress: OnyxSnapshot.progress(snapshot?.water.ml, snapshot?.water.goalMl),
            color: accent, height: 4)
@@ -203,7 +199,7 @@ private struct StepsQuadrant: View {
         BigValue(value: snapshot?.steps.count.map { $0.formatted(.number.grouping(.automatic)) },
                  size: 20, color: Color.onyx.textPrimary)
         Text(snapshot?.steps.goal.map { "/ \($0 / 1000)k" } ?? "")
-          .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
       }
       Rail(progress: OnyxSnapshot.progress(snapshot?.steps.count.map(Double.init),
                                             snapshot?.steps.goal.map(Double.init)),
@@ -223,12 +219,13 @@ private struct TrainingQuadrant: View {
     VStack(alignment: .leading, spacing: 4) {
       Caption("TRAINING", color: accent)
       Text(snapshot?.workout.label ?? "—")
-        .font(OnyxWidgetType.label(13, weight: .bold))
+        .onyxWidgetFont { OnyxWidgetType.label(13 * $0, weight: .bold) }
         .foregroundStyle(Color.onyx.textPrimary)
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
+        // Two lines before it shrinks: a day name never truncates (B3).
+        .lineLimit(2)
+        .minimumScaleFactor(0.8)
       Text(state)
-        .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
       Spacer(minLength: 0)
     }
   }
@@ -240,8 +237,8 @@ private struct TrainingQuadrant: View {
     guard let s = snapshot else { return "—" }
     if s.workout.isRestDay { return "recovery" }
     if let done = s.today {
-      let volume = OnyxSnapshot.tonnes(done.volumeKg)
-      return volume.map { "done · \($0)" } ?? "done"
+      // A check and the tonnage: "done · 12.4 t" clipped at 9 pt (B3).
+      return "✓ " + (OnyxSnapshot.tonnes(done.volumeKg) ?? "logged")
     }
     if let exercises = s.workout.plannedExercises, let sets = s.workout.plannedSets {
       return "due · \(exercises) ex · \(sets) sets"

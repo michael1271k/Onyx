@@ -43,13 +43,13 @@ struct CardioFocusFace: View {
       if let last = c?.last {
         BigValue(value: CardioFormat.distance(last.distanceM), size: 28, color: Color.onyx.textPrimary)
         Text(CardioFormat.subtitle(last))
-          .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
       } else {
         // Nothing logged is a real state, not an error. It gets a sentence, not
         // a row of em dashes pretending to be a reading.
         BigValue(value: nil, size: 28)
         Text("no cardio logged yet")
-          .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
       }
 
       Spacer(minLength: 0)
@@ -81,7 +81,7 @@ struct CardioLedgerFace: View {
           size: 30,
           color: mono ? .white : zoneColor)
         Text(c.map { "/ \($0.weekTarget) zone 2" } ?? "zone 2")
-          .font(OnyxWidgetType.face(11)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(11 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         Spacer(minLength: 0)
         ZonePips(cardio: c, mono: mono)
       }
@@ -130,7 +130,7 @@ struct CardioLargeFace: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
           BigValue(value: c.map { "\($0.weekSessions)" }, size: 34, color: Color.onyx.textPrimary)
           Text(c.map { "/ \($0.weekTarget) zone 2 sessions" } ?? "zone 2 sessions")
-            .font(OnyxWidgetType.face(11)).foregroundStyle(Color.onyx.textSecondary)
+            .onyxWidgetFont { OnyxWidgetType.face(11 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           Spacer(minLength: 0)
           ZonePips(cardio: c, mono: mono)
         }
@@ -147,7 +147,7 @@ struct CardioLargeFace: View {
             .frame(maxHeight: .infinity)
         } else {
           Text("no cardio in the last week")
-            .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+            .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         }
       }
       .frame(maxHeight: .infinity)
@@ -164,7 +164,7 @@ struct CardioLargeFace: View {
         }
       } else {
         Text("no cardio logged yet")
-          .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
       }
     }
   }
@@ -193,7 +193,7 @@ private struct ZonePips: View {
         // would render a strong week identically to an exactly-met one.
         if cardio.weekSessions > cardio.weekTarget {
           Text("+\(cardio.weekSessions - cardio.weekTarget)")
-            .font(OnyxWidgetType.figure(9))
+            .onyxWidgetFont { OnyxWidgetType.figure(9 * $0) }
             .foregroundStyle(mono ? .white : Color.onyx.good)
         }
       }

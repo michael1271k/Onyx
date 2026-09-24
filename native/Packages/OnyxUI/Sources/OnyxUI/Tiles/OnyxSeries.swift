@@ -117,7 +117,7 @@ public struct TrajectoryView: View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
           BigValue(value: board.ratePerWeekKg.map { OnyxSeriesFormat.signed($0, decimals: 2) },
                    size: size == .small ? 26 : 30, color: paceInk)
-          Text("kg/wk").font(OnyxWidgetType.face(11)).foregroundStyle(Color.onyx.textSecondary)
+          Text("kg/wk").onyxWidgetFont { OnyxWidgetType.face(11 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           Spacer(minLength: 0)
           etaChip(board)
         }
@@ -142,17 +142,17 @@ public struct TrajectoryView: View {
   @ViewBuilder private var bandLine: some View {
     if let lo = board?.targetRateMinKgWk, let hi = board?.targetRateMaxKgWk {
       Text("want \(OnyxSeriesFormat.signed(min(lo, hi), decimals: 2)) to \(OnyxSeriesFormat.signed(max(lo, hi), decimals: 2))")
-        .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
     } else if let target = board?.targetWeightKg {
       Text("target \(String(format: "%.1f", target)) kg")
-        .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
     }
   }
 
   @ViewBuilder private func etaChip(_ board: GoalBoard) -> some View {
     if let eta = board.etaISO, let weeks = board.weeksToTarget {
       Text("\(OnyxChart.date(eta).map(OnyxChart.shortDate) ?? eta) · \(OnyxSeriesFormat.trim(weeks)) wk")
-        .font(OnyxWidgetType.face(10, weight: .semibold))
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold) }
         .foregroundStyle(mono ? .white : accent)
         .padding(.horizontal, 6).padding(.vertical, 2)
         .background(Capsule().fill((mono ? Color.white : accent).opacity(0.16)))
@@ -292,13 +292,13 @@ public struct ConsistencyView: View {
           // failure" defect one axis over — `MuscleView.bar` states the same
           // rule about a family the plan asks nothing of.
           Text(size == .small ? "planned" : (thisWeek.map { "of \($0.planned) planned" } ?? "planned"))
-            .font(OnyxWidgetType.face(size == .small ? 10 : 11))
+            .onyxWidgetFont { OnyxWidgetType.face((size == .small ? 10 : 11) * $0) }
             .foregroundStyle(Color.onyx.textSecondary)
             .lineLimit(1)
           Spacer(minLength: 0)
           if size != .small, let rate = model.adherencePct {
             Text("\(OnyxSeriesFormat.trim(rate))% over 8 wk")
-              .font(OnyxWidgetType.face(9))
+              .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
               .foregroundStyle(Color.onyx.textSecondary)
               .lineLimit(1)
           }
@@ -320,8 +320,8 @@ public struct ConsistencyView: View {
   @ViewBuilder private var flame: some View {
     if let day = entry.snapshot?.streak?.current, day > 0 {
       HStack(spacing: 2) {
-        Image(systemName: "flame.fill").font(OnyxWidgetType.face(9))
-        Text("\(day)").font(OnyxWidgetType.figure(10))
+        Image(systemName: "flame.fill").onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
+        Text("\(day)").onyxWidgetFont { OnyxWidgetType.figure(10 * $0) }
       }
       .foregroundStyle(mono ? .white : Color.onyx.record)
     }
@@ -405,7 +405,7 @@ public struct DeficitLedgerView: View {
   public init(entry: OnyxTileEntry) { self.entry = entry }
 
   private var model: DeficitLedger? { entry.snapshot?.deficit }
-  private var accent: Color { mono ? .white : OnyxDomain.fuel.accent }
+  private var accent: Color { mono ? .white : Color.onyx.calories }
 
   public var body: some View {
     face.onyxMarked(monochrome: mono, hidden: entry.isStale)
@@ -465,12 +465,12 @@ public struct DeficitLedgerView: View {
       BigValue(value: model?.weeks.last?.balanceKcal.map { OnyxSeriesFormat.signed($0, decimals: 0) },
                size: size == .large ? 28 : 22, color: Color.onyx.textPrimary)
       Text(size == .large ? "kcal this week" : "kcal")
-        .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         .lineLimit(1)
       Spacer(minLength: 0)
       if size == .large, let model {
         Text("\(model.daysCounted) d counted")
-          .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
       }
     }
   }
@@ -511,7 +511,7 @@ public struct DeficitLedgerView: View {
         ForEach(days) { day in
           HStack(spacing: 6) {
             Text(OnyxSnapshot.weekdayInitial(day.d))
-              .font(OnyxWidgetType.face(8, weight: .bold))
+              .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .bold) }
               .foregroundStyle(Color.onyx.textSecondary)
               .frame(width: 10, alignment: .leading)
             if let kcal = day.kcal {
@@ -524,7 +524,7 @@ public struct DeficitLedgerView: View {
             }
             if size != .small {
               Text(day.kcal.map { OnyxSeriesFormat.signed($0, decimals: 0) } ?? "—")
-                .font(OnyxWidgetType.figure(9))
+                .onyxWidgetFont { OnyxWidgetType.figure(9 * $0) }
                 .foregroundStyle(day.kcal == nil ? Color.onyx.textTertiary : Color.onyx.textSecondary)
                 .frame(width: 40, alignment: .trailing)
             }
@@ -637,7 +637,7 @@ public struct FatigueStackView: View {
           BigValue(value: today.batteryPct.map { OnyxSeriesFormat.trim($0) },
                    size: size == .small ? 26 : 30,
                    color: mono ? .white : Color.onyx.battery(today.batteryPct.map { Int($0.rounded()) }))
-          Text("%").font(OnyxWidgetType.face(12)).foregroundStyle(Color.onyx.textSecondary)
+          Text("%").onyxWidgetFont { OnyxWidgetType.face(12 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           Spacer(minLength: 0)
           worst(today)
         }
@@ -714,12 +714,12 @@ public struct FatigueStackView: View {
             .fill(Self.ink(.workout, mono: mono).opacity(0.32))
             .frame(width: 10, height: 6)
             .clipShape(RoundedRectangle(cornerRadius: 1.5))
-          Text("day's drain").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          Text("day's drain").onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         }
       }
       Spacer(minLength: 0)
       Text("\(scored.count) of \(days.count) d")
-        .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
     }
     .lineLimit(1)
   }
@@ -736,7 +736,7 @@ public struct FatigueStackView: View {
     let top = BatteryDrain.allCases.filter { $0 != .time }.max { day.drain($0) < day.drain($1) }
     if let top, day.drain(top) > 0 {
       Text("\(top.rawValue) −\(OnyxSeriesFormat.trim(day.drain(top)))")
-        .font(OnyxWidgetType.face(10, weight: .semibold))
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold) }
         .foregroundStyle(Self.ink(top, mono: mono))
         .lineLimit(1)
     }

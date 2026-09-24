@@ -76,6 +76,35 @@ public extension EnvironmentValues {
     get { self[OnyxTileFamilyKey.self] }
     set { self[OnyxTileFamilyKey.self] = newValue }
   }
+
+  /// True where a face is drawn inside the app (the Today grid and its
+  /// sheets), false on the Home Screen. A face's sub-region `Link`s are for
+  /// WidgetKit; in the app the tile's own `Button` owns the tap, and a live
+  /// `Link` inside it won the touch and switched tabs over `onyx://` instead
+  /// of opening the sheet (decision Q9).
+  @Entry var onyxInApp: Bool = false
+}
+
+/// A face's sub-region link: a `Link` on the Home Screen, plain content in
+/// the app (`onyxInApp`) or when the destination did not resolve — a nil URL
+/// must still render, a placeholder entry has no date.
+struct FaceLink<Label: View>: View {
+  let destination: URL?
+  @ViewBuilder let label: () -> Label
+  @Environment(\.onyxInApp) private var inApp
+
+  init(_ destination: URL?, @ViewBuilder label: @escaping () -> Label) {
+    self.destination = destination
+    self.label = label
+  }
+
+  var body: some View {
+    if let destination, !inApp {
+      Link(destination: destination, label: label)
+    } else {
+      label()
+    }
+  }
 }
 
 /// The three Home Screen sizes, collapsed out of `WidgetFamily`.
@@ -103,7 +132,7 @@ struct Dash: View {
   var size: CGFloat = 20
   var body: some View {
     Text("—")
-      .font(OnyxWidgetType.face(size, weight: .bold))
+      .onyxWidgetFont { OnyxWidgetType.face(size * $0, weight: .bold) }
       .foregroundStyle(Color.onyx.textSecondary)
   }
 }
@@ -116,7 +145,7 @@ struct BigValue: View {
   var body: some View {
     if let value {
       Text(value)
-        .font(OnyxWidgetType.face(size, weight: .bold, design: .rounded))
+        .onyxWidgetFont { OnyxWidgetType.face(size * $0, weight: .bold, design: .rounded) }
         .foregroundStyle(color)
         .minimumScaleFactor(0.6)
         .lineLimit(1)
@@ -170,7 +199,7 @@ struct BatteryRing: View {
       VStack(spacing: 0) {
         BigValue(value: pct.map { "\($0)" }, size: size * 0.27, color: Color.onyx.textPrimary)
         Text("BATT")
-          .font(OnyxWidgetType.face(size * 0.11, weight: .bold))
+          .onyxWidgetFont { OnyxWidgetType.face((size * 0.11) * $0, weight: .bold) }
           .foregroundStyle(Color.onyx.textSecondary)
       }
     }
@@ -187,8 +216,12 @@ struct Caption: View {
   }
   var body: some View {
     Text(text)
-      .font(OnyxWidgetType.face(10, weight: .heavy)).tracking(1.5)
+      .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .heavy) }.tracking(1.5)
       .foregroundStyle(color)
+      // A register caption never breaks mid-word: "RECOVE / RY" beside a
+      // stale tag on the Recovery Medium (B1 shot). It shrinks instead.
+      .lineLimit(1)
+      .minimumScaleFactor(0.7)
   }
 }
 
@@ -220,7 +253,7 @@ struct StaleTag: View {
 
   var body: some View {
     Text(OnyxSnapshot.shortAge(age).map { "\($0) ago" } ?? "last known")
-      .font(OnyxWidgetType.face(8, weight: .semibold))
+      .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .semibold) }
       .foregroundStyle(Color.onyx.textSecondary)
   }
 }
@@ -243,7 +276,7 @@ struct ContextChip: View {
   var body: some View {
     if let context {
       Text(context.label.uppercased())
-        .font(OnyxWidgetType.face(8, weight: .bold))
+        .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .bold) }
         .tracking(0.4)
         .padding(.horizontal, 4)
         .padding(.vertical, 1.5)
@@ -273,11 +306,11 @@ struct Unavailable: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
-      Image(systemName: symbol).font(OnyxWidgetType.face(14)).foregroundStyle(Color.onyx.textSecondary)
-      Text(title).font(OnyxWidgetType.face(12, weight: .bold)).foregroundStyle(Color.onyx.textPrimary)
+      Image(systemName: symbol).onyxWidgetFont { OnyxWidgetType.face(14 * $0) }.foregroundStyle(Color.onyx.textSecondary)
+      Text(title).onyxWidgetFont { OnyxWidgetType.face(12 * $0, weight: .bold) }.foregroundStyle(Color.onyx.textPrimary)
       if !compact {
         Text(detail)
-          .font(OnyxWidgetType.face(9))
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
           .foregroundStyle(Color.onyx.textSecondary)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -310,83 +343,14 @@ struct LedgerRow: View {
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 6) {
       Text(label)
-        .font(OnyxWidgetType.face(10, weight: .semibold)).tracking(0.6)
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold) }.tracking(0.6)
         .foregroundStyle(Color.onyx.textSecondary)
         .lineLimit(1)
       Spacer(minLength: 4)
       BigValue(value: value, size: 14, color: color)
       if let trailing {
-        Text(trailing).font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+        Text(trailing).onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
       }
-    }
-  }
-}
-
-/// The Sleep Rainbow: one stacked bar of stage TOTALS.
-///
-/// Honest by construction. `SleepStages.tsx` insists on the same point: these
-/// are durations, not a timeline, and drawing them as a hypnogram would claim an
-/// ordering within the night that HealthKit's aggregate simply does not carry.
-/// Segments are sorted deep → awake because the RAMP orders, not the night.
-///
-/// Public since W2: Pulse's sleep hero draws the same bar at 44 pt, and a
-/// second stacked bar in the app would be a second answer to "what was this
-/// night made of" — the rule `DepthArc` is public for.
-public struct DepthBar: View {
-  /// `(stage, minutes)` — a stage with no reading is absent, not zero.
-  let segments: [(OnyxSleepStage, Int)]
-  var height: CGFloat = 12
-  var monochrome = false
-  /// Nil is `height / 2` — a capsule, which is right for the 12 pt tile bars
-  /// this was written for. At 44 pt a 22 pt radius eats the whole of a short
-  /// last segment and leaves a crescent where "awake" should be, so the app's
-  /// hero bar spells a radius instead of inheriting one from its own height.
-  var cornerRadius: CGFloat?
-
-  public init(
-    segments: [(OnyxSleepStage, Int)], height: CGFloat = 12,
-    monochrome: Bool = false, cornerRadius: CGFloat? = nil
-  ) {
-    self.segments = segments
-    self.height = height
-    self.monochrome = monochrome
-    self.cornerRadius = cornerRadius
-  }
-
-  private var radius: CGFloat { cornerRadius ?? height / 2 }
-
-  private var total: Int { segments.reduce(0) { $0 + $1.1 } }
-
-  public var body: some View {
-    GeometryReader { geo in
-      if total > 0 {
-        HStack(spacing: 1) {
-          ForEach(OnyxSleepStage.allCases, id: \.self) { stage in
-            if let minutes = segments.first(where: { $0.0 == stage })?.1, minutes > 0 {
-              Rectangle()
-                .fill(monochrome ? Color.white.opacity(stageOpacity(stage)) : stage.color)
-                .frame(width: max(1, geo.size.width * CGFloat(minutes) / CGFloat(total)))
-            }
-          }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-      } else {
-        // No stage breakdown is a real state — a night synced as a duration with
-        // no stages at all. An empty track says so; four zero-width bars do not.
-        RoundedRectangle(cornerRadius: radius, style: .continuous)
-          .fill(Color.onyx.hairline)
-      }
-    }
-    .frame(height: height)
-  }
-
-  /// In tinted mode the ramp survives as opacity, so depth is still legible.
-  private func stageOpacity(_ stage: OnyxSleepStage) -> Double {
-    switch stage {
-    case .deep: return 1.0
-    case .core: return 0.75
-    case .rem: return 0.5
-    case .awake: return 0.3
     }
   }
 }
@@ -396,7 +360,10 @@ public struct DepthBar: View {
 /// The baseline is what makes "compared to last week" a thing you SEE rather
 /// than a number you read and then have to hold in your head against a curve.
 public struct Sparkline: View {
-  let points: [Double]
+  /// One slot per step along the x axis. A nil slot is a GAP: the pen lifts
+  /// over it rather than joining the readings either side (overhaul B2 — the
+  /// "joins across an unanswered day" caveat the stress card had to admit).
+  let points: [Double?]
   let baseline: Double?
   // No default here: the public init below supplies it, so a default on the
   // property would be unreachable and the two could silently disagree.
@@ -405,17 +372,37 @@ public struct Sparkline: View {
   /// tonnage, water, calories — and false for bodyweight, where zero-basing an
   /// 78-to-80 kg fortnight flattens the only signal in it.
   let zeroBased: Bool
-  /// Nil draws nothing at all rather than a flat line at zero.
-  private var usable: [Double]? { points.count >= 2 ? points : nil }
+  /// Nil draws nothing at all rather than a flat line at zero: fewer than two
+  /// readings is not a line.
+  private var usable: [Double?]? { points.compactMap { $0 }.count >= 2 ? points : nil }
 
   /// Public because the app's sheets draw the same 40×16 micro-graph beside a
   /// metric row (§3.5) and a second implementation of it would be a second
   /// answer to "what does this fortnight look like".
   public init(points: [Double], baseline: Double? = nil, color: Color = OnyxDomain.train.accent, zeroBased: Bool = false) {
+    self.init(gapped: points, baseline: baseline, color: color, zeroBased: zeroBased)
+  }
+
+  /// A series laid on a fixed calendar, nil where no reading landed. The dot
+  /// marks the LAST slot only when it holds a reading — a missing today is
+  /// not "here".
+  public init(gapped points: [Double?], baseline: Double? = nil, color: Color = OnyxDomain.train.accent, zeroBased: Bool = false) {
     self.points = points
     self.baseline = baseline
     self.color = color
     self.zeroBased = zeroBased
+  }
+
+  /// The runs of consecutive readings, as index ranges — each is drawn as its
+  /// own curve, and a run of one as a dot.
+  nonisolated static func runs(_ points: [Double?]) -> [ClosedRange<Int>] {
+    var out: [ClosedRange<Int>] = []
+    var start: Int?
+    for (i, v) in points.enumerated() {
+      if v != nil { start = start ?? i } else if let s = start { out.append(s...(i - 1)); start = nil }
+    }
+    if let s = start { out.append(s...(points.count - 1)) }
+    return out
   }
 
   /// ── WHY THE BAND IS NEVER EXACTLY min…max ──────────────────────────────────
@@ -490,10 +477,11 @@ public struct Sparkline: View {
   public var body: some View {
     GeometryReader { geo in
       if let values = usable {
+        let readings = values.compactMap { $0 }
         // The band includes the baseline so the dotted line can never fall
         // outside the drawn area — which is exactly when it matters most.
-        let rawLo = min(values.min() ?? 0, baseline ?? .greatestFiniteMagnitude)
-        let rawHi = max(values.max() ?? 1, baseline ?? -.greatestFiniteMagnitude)
+        let rawLo = min(readings.min() ?? 0, baseline ?? .greatestFiniteMagnitude)
+        let rawHi = max(readings.max() ?? 1, baseline ?? -.greatestFiniteMagnitude)
         let (lo, hi) = Self.band(lo: rawLo, hi: rawHi, zeroBased: zeroBased)
         let span = max(hi - lo, 0.0001)
         let y = { (v: Double) in geo.size.height * (1 - CGFloat((v - lo) / span)) }
@@ -507,18 +495,27 @@ public struct Sparkline: View {
             }
             .stroke(Color.onyx.textSecondary.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
           }
-          Self.curve((0..<values.count).map { CGPoint(x: x($0), y: y(values[$0])) })
-            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+          ForEach(Self.runs(values), id: \.lowerBound) { run in
+            if run.count == 1 {
+              Circle().fill(color).frame(width: 3, height: 3)
+                .position(x: x(run.lowerBound), y: y(values[run.lowerBound]!))
+            } else {
+              Self.curve(run.map { CGPoint(x: x($0), y: y(values[$0]!)) })
+                .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            }
+          }
           // The latest reading, marked. A trace without a "you are here" makes
           // the reader find the right-hand end for themselves every glance.
-          Circle()
-            .fill(color)
-            .frame(width: 4, height: 4)
-            .position(x: x(values.count - 1), y: y(values[values.count - 1]))
+          if let last = values.last, let last {
+            Circle()
+              .fill(color)
+              .frame(width: 5, height: 5)
+              .position(x: x(values.count - 1), y: y(last))
+          }
         }
       } else {
         Text("not enough readings")
-          .font(OnyxWidgetType.face(9))
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
           .foregroundStyle(Color.onyx.textSecondary)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
       }
@@ -556,11 +553,15 @@ public struct DepthArc: View {
   /// `fill` — the arc is still a fraction of it — so turning the label off
   /// changes what is written, never what is drawn.
   let showsGoal: Bool
+  /// False draws the bowl empty — for a host that prints the duration beside
+  /// the gauge at its own (Dynamic Type) size, as Pulse's sleep hero does.
+  let showsLabel: Bool
 
   /// Public because the Sleep SHEET draws this arc (§5.1) and the widget face
   /// draws it too. One gauge, one implementation: the sheet and the Lock Screen
   /// can never disagree about how long a night was.
-  public init(segments: [(OnyxSleepStage, Int)], minutes: Int?, goalMin: Int?, lineWidth: CGFloat = 10, monochrome: Bool = false, showsGoal: Bool = true) {
+  public init(segments: [(OnyxSleepStage, Int)], minutes: Int?, goalMin: Int?, lineWidth: CGFloat = 10, monochrome: Bool = false, showsGoal: Bool = true, showsLabel: Bool = true) {
+    self.showsLabel = showsLabel
     self.segments = segments
     self.minutes = minutes
     self.goalMin = goalMin
@@ -614,16 +615,16 @@ public struct DepthArc: View {
           }
         }
 
-        VStack(spacing: 1) {
+        if showsLabel { VStack(spacing: 1) {
           BigValue(value: OnyxSnapshot.formatSleep(minutes) == "—" ? nil
                    : OnyxSnapshot.formatSleep(minutes), size: d * 0.17, color: Color.onyx.textPrimary)
           if let goalMin, showsGoal {
             Text("goal \(OnyxSnapshot.formatSleep(goalMin))")
-              .font(OnyxWidgetType.face(max(7, d * 0.075)))
+              .onyxWidgetFont { OnyxWidgetType.face((max(7, d * 0.075)) * $0) }
               .foregroundStyle(Color.onyx.textSecondary)
           }
         }
-        .offset(y: d * 0.12)
+        .offset(y: d * 0.12) }
       }
       .frame(width: d, height: d)
       // ── THE GAUGE IS CENTRED ON WHAT IT DRAWS, NOT ON ITS CIRCLE ────────
@@ -707,7 +708,7 @@ struct BarChart: View {
   var body: some View {
     if points.isEmpty {
       Text("no readings in this window")
-        .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     } else {
       VStack(spacing: 3) {
@@ -738,7 +739,7 @@ struct BarChart: View {
           HStack(spacing: max(2, 4)) {
             ForEach(points) { point in
               Text(label(point))
-                .font(OnyxWidgetType.face(7, weight: .bold))
+                .onyxWidgetFont { OnyxWidgetType.face(7 * $0, weight: .bold) }
                 .foregroundStyle(Color.onyx.textSecondary)
                 .frame(maxWidth: .infinity)
             }
@@ -814,14 +815,14 @@ struct DeltaChip: View {
       HStack(spacing: 2) {
         if moved {
           Image(systemName: delta > 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
-            .font(OnyxWidgetType.face(7))
+            .onyxWidgetFont { OnyxWidgetType.face(7 * $0) }
         }
-        Text(text + suffix).font(OnyxWidgetType.face(10, weight: .bold)).monospacedDigit()
+        Text(text + suffix).onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .bold) }.monospacedDigit()
       }
       .foregroundStyle(color)
     } else {
       // No comparison is not "no change". Saying so costs four characters.
-      Text("new").font(OnyxWidgetType.face(9, weight: .semibold)).foregroundStyle(Color.onyx.textSecondary)
+      Text("new").onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .semibold) }.foregroundStyle(Color.onyx.textSecondary)
     }
   }
 }
@@ -925,6 +926,38 @@ public enum OnyxWidgetType {
   public static func face(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
     .system(size: size, weight: weight, design: design)
   }
+}
+
+// MARK: - Dynamic Type, in the app only (overhaul B2)
+
+public extension EnvironmentValues {
+  /// How much a face's fixed point sizes grow. 1 on the Home Screen, where
+  /// WidgetKit owns the type and a tile's geometry is the system's; the app's
+  /// hosts (`TileFrame`, the domain sheets) set it from a `@ScaledMetric`, so
+  /// a face drawn in the app follows Dynamic Type — clamped, because the tile
+  /// is still a fixed aspect ratio and the text has to stay inside it.
+  @Entry var onyxFaceScale: CGFloat = 1
+}
+
+private struct WidgetFont: ViewModifier {
+  let make: (CGFloat) -> Font
+  @Environment(\.onyxFaceScale) private var scale
+  func body(content: Content) -> some View { content.font(make(scale)) }
+}
+
+extension View {
+  /// `.onyxWidgetFont { OnyxWidgetType.x(size * $0) }`, with the size multiplied by
+  /// `onyxFaceScale`. Every face in `Tiles/` spells its fonts this way.
+  func onyxWidgetFont(_ make: @escaping (CGFloat) -> Font) -> some View {
+    modifier(WidgetFont(make: make))
+  }
+}
+
+/// The in-app scale: body-relative, and never past `ceiling` — a tile is a
+/// fixed shape, so type that kept growing would push its own figure out.
+public enum OnyxFaceScale {
+  public static let ceiling: CGFloat = 1.2
+  public static func clamp(_ scaled: CGFloat) -> CGFloat { min(max(scaled, 1), ceiling) }
 }
 
 #endif

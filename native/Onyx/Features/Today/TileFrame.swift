@@ -116,24 +116,32 @@ struct TileFrame<Content: View>: View {
     }
 
     var body: some View {
-        content()
-            .environment(\.onyxTileFamily, slot.size.family)
-            .padding(OnyxSpace.m)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onyxGlass(.tile)
-            .contentShape(RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous))
-            .onTapGesture { onTap() }
-            .overlay { if editing, reduceMotion { stillOutline } }
-            .overlay(alignment: .topLeading) { if editing { removeBadge } }
-            .overlay(alignment: .bottomTrailing) { if editing, sizes.count > 1 { resizeBadge } }
-            // The whole wobble is off for a reader who has turned motion off
-            // (`Jiggle` reads the same two flags), and the hairline above
-            // stands in for it — see the header.
-            .modifier(Jiggle(on: editing, seed: slot.id))
-            .sensoryFeedback(.selection, trigger: resizes)
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(Self.label(slot, up: up))
-            .accessibilityHint(editing ? "Editing. Double-tap and hold to drag." : "Opens the sheet. Actions available.")
+        // ── A BUTTON, NOT `.onTapGesture` (overhaul B1, decision Q9) ─────────
+        // A bare tap gesture inside the Today `ScrollView` has no press state
+        // and is not cancelled when the scroll takes the touch, so a drag that
+        // began on a tile could end by opening its sheet. A `Button` gets
+        // UIKit's cancel-on-scroll for free and `OnyxPressStyle` answers the
+        // press-down. `.contextMenu` still sits on the button (`TileMenu`).
+        Button(action: onTap) {
+            content()
+                .environment(\.onyxTileFamily, slot.size.family)
+                .padding(OnyxSpace.m)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onyxGlass(.tile)
+                .contentShape(RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous))
+        }
+        .buttonStyle(OnyxPressStyle(scale: 0.97, highlight: true))
+        .overlay { if editing, reduceMotion { stillOutline } }
+        .overlay(alignment: .topLeading) { if editing { removeBadge } }
+        .overlay(alignment: .bottomTrailing) { if editing, sizes.count > 1 { resizeBadge } }
+        // The whole wobble is off for a reader who has turned motion off
+        // (`Jiggle` reads the same two flags), and the hairline above
+        // stands in for it — see the header.
+        .modifier(Jiggle(on: editing, seed: slot.id))
+        .sensoryFeedback(.selection, trigger: resizes)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Self.label(slot, up: up))
+        .accessibilityHint(editing ? "Editing. Double-tap and hold to drag." : "Opens the sheet. Actions available.")
     }
 
     /// The jiggle's stand-in when motion is off — see the header.

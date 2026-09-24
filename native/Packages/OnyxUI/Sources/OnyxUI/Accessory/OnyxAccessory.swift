@@ -337,7 +337,7 @@ struct AccessoryReading {
                 ?? t?.kcal.map { "\($0) of \(t?.kcalGoal.map { "\($0)" } ?? dash)" }
                 ?? dash
             inline = title
-            accent = OnyxDomain.fuel.accent
+            accent = Color.onyx.calories
 
         case .volume:
             // ── NOT A COMPLICATION, AND THAT IS WHY IT IS NOT IN `wearable` ─
@@ -377,7 +377,8 @@ struct AccessoryReading {
             title = ml.map { "\($0) ml" } ?? "No water yet"
             sub = t?.waterGoalMl.map { "of \($0) ml" } ?? dash
             inline = ml.map { "\($0) ml water" } ?? "Water —"
-            accent = OnyxDomain.fuel.accent
+            // Water is fixed blue in every theme (`OnyxInk.Fixed.water`).
+            accent = Color.onyx.water
 
         case .steps:
             let n = t?.steps

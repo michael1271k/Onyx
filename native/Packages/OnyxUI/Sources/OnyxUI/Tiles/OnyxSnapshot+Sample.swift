@@ -217,7 +217,12 @@ public extension OnyxSnapshot {
         trend: series([66.1, 65.9, 65.8, 65.4, 65.5, 65.2, 64.9, 65.0, 64.8, 64.7, 64.6, 64.5, 64.7, 64.3])),
       macros: Macros(
         kcal: 1240, kcalGoal: 1955, proteinG: 128, proteinGoalG: 170, carbsG: 121, carbsGoalG: 195,
-        fatG: 38, fatGoalG: 55, kcalTrend: series([1980, 1870, 2110, 1940, 1790, 1905, 1240])),
+        fatG: 38, fatGoalG: 55, kcalTrend: series([1980, 1870, 2110, 1940, 1790, 1905, 1240]),
+        keyMicros: [
+          KeyMicro(key: "potassium", name: "Potassium", pct: 0.41),
+          KeyMicro(key: "sodium", name: "Sodium", pct: 1.38),
+          KeyMicro(key: "calcium", name: "Calcium", pct: 0.66),
+        ]),
       water: Water(ml: 1900, goalMl: 3000, trend: series([2800, 3100, 2600, 3000, 2400, 2900, 1900])),
       steps: Steps(
         count: 7412, goal: 10000, distanceM: 5630, activeKcal: 412,

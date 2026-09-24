@@ -156,11 +156,11 @@ struct SleepStageList: View {
 /// this leads the VITALS, which it does at `.display` against a grid whose
 /// cells are `.secondary`.
 ///
-/// ── THE BAR IS 44 pt BECAUSE IT IS ALSO THE TARGET ──────────────────────────
-/// The whole cell is one button, and the bar is the part of it a thumb aims at.
-/// 44 pt is the minimum target and, at that height, `DepthBar`'s four segments
-/// are readable as proportions rather than as a hairline — which is what makes
-/// it worth drawing at all instead of printing four percentages.
+/// ── THE HALF-RING, NOT A BAR (overhaul B2, decision Q6) ─────────────────────
+/// This was a 44 pt `DepthBar`, so the night was drawn as a bar here and as a
+/// half-ring on the tile, the Today sheet and the edit sheet. It is the same
+/// `DepthArc` now — sweep = the night against the goal, fill = the stages in
+/// the fixed sleep ramp. The whole cell is still one button.
 struct SleepHeroCell: View {
     let model: DayModel
     let action: () -> Void
@@ -189,17 +189,14 @@ struct SleepHeroCell: View {
 
     private var goalMet: Bool { (minutes ?? goalMin) - goalMin >= -5 }
 
-    /// Deep · REM · Core · Awake. A stage with no reading is ABSENT, not zero —
-    /// `DepthBar` draws an empty track for a night synced as a duration alone,
-    /// which is a different fact from a night of pure core sleep.
+    /// `SleepStage`'s one rule (OnyxCore): depth order, a stage with no
+    /// reading ABSENT — the arc draws its empty track for a night synced as a
+    /// duration alone, a different fact from a night of pure core sleep.
     private var segments: [(OnyxSleepStage, Int)] {
         guard let night else { return [] }
-        return [
-            (OnyxSleepStage.deep, night.deepMin ?? 0),
-            (.rem, night.remMin ?? 0),
-            (.core, night.coreMin ?? 0),
-            (.awake, night.awakeMin ?? 0),
-        ].filter { $0.1 > 0 }
+        return OnyxSleepStage.segments(
+            deep: night.deepMin, core: night.coreMin, rem: night.remMin, awake: night.awakeMin
+        )
     }
 
     /// The bank, in one line. `sleepDebt` is nil under three nights of data,
@@ -216,8 +213,17 @@ struct SleepHeroCell: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: OnyxSpace.xs) {
                 header
-                reading
-                DepthBar(segments: segments, height: 44, cornerRadius: OnyxSpace.m)
+                // The half-ring (decision Q6): the same `DepthArc` the tiles,
+                // the Today sheet and the edit sheet draw. Its bowl stays
+                // empty — the duration beside it is the Dynamic Type numeral.
+                HStack(alignment: .center, spacing: OnyxSpace.m) {
+                    DepthArc(
+                        segments: segments, minutes: minutes, goalMin: goalMin,
+                        lineWidth: 10, showsGoal: false, showsLabel: false
+                    )
+                    .frame(width: 96, height: 56)
+                    reading
+                }
                 Text(debtLine)
                     .onyxType(.caption)
                     .foregroundStyle(Color.onyx.textTertiary)

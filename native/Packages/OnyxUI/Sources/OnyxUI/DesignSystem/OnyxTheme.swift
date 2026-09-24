@@ -92,6 +92,10 @@ public struct OnyxTheme: Sendable {
         let micro: Color
     }
 
+    /// This theme's protein ink — for a preview that draws a theme that is
+    /// not (yet) the current one (Appearance's live strip, B3).
+    public var proteinInk: Color { nutrition.protein }
+
     public init(spec: OnyxThemeSpec, base: OnyxThemeSpec? = nil) {
         self.spec = spec
         self.base = base ?? spec
