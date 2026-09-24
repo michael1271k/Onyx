@@ -672,7 +672,12 @@ struct WorkoutTabView: View {
                     .navigationTransition(.zoom(sourceID: Self.doneTransitionID, in: zoom))
             } label: {
                 if let header = doneHeader, header.id == id {
-                    SessionHeaderCard(header: header, totals: summary)
+                    SessionHeaderCard(header: header, totals: summary, masthead: SessionMasthead(
+                        name: header.label,
+                        durationSec: Int(jsRound((minutes ?? 0) * 60)),
+                        tonnageKg: volumeKg, avgBpm: nil, prCount: prCount,
+                        hrSpark: [], startedAt: Date()
+                    ))
                 } else {
                     // The header is a career-wide read; the label, the four
                     // numbers and the day's three muscles are all on the

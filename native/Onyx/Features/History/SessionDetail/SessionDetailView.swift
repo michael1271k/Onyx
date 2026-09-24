@@ -564,9 +564,9 @@ struct SessionDetailView: View {
 
     // MARK: - 1 · The masthead
 
-    /// Row 1 — `SessionMasthead`, the one value every surface that names a
-    /// finished session draws, through the local placeholder until Lane B's
-    /// shared face lands.
+    /// Row 1 — `SessionMasthead` through Lane B's shared `OnyxMasthead` face
+    /// (the name wraps, never truncates; the figures shrink under it), on the
+    /// split's day wash in a Stone slab.
     ///
     /// `page.program` — the deck that OWNED the session's date — names it, not
     /// the environment's active program: one session, one name, on every
@@ -574,13 +574,11 @@ struct SessionDetailView: View {
     private func masthead(_ page: SessionAnalysis.Page) -> some View {
         let label = SessionAnalysis.dayLabel(page.report.session.dayKey, in: page.program) ?? "Session"
         let session = page.report.session
-        return MastheadPlaceholder(
-            masthead: SessionMasthead(page: page, label: label),
-            dayKey: session.dayKey,
-            // The start time only: the bar's title already names the date.
-            stamp: session.startedAt.map { "Started " + $0.formatted(date: .omitted, time: .shortened) } ?? "",
-            tonnageInk: page.tonnageDelta.flatMap { abs($0) >= 0.5 ? SetRow.deltaInk($0, upIsGood: true) : nil }
-        )
+        return OnyxMasthead(SessionMasthead(page: page, label: label), accent: Color.onyx.day(session.dayKey))
+            .padding(OnyxSpace.l)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sessionDayWash(session.dayKey)
+            .onyxGlass(.tile)
     }
 
     // MARK: - 3 · The exercise grid

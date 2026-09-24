@@ -84,6 +84,10 @@ struct SessionHeaderCard: View {
     /// figure — the card is one of four things on a page about today — so the
     /// name keeps the role. One card, two screens, one hero each.
     var hero: Hero?
+    /// The shared face (overhaul, Lane B's `OnyxMasthead`): when present it
+    /// replaces the title row, the hero and `totals` — name · duration ·
+    /// tonnage · bpm · records, measured by the face itself.
+    var masthead: SessionMasthead? = nil
 
     /// A labelled figure with its comparison, at the top of the card.
     struct Hero {
@@ -100,6 +104,26 @@ struct SessionHeaderCard: View {
     }
 
     var body: some View {
+        if let masthead {
+            faced(masthead)
+        } else {
+            classic
+        }
+    }
+
+    private func faced(_ masthead: SessionMasthead) -> some View {
+        VStack(alignment: .leading, spacing: OnyxSpace.s) {
+            OnyxMasthead(masthead, accent: Color.onyx.day(header.dayKey))
+            planTags
+            muscleRow
+        }
+        .padding(OnyxSpace.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sessionDayWash(header.dayKey)
+        .onyxGlass(.tile)
+    }
+
+    private var classic: some View {
         VStack(alignment: .leading, spacing: OnyxSpace.s) {
             // ── ROW 1 · WHICH SESSION THIS IS ──────────────────────────────
             // The name, and the ordinal it holds in the whole career. They are
