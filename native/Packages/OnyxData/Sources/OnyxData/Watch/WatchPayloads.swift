@@ -250,14 +250,23 @@ public struct EffortPulse: Codable, Hashable, Sendable {
     /// On the 0.5 grid `Effort.ladder` scrubs.
     public var rpe: Double
     public var band: EffortBand
+    /// The set's own id — the one both logs share, since every event carries
+    /// it (overhaul Lane A). OPTIONAL AND LAST: `exerciseId` + `setIndex` are
+    /// spelled differently on the two devices (slug vs catalogue uuid), and the
+    /// id is the one key the phone's deck row (`SetRow.storeId`) can match
+    /// exactly. Nil from a W0 sender; the phone then falls back to the resting
+    /// movement's last ticked set.
+    public var setId: String?
 
     /// `band` defaults to the ladder's own fold of `rpe`.
-    public init(sessionId: String, exerciseId: String, setIndex: Int, rpe: Double, band: EffortBand? = nil) {
+    public init(sessionId: String, exerciseId: String, setIndex: Int, rpe: Double, band: EffortBand? = nil,
+                setId: String? = nil) {
         self.sessionId = sessionId
         self.exerciseId = exerciseId
         self.setIndex = setIndex
         self.rpe = rpe
         self.band = band ?? EffortBand(rpe: rpe)
+        self.setId = setId
     }
 }
 

@@ -970,7 +970,9 @@ struct ExerciseCardView: View {
                     },
                     onOptions: { optionsFor = SetTarget(group, ordinal: index + 1) },
                     onEffort: { targets in effortFor = SetTarget(targets, ordinal: index + 1) },
-                    onRecord: { recordFor = SetTarget(group, ordinal: index + 1) }
+                    onRecord: { recordFor = SetTarget(group, ordinal: index + 1) },
+                    provisional: group.lazy.compactMap { model.provisional(for: $0) }.first,
+                    onConfirmProvisional: { for row in group { model.commitProvisional(row, in: exercise) } }
                 )
             }
 
@@ -1381,6 +1383,10 @@ struct SetRowView: View {
     let onEffort: ([LoggerModel.SetRow]) -> Void
     /// The trophy's own tap: what this set actually beat.
     let onRecord: () -> Void
+    /// The rating the wrist's Crown is scrubbing for this set, not yet
+    /// written (overhaul A3). Drawn in its band's ink; a tap commits it.
+    var provisional: LoggerModel.ProvisionalEffort? = nil
+    var onConfirmProvisional: () -> Void = {}
 
     @State private var justLogged = false
     /// Which log the current flash belongs to. Two ticks inside 300 ms had the
@@ -2124,7 +2130,52 @@ struct SetRowView: View {
         [side] + rows.filter { $0.id != side.id && $0.rpe == nil }
     }
 
+    /// The wrist's provisional rating, in place of the word (overhaul A3).
+    ///
+    /// ── PROVISIONAL LOOKS PROVISIONAL ───────────────────────────────────────
+    /// The rung's word in its `EffortBand` ink inside a DASHED capsule of the
+    /// same ink, with the watch glyph ahead of it: a reading that has arrived
+    /// and not been written. Shape and glyph carry the state, so it never
+    /// depends on the hue alone (WCAG 1.4.1). A tap writes it — the tick of
+    /// the next set does the same — and the capsule becomes the plain word.
+    private func provisionalEffort(_ p: LoggerModel.ProvisionalEffort) -> some View {
+        Button(action: onConfirmProvisional) {
+            HStack(spacing: 3) {
+                Image(systemName: "applewatch")
+                    .onyxType(.micro).fontWeight(.bold)
+                Text(RpeLadder.label(p.rpe) ?? OnyxFormat.kg(p.rpe))
+                    .onyxType(.caption).fontWeight(.bold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(p.band.ink)
+            .padding(.horizontal, OnyxSpace.s)
+            .padding(.vertical, 3)
+            .background(Capsule(style: .continuous).fill(p.band.ink.opacity(0.14)))
+            .overlay {
+                Capsule(style: .continuous)
+                    .strokeBorder(p.band.ink, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+            }
+            .frame(maxWidth: .infinity, alignment: typeSize.isAccessibilitySize ? .leading : .trailing)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Effort from your watch")
+        .accessibilityValue("\(RpeLadder.readout(p.rpe) ?? p.band.title), \(p.band.title), not saved yet")
+        .accessibilityHint("Saves this rating")
+    }
+
+    @ViewBuilder
     private func wordEffort(_ targets: [LoggerModel.SetRow]) -> some View {
+        if let provisional, isDone {
+            provisionalEffort(provisional)
+        } else {
+            plainWordEffort(targets)
+        }
+    }
+
+    private func plainWordEffort(_ targets: [LoggerModel.SetRow]) -> some View {
         Button { onEffort(targets) } label: {
             // ── WHY "RATE" WEARS AN OUTLINE ─────────────────────────────────
             // Effort below 8 is drawn in secondary ink on purpose, so an

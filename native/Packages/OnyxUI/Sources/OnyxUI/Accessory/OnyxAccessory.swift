@@ -159,7 +159,15 @@ public struct AccessoryFace: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(r.title).font(AccessoryType.title).lineLimit(1)
-                Text(r.sub).font(AccessoryType.sub).foregroundStyle(.secondary).lineLimit(1)
+                // Full colour (the watch's dashboard slabs, a full-colour face)
+                // draws the caption in the grey text token: the hierarchical
+                // `.secondary` resolved to the SLAB's tint at low opacity
+                // there — "of 3000 ml" in dim blue on a blue wash, about
+                // 2.5:1 (overhaul A2 shots). Accented and vibrant modes keep
+                // the system's own secondary level.
+                Text(r.sub).font(AccessoryType.sub)
+                    .foregroundStyle(mode == .fullColor ? AnyShapeStyle(Color.onyx.textSecondary) : AnyShapeStyle(.secondary))
+                    .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .accessibilityLabel(r.spokenSub ?? r.sub)
             }

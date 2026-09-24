@@ -338,6 +338,12 @@ struct LiveLoggerView: View {
         // It also fires when the reading goes STALE and the bridge starts
         // answering nil, which is what takes the number off the card rather
         // than freezing it at whatever the watch last said before it left.
+        // ── THE WRIST'S CROWN, ONTO THE DECK CARD (overhaul A3) ─────────────
+        // A provisional RPE, drawn and never stored until a tick commits it.
+        .onChange(of: environment?.watchBridge.effort) { _, pulse in
+            guard let pulse, !model.isEditing else { return }
+            model.receiveEffort(pulse)
+        }
         .onChange(of: environment?.watchBridge.liveBpm) { _, bpm in
             guard !model.isEditing else { return }
             activity.liveBpm = bpm

@@ -485,7 +485,7 @@ enum PreviewHarness {
             WatchSyncHarness()
         case "logger", "logger-stats", "logger-lifts", "logger-paused", "logger-finish", "logger-options", "logger-timer",
              // W10: the rest bar and the progression cue, on one card.
-             "logger-rest",
+             "logger-rest", "logger-effort",
              "set-row", "set-row-split", "set-row-cardio", "set-row-records", "set-options", "effort-picker",
              // W5: the heart-rate chart (seeded Health) and the Hevy card (fixture).
              "telemetry-finish", "telemetry-detail", "hevy-card",

@@ -791,6 +791,43 @@ final class WatchModel {
         amend(sets.last?.id, OnyxData.SetPatch(rpe: value))
     }
 
+    // MARK: - Crown RPE (overhaul A3, decision Q2)
+
+    /// The rest ladder's two clocks — see `EffortScrub`. Lazy, so the
+    /// closures can reach `self`.
+    @ObservationIgnored private lazy var effortScrub = EffortScrub(
+        pulse: { [weak self] rpe in self?.sendEffort(rpe) },
+        settle: { [weak self] rpe in self?.settleEffort(rpe) }
+    )
+
+    /// The Crown landed on a rung. Called per detent by `RestView`.
+    func scrubEffort(_ rpe: Double) { effortScrub.scrub(rpe) }
+
+    /// The cover is going away: write what was chosen now.
+    func finishScrub() { effortScrub.flush() }
+
+    /// The provisional rung, to the phone's deck card — message-only, never
+    /// stored (`WatchLink.send(effort:)`). The set is the one the rest cover
+    /// names: this wrist's last logged set when it has the fold, and the
+    /// phone resolves it from its own resting movement when it does not.
+    private func sendEffort(_ rpe: Double) {
+        let last = sets.last
+        guard let session = sessionId ?? rest?.sessionId else { return }
+        link?.send(effort: EffortPulse(
+            sessionId: session, exerciseId: last?.exerciseId ?? "", setIndex: last?.setIndex ?? 0,
+            rpe: rpe, setId: last?.id
+        ))
+    }
+
+    /// End of scrub: ONE amend, and only from the device holding the pencil.
+    /// While the phone holds it the phone commits the rating it has been
+    /// shown (its next tick, or a tap on the capsule) — an amend from here
+    /// would be refused, and a refusal flips this wrist to the mirror screen.
+    private func settleEffort(_ rpe: Double) {
+        guard holdsPencil, sets.last?.rpe != rpe else { return }
+        rate(rpe)
+    }
+
     // MARK: - The quality panel (W3)
     //
     // ── EVERY ONE NAMES ITS SET ─────────────────────────────────────────────

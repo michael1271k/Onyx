@@ -89,6 +89,9 @@ final class PhoneWatchBridge {
         var opened: String?
     }
     private(set) var news = WristNews()
+    /// The last provisional RPE the wrist's Crown sent (overhaul A3). Read
+    /// by the live logger; never persisted.
+    private(set) var effort: EffortPulse?
     /// `.notice`, so `log show` returns it — the phone's half of the watch's
     /// own session log (App Store W4).
     private let log = Logger(subsystem: "app.onyx.phone", category: "watch")
@@ -500,10 +503,12 @@ final class PhoneWatchBridge {
                 // next picked up. Signed out it does nothing and the key
                 // waits, which is `drainPendingWater`'s own behaviour.
                 onWaterQueued?()
-            case .effort:
-                // Overhaul W0 contract: decoded, not yet drawn. Lane A turns
-                // it into provisional ink on the deck card; it is never stored.
-                break
+            case .effort(let pulse):
+                // The wrist's Crown, mid-scrub (overhaul A3). Held here for
+                // the logger to read — `LiveLoggerView` hands it to
+                // `LoggerModel.receiveEffort`, which draws it as provisional
+                // ink. Never stored: the wire says so and so does this.
+                effort = pulse
             case .session(let pulse):
                 // ── THE WRIST'S SESSION, IN THIS STORE (App Store W4) ───────
                 // The row first — `ingestFromWatch` refuses a set whose
