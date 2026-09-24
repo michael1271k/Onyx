@@ -41,11 +41,17 @@ extension SessionReplay.Input {
         let end = session.endedAt ?? start.addingTimeInterval(Double(max(masthead.durationSec, 60)))
         var sets: [SessionReplay.SetMark] = []
         for (m, exercise) in report.exercises.enumerated() {
+            // `records` is keyed by set NUMBER, which the two sides of a pair
+            // share — so a number's records go on its first row only, or a
+            // unilateral record is flashed twice (11 flashes under a masthead
+            // that said 9, in the first shot).
+            var credited = Set<Int>()
             for set in exercise.detail.sets {
+                let number = Int(set.setNumber)
                 sets.append(SessionReplay.SetMark(
                     movement: m,
-                    at: clocks["\(exercise.detail.exerciseId)|\(Int(set.setNumber))"],
-                    records: exercise.records[Int(set.setNumber)]?.count ?? 0
+                    at: clocks["\(exercise.detail.exerciseId)|\(number)"],
+                    records: credited.insert(number).inserted ? (exercise.records[number]?.count ?? 0) : 0
                 ))
             }
         }
@@ -63,6 +69,8 @@ struct ReplayCard: View {
     /// The split's own colour — the share frames' masthead bar.
     let dayInk: Color
     let sessionId: String
+    /// The session's logical day, for the share frames' date line.
+    let day: Date
     /// False until the page's heart-rate read has answered: a replay that
     /// started on the tonnage bar and swapped to the trace a beat later would
     /// be two replays.
@@ -84,7 +92,9 @@ struct ReplayCard: View {
                     .padding(.trailing, 44)
                     .frame(minHeight: 28, alignment: .leading)
                 ReplayCanvas(timeline: timeline, frame: frame, accent: accent)
-                    .frame(height: 88)
+                    // A bar needs a line, not a chart's height: 88 pt around
+                    // an 18 pt bar was mostly empty slab in the first shot.
+                    .frame(height: timeline.mode == .trace ? 88 : 48)
             }
         }
         .padding(OnyxSpace.m)
@@ -93,11 +103,14 @@ struct ReplayCard: View {
         .contentShape(RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous))
         .onTapGesture(perform: play)
         .overlay(alignment: .topTrailing) {
-            ShareLink(items: ReplayShareItem.all(timeline: timeline, dayInk: dayInk, sessionId: sessionId)) { item in
+            ShareLink(items: ReplayShareItem.all(timeline: timeline, dayInk: dayInk, sessionId: sessionId, day: day)) { item in
                 SharePreview(item.title, icon: Image(systemName: item.symbol))
             } label: {
                 Image(systemName: "square.and.arrow.up")
                     .onyxType(.body)
+                    // Capped: at AX5 the glyph outgrew its 44 pt target and
+                    // hung over the card's edge.
+                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
                     .foregroundStyle(accent)
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)

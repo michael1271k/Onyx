@@ -606,6 +606,7 @@ struct SessionDetailView: View {
                 )),
                 dayInk: Color.onyx.day(page.report.session.dayKey),
                 sessionId: sessionId,
+                day: LogicalDay.date(fromISO: page.report.session.date) ?? Date(),
                 ready: heartLoaded && replayClocks != nil
             )
         }

@@ -27,9 +27,9 @@ import os
 // ── AND WHY THE FROST IS PAINTED ────────────────────────────────────────────
 // `ImageRenderer` has no render server, so `.thinMaterial` draws NOTHING in it
 // (`WeeklyWrapContent.render` says the same). The Stone slab's frost is
-// therefore painted: the slab at 62 % over the backdrop, a 5 % white lift, a
-// sheen down the top third and the one lit edge — the look `.onyxGlass` has
-// over this backdrop, without the blur that has nothing to sample here anyway.
+// therefore painted: the slab at the app's own 0.78 over the backdrop, a 4 %
+// white lift, a sheen on the top edge and one lit border — the look
+// `.onyxGlass` has over this backdrop, without the blur (nothing to sample).
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// One thing the share sheet offers.
@@ -41,13 +41,15 @@ struct ReplayShareItem: Transferable, Sendable {
     let accent: Color
     let dayInk: Color
     let sessionId: String
+    /// The session's logical day — what the page's title says.
+    let day: Date
 
-    static func all(timeline: SessionReplay.Timeline, dayInk: Color, sessionId: String) -> [ReplayShareItem] {
+    static func all(timeline: SessionReplay.Timeline, dayInk: Color, sessionId: String, day: Date) -> [ReplayShareItem] {
         // The accent is read HERE, on the main actor, from the theme the page
         // is drawn in — the exporter must not re-read a global later.
         let accent = OnyxInk.Themed.accent
         return Kind.allCases.map {
-            ReplayShareItem(kind: $0, timeline: timeline, accent: accent, dayInk: dayInk, sessionId: sessionId)
+            ReplayShareItem(kind: $0, timeline: timeline, accent: accent, dayInk: dayInk, sessionId: sessionId, day: day)
         }
     }
 
@@ -103,17 +105,21 @@ struct ReplayShareFrame: View {
     let frame: SessionReplay.Frame
     let accent: Color
     let dayInk: Color
+    let day: Date
+
+    /// The card's own surface, flattened — the ring each dot is cut out with.
+    private static let cardInk = Color.onyx.slab.mix(with: .white, by: 0.08)
 
     var body: some View {
         let size = format.size
-        VStack(spacing: 0) {
-            Spacer(minLength: OnyxSpace.l)
+        // Card and wordmark are ONE block, centred in the safe band — the
+        // wordmark floating at the bottom read as a second, unrelated object.
+        VStack(spacing: format == .stories ? 28 : OnyxSpace.l) {
             card
                 .frame(width: size.width * 0.72)
-            Spacer(minLength: OnyxSpace.l)
             wordmark
-                .padding(.bottom, format == .stories ? OnyxSpace.l : OnyxSpace.l + OnyxSpace.xs)
         }
+        .frame(maxHeight: .infinity)
         .padding(.top, format.safeTop)
         .padding(.bottom, format.safeBottom)
         .frame(width: size.width, height: size.height)
@@ -123,57 +129,73 @@ struct ReplayShareFrame: View {
     }
 
     /// A deep two-stop radial of the theme accent over near-black, lit a
-    /// little above the card's centre so the light falls ON the data.
+    /// little above the card's centre so the light falls ON the data; a
+    /// fainter glow high on the left breaks the symmetry, and a vignette
+    /// takes the corners to black so the frame has depth, not a haze.
     private var backdrop: some View {
-        ZStack {
+        let h = format.size.height
+        return ZStack {
             Color.onyx.slab
             RadialGradient(
-                colors: [accent.opacity(0.55), Color.onyx.slab.opacity(0)],
-                center: UnitPoint(x: 0.5, y: format == .stories ? 0.42 : 0.4),
+                colors: [accent.opacity(0.5), Color.onyx.slab.opacity(0)],
+                center: UnitPoint(x: 0.5, y: 0.4),
                 startRadius: 0,
-                endRadius: format.size.height * (format == .stories ? 0.62 : 0.78)
+                endRadius: format == .stories ? 380 : 300
+            )
+            RadialGradient(
+                colors: [accent.opacity(0.18), accent.opacity(0)],
+                center: UnitPoint(x: 0.12, y: 0.06),
+                startRadius: 0,
+                endRadius: 240
+            )
+            RadialGradient(
+                colors: [.black.opacity(0), .black.opacity(0.5)],
+                center: .center,
+                startRadius: h * 0.47,
+                endRadius: h * 0.875
             )
         }
     }
 
     private var card: some View {
-        let settle = frame.settle
         return VStack(alignment: .leading, spacing: OnyxSpace.m) {
-            Text(timeline.masthead.startedAt.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)).uppercased())
+            Text(day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)).uppercased())
                 .onyxType(.micro, tracking: 0.08)
                 .fontWeight(.semibold)
                 .foregroundStyle(Color.onyx.textSecondary)
-            OnyxMasthead(timeline.masthead, accent: dayInk)
-                // The masthead settles in the last second of the video; the
-                // PNGs are the final frame, where it is simply there.
-                .opacity(settle)
-                .offset(y: 6 * (1 - settle))
-            ReplayCanvas(timeline: timeline, frame: frame, accent: accent)
-                .frame(height: format == .stories ? 132 : 92)
+            // Present from frame 0 and COUNTING UP with the replay — it
+            // settles on the real figures at the end (the share round: a
+            // masthead hidden until 9 s left the card's top empty for most of
+            // a video that Stories may never let run to its end).
+            OnyxMasthead(timeline.masthead(at: frame), accent: dayInk)
+            ReplayCanvas(timeline: timeline, frame: frame, accent: accent,
+                         lineWidth: 2.5, ground: Self.cardInk)
+                .frame(height: format == .stories ? 170 : 96)
             ReplayCaption(timeline: timeline, frame: frame)
         }
-        .padding(OnyxSpace.l)
+        .padding(20)
         .background { frost }
     }
 
     /// The Stone slab, painted (see the file header).
     private var frost: some View {
-        let shape = RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous)
+        // At the app's own slab tint (0.78): at 0.62 the backdrop's radial
+        // showed through as a bullseye in the middle of the card.
+        let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
         return shape
-            .fill(Color.onyx.slab.opacity(0.62))
-            .overlay { shape.fill(.white.opacity(0.05)) }
+            .fill(Color.onyx.slab.opacity(Color.onyx.slabTint))
+            .overlay { shape.fill(.white.opacity(0.04)) }
             .overlay {
                 shape.fill(LinearGradient(
-                    stops: [.init(color: .white.opacity(0.07), location: 0), .init(color: .white.opacity(0), location: 0.35)],
+                    stops: [.init(color: .white.opacity(0.06), location: 0), .init(color: .white.opacity(0), location: 0.12)],
                     startPoint: .top, endPoint: .bottom
                 ))
             }
             .overlay {
                 shape.strokeBorder(LinearGradient(
                     stops: [
-                        .init(color: .white.opacity(0.18), location: 0),
-                        .init(color: .white.opacity(0.05), location: 0.3),
-                        .init(color: .white.opacity(0.05), location: 1),
+                        .init(color: .white.opacity(0.16), location: 0),
+                        .init(color: .white.opacity(0.03), location: 1),
                     ],
                     startPoint: .top, endPoint: .bottom
                 ), lineWidth: 1)
@@ -185,7 +207,7 @@ struct ReplayShareFrame: View {
             OnyxMark(size: 18, opacity: 1)
             OnyxWordmark(role: .secondary)
         }
-        .opacity(0.9)
+        .opacity(0.7)
     }
 }
 
@@ -204,13 +226,13 @@ enum ReplayExporter {
         let folder = FileManager.default.temporaryDirectory.appending(path: "replay", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         // A readable name: it is the file name the recipient sees.
-        let name = timelineSlug(item.timeline) + "-" + item.kind.rawValue
+        let name = slug(item) + "-" + item.kind.rawValue
         return folder.appending(path: "\(name).\(ext)")
     }
 
-    private static func timelineSlug(_ timeline: SessionReplay.Timeline) -> String {
-        let day = timeline.masthead.startedAt.formatted(.iso8601.year().month().day())
-        let name = timeline.masthead.name.lowercased()
+    private static func slug(_ item: ReplayShareItem) -> String {
+        let day = LogicalDay.iso(item.day)
+        let name = item.timeline.masthead.name.lowercased()
             .map { $0.isLetter || $0.isNumber ? $0 : "-" }
         return "onyx-\(String(name).split(separator: "-").joined(separator: "-"))-\(day)"
     }
@@ -218,7 +240,7 @@ enum ReplayExporter {
     private static func renderer(_ item: ReplayShareItem, format: ReplayShareFrame.Format, at t: Double) -> ImageRenderer<ReplayShareFrame> {
         let renderer = ImageRenderer(content: ReplayShareFrame(
             format: format, timeline: item.timeline, frame: item.timeline.frame(at: t),
-            accent: item.accent, dayInk: item.dayInk
+            accent: item.accent, dayInk: item.dayInk, day: item.day
         ))
         renderer.scale = scale
         renderer.proposedSize = ProposedViewSize(format.size)
@@ -274,11 +296,11 @@ enum ReplayExporter {
         writer.startSession(atSourceTime: .zero)
 
         let frames = Int(item.timeline.duration * Double(fps))
-        for i in 0...frames {
+        for i in 0..<frames {
             while !input.isReadyForMoreMediaData {
                 try await Task.sleep(for: .milliseconds(4))
             }
-            let t = Double(i) / Double(fps)
+            let t = item.timeline.duration * Double(i) / Double(frames - 1)
             guard let image = renderer(item, format: .stories, at: t).cgImage,
                   let pool = adaptor.pixelBufferPool,
                   let buffer = pixelBuffer(from: image, pool: pool)
@@ -298,7 +320,7 @@ enum ReplayExporter {
         guard writer.status == .completed else {
             throw Failure.writer(writer.error?.localizedDescription ?? "finishWriting")
         }
-        log.notice("replay MP4 written: \(frames + 1) frames in \(Date().timeIntervalSince(began), format: .fixed(precision: 1)) s")
+        log.notice("replay MP4 written: \(frames) frames in \(Date().timeIntervalSince(began), format: .fixed(precision: 1)) s")
         return out
     }
 
@@ -352,7 +374,8 @@ struct ReplayShareHarness: View {
         let clocks = SessionReplay.Input.clocks(database: database, sessionId: id)
         let label = SessionAnalysis.dayLabel(page.report.session.dayKey, in: page.program) ?? "Session"
         let timeline = SessionReplay.timeline(.session(page, label: label, samples: samples, clocks: clocks))
-        let items = ReplayShareItem.all(timeline: timeline, dayInk: Color.onyx.day(page.report.session.dayKey), sessionId: id)
+        let items = ReplayShareItem.all(timeline: timeline, dayInk: Color.onyx.day(page.report.session.dayKey), sessionId: id,
+                                        day: LogicalDay.date(fromISO: page.report.session.date) ?? timeline.masthead.startedAt)
         do {
             let square = try ReplayExporter.png(items[0])
             let stories = try ReplayExporter.png(items[1])

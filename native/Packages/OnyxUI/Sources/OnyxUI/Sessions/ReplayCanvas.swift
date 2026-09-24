@@ -35,12 +35,17 @@ public struct ReplayCanvas: View {
     /// The trace's stroke; everything else scales from it, so the watch and a
     /// 1080 px share frame are the same drawing at two sizes.
     let lineWidth: CGFloat
+    /// The surface under the canvas — each dot is cut out of the trace with
+    /// a ring of it, so the ring must BE that surface, not black.
+    let ground: Color
 
-    public init(timeline: SessionReplay.Timeline, frame: SessionReplay.Frame, accent: Color, lineWidth: CGFloat = 2) {
+    public init(timeline: SessionReplay.Timeline, frame: SessionReplay.Frame, accent: Color,
+                lineWidth: CGFloat = 2, ground: Color = Color.onyx.slab) {
         self.timeline = timeline
         self.frame = frame
         self.accent = accent
         self.lineWidth = lineWidth
+        self.ground = ground
     }
 
     private var dotRadius: CGFloat { lineWidth * 1.75 }
@@ -81,8 +86,15 @@ public struct ReplayCanvas: View {
         guard drawn.count >= 2 else { return }
         let points = drawn.map { point($0, in: plot) }
 
+        // Smoothed through the midpoints (a quadratic per point): the
+        // resampled series is 60 straight segments and read as raw noise.
         var line = Path()
-        line.addLines(points)
+        line.move(to: points[0])
+        for i in 1..<points.count {
+            let mid = CGPoint(x: (points[i - 1].x + points[i].x) / 2, y: (points[i - 1].y + points[i].y) / 2)
+            line.addQuadCurve(to: mid, control: points[i - 1])
+        }
+        line.addLine(to: points[points.count - 1])
         // The area under the line — a wash, not a second line.
         var area = line
         area.addLine(to: CGPoint(x: points.last!.x, y: plot.maxY))
@@ -109,7 +121,7 @@ public struct ReplayCanvas: View {
     /// No heart rate: one bar, each movement's share of the work growing in
     /// turn, in the movement's own colour.
     private func drawBars(in ctx: inout GraphicsContext, plot: CGRect) {
-        let height = max(lineWidth * 3, plot.height * 0.16)
+        let height = max(lineWidth * 4, plot.height * 0.26)
         let y = plot.midY - height / 2
         let track = Path(roundedRect: CGRect(x: plot.minX, y: y, width: plot.width, height: height),
                          cornerRadius: height / 2)
@@ -141,26 +153,26 @@ public struct ReplayCanvas: View {
             let ink = lit ? OnyxInk.Fixed.record : accent
 
             if dot.isRecord, frame.recordGlow > 0 {
-                // The one flash: a ring blooming out and fading.
+                // The one flash: a ping — a ring widening as it fades.
                 let g = frame.recordGlow
-                let ring = r * (1.6 + 2.2 * g)
+                let ring = r * (1.5 + 1.2 * g)
                 ctx.fill(Path(ellipseIn: CGRect(x: c.x - ring, y: c.y - ring, width: ring * 2, height: ring * 2)),
-                         with: .color(OnyxInk.Fixed.record.opacity(0.22 * g)))
+                         with: .color(OnyxInk.Fixed.record.opacity(0.12 * g)))
                 ctx.stroke(Path(ellipseIn: CGRect(x: c.x - ring, y: c.y - ring, width: ring * 2, height: ring * 2)),
                            with: .color(OnyxInk.Fixed.record.opacity(0.9 * g)), lineWidth: max(1, lineWidth * 0.6))
             } else if lit {
                 // After the flash a record keeps a quiet halo.
-                let halo = r * 2.2
+                let halo = r * 1.9
                 ctx.fill(Path(ellipseIn: CGRect(x: c.x - halo, y: c.y - halo, width: halo * 2, height: halo * 2)),
-                         with: .color(OnyxInk.Fixed.record.opacity(0.22)))
+                         with: .color(OnyxInk.Fixed.record.opacity(0.18)))
             }
 
-            // A ring of slab around each dot so it reads OVER the line.
+            // A ring of the ground around each dot: cut out of the line.
             var dotCtx = ctx
             dotCtx.opacity = min(1, drop * 3)
-            let edge = r + max(1, lineWidth * 0.6)
+            let edge = r + max(1, lineWidth * 0.75)
             dotCtx.fill(Path(ellipseIn: CGRect(x: c.x - edge, y: c.y - edge, width: edge * 2, height: edge * 2)),
-                        with: .color(Color.onyx.slab))
+                        with: .color(ground))
             dotCtx.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
                         with: .color(ink))
         }
@@ -194,17 +206,18 @@ public struct ReplayCaption: View {
         }
         .onyxType(role)
         .fontWeight(.semibold)
-        .lineLimit(1)
+        // Two lines, not one: at AX5 "5 movements · 9…" truncated the count.
+        .lineLimit(2)
         .minimumScaleFactor(0.8)
     }
 
-    /// "3 movements · 18 sets · 2 PR" — the PR count in record gold.
+    /// "3 movements · 18 sets". No PR count: the masthead beside every
+    /// replay owns it, and two counts one line apart is how they came to
+    /// disagree in the first shot.
     private var summary: Text {
         let moves = timeline.movements.count, sets = timeline.dots.count
-        let head = Text("\(moves) \(moves == 1 ? "movement" : "movements") · \(sets) \(sets == 1 ? "set" : "sets")")
+        return Text("\(moves) \(moves == 1 ? "movement" : "movements") · \(sets) \(sets == 1 ? "set" : "sets")")
             .foregroundStyle(Color.onyx.textSecondary)
-        guard timeline.recordCount > 0 else { return head }
-        return Text("\(head) · \(Text("\(timeline.recordCount) PR").foregroundStyle(OnyxInk.Fixed.record))")
     }
 
     /// What VoiceOver reads for the whole replay.

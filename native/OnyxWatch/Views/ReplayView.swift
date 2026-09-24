@@ -8,7 +8,7 @@ import SwiftUI
 /// banner; a tap here plays it again.
 ///
 /// ── 40 MM ───────────────────────────────────────────────────────────────────
-/// A caption line, a 60 pt track and the masthead, which drops to its 2 × 2
+/// A caption line (only with sets), a 48 pt track and the masthead, which drops to its 2 × 2
 /// caption tier by itself. In a `ScrollView` so the Crown still reaches the
 /// masthead if a long split name wraps to two lines.
 struct ReplayView: View {
@@ -23,9 +23,14 @@ struct ReplayView: View {
             TimelineView(.animation(paused: startedAt == nil)) { context in
                 let frame = startedAt.map { timeline.frame(at: context.date.timeIntervalSince($0)) } ?? timeline.final
                 VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                    ReplayCaption(timeline: timeline, frame: frame, role: .caption)
+                    // No caption for a session this wrist holds no sets of —
+                    // "0 movements · 0 sets" was the first 40 mm shot, and
+                    // it was the line that pushed the masthead off screen.
+                    if !timeline.dots.isEmpty {
+                        ReplayCaption(timeline: timeline, frame: frame, role: .caption)
+                    }
                     ReplayCanvas(timeline: timeline, frame: frame, accent: OnyxInk.Themed.accent, lineWidth: 1.5)
-                        .frame(height: 60)
+                        .frame(height: 48)
                     OnyxMasthead(timeline.masthead, accent: dayInk)
                         .opacity(frame.settle)
                         .offset(y: 4 * (1 - frame.settle))

@@ -130,6 +130,18 @@ struct SessionReplayTests {
         #expect(timeline.frame(at: 42) == last)
     }
 
+    @Test("the video's masthead counts up and lands on the real figures")
+    func mastheadCountsUp() {
+        let timeline = SessionReplay.timeline(Self.input(hr: true))
+        let start = timeline.masthead(at: timeline.frame(at: 0))
+        #expect(start.durationSec == 0 && start.tonnageKg == 1 && start.prCount == 0)
+        let mid = timeline.masthead(at: timeline.frame(at: 5))
+        #expect(mid.tonnageKg > 0 && mid.tonnageKg < timeline.masthead.tonnageKg)
+        #expect(mid.prCount == 0)
+        #expect(timeline.masthead(at: timeline.frame(at: 8.5)).prCount == 3)
+        #expect(timeline.masthead(at: timeline.final) == timeline.masthead)
+    }
+
     @Test("the condensed watch replay is the same keyframes, scaled to 3 s")
     func watchIsScaled() {
         let long = SessionReplay.timeline(Self.input(hr: true))
@@ -157,7 +169,7 @@ struct SessionReplayTests {
         #expect(abs(xs[0] - 0.5 / 8) < 1e-9 && abs(xs[7] - 7.5 / 8) < 1e-9)
     }
 
-    @Test("tonnage mode: one bar segment per movement, proportional, the bodyweight one kept visible")
+    @Test("tonnage mode: one bar segment per movement, by work and sets, the bodyweight one kept visible")
     func tonnageBars() {
         let timeline = SessionReplay.timeline(Self.input(hr: false))
         #expect(timeline.trace.isEmpty)

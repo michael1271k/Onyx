@@ -21,8 +21,8 @@ import Foundation
 //
 // ── ONE AXIS, TWO MEANINGS ──────────────────────────────────────────────────
 // `x` runs 0…1 along the track. With heart rate it is TIME through the session
-// (a set sits where its commit happened). Without, it is cumulative TONNAGE
-// (a movement's segment is as wide as its share of the work). Both grow at the
+// (a set sits where its commit happened). Without, it is the TONNAGE bar
+// (a movement's segment is half its share of the work, half its sets). Both grow at the
 // same rate — the track reaches `x` at `0.6·D·x` — and a dot at `x` drops at
 // `0.2·D + x·(0.6·D − drop)`, which is never earlier. That inequality is the
 // whole reason a dot always lands on something already drawn.
@@ -203,6 +203,24 @@ public enum SessionReplay {
 
         /// The last frame — what Reduce Motion jumps to and the share frames draw.
         public var final: Frame { frame(at: duration) }
+
+        /// The masthead as far as the replay has got — the video's figures
+        /// count up with it instead of appearing only in the last second
+        /// (the share round's critique). Duration follows the track, tonnage
+        /// the landed sets' movements, the record count the flash. At the
+        /// final frame it IS the masthead.
+        public func masthead(at frame: Frame) -> SessionMasthead {
+            guard frame.settle < 1 else { return masthead }
+            var live = masthead
+            live.durationSec = Int((Double(masthead.durationSec) * frame.trackProgress).rounded())
+            let landed = zip(dots, frame.drops).filter { $0.1 >= 1 }.map(\.0)
+            let share = dots.isEmpty ? frame.trackProgress : Double(landed.count) / Double(dots.count)
+            // Never exactly 0 on a session that has a tonnage: the face drops a
+            // zero figure, and the grid would reflow when the first set lands.
+            live.tonnageKg = masthead.tonnageKg > 0 ? max(masthead.tonnageKg * share, 1) : 0
+            live.prCount = frame.recordsLit ? masthead.prCount : 0
+            return live
+        }
     }
 
     // MARK: - Building
@@ -218,7 +236,7 @@ public enum SessionReplay {
         case .trace:
             xs = clocked(input.sets, start: input.start, span: span)
         case .tonnage:
-            bars = segments(input.movements)
+            bars = segments(input.movements, sets: input.sets)
             xs = input.sets.map { _ in 0 }
             // Each movement's sets spaced evenly inside its own segment.
             for (m, bar) in bars.enumerated() {
@@ -308,12 +326,20 @@ public enum SessionReplay {
         return a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x)
     }
 
-    /// The tonnage bar: each movement's share of the work, with a floor so a
-    /// bodyweight movement is still a visible stretch. All zero → equal parts.
-    static func segments(_ movements: [Movement]) -> [Bar] {
+    /// The tonnage bar: each movement's width is HALF its share of the work and
+    /// half its share of the sets, with a floor. Pure tonnage (the first
+    /// draft) crowded a bodyweight movement's four sets into 4 % of the bar —
+    /// a knot of dots at the end of the first shot. All zero → the set share.
+    static func segments(_ movements: [Movement], sets: [SetMark]) -> [Bar] {
         guard !movements.isEmpty else { return [] }
         let total = movements.reduce(0) { $0 + max($1.tonnageKg, 0) }
-        let raw = movements.map { total > 0 ? max(max($0.tonnageKg, 0) / total, minSegment) : 1 }
+        let counts = movements.indices.map { m in Double(sets.filter { $0.movement == m }.count) }
+        let setTotal = counts.reduce(0, +)
+        let raw = movements.indices.map { m -> Double in
+            let work = total > 0 ? max(movements[m].tonnageKg, 0) / total : nil
+            let share = setTotal > 0 ? counts[m] / setTotal : 1 / Double(movements.count)
+            return max(work.map { 0.5 * $0 + 0.5 * share } ?? share, minSegment)
+        }
         let sum = raw.reduce(0, +)
         var from = 0.0
         return raw.enumerated().map { i, w in
