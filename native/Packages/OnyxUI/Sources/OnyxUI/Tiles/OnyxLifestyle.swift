@@ -154,7 +154,9 @@ func sleepDuration(_ s: OnyxSnapshot?) -> String? {
 func nextSessionText(_ s: OnyxSnapshot?) -> String? {
   guard let label = s?.workout.label, !label.isEmpty else { return nil }
   if s?.workout.isRestDay == true { return "Rest" }
-  return s?.today != nil ? "\(label) ✓" : label
+  // No "✓" glued to the name: "Legs & Core B ✓" is what clipped (B3). The
+  // ledger row draws the check as a glyph beside the name instead.
+  return label
 }
 
 // MARK: - Onyx Body
@@ -318,6 +320,12 @@ struct CalorieLedgerFace: View {
           .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold) }.tracking(0.6)
           .foregroundStyle(Color.onyx.textSecondary)
         Spacer(minLength: 4)
+        if s?.today != nil, s?.workout.isRestDay != true {
+          Image(systemName: "checkmark.circle.fill")
+            .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .bold) }
+            .foregroundStyle(mono ? .white : Color.onyx.good)
+            .accessibilityLabel("done")
+        }
         Text(nextSessionText(s) ?? "—")
           .onyxWidgetFont { OnyxWidgetType.face(12 * $0, weight: .bold) }
           .foregroundStyle(mono ? .white : Color.onyx.dayLabel(s?.workout.dayKey))
@@ -454,6 +462,8 @@ struct WaterLedgerFace: View {
             .onyxWidgetFont { OnyxWidgetType.face(8 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         }
       }
+      // The corner belongs to the mark (B2 shot: it sat on "avg 2.7 L").
+      .padding(.trailing, OnyxMark.faceInset)
       BarChart(points: s?.water.trend ?? [], goal: s?.water.goalMl,
                color: tint(Color.onyx.water),
                label: { OnyxSnapshot.weekdayInitial($0.d) })
@@ -1362,6 +1372,8 @@ struct MacroLargeFace: View {
       // is what a third register has to earn its height with.
       Register(title: "WHERE THE ENERGY CAME FROM", accent: tint(OnyxDomain.fuel.end)) {
         EnergySplit(entry: entry, mono: mono)
+        MicroRails(micros: Array((s?.macros.micros ?? []).prefix(3)), mono: mono)
+          .padding(.top, 8)
       }
 
       Spacer(minLength: 0)

@@ -125,33 +125,9 @@ struct WorkoutLockCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                // The mark, carrying the split's colour, IS the dot that used to
-                // sit here — a filled circle said "this app has a colour", the
-                // ring says which app.
-                OnyxMark(size: 11, tint: accent, opacity: 1)
-                Text(title.uppercased())
-                    .font(OnyxWidgetType.label(10, weight: .black))
-                    .tracking(1.2)
-                    .foregroundStyle(accent)
-                    .lineLimit(1)
-                    .layoutPriority(1)
-                // ── THE MUSCLE TAG SITS AFTER THE SESSION TITLE ─────────────
-                // Decision 4, and the header is where it belongs on width as
-                // well as on sense. "DELTS & ARMS" is ~105 pt and the clock
-                // ~62 of a 328 pt row, so this is the one band on the card with
-                // a hundred points spare — every other row is already carrying
-                // a 28-character movement name or four 34 pt controls.
-                //
-                // Beside the SESSION it also reads correctly: the split and the
-                // muscle are both facts about what today is for, and the tag
-                // under a movement name was answering a question the movement
-                // name had already answered.
-                WorkoutMuscleTag(token: state.primaryMuscle)
-                Spacer(minLength: 4)
-                WorkoutElapsed(state: state, startedAt: startedAt)
-            }
-            WorkoutTotals(state: state)
+            // The masthead (B3): the title never truncates, and the clock,
+            // tonnage, heart and records ride under it in one measured row.
+            OnyxMasthead(live: state, title: title, startedAt: startedAt)
             WorkoutCurrentSet(state: state)
             // `total:` is what gives the bar a denominator — see `restCountdown`.
             // Without it the range was rebased to `now` on every redraw and the
@@ -421,51 +397,87 @@ struct WorkoutRestBand: View {
 struct WorkoutCompactTrailing: View {
     let state: OnyxWorkoutAttributes.ContentState
 
+    // ── HEART AND BPM, AND NOTHING ELSE (overhaul B3, challenge C8) ─────────
+    // This slot used to rotate through four answers — the rest countdown, the
+    // bout clock, the heart rate, the load — and the founder's call was that
+    // the compact island is exactly two facts: the session's clock (leading,
+    // `WorkoutClock`) and the heart (here). The rest countdown lives in the
+    // expanded island and on the Lock Screen card. Heart is `OnyxInk.Fixed
+    // .heart` on the glyph AND the number; "—" when no watch is speaking.
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "heart.fill")
+            Text(state.bpm.map { "\($0)" } ?? "—").monospacedDigit()
+        }
+        .foregroundStyle(OnyxInk.Fixed.heart)
+        .font(OnyxWidgetType.figure(13))
+        .frame(minWidth: 44, maxWidth: 52, alignment: .trailing)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Heart rate")
+        .accessibilityValue(state.bpm.map { "\($0) beats per minute, from your watch" } ?? "no reading")
+    }
+}
+
+/// The compact LEADING slot: the session's elapsed time, monospaced — frozen
+/// while paused, a running `.timer` otherwise (the same origin rule
+/// `WorkoutElapsed` keeps).
+struct WorkoutClock: View {
+    let state: OnyxWorkoutAttributes.ContentState
+    let startedAt: Date
+
     var body: some View {
         Group {
-            if let countdown = restCountdown(state.restEndsAt, total: state.restTotalSec) {
-                Text(timerInterval: countdown, countsDown: true)
-                    .monospacedDigit()
-                    .frame(minWidth: 44, maxWidth: 44, alignment: .trailing)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    // The timer wears the MOVEMENT's colour on every surface —
-                    // see `WorkoutRestBand.accent`.
-                    .foregroundStyle(
-                        WorkoutMuscleTag.tint(state.primaryMuscle) ?? Color.onyx.day(state.dayKey)
-                    )
-            } else if let sec = state.cardioElapsedSec {
-                // ── A REAL BRANCH, BECAUSE THE FALLBACK CANNOT ──────────────
-                // The `else` below is string surgery on a load the producer
-                // composed ("42.5 kg × 12" minus its unit), and a bout has no
-                // " kg " in it to cut — it would print the whole line into a
-                // ~44 pt slot. The bout's own clock is the one number that
-                // fits, and it is the axis a treadmill block is prescribed in.
-                Text(SetFormat.clock(Double(sec)))
-                    .monospacedDigit()
-                    .frame(minWidth: 44, maxWidth: 44, alignment: .trailing)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .foregroundStyle(Color.onyx.cardio)
-            } else if let bpm = state.bpm {
-                // Red on the glyph, ordinary ink on the number — the rule
-                // `WorkoutRestBand`'s reading row states at length.
-                HStack(spacing: 2) {
-                    Image(systemName: "heart.fill").foregroundStyle(Color.onyx.danger)
-                    Text("\(bpm)").monospacedDigit().foregroundStyle(Color.onyx.textPrimary)
-                }
-                .frame(minWidth: 44, maxWidth: 44, alignment: .trailing)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Heart rate")
-                .accessibilityValue("\(bpm) beats per minute, from your watch")
+            if state.isPaused == true {
+                Text(state.elapsed ?? "")
+                    .foregroundStyle(Color.onyx.textTertiary)
             } else {
-                Text(state.load.replacingOccurrences(of: " kg ", with: ""))
-                    .foregroundStyle(Color.onyx.day(state.dayKey))
+                Text(state.timerOrigin ?? startedAt, style: .timer)
+                    .foregroundStyle(Color.onyx.textPrimary)
             }
         }
-        .font(OnyxWidgetType.figure(12))
+        .font(OnyxWidgetType.figure(13))
+        .monospacedDigit()
+        .frame(minWidth: 44, maxWidth: 58, alignment: .leading)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .accessibilityLabel("Total workout time")
+    }
+}
+
+extension OnyxMasthead {
+    /// The running session as the masthead draws it: the live clock, the
+    /// running tonnage, the wrist's CURRENT heart rate, this session's records.
+    init(live state: OnyxWorkoutAttributes.ContentState, title: String, startedAt: Date) {
+        self.init(
+            name: title,
+            clock: state.isPaused == true
+                ? .frozen(state.elapsed ?? "")
+                : .running(since: state.timerOrigin ?? startedAt),
+            tonnage: state.volume.isEmpty ? nil : state.volume,
+            bpm: state.bpm, prCount: state.prsThisSession,
+            accent: Color.onyx.day(state.dayKey), bpmIsAverage: false
+        )
+    }
+}
+
+/// The expanded island (B3): the masthead, and — only while resting — the
+/// rest band, the one control a raised island is for.
+struct WorkoutIslandExpanded: View {
+    let title: String
+    let startedAt: Date
+    let state: OnyxWorkoutAttributes.ContentState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            OnyxMasthead(live: state, title: title, startedAt: startedAt)
+            if let countdown = restCountdown(state.restEndsAt, total: state.restTotalSec) {
+                WorkoutRestBand(countdown: countdown, state: state, showsSkip: false)
+            }
+        }
+        // The system rounds the region's edge; two points keeps a capsule off it.
+        .padding(.bottom, 2)
     }
 }
 

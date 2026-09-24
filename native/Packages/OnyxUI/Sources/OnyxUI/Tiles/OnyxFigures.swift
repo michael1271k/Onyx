@@ -162,9 +162,10 @@ struct PitcherBody: Shape {
     return Path { p in
       // The spout: out and up from the rim's left end, then back down into
       // the wall a little below it.
-      p.move(to: CGPoint(x: tl.x, y: tl.y + h * 0.08))
-      p.addLine(to: CGPoint(x: r.minX + w * 0.04, y: r.minY + h * 0.02))
-      p.addQuadCurve(to: tl, control: CGPoint(x: r.minX + w * 0.12, y: top - h * 0.02))
+      p.move(to: CGPoint(x: tl.x - w * 0.01, y: tl.y + h * 0.12))
+      p.addLine(to: CGPoint(x: r.minX + w * 0.02, y: r.minY))
+      p.addQuadCurve(to: CGPoint(x: tl.x + w * 0.10, y: top),
+                     control: CGPoint(x: r.minX + w * 0.16, y: top))
       p.addLine(to: tr)
       // The right wall, and a rounded foot at both corners.
       p.addLine(to: CGPoint(x: br.x, y: bottom - radius))

@@ -189,6 +189,36 @@ struct TodayFace: View {
 
   private var stack: some View {
     VStack(alignment: .leading, spacing: compact ? 6 : 8) {
+      if let done, !isRest {
+        // ── A FINISHED DAY IS THE MASTHEAD (overhaul B3) ─────────────────
+        // It was a "DONE" caption over a one-line title that clipped "Legs &
+        // Core B", plus six stats. The masthead measures itself and never
+        // truncates the name.
+        todayMasthead(s, done, accent: accent)
+        Spacer(minLength: 0)
+      } else {
+        planned
+      }
+
+      if !compact {
+        // ── CONTEXT, NOT A COUNT ────────────────────────────────────────────
+        // This used to be "3/5 this week" over a rail, which is a number you
+        // cannot act on: the chips name the sessions in their own `DAY_COLOR`,
+        // so the shape of the week is visible rather than counted.
+        Hairline()
+        HStack(spacing: 5) {
+          Text(weekText)
+            .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .semibold) }.foregroundStyle(Color.onyx.textSecondary)
+            .lineLimit(1)
+          Spacer(minLength: 4)
+          SessionChips(entry: entry, mono: mono)
+        }
+      }
+    }
+  }
+
+  /// Due and rest days: the header, the title, the prescription.
+  @ViewBuilder private var planned: some View {
       TodayHeader(entry: entry, mono: mono, branded: !compact)
 
       // ── THE HEADLINE IS THE TAP TARGET (W6) ─────────────────────────────
@@ -224,31 +254,10 @@ struct TodayFace: View {
       // changed with the day.
       //
       // Rest is the one state that genuinely has no figures, and says so above.
-      if !compact, let done {
-        Hairline()
-        TodayStats(done: done, mono: mono)
-      } else if !compact, !isRest, let s {
+      if !compact, !isRest, let s {
         Hairline()
         TodayPlanned(workout: s.workout, week: s.week, mono: mono)
       }
-
-      if !compact {
-        // ── CONTEXT, NOT A COUNT ────────────────────────────────────────────
-        // This used to be "3/5 this week" over a rail, which is a number you
-        // cannot act on: it says how many sessions happened and nothing about
-        // WHICH, so a week of three leg days and a week of a proper rotation
-        // rendered identically. The chips name the sessions in their own
-        // `DAY_COLOR`, so the shape of the week is visible rather than counted.
-        Hairline()
-        HStack(spacing: 5) {
-          Text(weekText)
-            .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .semibold) }.foregroundStyle(Color.onyx.textSecondary)
-            .lineLimit(1)
-          Spacer(minLength: 4)
-          SessionChips(entry: entry, mono: mono)
-        }
-      }
-    }
   }
 
   private var headline: some View {
@@ -273,14 +282,6 @@ struct TodayFace: View {
   /// prescription is the thing worth a glance: how much work today is.
   private var sub: String? {
     if isRest { return "recovery is the session" }
-    if let done {
-      // On a Small, where the stat row is absent, the two figures that matter.
-      guard compact else { return nil }
-      let time = done.durationMin.map { "\($0)′" }
-      let volume = OnyxSnapshot.tonnes(done.volumeKg)
-      let parts = [time, volume].compactMap { $0 }
-      return parts.isEmpty ? "logged" : parts.joined(separator: " · ")
-    }
     if let exercises = s?.workout.plannedExercises, let sets = s?.workout.plannedSets {
       return "\(exercises) exercises · \(sets) sets"
     }
@@ -413,15 +414,10 @@ private struct TodayHeader: View {
     }
   }
 
-  private var glyph: String {
-    if isRest { return "moon.zzz.fill" }
-    return s?.today != nil ? "checkmark.circle.fill" : "dumbbell.fill"
-  }
-
-  private var caption: String {
-    if isRest { return "REST DAY" }
-    return s?.today != nil ? "DONE" : "DUE TODAY"
-  }
+  // A finished day draws `OnyxMasthead` instead of this header (B3), so the
+  // "DONE" caption that clipped beside a long title is gone.
+  private var glyph: String { isRest ? "moon.zzz.fill" : "dumbbell.fill" }
+  private var caption: String { isRest ? "REST DAY" : "DUE TODAY" }
 }
 
 /// The DUE state's four figures — the row that used not to exist.
@@ -444,54 +440,6 @@ private struct TodayPlanned: View {
            color: mono ? .white : Color.onyx.textSecondary)
       Stat(value: week.sessionTarget.map { "\(week.sessions)/\($0)" } ?? "\(week.sessions)",
            label: "THIS WEEK", color: Color.onyx.textPrimary)
-    }
-  }
-}
-
-/// What the session cost, in six figures over two rows.
-///
-/// ── WHY SIX AND NOT FOUR ─────────────────────────────────────────────────
-/// Four figures across one row left the Medium with a band of obsidian above
-/// them that the `Spacer` was collecting — a tile reporting a finished session
-/// and using a third of itself to say nothing. The two readings that fill it
-/// are ones `workout_sessions` has carried all along and no surface but the
-/// session page ever showed: what the session cost in calories, and what the
-/// heart did during it.
-///
-/// ── AND WHY THREE ACROSS RATHER THAN SIX ─────────────────────────────────
-/// Six `Stat`s across a 338 pt Medium is ~56 pt a column, which is narrower
-/// than "1.4 t" plus its label wants at a readable size. Three across is 112,
-/// which is what pays for the type going up from 13 to 15 rather than down.
-///
-/// ── THE GRID IS FIXED, INCLUDING THE EMPTY CELLS ─────────────────────────
-/// A session with no heart rate draws "—" and keeps its cell. This file's own
-/// header is explicit that the three day-states are one layout on purpose —
-/// "a widget whose height and layout change with the day is one you have to
-/// re-read every morning" — and a row that collapses when a reading is
-/// missing is the same defect one axis down.
-private struct TodayStats: View {
-  let done: OnyxSnapshot.Today
-  let mono: Bool
-
-  var body: some View {
-    VStack(spacing: 6) {
-      HStack(spacing: 0) {
-        Stat(value: done.durationMin.map { "\($0)′" }, label: "TIME", color: Color.onyx.textPrimary, size: 15)
-        Stat(value: OnyxSnapshot.tonnes(done.volumeKg), label: "VOLUME", color: Color.onyx.textPrimary, size: 15)
-        Stat(value: done.prCount.map { "\($0)" }, label: "RECORDS",
-             color: (done.prCount ?? 0) > 0 ? (mono ? .white : Color.onyx.record) : Color.onyx.textSecondary,
-             size: 15)
-      }
-      HStack(spacing: 0) {
-        Stat(value: done.sessionRpe.map { String(format: "%.0f/10", $0) },
-             label: "EFFORT", color: mono ? .white : OnyxDomain.train.accent, size: 15)
-        // No decimal and no thousands separator: it is a kilocalorie count in
-        // a 112 pt column, and "612" is the whole of what it has to say.
-        Stat(value: done.caloriesKcal.map { "\(Int($0.rounded()))" }, label: "CALORIES",
-             color: mono ? .white : OnyxDomain.fuel.accent, size: 15)
-        Stat(value: done.avgBpm.map { "\($0)" }, label: "AVG HR",
-             color: mono ? .white : OnyxDomain.recover.accent, size: 15)
-      }
     }
   }
 }
@@ -546,6 +494,9 @@ struct TodayLargeFace: View {
   private var stack: some View {
     VStack(alignment: .leading, spacing: 10) {
       Register(title: "TODAY", accent: mono ? .white : accent) {
+        if let done = s?.today, s?.workout.isRestDay != true {
+          todayMasthead(s, done, accent: accent)
+        } else {
         TodayHeader(entry: entry, mono: mono, branded: true)
         FaceLink(OnyxLink.workout ?? OnyxLink.home) {
           HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -558,15 +509,14 @@ struct TodayLargeFace: View {
             if s?.workout.isRestDay != true, s?.today == nil { StartChip(accent: accent) }
           }
         }
-        if let done = s?.today {
-          TodayStats(done: done, mono: mono)
-        } else if s?.workout.isRestDay == true {
+        if s?.workout.isRestDay == true {
           Text("recovery is the session")
             .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         } else if let s {
           // Was "not logged yet" — true, and nothing you could act on, on the
           // largest surface in the gallery.
           TodayPlanned(workout: s.workout, week: s.week, mono: mono)
+        }
         }
       }
 
@@ -1345,6 +1295,18 @@ private struct AdherenceStrip: View {
       }
     }
   }
+}
+
+/// The finished session as every Today face draws it (overhaul B3). Clamped
+/// at xLarge: the tile is a fixed shape, and the masthead's type is Dynamic.
+func todayMasthead(_ s: OnyxSnapshot?, _ done: OnyxSnapshot.Today, accent: Color) -> some View {
+  OnyxMasthead(
+    name: s?.workout.label ?? "",
+    clock: done.durationMin.map { .elapsed(seconds: $0 * 60) },
+    tonnage: OnyxSnapshot.tonnes(done.volumeKg),
+    bpm: done.avgBpm, prCount: done.prCount ?? 0, accent: accent
+  )
+  .dynamicTypeSize(...DynamicTypeSize.xLarge)
 }
 
 #endif

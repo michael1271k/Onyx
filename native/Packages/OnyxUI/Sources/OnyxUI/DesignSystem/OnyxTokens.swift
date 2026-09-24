@@ -129,6 +129,13 @@ extension Color {
         /// already separated by material is noise.
         public static let hairline = Color.white.opacity(0.08)
 
+        /// The Stone slab (overhaul B3, concept 1): near-black `#0B0B0E`, the
+        /// colour of the icon's onyx. Laid over `.thinMaterial` at `slabTint`
+        /// so content scrolling behind a card frosts rather than vanishes
+        /// (challenge C1), and drawn solid under Reduce Transparency.
+        public static let slab = Color(red: 11 / 255, green: 11 / 255, blue: 14 / 255)
+        public static let slabTint: Double = 0.78
+
         /// Ink at a weight the three text tokens do not name — for a FILL or a
         /// STROKE that is ink rather than type: the body atlas's unworked
         /// silhouette, a baseline tick, a scrim.
@@ -678,11 +685,16 @@ public enum OnyxSpace {
 /// v2 brought all three down (12/20/32 → 10/16/28). A 20 pt corner on a 160 pt
 /// tile is a lozenge; iOS's own widgets, cards and grouped rows sit near 16, and
 /// the tiles were reading as web cards partly because of it.
+///
+/// Overhaul B3 (concept 1, "Stone", founder-approved): 28 / 20 / 12 by depth.
+/// The lozenge argument above was about a TRANSLUCENT card on a grey wash;
+/// a near-black slab with one lit top edge reads as a cut stone at 20, which
+/// is the object the new icon is. Watch rows inherit the 12.
 public enum OnyxCorner {
     /// A row inside a tile.
-    public static let row: CGFloat = 10
+    public static let row: CGFloat = 12
     /// A tile on a screen.
-    public static let tile: CGFloat = 16
+    public static let tile: CGFloat = 20
     /// A presented sheet.
     public static let sheet: CGFloat = 28
 

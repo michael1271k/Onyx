@@ -563,14 +563,16 @@ struct VitalSparkFace: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: count > 3 ? 6 : 8) {
-      HStack(spacing: 4) {
+      HStack(alignment: .firstTextBaseline, spacing: 6) {
         Caption("VITALS", color: mono ? .white : OnyxDomain.recover.accent)
-        Spacer(minLength: 0)
         Text("7 nights")
           .onyxWidgetFont { OnyxWidgetType.face(8 * $0) }
           .foregroundStyle(Color.onyx.textSecondary)
+        Spacer(minLength: 0)
         if entry.isStale { StaleTag(age: entry.age) }
       }
+      // The corner belongs to the mark (B2 shot: it sat on "7 nights").
+      .padding(.trailing, OnyxMark.faceInset)
       ForEach(Array(specs.enumerated()), id: \.element.label) { index, spec in
         if index > 0 { Hairline() }
         VitalSparkRow(spec: spec, vitals: s?.vitals, date: s?.date, mono: mono, stacked: count <= 2)
@@ -642,7 +644,9 @@ struct VitalSparkRow: View {
 
   private var spark: some View {
     Sparkline(gapped: VitalSparkFace.week(vital?.trend, endingOn: date), baseline: vital?.baseline, color: ink)
-      .frame(maxWidth: .infinity, minHeight: 14, maxHeight: .infinity)
+      // Capped: a 150 pt Large row drew a week of 97.0–97.5 % SpO₂ as a
+      // full-height wave, which is drama the reading does not have.
+      .frame(maxWidth: .infinity, minHeight: 14, maxHeight: 36)
   }
 }
 

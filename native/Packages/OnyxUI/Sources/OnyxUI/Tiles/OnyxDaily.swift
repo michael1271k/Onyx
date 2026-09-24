@@ -221,8 +221,9 @@ private struct TrainingQuadrant: View {
       Text(snapshot?.workout.label ?? "—")
         .onyxWidgetFont { OnyxWidgetType.label(13 * $0, weight: .bold) }
         .foregroundStyle(Color.onyx.textPrimary)
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
+        // Two lines before it shrinks: a day name never truncates (B3).
+        .lineLimit(2)
+        .minimumScaleFactor(0.8)
       Text(state)
         .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
       Spacer(minLength: 0)
@@ -236,8 +237,8 @@ private struct TrainingQuadrant: View {
     guard let s = snapshot else { return "—" }
     if s.workout.isRestDay { return "recovery" }
     if let done = s.today {
-      let volume = OnyxSnapshot.tonnes(done.volumeKg)
-      return volume.map { "done · \($0)" } ?? "done"
+      // A check and the tonnage: "done · 12.4 t" clipped at 9 pt (B3).
+      return "✓ " + (OnyxSnapshot.tonnes(done.volumeKg) ?? "logged")
     }
     if let exercises = s.workout.plannedExercises, let sets = s.workout.plannedSets {
       return "due · \(exercises) ex · \(sets) sets"
