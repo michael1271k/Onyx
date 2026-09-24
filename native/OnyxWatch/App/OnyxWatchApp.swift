@@ -1,4 +1,25 @@
+import HealthKit
 import SwiftUI
+import WatchKit
+
+/// The phone's Start woke this app through `HKHealthStore.startWatchApp`
+/// (overhaul W5.2). The launch can land before the root's `.task` has handed
+/// the model over, so it is held until then — once, never replayed.
+@MainActor
+final class WatchAppDelegate: NSObject, WKApplicationDelegate {
+    var model: WatchModel? {
+        didSet {
+            guard pendingLaunch, let model else { return }
+            pendingLaunch = false
+            model.handleWorkoutLaunch()
+        }
+    }
+    private var pendingLaunch = false
+
+    func handle(_ workoutConfiguration: HKWorkoutConfiguration) {
+        if let model { model.handleWorkoutLaunch() } else { pendingLaunch = true }
+    }
+}
 
 /// The Watch logging client.
 ///
@@ -23,6 +44,8 @@ struct OnyxWatchApp: App {
     /// One model for the whole app, created here so it outlives every view.
     /// `@State` rather than `@StateObject` — `WatchModel` is `@Observable`.
     @State private var model = WatchModel()
+    /// Receives the phone's `startWatchApp` launch (overhaul W5.2).
+    @WKApplicationDelegateAdaptor private var delegate: WatchAppDelegate
 
     var body: some Scene {
         WindowGroup {
@@ -45,6 +68,7 @@ struct OnyxWatchApp: App {
                 // appearance costs nothing.
                 .task {
                     model.start()
+                    delegate.model = model
                     #if DEBUG
                     // ── THE SHOT LOOP'S ONE HOOK ────────────────────────────
                     // `ONYX_WATCH_AUTOSTART=1` in the launch environment

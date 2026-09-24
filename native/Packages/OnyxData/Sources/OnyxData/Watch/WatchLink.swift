@@ -279,6 +279,17 @@ public final class WatchLink: NSObject, Sendable {
         try? wc.updateApplicationContext([Key.kind: Kind.context, Key.payload: data])
     }
 
+    #if os(iOS)
+    /// The three facts `WatchLaunch` decides on; nil before the session has
+    /// activated (or where WatchConnectivity is unsupported).
+    public var reach: (paired: Bool, installed: Bool, reachable: Bool)? {
+        guard WCSession.isSupported() else { return nil }
+        let wc = WCSession.default
+        guard wc.activationState == .activated else { return nil }
+        return (wc.isPaired, wc.isWatchAppInstalled, wc.isReachable)
+    }
+    #endif
+
     private func active() -> WCSession? {
         guard WCSession.isSupported() else { return nil }
         let wc = WCSession.default

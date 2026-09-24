@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import HealthKit
 import Observation
 import OnyxCore
 import OnyxData
@@ -95,6 +96,8 @@ final class PhoneWatchBridge {
     /// `.notice`, so `log show` returns it — the phone's half of the watch's
     /// own session log (App Store W4).
     private let log = Logger(subsystem: "app.onyx.phone", category: "watch")
+    /// Only for `startWatchApp` (W5.2) — one store for the bridge's lifetime.
+    private let healthStore = HKHealthStore()
     func clearNews() { news = WristNews() }
 
     /// Switches the shell to the Train tab when the wrist opens a session.
@@ -462,6 +465,43 @@ final class PhoneWatchBridge {
         }
         link?.send(session: pulse)
         record(pulse)
+        if pulse.phase == .open { launchWatchApp() }
+    }
+
+    /// Wake a CLOSED watch app on the phone's Start (overhaul W5.2, founder
+    /// decision 2026-09-24). A running or recently woken app already follows
+    /// the messaged open; a closed one only learned of the session when the
+    /// wearer opened it. `startWatchApp` launches it with a strength workout
+    /// configuration, and the launch runs the ordinary lifecycle path
+    /// (`WatchModel.handleWorkoutLaunch` → the queued open → adopt).
+    ///
+    /// Never blocks Start: it is fire-and-forget, and every outcome is logged.
+    /// It fails quietly without HealthKit authorisation — which only a device
+    /// can prove (the simulator pair has no HK workout launch).
+    private func launchWatchApp() {
+        guard let reach = link?.reach else {
+            log.notice("startWatchApp skipped: the watch link has not activated")
+            return
+        }
+        guard WatchLaunch.shouldStartWatchApp(paired: reach.paired, installed: reach.installed, reachable: reach.reachable) else {
+            log.notice("startWatchApp skipped: paired \(reach.paired), installed \(reach.installed), reachable \(reach.reachable)")
+            return
+        }
+        guard HKHealthStore.isHealthDataAvailable() else {
+            log.notice("startWatchApp skipped: no HealthKit on this device")
+            return
+        }
+        let configuration = HKWorkoutConfiguration()
+        configuration.activityType = .traditionalStrengthTraining
+        configuration.locationType = .indoor
+        let log = log
+        healthStore.startWatchApp(with: configuration) { launched, error in
+            if launched {
+                log.notice("startWatchApp launched the watch app")
+            } else {
+                log.error("startWatchApp failed: \(error?.localizedDescription ?? "no error", privacy: .public)")
+            }
+        }
     }
 
     // MARK: - Inbound

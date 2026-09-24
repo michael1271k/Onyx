@@ -570,6 +570,23 @@ final class WatchModel {
         startMidnightClock()
     }
 
+    /// The phone's Start launched this app through `HKHealthStore.startWatchApp`
+    /// (overhaul W5.2). It adds nothing of its own: the launch runs the same
+    /// lifecycle-then-rejoin path a cold open does, and a wrist ALREADY holding
+    /// a session ignores it — `WorkoutSessionController.start()` guards on
+    /// `session == nil`, `rejoinLiveSession` on `sessionId == nil`, so a second
+    /// `HKWorkoutSession` can never be built over the adopted one.
+    func handleWorkoutLaunch() {
+        start()
+        guard sessionId == nil else {
+            log.notice("workout launch from the phone: already holding \(self.sessionId ?? "", privacy: .public) — no-op")
+            return
+        }
+        applyLifecycle()
+        rejoinLiveSession()
+        log.notice("workout launch from the phone: \(self.sessionId == nil ? "nothing live to adopt yet (the queued open follows)" : "adopted", privacy: .public)")
+    }
+
     private var midnight: Task<Void, Never>?
 
     /// Reload every complication at this watch's own 00:00 (overhaul A2).
