@@ -17,6 +17,10 @@ public enum CardioImport {
     /// decode failure — a bout that exists and cannot be read — where a string
     /// is merely a kind this build has no glyph for.
     public static let walk = "walk"
+    /// An INDOOR walk (overhaul C2). Health files it as `.walking` with
+    /// `HKMetadataKeyIndoorWorkout`; the reader never read the key, so every
+    /// treadmill bout came in as a walk and the warm-up card named it "Walk".
+    public static let treadmill = "treadmill"
     public static let run = "run"
     public static let cycling = "cycling"
     public static let rowing = "rowing"
@@ -26,7 +30,17 @@ public enum CardioImport {
     /// Display order. Walk and run lead because they are the two the founder
     /// logs; the rest follow in descending likelihood rather than alphabetically,
     /// which would put `cycling` above the two that matter.
-    public static let offered = [walk, run, cycling, rowing, elliptical, hiit]
+    public static let offered = [walk, treadmill, run, cycling, rowing, elliptical, hiit]
+
+    /// Whether two kinds can be ONE bout. Exact, except that a walk and a
+    /// treadmill are the same activity told apart by one metadata key — so a
+    /// row filed as `walk` before the key was read still matches the treadmill
+    /// bout Health now describes, rather than being imported a second time.
+    public static func sameActivity(_ a: String, _ b: String) -> Bool {
+        if a == b { return true }
+        let foot: Set<String> = [walk, treadmill]
+        return foot.contains(a) && foot.contains(b)
+    }
 
     /// How close two bouts must start to be the same bout: five minutes.
     ///
@@ -123,7 +137,7 @@ public enum CardioImport {
             return keyed
         }
 
-        let sameBout = existing.filter { $0.date == date && $0.kind == kind }
+        let sameBout = existing.filter { $0.date == date && sameActivity($0.kind, kind) }
 
         // Then the precise HEURISTIC: an imported row can be matched on its
         // start, and the closest one wins so a day of hourly walks maps

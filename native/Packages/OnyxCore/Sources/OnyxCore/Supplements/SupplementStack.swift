@@ -103,6 +103,11 @@ public struct CustomSupplement: Codable, Equatable, Sendable {
     /// row written before 7.13.0. Read through `Supplements.doseAt`, never
     /// directly: see `DosePeriod`.
     public var dosePeriods: [DosePeriod]?
+    /// Label ingredients the nutrient table has no key for, by name —
+    /// `custom_supplements.other_ingredients`, written only by the DSLD import
+    /// (overhaul C3). Nil on every other row. Added LAST and optional: a new
+    /// key, never a renamed one.
+    public var otherIngredients: [String]?
 
     /// `archived_at` is spelled the way the row spells it: the golden vectors
     /// serialise this struct from the TypeScript side, where it is a raw
@@ -113,16 +118,18 @@ public struct CustomSupplement: Codable, Equatable, Sendable {
         case doseAmount = "dose_amount"
         case doseUnit = "dose_unit"
         case dosePeriods = "dose_periods"
+        case otherIngredients = "other_ingredients"
     }
 
     public init(id: String, name: String, dose: String, color: String? = nil, form: String? = nil,
                 time: String? = nil, schedule: CustomSchedule? = nil, micros: [String: Double]? = nil,
                 archivedAt: String? = nil, doseAmount: Double? = nil, doseUnit: String? = nil,
-                dosePeriods: [DosePeriod]? = nil) {
+                dosePeriods: [DosePeriod]? = nil, otherIngredients: [String]? = nil) {
         self.id = id; self.name = name; self.dose = dose; self.color = color
         self.form = form; self.time = time; self.schedule = schedule; self.micros = micros
         self.archivedAt = archivedAt; self.doseAmount = doseAmount; self.doseUnit = doseUnit
         self.dosePeriods = dosePeriods
+        self.otherIngredients = otherIngredients
     }
 }
 

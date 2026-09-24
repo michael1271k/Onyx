@@ -550,3 +550,131 @@ struct CardioDuplicateSweepTests {
         #expect(try ids(db) == ["a"])
     }
 }
+
+// MARK: - Overhaul C2 · the treadmill relabel
+
+extension CardioIngestTests {
+
+    @Test("an indoor walk already filed as a walk is relabelled a treadmill, not duplicated")
+    func relabelsKeyedWalk() async throws {
+        let db = try store()
+        let id = UUID()
+        // The row an older build filed: Health said `.walking`, nobody read the
+        // indoor key.
+        _ = try await ingest(db, Wrist(bouts: [bout(hour: 7, minutes: 30, uuid: id)]))
+        #expect(try rows(db).map(\.kind) == [CardioImport.walk])
+        // This build reads the key: the same workout is a treadmill.
+        _ = try await ingest(db, Wrist(bouts: [bout(hour: 7, minutes: 30, kind: CardioImport.treadmill, uuid: id)]))
+        #expect(try rows(db).map(\.kind) == [CardioImport.treadmill])
+    }
+
+    @Test("a pre-uuid imported walk matches an indoor bout by its start and is relabelled once")
+    func relabelsUnkeyedImport() async throws {
+        let db = try store()
+        let start = calendar.date(from: DateComponents(year: 2026, month: 9, day: 4, hour: 7))!
+        try db.addCardio(CardioLogRow(id: "old", userId: user, date: today, kind: CardioImport.walk,
+                                      durationMin: 30, fromHealthkit: true, createdAt: start))
+        let reader = Wrist(bouts: [bout(hour: 7, minutes: 30, kind: CardioImport.treadmill)])
+        _ = try await ingest(db, reader)
+        let after = try rows(db)
+        #expect(after.count == 1)
+        #expect(after.first?.kind == CardioImport.treadmill)
+        // Idempotent: the second pass writes nothing.
+        #expect(try await ingest(db, reader).isEmpty)
+    }
+
+    @Test("a hand-typed walk keeps the athlete's own word")
+    func handTypedWalkIsNotRelabelled() async throws {
+        let db = try store()
+        try db.addCardio(CardioLogRow(id: "typed", userId: user, date: today, kind: CardioImport.walk,
+                                      durationMin: 30, fromHealthkit: false, createdAt: now))
+        _ = try await ingest(db, Wrist(bouts: [bout(hour: 7, minutes: 30, kind: CardioImport.treadmill)]))
+        #expect(try rows(db).first { $0.id == "typed" }?.kind == CardioImport.walk)
+        #expect(try rows(db).count == 1, "matched, not duplicated")
+    }
+}
+
+// MARK: - Overhaul C2 · the one-time treadmill door
+
+extension CardioIngestTests {
+
+    /// The first ordinary sync after the upgrade walks back 90 days ONCE, so
+    /// every indoor walk an older build filed as `walk` is relabelled; the flag
+    /// then closes the door and the next sync is the usual two days.
+    @Test("the first sync after the upgrade relabels 90 days of walks, once")
+    func treadmillDoorRunsOnce() async throws {
+        let db = try store()
+        let key = "treadmill-door-test-\(UUID().uuidString)"
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        let id = UUID()
+        // A bout a month back, filed as a walk by the old reader.
+        let old = calendar.date(byAdding: .day, value: -30, to: now)!
+        var walk = bout(hour: 7, minutes: 30, uuid: id)
+        walk.start = old
+        walk.end = old.addingTimeInterval(30 * 60)
+        try db.addCardio(CardioLogRow(
+            id: "old", userId: user, date: LogicalDayISO.string(old, calendar: calendar), kind: CardioImport.walk,
+            durationMin: 30, fromHealthkit: true, createdAt: old, hkUuid: id.uuidString.lowercased()))
+        var indoor = walk
+        indoor.cardioKind = CardioImport.treadmill
+        let sync = HealthSync(database: db, reader: Wrist(bouts: [indoor]), userId: user)
+
+        _ = try await sync.syncCardioBouts(now: now, calendar: calendar, days: 2, doorKey: key)
+        let rows = try db.cardioRows(userId: user, date: LogicalDayISO.string(old, calendar: calendar))
+        #expect(rows.map(\.kind) == [CardioImport.treadmill])
+        #expect(UserDefaults.standard.bool(forKey: key))
+
+        // A second walk on that old day stays untouched now the door is shut.
+        try db.addCardio(CardioLogRow(
+            id: "old2", userId: user, date: LogicalDayISO.string(old, calendar: calendar), kind: CardioImport.walk,
+            durationMin: 30, fromHealthkit: true, createdAt: old.addingTimeInterval(3 * 3600), hkUuid: "other"))
+        var second = indoor
+        second.uuid = UUID(uuidString: "00000000-0000-0000-0000-0000000000AB")!
+        _ = try await HealthSync(database: db, reader: Wrist(bouts: [second]), userId: user)
+            .syncCardioBouts(now: now, calendar: calendar, days: 2, doorKey: key)
+        #expect(try db.cardioRows(userId: user, date: LogicalDayISO.string(old, calendar: calendar))
+            .first { $0.id == "old2" }?.kind == CardioImport.walk)
+    }
+}
+
+extension CardioIngestTests {
+
+    /// Review fixes: the door's extra days never re-import, and a pass Health
+    /// answered with nothing leaves the door open for the next one.
+    @Test("the treadmill door neither re-imports old bouts nor closes on a silent Health")
+    func treadmillDoorIsCareful() async throws {
+        let db = try store()
+        let key = "treadmill-door-test-\(UUID().uuidString)"
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        let old = calendar.date(byAdding: .day, value: -30, to: now)!
+        let oldDay = LogicalDayISO.string(old, calendar: calendar)
+        try db.addCardio(CardioLogRow(
+            id: "kept", userId: user, date: oldDay, kind: CardioImport.walk,
+            durationMin: 30, fromHealthkit: true, createdAt: old, hkUuid: "kept-uuid"))
+
+        // Health answers nothing: no relabel, and the door stays open.
+        _ = try await HealthSync(database: db, reader: Wrist(bouts: []), userId: user)
+            .syncCardioBouts(now: now, calendar: calendar, days: 2, doorKey: key)
+        #expect(!UserDefaults.standard.bool(forKey: key))
+
+        // Health answers with a bout the athlete had deleted a month ago: it
+        // is NOT re-imported by the door's extra days.
+        var deleted = bout(hour: 7, minutes: 30)
+        deleted.start = old.addingTimeInterval(5 * 3600)
+        deleted.end = deleted.start.addingTimeInterval(1800)
+        _ = try await HealthSync(database: db, reader: Wrist(bouts: [deleted]), userId: user)
+            .syncCardioBouts(now: now, calendar: calendar, days: 2, doorKey: key)
+        #expect(try db.cardioRows(userId: user, date: oldDay).map(\.id) == ["kept"])
+        #expect(UserDefaults.standard.bool(forKey: key))
+    }
+
+    @Test("with no imported walk on the ledger the door closes without a scan")
+    func treadmillDoorClosesWhenNothingToDo() async throws {
+        let db = try store()
+        let key = "treadmill-door-test-\(UUID().uuidString)"
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        _ = try await HealthSync(database: db, reader: Wrist(bouts: []), userId: user)
+            .syncCardioBouts(now: now, calendar: calendar, days: 2, doorKey: key)
+        #expect(UserDefaults.standard.bool(forKey: key))
+    }
+}

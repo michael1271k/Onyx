@@ -142,23 +142,21 @@ struct WeeklyExportOverhaulTests {
         #expect(windowOnly.contains("**Fly** — target 12–15"))
     }
 
-    /// ── THE PLAN'S REST PRINTS; THE MEASURED ONE DOES NOT ──────────────────
+    /// ── THE PLAN'S REST PRINTS; A MEASURED ONE CANNOT (overhaul Q16) ────────
     /// `actual_rest_sec` is the gap between two log COMMITS — 1 s when the next
     /// set is entered while it is still under way, 304 s after a phone call —
-    /// and neither figure is a rest interval. It is withheld until the timer
-    /// stores the extension it already measures. The payload still CARRIES it,
-    /// which is what this test pins: the suppression is at the render boundary
-    /// and the builder half does not have to be rebuilt to restore it.
-    @Test("rest reaches the document planned, and the measured gap is withheld")
+    /// and neither figure is a rest interval. The founder's call: the ±15 s
+    /// timer nudges are visual only, so `restActualSec` left the payload. An
+    /// old payload that still carries the key decodes and prints the plan.
+    @Test("rest reaches the document planned, and an old payload's measured gap is ignored")
     func restIsPrinted() throws {
         let md = try build(payload(sessions: session("""
         [{"name": "Fly", "restTargetSec": 90, "restActualSec": 104,
           "sets": [{"weightKg": 15, "reps": 13, "failure": false}]}]
         """)))
         #expect(md.contains("rest 90 s"))
-        // §8 names the withheld field once, which is what a legend is for; the
-        // FIGURE reaches no movement's heading.
-        #expect(!md.contains("actual rest 104 s"))
+        #expect(!md.contains("104"))
+        #expect(md.contains("rest is the plan's target"))
     }
 
     // MARK: - §4 · a powder is food

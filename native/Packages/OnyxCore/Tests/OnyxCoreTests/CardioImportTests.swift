@@ -141,8 +141,8 @@ struct CardioImportTests {
     @Test("the offered kinds lead with the two the founder logs")
     func offeredOrder() {
         #expect(CardioImport.offered.first == CardioImport.walk)
-        #expect(CardioImport.offered.count == 6)
-        #expect(Set(CardioImport.offered).count == 6, "no key offered twice")
+        #expect(CardioImport.offered.count == 7)
+        #expect(Set(CardioImport.offered).count == 7, "no key offered twice")
     }
 
     // MARK: - The key (W1)
@@ -211,5 +211,22 @@ struct CardioImportTests {
             hkUuid: "HK-NEW", kind: CardioImport.walk, start: at(7, 14),
             durationMin: 40, date: day, in: rows
         )?.id == "a")
+    }
+}
+
+// MARK: - Overhaul C2 · a treadmill is a walk indoors
+
+extension CardioImportTests {
+
+    @Test("a treadmill bout matches the walk row an older build filed it as")
+    func treadmillMatchesItsWalk() {
+        let rows = [imported("a", at: at(7, 12))]
+        #expect(match(kind: CardioImport.treadmill, start: at(7, 14), in: rows)?.id == "a")
+        // And nothing else crosses: a run is never a walk.
+        #expect(match(kind: CardioImport.run, start: at(7, 14), in: rows) == nil)
+        #expect(CardioImport.sameActivity(CardioImport.walk, CardioImport.treadmill))
+        #expect(CardioImport.sameActivity(CardioImport.treadmill, CardioImport.walk))
+        #expect(!CardioImport.sameActivity(CardioImport.treadmill, CardioImport.run))
+        #expect(CardioImport.sameActivity(CardioImport.hiit, CardioImport.hiit))
     }
 }

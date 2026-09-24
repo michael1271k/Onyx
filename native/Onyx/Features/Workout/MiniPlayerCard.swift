@@ -66,13 +66,9 @@ struct MiniPlayerCard: View {
             // after, it would sit BEHIND the material and be blurred into a
             // flat grey, which is `white.opacity(0.1)` arrived at expensively.
             .background { wash }
+            // No hand-drawn shadow (overhaul Stone slab, Lane B): the slab's
+            // frost is what separates it from the scroll content under it.
             .onyxGlass(.tile)
-            // `GlassLevel.tile` carries no shadow on purpose — "a shadow under
-            // something that has not lifted is just dirt". This card HAS
-            // lifted: the tab's scroll content runs underneath it. The values
-            // are `.sheet`'s, copied rather than invented, and they stay at the
-            // call site so every other tile in the app stays flat.
-            .shadow(color: .black.opacity(0.35), radius: 24, y: 12)
         }
         // 0.98 and not the 0.96 default: on a 343 pt card 4 % is 14 pt of
         // horizontal travel, which reads as the card jumping rather than

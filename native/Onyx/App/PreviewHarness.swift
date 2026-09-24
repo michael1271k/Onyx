@@ -141,6 +141,29 @@ enum PreviewHarness {
 
     static let previewUser = "00000000-0000-0000-0000-000000000001"
 
+    static let dsldHits: [DSLD.Hit] = [
+        .init(id: "323076", brand: "Thorne", product: "Basic Nutrients 2/Day", form: "Capsule", serving: "2 Capsule(s)"),
+        .init(id: "291772", brand: "Thorne", product: "Basic Nutrients 2/Day", form: "Capsule", serving: nil, offMarket: true),
+        .init(id: "28427", brand: "Thorne Research", product: "Basic Nutrients 2/Day", form: "Capsule", serving: nil, offMarket: true),
+        .init(id: "253226", brand: "KAL", product: "Magnesium Glycinate 400", form: "Tablet or Pill", serving: nil),
+        .init(id: "33919", brand: "Vinco's", product: "Magnesium Glycinate", form: "Powder", serving: nil),
+    ]
+
+    static let dsldLabel: DSLD.Label? = {
+        func row(_ name: String, _ amount: Double, _ unit: String, _ dv: Double?) -> String {
+            #"{"name": "\#(name)", "quantity": [{"quantity": \#(amount), "unit": "\#(unit)", "dailyValueTargetGroup": [{"percent": \#(dv.map { "\($0)" } ?? "null")}]}]}"#
+        }
+        let rows = [
+            row("Vitamin A", 1.05, "mg", 117), row("Vitamin C", 250, "mg", 278), row("Vitamin D", 50, "mcg", 250),
+            row("Vitamin E", 16.5, "mg", 110), row("Vitamin K", 400, "mcg", 333), row("Thiamine", 50, "mg", 4167),
+            row("Vitamin B6", 20, "mg", 1176), row("Folate", 667, "mcg DFE", 167), row("Vitamin B12", 600, "mcg", 25000),
+            row("Magnesium", 20, "mg", 5), row("Zinc", 15, "mg", 136), row("Selenium", 200, "mcg", 364),
+            row("Boron", 2, "mg", nil), row("Lutein", 140, "mcg", nil),
+        ].joined(separator: ",")
+        let json = #"{"id": 323076, "fullName": "Basic Nutrients 2/Day", "brandName": "Thorne", "physicalState": {"langualCodeDescription": "Capsule"}, "servingSizes": [{"minQuantity": 2, "maxQuantity": 2, "unit": "Capsule(s)"}], "ingredientRows": [\#(rows)]}"#
+        return try? JSONDecoder().decode(DSLD.Label.self, from: Data(json.utf8))
+    }()
+
     /// A store that already holds one of the names in the seeded paste, so the
     /// preview shot shows a duplicate being recognised rather than only the
     /// happy path.
@@ -282,8 +305,39 @@ enum PreviewHarness {
         return environment
     }
 
-    @MainActor @ViewBuilder
+    /// The harness screen, plus `--onyx-measure` (overhaul C1/C3): four seconds
+    /// after launch, print the tallest scroll view's content and visible
+    /// heights as `ONYXMEASURE content=… container=…` on stdout. A `List` or
+    /// `Form` is a collection view SwiftUI's own scroll geometry cannot read,
+    /// and "≤ 1.1 screens" is a claim that needs a number.
+    @MainActor
     static func view(_ screen: String) -> some View {
+        screenView(screen).task {
+            guard ProcessInfo.processInfo.arguments.contains("--onyx-measure") else { return }
+            try? await Task.sleep(for: .seconds(4))
+            var tallest: UIScrollView?
+            func walk(_ view: UIView) {
+                if let scroll = view as? UIScrollView,
+                   scroll.contentSize.height > (tallest?.contentSize.height ?? 0) { tallest = scroll }
+                view.subviews.forEach(walk)
+            }
+            UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }.flatMap(\.windows).forEach(walk)
+            if let s = tallest {
+                // A List/Form ESTIMATES the rows it has not laid out, so walk
+                // to the bottom until the real height stops moving.
+                for _ in 0..<6 {
+                    s.setContentOffset(CGPoint(x: 0, y: max(0, s.contentSize.height - s.bounds.height + s.adjustedContentInset.bottom)), animated: false)
+                    try? await Task.sleep(for: .milliseconds(300))
+                }
+                let visible = s.bounds.height - s.adjustedContentInset.top - s.adjustedContentInset.bottom
+                print("ONYXMEASURE content=\(s.contentSize.height) container=\(visible)")
+            }
+        }
+    }
+
+    @MainActor @ViewBuilder
+    static func screenView(_ screen: String) -> some View {
         let _ = applyRequestedTheme()
         let model = sharedSettingsModel
         switch screen {
@@ -386,6 +440,18 @@ enum PreviewHarness {
             SignedInTabs().environment(tabsEnvironment(s))
         case "you":
             NavigationStack { SettingsTabView(seeded: model) }.environment(AppEnvironment.preview)
+        // ── OVERHAUL C3: the label-database import, with NO network ─────────
+        // Results as a product search for "basic nutrients" answered, and the
+        // label itself (an excerpt of DSLD 323076, Thorne "Basic Nutrients
+        // 2/Day" — the full response is OnyxCore's decoder fixture).
+        case "stack-import", "stack-import-label":
+            DSLDImportView(
+                onAdd: { _ in }, onManual: { _ in },
+                seed: .init(query: "basic nutrients", hits: Self.dsldHits,
+                            label: screen == "stack-import-label" ? Self.dsldLabel : nil)
+            )
+            .environment(AppEnvironment.preview)
+            .preferredColorScheme(.dark)
         case "train", "train-done", "train-pending", "train-cardio", "train-empty", "train-week", "train-wrap", "train-wrap-large",
              "train-wrap-deload", "train-report-large", "train-monday", "train-library", "train-library-open",
              // W4: the weekly report the wrap sheet became, seeded — the one
@@ -489,6 +555,8 @@ enum PreviewHarness {
              "set-row", "set-row-split", "set-row-cardio", "set-row-records", "set-options", "effort-picker",
              // W5: the heart-rate chart (seeded Health) and the Hevy card (fixture).
              "telemetry-finish", "telemetry-detail", "hevy-card",
+             // Overhaul C1: the inline HR strip over a seeded cache row.
+             "session-hr",
              // W3: the mid-session add.
              "logger-add":
             LoggerPreviews.view(screen)
@@ -526,7 +594,7 @@ enum PreviewHarness {
              "history-week-wrap-open", "session", "session-ledger", "exercise-history",
              // W2 (refinement): the ledger header's row 2, swapped.
              "session-ledger-assists",
-             "session-atlas", "session-edit", "session-records",
+             "session-atlas", "session-edit", "logger-edit", "session-records",
              // W10: the two seconds a record row opens on.
              "session-margin",
              // W4: the pair table, and a day that is only a bout.

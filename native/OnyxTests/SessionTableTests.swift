@@ -145,15 +145,15 @@ struct SessionTableTests {
 
     // MARK: - W4 · the ledger stops shouting
 
-    /// ── THE RESERVATION IS THE POINT, NOT THE EM-DASH (A2) ──────────────────
-    /// The line under each reading exists so a card does not change height
-    /// between two sessions. W4 took the glyph out of it and left the space, so
-    /// the only assertion that can tell the two apart is a rendered height —
-    /// a structural check would pass just as happily on a row that had lost the
-    /// line altogether, which is the regression this guards.
+    /// ── THE DELTA IS THE NUMERAL'S INK, NOT A LINE UNDER IT (overhaul Q14) ──
+    /// W4 reserved an empty line under every reading so a card could not
+    /// change height between two sessions. The overhaul deletes the line: the
+    /// comparison is carried by the reading's own colour, so a row with a
+    /// previous set and one without are the same height by construction — and
+    /// that height is the compact 30 pt floor, not the old 36.
     @MainActor
-    @Test("A card with no previous session is exactly as tall as one with")
-    func reservedHeight() throws {
+    @Test("A row with a previous set is as tall as one without, at the 30 pt floor")
+    func noReservedLine() throws {
         let rows = SessionDetail.toRows([try set(1, kg: 42.5, reps: 10)])
         let compared = SetRow(row: rows[0], timed: false,
                               prev: HistorySet(weightKg: 40, reps: 9), layout: .loaded)
@@ -161,18 +161,16 @@ struct SessionTableTests {
         let withPrevious = try #require(height(of: compared))
         let without = try #require(height(of: alone))
         #expect(withPrevious == without)
-        // And the reservation is a real line, not a zero — a spacer that
-        // collapsed would also make the two agree.
-        #expect(withPrevious > SetRow.badgeSide)
+        #expect(withPrevious >= SetRow.rowFloor)
+        #expect(withPrevious < 36, "the reserved delta line is gone")
     }
 
-    /// ── AND A HARDER SET IS NOT GOOD NEWS (A2) ──────────────────────────────
-    /// `deltaLine` painted `delta > 0` green on every track, so the same three
-    /// sets at RPE 8 last week and 9.5 this week drew an up arrow in the token
-    /// that means progress. The flag is the fix and the fix is one boolean, so
-    /// the boolean is what is held here.
+    /// ── BETTER IS THE ACCENT, WORSE IS QUIET, NOTHING IS RED OR GREEN ───────
+    /// `upIsGood` survives the redesign: a rise in RPE is still the harder
+    /// session, so it takes the quiet ink, while a rise in load takes the
+    /// theme's accent. No change and no comparison leave the numeral alone.
     @MainActor
-    @Test("A rise in RPE is danger, and a rise in load is not")
+    @Test("A rise in RPE is quiet ink, a rise in load is the accent")
     func effortInverts() throws {
         let rows = SessionDetail.toRows([try set(1, kg: 42.5, reps: 10, rpe: 9.5)])
         let row = SetRow(row: rows[0], timed: false,
@@ -180,9 +178,16 @@ struct SessionTableTests {
         let effort = row.effortFigure
         #expect(effort.upIsGood == false)
         #expect(effort.delta == 1.5)
-        // The load column keeps the default, which is the asymmetry the whole
-        // flag exists to express.
         #expect(SetRow.Figure(text: "42.5").upIsGood)
+        #expect(SetRow.deltaInk(1.5, upIsGood: false) == Color.onyx.textSecondary)
+        #expect(SetRow.deltaInk(-0.5, upIsGood: false) == OnyxInk.Themed.accent)
+        #expect(SetRow.deltaInk(2.5, upIsGood: true) == OnyxInk.Themed.accent)
+        #expect(SetRow.deltaInk(-2.5, upIsGood: true) == Color.onyx.textSecondary)
+        #expect(SetRow.deltaInk(0, upIsGood: true) == nil)
+        #expect(SetRow.deltaInk(nil, upIsGood: true) == nil)
+        for ink in [SetRow.deltaInk(3, upIsGood: true), SetRow.deltaInk(-3, upIsGood: true)] {
+            #expect(ink != Color.onyx.good && ink != Color.onyx.danger)
+        }
     }
 
     /// ── A UNILATERAL CARD FINALLY COMPARES (A3) ─────────────────────────────
@@ -281,6 +286,24 @@ struct SessionTableTests {
     /// could not produce an image, which `#require` turns into a failure rather
     /// than a silently-passing comparison of two nils.
     @MainActor
+    /// ── A PAIR REACHES THE CEILING ONCE, NOT TWICE (overhaul C1 review) ─────
+    /// The ledger header printed `4/2 @ 12–20` on a unilateral card: the
+    /// count walked SIDES while the total counts SETS — the 3.10.0 rows-vs-sets
+    /// unit bug in a new place. A pair counts when BOTH of its sides reached
+    /// the ceiling; a side that fell short means the set did not.
+    @Test("a pair counts once toward the ceiling, and only when both sides reached it")
+    func ceilingCountsPairsOnce() {
+        let sets: [(reps: Double, pairId: String?)] = [
+            (21, "p1"), (20, "p1"),   // both sides at 20 → one set at the ceiling
+            (22, "p2"), (19, "p2"),   // one side short → not at the ceiling
+            (20, nil),                // an ordinary set at the ceiling
+            (18, nil),
+        ]
+        #expect(SessionAnalysis.atCeiling(sets, ceiling: 20) == 2)
+        #expect(SessionAnalysis.atCeiling(sets, ceiling: nil) == 0)
+        #expect(SessionAnalysis.atCeiling([(20, ""), (20, "")], ceiling: 20) == 2, "an empty pair id is no pair")
+    }
+
     private func height(of row: SetRow) -> CGFloat? {
         let renderer = ImageRenderer(content: row.frame(width: 393))
         renderer.scale = 1

@@ -1,5 +1,6 @@
 #if DEBUG
 import SwiftUI
+import GRDB
 import OnyxCore
 import OnyxData
 import OnyxUI
@@ -30,9 +31,41 @@ enum LoggerPreviews {
         )
     }
 
+    /// A synthetic heart-rate series in the session's telemetry CACHE row —
+    /// the row `SessionTelemetry.reading` answers from before it asks Health
+    /// (overhaul C1). So `session-hr` photographs the inline strip with no
+    /// HealthKit, no signing and no permission sheet. The movements are cut
+    /// from the fixture's own set events, exactly as a real read is.
+    static func seedHeartRate(_ store: AppDatabase, sessionId: String) {
+        // The window `previewTelemetry(closed:)` stamps: started 46 min ago,
+        // ended 43 min after that.
+        let start = Date().addingTimeInterval(-46 * 60)
+        let end = start.addingTimeInterval(43 * 60)
+        try? store.seedRows { db in
+            let samples = stride(from: 0.0, to: end.timeIntervalSince(start), by: 15).map { t -> [String: Any] in
+                let bpm = 118 + 22 * sin(t / 240) + 9 * sin(t / 37)
+                return ["at": start.addingTimeInterval(t).timeIntervalSince1970, "bpm": Int(bpm.rounded())]
+            }
+            let json = try JSONSerialization.data(withJSONObject: samples)
+            try db.execute(
+                sql: "INSERT OR REPLACE INTO session_telemetry (session_id, samples_json, segments_json, source, fetched_at) VALUES (?, ?, ?, 'health', ?)",
+                arguments: [sessionId, json, Data("[]".utf8), Date()]
+            )
+        }
+    }
+
     @MainActor @ViewBuilder
     static func view(_ screen: String) -> some View {
         switch screen {
+        // ── OVERHAUL C1: the summary's inline heart-rate strip, fixture-backed ─
+        case "session-hr":
+            let closed = LoggerModel.previewTelemetry(closed: true)
+            let _ = PreviewCatalogue.seed(closed.store)
+            let sessionId = closed.model.sessionId ?? ""
+            let _ = seedHeartRate(closed.store, sessionId: sessionId)
+            NavigationStack { SessionDetailView(sessionId: sessionId) }
+                .environment(LoggerPreviews.environment(over: closed.store))
+                .preferredColorScheme(.dark)
         case "set-row":
             // The ROW, in every state it has — because the states are the
             // design and a card of four identical unlogged rows photographs

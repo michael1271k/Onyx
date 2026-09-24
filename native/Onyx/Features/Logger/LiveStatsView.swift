@@ -1029,7 +1029,7 @@ struct LiveStatsView: View {
                         liveBpm != nil ? "Heart rate" : "Avg HR", "heart.fill",
                         value: (liveBpm ?? session?.avgBpm).map { "\($0)" },
                         unit: "bpm",
-                        tint: Color.onyx.danger
+                        tint: OnyxInk.Fixed.heart
                     )
                     effortCell(
                         "Calories", "flame.fill",

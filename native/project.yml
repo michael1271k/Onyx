@@ -47,8 +47,8 @@ packages:
 # $(CURRENT_PROJECT_VERSION) rather than restating them.
 settings:
   base:
-    MARKETING_VERSION: "8.2.0"
-    CURRENT_PROJECT_VERSION: "80200"
+    MARKETING_VERSION: "8.3.0"
+    CURRENT_PROJECT_VERSION: "80300"
 
 targets:
   Onyx:
@@ -200,6 +200,12 @@ targets:
           Onyx saves the strength workouts you log — their duration and active
           energy — back to Apple Health, so the training you do here appears
           alongside the rest of your activity rings.
+        # Since 8.3.0: the optional barcode button on "Add from label
+        # database" (Supplements) opens VisionKit's scanner. The button is
+        # hidden when the key or the camera is missing.
+        NSCameraUsageDescription: >-
+          Onyx uses the camera only to read a supplement's barcode so it can
+          look the label up for you. No photo is taken or stored.
         # Substituted from Secrets.xcconfig at build time.
         ONYX_SUPABASE_URL: $(ONYX_SUPABASE_URL)
         ONYX_SUPABASE_ANON_KEY: $(ONYX_SUPABASE_ANON_KEY)

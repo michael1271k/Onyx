@@ -729,6 +729,19 @@ struct WeeklyExportBuilderV5Tests {
         _ = day
     }
 
+    /// Overhaul Q16: the rest is the plan's. The measured commit-to-commit gap
+    /// (`actual_rest_sec`) left the JSON and the AI export — the ±15 s timer
+    /// nudges are visual only and were never stored.
+    @Test("the export carries the planned rest and no measured rest, even when the rows hold one")
+    func noMeasuredRestInTheExport() throws {
+        let db = try seeded()
+        try db.writer.write { try $0.execute(sql: "UPDATE workout_sets SET actual_rest_sec = 120") }
+        let got = try WeeklyExportBuilder(database: db, userId: user, timeZone: TimeZone(identifier: "UTC")!)
+            .input(weekStart: weekStart, today: weekStart)
+        let json = String(decoding: try JSONEncoder().encode(got), as: UTF8.self)
+        #expect(!json.contains("restActualSec"))
+    }
+
     @Test("a set rated 10 is a set to failure, whatever the tick says")
     func failureComesFromTheRating() throws {
         let got = try built("UTC")

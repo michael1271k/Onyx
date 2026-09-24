@@ -88,6 +88,7 @@ public extension AppDatabase {
         color: String? = nil, form: String? = nil, time: String? = nil,
         schedule: CustomSchedule? = nil, micros: [String: Double]? = nil,
         doseAmount: Double? = nil, doseUnit: String? = nil,
+        otherIngredients: [String]? = nil,
         now: Date = Date()
     ) throws -> String {
         let id = newOnyxID()
@@ -98,7 +99,10 @@ public extension AppDatabase {
             color: color, form: form, time: time,
             schedule: try Self.json(resolved), micros: try Self.json(micros),
             createdAt: now, archivedAt: nil,
-            doseAmount: doseAmount, doseUnit: doseUnit, sortOrder: 0
+            doseAmount: doseAmount, doseUnit: doseUnit, sortOrder: 0,
+            // Nil, never `[]`, for a row with nothing to keep: a nil stays out
+            // of the push body until the founder's DDL adds the column.
+            otherIngredients: (otherIngredients ?? []).isEmpty ? nil : try Self.json(otherIngredients)
         )
         try writer.write { db in
             try row.insert(db)
@@ -232,7 +236,8 @@ public extension AppDatabase {
             micros: row.micros.flatMap { try? OnyxJSON.decoder.decode([String: Double].self, from: Data($0.raw.utf8)) },
             archivedAt: row.archivedAt.map(ISO8601.string),
             doseAmount: row.doseAmount, doseUnit: row.doseUnit,
-            dosePeriods: row.dosePeriods.flatMap { try? OnyxJSON.decoder.decode([DosePeriod].self, from: Data($0.raw.utf8)) }
+            dosePeriods: row.dosePeriods.flatMap { try? OnyxJSON.decoder.decode([DosePeriod].self, from: Data($0.raw.utf8)) },
+            otherIngredients: row.otherIngredients.flatMap { try? OnyxJSON.decoder.decode([String].self, from: Data($0.raw.utf8)) }
         )
     }
 

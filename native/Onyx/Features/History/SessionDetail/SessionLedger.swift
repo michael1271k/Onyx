@@ -420,6 +420,25 @@ struct SetRow: View {
     /// that drifts off its columns by a point on the next edit.
     static let badgeSide: CGFloat = 28
 
+    /// The row's height floor (overhaul Q14): the badge plus a point of air.
+    /// It was 36 while every reading reserved a delta line under itself; the
+    /// comparison is the numeral's own ink now, so the line — and the six
+    /// points it cost every row — is gone.
+    static let rowFloor: CGFloat = 30
+
+    /// The ink a reading takes from its comparison (overhaul Q14, concept 6).
+    ///
+    /// Better is the theme's accent, worse is quiet secondary ink, and no
+    /// change or no counterpart is nil — the reading keeps its own colour. NO
+    /// red, NO green, NO triangles: the verdict is a tint on the number the
+    /// reader is already looking at, not a second mark beside it.
+    /// `upIsGood` still decides which direction is better (an RPE that rose
+    /// is the harder session, so it takes the quiet ink).
+    static func deltaInk(_ delta: Double?, upIsGood: Bool) -> Color? {
+        guard let delta, abs(delta) > 0.001 else { return nil }
+        return (delta > 0) == upIsGood ? OnyxInk.Themed.accent : Color.onyx.textSecondary
+    }
+
     /// The `L` / `R` tag's track on a pair sub-line — one bold `micro` glyph.
     ///
     /// The value is `SetColumn.side`'s, and the number is spelled again rather
@@ -465,25 +484,21 @@ struct SetRow: View {
         /// looks the same ten seconds after it is logged as it does here.
         ///
         /// A card reaches this layout when ANY of its rows is a pair, and the
-        /// rows that are not simply draw their own whole string with the same
-        /// reserved line under them. Both shapes are one string and one
-        /// verdict, which is what lets them share a card — see `layout(_:)`.
+        /// rows that are not simply draw their own whole string in the same
+        /// verdict ink. Both shapes are one string and one verdict, which is
+        /// what lets them share a card — see `layout(_:)`.
         case pair
         /// One string across the row — a timed hold, or a card whose rows
         /// disagree about their own shape.
         case whole
 
         /// Whether a set in this table has a counterpart to be measured
-        /// against — which is what decides whether the reserved delta line
-        /// under each reading is drawn at all.
+        /// against — which is what decides whether a reading takes the delta
+        /// ink (`SetRow.deltaInk`) at all.
         ///
         /// A bout never does: it is stored as a warm-up (that is what keeps
         /// five minutes of walking out of tonnage and out of the PR engine), so
         /// it carries no working ordinal to index the previous session by.
-        /// Three reserved lines under three readings that can never move is
-        /// 36 pt of empty glass on every row of the card — which is why this is
-        /// false here rather than merely blank, and why the row centres against
-        /// the badge when it is (see `body`).
         ///
         /// `.pair` DOES compare, on the pair's own volume rather than on a
         /// column — see `SetRow.unitDelta` for why six numbers cannot be
@@ -594,14 +609,11 @@ struct SetRow: View {
     /// numbers rather than a row of controls.
     var body: some View {
         // ── THE ALIGNMENT IS A DECISION, NOT A DEFAULT ──────────────────────
-        // `.top` is right for a table: the badge and the readings share a first
-        // line and the reserved delta hangs under the numbers. A card that
-        // reserves NO delta — a bout, a timed hold — has ONE line of content
-        // beside a 28 pt badge inside a 36 pt row, so top-aligning it parked
-        // the whole row against its ceiling with the slack underneath. That was
-        // the treadmill card's second visible defect after the empty tag row,
-        // and `badgeSide` is the measurement both halves centre against.
-        HStack(alignment: layout.comparable ? .top : .center, spacing: OnyxSpace.s) {
+        // Centred: since the delta line left (overhaul Q14) every row is ONE
+        // line of readings beside a 28 pt badge, and a top-aligned row parked
+        // its numbers against the ceiling of the 30 pt floor with the slack
+        // underneath. A pair's two sub-lines centre on the badge the same way.
+        HStack(alignment: .center, spacing: OnyxSpace.s) {
             badgeGroup
             if let figures, !typeSize.isAccessibilitySize {
                 // Equal tracks, and no measurement anywhere: each column asks
@@ -648,7 +660,6 @@ struct SetRow: View {
                     // and its arrows are carried by `spoken` — a fourth line on
                     // an AX5 row that is already two is not a comparison, it is
                     // a scroll.
-                    if layout == .pair, cardComparable { deltaLine(unitDelta, unit: "kg") }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 // A split pair has already drawn its one effort, centred
@@ -669,7 +680,7 @@ struct SetRow: View {
         // The frame BEFORE the wash. A `.background` applied first sizes itself
         // to the CONTENT, so a record row's tint stopped short of the row's own
         // height and drew as a pale stripe with a dark margin under it.
-        .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: Self.rowFloor, alignment: .leading)
         // ── A RECORD ROW IS WASHED IN THE MOVEMENT'S OWN COLOUR ─────────────
         // It was a 2 pt gold inset on the leading edge, which is invisible on a
         // scrolled page and says nothing about WHICH lift set the record. The
@@ -684,6 +695,19 @@ struct SetRow: View {
         // rather than against nothing, and the old value stepped far enough to
         // reintroduce the banding the wash exists to remove.
         .background(isRecord ? tint.opacity(0.10) : Color.clear)
+        // A record row is underlined in the record's own gold (concept 6):
+        // a hairline, inset to the readings, so the ledger names its records
+        // without a second glyph on the row.
+        .overlay(alignment: .bottom) {
+            if isRecord {
+                Rectangle()
+                    .fill(Color.onyx.record.opacity(0.7))
+                    .frame(height: 1)
+                    .padding(.leading, OnyxSpace.l + Self.badgeSide + OnyxSpace.s)
+                    .padding(.trailing, OnyxSpace.l)
+                    .accessibilityHidden(true)
+            }
+        }
         // ── THE WHOLE ROW, NOT THE 22 pt DISC ───────────────────────────────
         // The trophy is the affordance and the disc is 22 pt — under the 44 pt
         // floor, and a long press that has to be landed accurately is a gesture
@@ -811,87 +835,26 @@ struct SetRow: View {
                       upIsGood: false)
     }
 
-    /// One track: the reading, and the ground it gained under it.
+    /// One track: the reading, in the ink of its comparison.
     ///
-    /// ── THE DELTA LINE IS ALWAYS DRAWN ──────────────────────────────────────
-    /// §3.6's rule, the one the metric grid at the top of this page already
-    /// obeys: a line that appears only when there is a change makes the row
-    /// change height between two sessions, and a row silent about its
-    /// comparison is indistinguishable from one that has none. So the line is
-    /// reserved, and carries an em-dash when there is nothing to say.
-    ///
-    /// ── AND WHY IT IS SMALLER AND QUIETER THAN THE NUMBER ───────────────────
-    /// `micro` against the number's `body`. The reading is what the reader came
-    /// for; the delta is the context it sits in. Same size would make a card of
-    /// five sets read as ten numbers.
-    ///
-    /// ── THE RESERVATION SURVIVED; THE GLYPH DID NOT (W4 · A2) ───────────────
-    /// The line carried an em-dash when there was nothing to say, which on a
-    /// three-track card with no previous session is FIFTEEN dashes — a page of
-    /// punctuation saying "no comparison" fifteen times. The reason the line is
-    /// reserved is unchanged and is not about the glyph: it stops the row
-    /// changing height between two sessions. So the space stays and the ink
-    /// goes. See `deltaLine`.
+    /// ── THE DELTA IS THE NUMERAL, NOT A LINE UNDER IT (overhaul Q14) ────────
+    /// Every reading used to reserve a `micro` line for a signed change with a
+    /// red or green triangle. The founder's call is concept 6: the number
+    /// itself is tinted — the theme's accent when it went the good way, quiet
+    /// secondary ink when it went the other — and the magnitude lives in
+    /// VoiceOver (`spoken`) and the long-press record sheet. With no line to
+    /// reserve, a row cannot change height between two sessions by
+    /// construction. See `deltaInk`.
     private func column(_ figure: Figure) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(figure.text)
-                .onyxType(.body).onyxNumeral()
-                .foregroundStyle(figure.tint ?? Color.onyx.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            if layout.comparable, cardComparable {
-                deltaLine(figure.delta, upIsGood: figure.upIsGood)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    /// The app's own pair of triangles — the two glyphs `MetaTagRow` treats as
-    /// the only direction marks — and the amount beside them, in the verdict
-    /// colours and nothing else.
-    /// - Parameters:
-    ///   - unit: named only where the line has no column head above it to name
-    ///     it — which is `.pair`, whose verdict is in kilograms and whose row
-    ///     is a string rather than a table.
-    ///   - upIsGood: which direction earns the good token. See `Figure`.
-    @ViewBuilder
-    private func deltaLine(_ delta: Double?, unit: String? = nil, upIsGood: Bool = true) -> some View {
-        if let delta, abs(delta) > 0.001 {
-            HStack(spacing: 2) {
-                Image(systemName: delta > 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
-                    .symbolRenderingMode(.hierarchical)
-                Text(signed(delta) + (unit.map { " \($0)" } ?? ""))
-            }
-            .onyxType(.micro).onyxNumeral()
-            // ── THE ARROW POINTS AT THE SIGN; THE COLOUR JUDGES IT ──────────
-            // Both used to be the sign. An RPE that climbed from 8 to 9.5
-            // therefore drew an up arrow in the GOOD token — the ledger
-            // congratulating a lifter for being more tired. The arrow still
-            // points where the number went, because that is a fact; the ink is
-            // the verdict, and only the verdict inverts.
-            .foregroundStyle((delta > 0) == upIsGood ? Color.onyx.good : Color.onyx.danger)
+        let ink = layout.comparable && cardComparable
+            ? Self.deltaInk(figure.delta, upIsGood: figure.upIsGood) : nil
+        return Text(figure.text)
+            .onyxType(.body).onyxNumeral()
+            .foregroundStyle(ink ?? figure.tint ?? Color.onyx.textPrimary)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
-        } else {
-            // ── A RESERVED LINE, DRAWN IN NOTHING ───────────────────────────
-            // It was an em-dash, covering both silences — no set to compare
-            // with, and a number that did not move. Both readings survive: the
-            // line is still there, so the row cannot change height between two
-            // sessions, and there is still no arrow claiming a verdict nothing
-            // earned. What is gone is the fifteen glyphs per card that said so
-            // out loud.
-            //
-            // Measured BY the micro line rather than by a number: the same
-            // `Text`, in the same role, hidden. `.hidden()` is documented as
-            // "hides this view without changing its layout", so the reservation
-            // is the old height by construction and at every text size — a
-            // `frame(height:)` would hold at default type and drift at AX5.
-            Text("—")
-                .onyxType(.micro)
-                .hidden()
-                .accessibilityHidden(true)
-        }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// How this row's two sides are drawn — nil on anything that is not a pair.
@@ -1003,7 +966,7 @@ struct SetRow: View {
                            alignment: .leading)
                 Text(fmt(set))
                     .onyxType(.secondary).onyxNumeral()
-                    .foregroundStyle(Color.onyx.textPrimary)
+                    .foregroundStyle(pairInk ?? Color.onyx.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
@@ -1026,6 +989,12 @@ struct SetRow: View {
     /// tonnage is that function; a second pair arithmetic on the row beneath
     /// them would put two numbers on one card that disagree about what a pair
     /// is worth.
+    /// The pair's one verdict, as the ink both of its lines take.
+    private var pairInk: Color? {
+        guard layout == .pair, cardComparable else { return nil }
+        return Self.deltaInk(unitDelta, upIsGood: true)
+    }
+
     private var unitDelta: Double? {
         guard let previous = prevUnitKg else { return nil }
         return volumeKg - previous
@@ -1097,14 +1066,14 @@ struct SetRow: View {
     /// it. The badge's column is 28 pt wide, is the same 28 pt the heading
     /// leaves empty, and has nothing under the ordinal at all.
     ///
-    /// ── AND WHY IT COSTS NO HEIGHT ON A CARD THAT COMPARES ──────────────────
-    /// A comparable card already reserves a delta line under every reading
-    /// (`SetLayout.comparable` and `deltaLine`), and the badge is 28 pt inside
-    /// a row that is therefore already taller than it. The rest lands in slack
-    /// that was there anyway. On a card that reserves NO delta — a bout, a
-    /// timed hold — the line WOULD add height, so it is not drawn: those are
-    /// also the two shapes where the number says least (a treadmill block is
-    /// one set, and there is nothing before it to have rested from).
+    /// ── WHERE IT COSTS HEIGHT, AND WHERE IT IS NOT DRAWN ────────────────────
+    /// It used to land in the slack the reserved delta line left under the
+    /// badge. That line is gone (overhaul Q14), so a row with a MEASURED rest
+    /// is a line taller than the 30 pt floor — a real reading, not a
+    /// reservation, and most rows carry none. On a card that cannot compare —
+    /// a bout, a timed hold — it is still not drawn: those are the two shapes
+    /// where the number says least (a treadmill block is one set, and there is
+    /// nothing before it to have rested from).
     ///
     /// ── THE DELTA IS A DIRECTION, NOT A VERDICT ─────────────────────────────
     /// An arrow and no colour. Resting longer than the set before is neither
@@ -1211,7 +1180,7 @@ struct SetRow: View {
     private var value: some View {
         Text(current)
             .onyxType(.body).onyxNumeral()
-            .foregroundStyle(Color.onyx.textPrimary)
+            .foregroundStyle(pairInk ?? Color.onyx.textPrimary)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
             .fixedSize(horizontal: false, vertical: true)

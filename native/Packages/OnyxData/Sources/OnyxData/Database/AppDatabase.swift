@@ -1460,6 +1460,22 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // ── v38: a supplement's unmapped label ingredients (overhaul C3) ────
+        // The DSLD import fills `micros` with what `NutrientTargets` can key
+        // and keeps the rest BY NAME, so a label's selenium or ashwagandha is
+        // on the item rather than silently dropped. A jsonb string array,
+        // nullable: nil on every row the import did not write, so
+        // `encodeIfPresent` keeps the key out of those push bodies. A fresh
+        // install gets the column from the regenerated `migrateMirrorV1`; this
+        // is the guarded alter for a store that already exists (v35's shape).
+        migrator.registerMigration("v38.otherIngredients") { db in
+            let existing = Set(try db.columns(in: "custom_supplements").map(\.name))
+            guard !existing.contains("other_ingredients") else { return }
+            try db.alter(table: "custom_supplements") { t in
+                t.add(column: "other_ingredients", .text)
+            }
+        }
+
         return migrator
     }
 }

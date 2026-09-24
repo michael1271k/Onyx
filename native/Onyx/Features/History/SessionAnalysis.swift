@@ -411,7 +411,7 @@ enum SessionAnalysis {
                 ? Ceilings.holdTarget(for: canonical, dayKey: session.dayKey, program: program)
                 : Ceilings.repWindow(for: canonical, dayKey: session.dayKey, program: program)?.ceiling
             let workingRows = g.sets.filter { SetTags.isWorkingSet($0.setType) }
-            let atCeiling = ceiling.map { c in workingRows.filter { Double($0.reps) >= c }.count } ?? 0
+            let atCeiling = Self.atCeiling(workingRows.map { (Double($0.reps), $0.pairId) }, ceiling: ceiling)
 
             exercises.append(ExerciseReport(
                 detail: detail, canonical: canonical, timed: timed,
@@ -647,6 +647,23 @@ enum SessionAnalysis {
             }
         }
         return PrEngine.detectSessionPrs(candidates, baselines)
+    }
+
+    /// Working SETS that reached the ceiling — a pair once, and only when
+    /// every side of it did. Counting rows here printed `4/2` over a two-set
+    /// unilateral card (sides over sets, the 3.10.0 unit bug).
+    static func atCeiling(_ sets: [(reps: Double, pairId: String?)], ceiling: Double?) -> Int {
+        guard let ceiling else { return 0 }
+        var units: [[Double]] = []
+        var byPair: [String: Int] = [:]
+        for s in sets {
+            if let p = s.pairId, !p.isEmpty {
+                if let i = byPair[p] { units[i].append(s.reps); continue }
+                byPair[p] = units.count
+            }
+            units.append([s.reps])
+        }
+        return units.filter { $0.allSatisfy { $0 >= ceiling } }.count
     }
 
     /// Ghosts excluded, a pair once.

@@ -331,3 +331,33 @@ struct StackPushTests {
         #expect(!Supplements.isArchived(custom, on: "2020-01-01"))
     }
 }
+
+// MARK: - Overhaul C3 · the label import's leftovers
+
+extension StackPushTests {
+
+    @Test("a label import keeps its unmapped ingredients by name, and a hand-added item carries no key")
+    func otherIngredientsRoundTrip() async throws {
+        let db = try AppDatabase.inMemory(deviceId: "device-a")
+        let id = try db.addCustomSupplement(
+            userId: "u1", name: "Thorne Basic Nutrients 2/Day", dose: "2 caps",
+            micros: ["vitaminC": 125], doseAmount: 2, doseUnit: "cap",
+            otherIngredients: ["Selenium", "Boron"]
+        )
+        let row = try #require(try await db.writer.read { try CustomSupplementRow.fetchOne($0, key: id) })
+        let item = AppDatabase.custom(row)
+        #expect(item.otherIngredients == ["Selenium", "Boron"])
+        #expect(item.micros == ["vitaminC": 125])
+
+        let plain = try db.addCustomSupplement(userId: "u1", name: "Zinc", dose: "15 mg")
+        let plainRow = try #require(try await db.writer.read { try CustomSupplementRow.fetchOne($0, key: plain) })
+        #expect(AppDatabase.custom(plainRow).otherIngredients == nil)
+
+        let push = RecordingPush()
+        _ = try await drain(db, push)
+        let sent = await push.sent
+        #expect(sent.first { $0.json.contains("Thorne") }?.json.contains("\"other_ingredients\"") == true)
+        #expect(sent.first { $0.json.contains("Zinc") }?.json.contains("other_ingredients") == false,
+                "a nil stays out of the push body until the founder's DDL lands")
+    }
+}

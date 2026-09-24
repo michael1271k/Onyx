@@ -28,6 +28,17 @@ struct StackView: View {
 
     @State private var adding = false
     @State private var editing: CustomSupplement?
+    /// "Add from label database" (overhaul C3). The import sheet hands back a
+    /// prefill; the edit sheet opens on it only after the import sheet has
+    /// gone, because one presenter cannot hold two sheets at once.
+    @State private var importing = false
+    @State private var pending: LabelDraft?
+    @State private var draft: LabelDraft?
+
+    struct LabelDraft: Identifiable {
+        let id = UUID()
+        let prefill: DSLD.Prefill
+    }
 
     private var doses: [SupplementDose] { model.doses }
 
@@ -73,13 +84,35 @@ struct StackView: View {
         .tint(Color.onyx.accent(.fuel))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { adding = true } label: {
+                Menu {
+                    Button { adding = true } label: { Label("Add by hand", systemImage: "square.and.pencil") }
+                    Button { importing = true } label: { Label("Add from label database", systemImage: "text.magnifyingglass") }
+                } label: {
                     Image(systemName: "plus").frame(minWidth: 44, minHeight: 44)
                 }
                 .accessibilityLabel("Add a supplement")
             }
         }
         .sheet(isPresented: $adding) { SupplementEditSheet(model: model, editing: nil) }
+        .sheet(isPresented: $importing, onDismiss: {
+            draft = pending
+            pending = nil
+        }) {
+            DSLDImportView(
+                onAdd: { prefill in
+                    pending = LabelDraft(prefill: prefill)
+                    importing = false
+                },
+                onManual: { name in
+                    pending = LabelDraft(prefill: DSLD.Prefill(
+                        name: name, form: nil, doseAmount: nil, doseUnit: nil, micros: [:], otherIngredients: []))
+                    importing = false
+                }
+            )
+        }
+        .sheet(item: $draft) { draft in
+            SupplementEditSheet(model: model, editing: nil, prefill: draft.prefill)
+        }
         .sheet(item: $editing) { custom in SupplementEditSheet(model: model, editing: custom) }
     }
 
@@ -324,6 +357,9 @@ private struct ArchivedRow: View {
 struct SupplementEditSheet: View {
     let model: DayModel
     let editing: CustomSupplement?
+    /// A label from the DSLD import (overhaul C3): name, form, dose and the
+    /// per-unit micros it fills in. Nil for the plain add and for an edit.
+    var prefill: DSLD.Prefill? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -398,7 +434,7 @@ struct SupplementEditSheet: View {
         } header: {
             OnyxSectionHeader("Item", .fuel)
         } footer: {
-            Text(dosePreview)
+            Text(prefillNote.map { dosePreview + " " + $0 } ?? dosePreview)
         }
     }
 
@@ -484,6 +520,15 @@ struct SupplementEditSheet: View {
     /// What the row will read, said before it is saved. A count multiplies its
     /// micronutrient payload and a mass does not, and this is the only place
     /// that difference is visible before it starts moving the day's totals.
+    /// What the label brought with it, said once under the form.
+    private var prefillNote: String? {
+        guard let prefill, !prefill.micros.isEmpty || !prefill.otherIngredients.isEmpty else { return nil }
+        var parts: [String] = []
+        if !prefill.micros.isEmpty { parts.append("\(prefill.micros.count) micronutrients from the label count toward your day") }
+        if !prefill.otherIngredients.isEmpty { parts.append("\(prefill.otherIngredients.count) other ingredients are kept by name") }
+        return parts.joined(separator: "; ") + "."
+    }
+
     private var dosePreview: String {
         guard let amount, amount > 0, let unit else {
             return "An amount and a unit. \"2 tabs\" delivers twice the label; \"300 mg\" is the label itself."
@@ -541,8 +586,10 @@ struct SupplementEditSheet: View {
         guard !loaded else { return }
         loaded = true
         guard let editing else {
-            form = .pill
-            unit = .mg
+            form = prefill?.form ?? .pill
+            unit = prefill?.doseUnit ?? .mg
+            name = prefill?.name ?? ""
+            amount = prefill?.doseAmount
             return
         }
         name = editing.name
@@ -577,7 +624,8 @@ struct SupplementEditSheet: View {
             landed = model.addSupplement(
                 name: cleanName, dose: dose, doseAmount: amount, doseUnit: unit.rawValue,
                 time: cleanTime, days: days.sorted(),
-                color: nil, form: form?.rawValue, notes: nil, trainingOnly: trainingOnly
+                color: nil, form: form?.rawValue, notes: nil, trainingOnly: trainingOnly,
+                micros: prefill?.micros, otherIngredients: prefill?.otherIngredients
             )
         }
         if landed { dismiss() }

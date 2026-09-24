@@ -72,11 +72,32 @@ struct OnyxSectionHeader: View {
         self.color = color
     }
 
+    /// 11 pt, semibold, tracked (overhaul Q20): a register label over a group
+    /// of rows, not a title competing with them. Scales with Dynamic Type.
     var body: some View {
         Text(title)
-            .font(.footnote.weight(.semibold))
-            .tracking(12 * 0.01)
+            .font(.caption2.weight(.semibold))
+            .tracking(0.8)
             .foregroundStyle(color)
+    }
+}
+
+extension View {
+    /// The compact Settings row (overhaul Q20): the system `Form`, 6 pt above
+    /// and below instead of the default 11, the standard 16 pt sides. Applied
+    /// per `Section`, which hands it to every row inside.
+    func settingsRows() -> some View {
+        listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+    }
+
+    /// The density the whole compact Form reads: subheadline titles (a row's
+    /// detail line sets its own `.footnote`), 16 pt between sections, a
+    /// shorter row floor, and small controls wherever a control honours it.
+    func settingsDensity() -> some View {
+        font(.subheadline)
+            .listSectionSpacing(16)
+            .environment(\.defaultMinListRowHeight, 36)
+            .controlSize(.small)
     }
 }
 
