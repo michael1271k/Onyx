@@ -35,6 +35,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Onyx uses the camera only to read a supplement's barcode so it can look the label up for you. No photo is taken or stored.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Onyx reads your activity, heart, sleep, body-measurement and nutrition data from Apple Health to work out your daily readiness and recovery scores, your training load and your energy balance, and to fill in the charts and Home Screen widgets. Nothing is read that you do not allow, and your data is stored only on this device and in your own private Onyx account.</string>
 	<key>NSHealthUpdateUsageDescription</key>
