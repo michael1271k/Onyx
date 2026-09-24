@@ -343,6 +343,17 @@ final class PhoneWatchBridge {
     /// wrist. Stored, then pushed without the tiles' throttle.
     private func record(_ pulse: SessionPulse) {
         guard let lifecycle = SessionLifecycle(pulse) else { return }
+        // ── NEVER BACKWARDS (after review) ──────────────────────────────────
+        // The same three rules the wrist's `noteWord` keeps: a pulse about an
+        // OLDER session than the stored word, the discard of a losing rival
+        // while the winner is open, and a late open for a session the word
+        // has already closed all leave the word alone. Otherwise every later
+        // context told the wrist the live session had been discarded.
+        if let current = word?.lifecycle, word?.userId == pulse.userId {
+            if current.sessionId != lifecycle.sessionId, current.startedAt > lifecycle.startedAt { return }
+            if current.sessionId != lifecycle.sessionId, current.phase == .open, lifecycle.phase == .discarded { return }
+            if current.sessionId == lifecycle.sessionId, current.phase != .open, lifecycle.phase == .open { return }
+        }
         word = Word(userId: pulse.userId, lifecycle: lifecycle)
         log.notice("lifecycle \(lifecycle.phase.rawValue, privacy: .public) \(lifecycle.sessionId, privacy: .public)")
         if let onLifecycleChanged { onLifecycleChanged() } else { pushLifecycle() }
@@ -447,7 +458,7 @@ final class PhoneWatchBridge {
         var pulse = pulse
         if pulse.phase == .finished {
             flush()
-            pulse.expectedEventCount = try? database.eventCount(sessionId: pulse.sessionId)
+            pulse.expectedEventCount = try? database.authoredEventCount(sessionId: pulse.sessionId)
         }
         link?.send(session: pulse)
         record(pulse)

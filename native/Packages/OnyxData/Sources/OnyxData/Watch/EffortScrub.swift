@@ -56,6 +56,9 @@ public final class EffortScrub {
     /// Settle whatever is pending, now. A no-op with nothing pending.
     public func flush() {
         settleTask?.cancel()
+        // A provisional pulse arriving after the rating is written would
+        // repaint the phone's capsule over a committed set.
+        pulseTask?.cancel()
         settleNow()
     }
 

@@ -225,9 +225,13 @@ public struct SessionLifecycle: Codable, Hashable, Sendable {
     /// than by a clock reading of `startedAt`.
     public var date: String?
     public var dayKey: String?
+    /// A finish's `SessionPulse.expectedEventCount`, carried on the context
+    /// too: the context and the message leave together, and the context path
+    /// must wait for the queued sets exactly as the message does.
+    public var expectedEventCount: Int?
 
     public init(sessionId: String, phase: Phase, startedAt: Date, endedAt: Date? = nil, summary: SessionMasthead? = nil,
-                date: String? = nil, dayKey: String? = nil) {
+                date: String? = nil, dayKey: String? = nil, expectedEventCount: Int? = nil) {
         self.sessionId = sessionId
         self.phase = phase
         self.startedAt = startedAt
@@ -235,6 +239,7 @@ public struct SessionLifecycle: Codable, Hashable, Sendable {
         self.summary = summary
         self.date = date
         self.dayKey = dayKey
+        self.expectedEventCount = phase == .finished ? expectedEventCount : nil
     }
 }
 

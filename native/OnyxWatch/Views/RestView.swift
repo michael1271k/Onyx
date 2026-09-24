@@ -183,6 +183,13 @@ struct RestView: View {
             model.scrubEffort(value)
         }
         .onDisappear { model.finishScrub() }
+        #if DEBUG
+        // `restband`: the ladder on a chosen rung, so the band ink can be
+        // photographed — a simulator has no Crown to turn.
+        .onChange(of: model.debugScreen, initial: true) { _, screen in
+            if screen == .restband { rung = Double(Effort.rpeStopIndex(9.5)) }
+        }
+        #endif
         .task(id: pulse.endsAt) { await countdown() }
     }
 

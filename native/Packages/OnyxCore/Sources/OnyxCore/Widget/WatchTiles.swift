@@ -126,6 +126,11 @@ public struct WatchTiles: Codable, Sendable, Equatable {
     public let carbsG: Int?
     public let fatG: Int?
     public var nextDose: NextDose?
+    /// Today's finished session, for the Workout complication's "done" face
+    /// (overhaul Lane A, Lane B's request): name · tonnage · avg HR · PRs.
+    /// Set on the WATCH from `WatchContext.session.summary` when it saves the
+    /// tiles for its complications — the phone leaves it nil on the wire.
+    public var finished: SessionMasthead?
 
     /// The next supplement slot today — its first item's name (and how many
     /// ride with it) and when. Nil when nothing is left today.
@@ -170,7 +175,7 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         weekSets: Int? = nil, weekVolumeKg: Double? = nil,
         proteinG: Int? = nil, proteinGoalG: Int? = nil,
         offWrist: OffWristNote? = nil,
-        carbsG: Int? = nil, fatG: Int? = nil, nextDose: NextDose? = nil
+        carbsG: Int? = nil, fatG: Int? = nil, nextDose: NextDose? = nil, finished: SessionMasthead? = nil
     ) {
         self.date = date
         self.battery = battery
@@ -199,6 +204,7 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         self.carbsG = carbsG
         self.fatG = fatG
         self.nextDose = nextDose
+        self.finished = finished
     }
 
     enum CodingKeys: String, CodingKey {
@@ -215,7 +221,7 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         case weekSets = "ws", weekVolumeKg = "wv"
         case proteinG = "p", proteinGoalG = "pg"
         case offWrist = "ow"
-        case carbsG = "cg", fatG = "fg", nextDose = "nd"
+        case carbsG = "cg", fatG = "fg", nextDose = "nd", finished = "fs"
     }
 
     /// The projection. ONE place cuts the snapshot down, so the phone's
@@ -302,7 +308,7 @@ public struct WatchTiles: Codable, Sendable, Equatable {
             week: week, medianBedtime: medianBedtime, lastBedtime: lastBedtime,
             weekSets: weekSets, weekVolumeKg: weekVolumeKg,
             proteinG: proteinG, proteinGoalG: proteinGoalG, offWrist: offWrist,
-            carbsG: carbsG, fatG: fatG, nextDose: nextDose
+            carbsG: carbsG, fatG: fatG, nextDose: nextDose, finished: finished
         )
     }
 

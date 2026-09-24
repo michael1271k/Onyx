@@ -208,7 +208,7 @@ final class WatchModel {
     /// `dashboard` is W4's, and it is the last name `watch-shot.sh` refused
     /// (W1 left it named as unreachable and said so by name rather than
     /// photographing `StartView` under its filename).
-    enum DebugScreen: String { case start, restday, rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget, banner, join, glance, pulse }
+    enum DebugScreen: String { case start, restday, rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget, banner, join, glance, pulse, restband }
     var debugScreen: DebugScreen?
     #endif
 
@@ -432,8 +432,20 @@ final class WatchModel {
     /// late open can put it back for `rejoinLiveSession` to adopt — the third
     /// defect behind "Start after the phone finished". If this wrist was
     /// running it, its half ends the way the missed pulse would have ended it.
-    private func applyLifecycle() {
+    private func applyLifecycle(waited: Bool = false) {
         guard let store, let context, let word = context.session, word.phase != .open else { return }
+        // ── THE CONTEXT WAITS FOR THE QUEUE TOO (after review) ──────────────
+        // The context and the messaged finish leave the phone together, so a
+        // finish applied from here before the sets queued ahead of it would
+        // close this copy without them — the rule the message path keeps.
+        if !waited, (try? store.lifecycleIsReady(word)) == false {
+            Task { [weak self] in
+                await store.waitForLifecycle(word)
+                guard let self, self.context?.session == word else { return }
+                self.applyLifecycle(waited: true)
+            }
+            return
+        }
         let outcome: AppDatabase.SessionPulseOutcome
         do {
             outcome = try store.applyLifecycle(word, userId: context.userId)
@@ -444,7 +456,11 @@ final class WatchModel {
         if outcome != .unchanged {
             log.notice("context \(word.phase.rawValue, privacy: .public) \(word.sessionId, privacy: .public): \(String(describing: outcome), privacy: .public)")
         }
-        guard word.sessionId == sessionId else { return }
+        // Only when THIS call closed or discarded it: the messaged pulse and the
+        // context arrive together, and the pulse path may already be ending
+        // the workout — a second `end` or a `cancel` over a Finish that is
+        // saving would be the defect the pulse path's own comment forbids.
+        guard word.sessionId == sessionId, outcome != .unchanged else { return }
         if word.phase == .finished {
             endAdopted(word.sessionId, at: word.endedAt, store: store)
         } else {
@@ -800,18 +816,29 @@ final class WatchModel {
         settle: { [weak self] rpe in self?.settleEffort(rpe) }
     )
 
+    /// The set the current scrub rates, fixed at its first detent (after
+    /// review): a phone tick landing during the one-second settle moves
+    /// `sets.last`, and the rating must stay on the set the cover named.
+    private var scrubTarget: WorkoutSet?
+
     /// The Crown landed on a rung. Called per detent by `RestView`.
-    func scrubEffort(_ rpe: Double) { effortScrub.scrub(rpe) }
+    func scrubEffort(_ rpe: Double) {
+        if scrubTarget == nil { scrubTarget = sets.last }
+        effortScrub.scrub(rpe)
+    }
 
     /// The cover is going away: write what was chosen now.
-    func finishScrub() { effortScrub.flush() }
+    func finishScrub() {
+        effortScrub.flush()
+        scrubTarget = nil
+    }
 
     /// The provisional rung, to the phone's deck card — message-only, never
     /// stored (`WatchLink.send(effort:)`). The set is the one the rest cover
     /// names: this wrist's last logged set when it has the fold, and the
     /// phone resolves it from its own resting movement when it does not.
     private func sendEffort(_ rpe: Double) {
-        let last = sets.last
+        let last = scrubTarget ?? sets.last
         guard let session = sessionId ?? rest?.sessionId else { return }
         link?.send(effort: EffortPulse(
             sessionId: session, exerciseId: last?.exerciseId ?? "", setIndex: last?.setIndex ?? 0,
@@ -824,8 +851,9 @@ final class WatchModel {
     /// shown (its next tick, or a tap on the capsule) — an amend from here
     /// would be refused, and a refusal flips this wrist to the mirror screen.
     private func settleEffort(_ rpe: Double) {
-        guard holdsPencil, sets.last?.rpe != rpe else { return }
-        rate(rpe)
+        let target = scrubTarget ?? sets.last
+        guard holdsPencil, let target, target.rpe != rpe else { return }
+        amend(target.id, OnyxData.SetPatch(rpe: rpe))
     }
 
     // MARK: - The quality panel (W3)
@@ -1321,6 +1349,16 @@ final class WatchModel {
         context?.tiles?.addingWater(pendingWaterMl)
     }
 
+    /// Park the context's tiles for the complications, with today's finished
+    /// masthead folded in — the Workout face's "done" line (overhaul A2).
+    private func saveTiles(_ context: WatchContext) {
+        guard var tiles = context.tiles else { return }
+        if let word = context.session, word.phase == .finished, word.isOn(context.today) {
+            tiles.finished = word.summary
+        }
+        tiles.save()
+    }
+
     /// The palette the phone last sent, as an identity for the app root
     /// (`OnyxWatchApp` re-ids on it so the computed `WatchInk` is read again).
     /// `OnyxThemeSpec` is not `Hashable`; its four numbers are the identity.
@@ -1565,8 +1603,8 @@ final class WatchModel {
             // The complications' numbers, then the reload that makes them
             // draw. Nil tiles (an older phone) leave the last ones in place
             // rather than blanking a face that was right yesterday.
-            if let tiles = next.tiles {
-                tiles.save()
+            if next.tiles != nil {
+                saveTiles(next)
                 WidgetCenter.shared.reloadAllTimelines()
             }
             resolveDay()
@@ -1930,7 +1968,7 @@ extension WatchModel {
             session: session
         )
         WatchContextCache.save(next)
-        next.tiles?.save()
+        saveTiles(next)
         // What `receive(.context)` does with the palette, so the root re-ids
         // (`themeKey`) onto it.
         OnyxTheme.save(next.theme ?? .default, to: WatchTiles.defaults())

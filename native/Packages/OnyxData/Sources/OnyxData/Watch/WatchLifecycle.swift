@@ -35,7 +35,7 @@ extension SessionLifecycle {
             sessionId: pulse.sessionId, phase: phase, startedAt: startedAt,
             endedAt: phase == .finished ? pulse.endedAt : nil,
             summary: phase == .finished ? summary : nil,
-            date: pulse.date, dayKey: pulse.dayKey
+            date: pulse.date, dayKey: pulse.dayKey, expectedEventCount: pulse.expectedEventCount
         )
     }
 
@@ -79,21 +79,51 @@ extension AppDatabase {
         return SessionMasthead(session: row, name: name, samples: samples)
     }
 
-    /// Every event this store holds for a session — the number a messaged
-    /// finish is measured against. Pauses and voids count: the sender counted
-    /// its whole log for the session, and so does this.
-    public func eventCount(sessionId: String) throws -> Int {
-        try writer.read { db in
-            try SetEvent.filter(SetEvent.Columns.sessionId == sessionId).fetchCount(db)
+    /// How many of a session's events THIS device wrote — what a sender puts
+    /// on its finish (`SessionPulse.expectedEventCount`).
+    ///
+    /// ── ITS OWN, NOT ALL OF THEM (after review) ─────────────────────────────
+    /// A whole-log count on both ends lets two queues cancel out: wrist events
+    /// still on their way to the phone and phone events still on their way to
+    /// the wrist leave both totals equal, and the finish lands early. Each
+    /// side's own events are the ones only it can deliver, so the sender counts
+    /// its own and the receiver counts everything it did NOT write
+    /// (`receivedEventCount`). The phone relays only its own events to the
+    /// watch (`PhoneWatchBridge.flush` → `localEvents`), so on the wrist
+    /// "not mine" is exactly "the phone's".
+    public func authoredEventCount(sessionId: String) throws -> Int {
+        let me = try deviceId()
+        return try writer.read { db in
+            try SetEvent.filter(SetEvent.Columns.sessionId == sessionId && SetEvent.Columns.deviceId == me).fetchCount(db)
+        }
+    }
+
+    /// How many of a session's events arrived from another device.
+    public func receivedEventCount(sessionId: String) throws -> Int {
+        let me = try deviceId()
+        return try writer.read { db in
+            try SetEvent.filter(SetEvent.Columns.sessionId == sessionId && SetEvent.Columns.deviceId != me).fetchCount(db)
         }
     }
 
     /// May this finish be applied yet? Always, unless it carries a count this
-    /// store's log has not reached — the queued sets ahead of it are still in
-    /// flight.
+    /// store has not received — the sender's queued sets are still in flight.
     public func finishIsReady(_ pulse: SessionPulse) throws -> Bool {
-        guard pulse.phase == .finished, let expected = pulse.expectedEventCount else { return true }
-        return try eventCount(sessionId: pulse.sessionId) >= expected
+        guard pulse.phase == .finished else { return true }
+        return try isReady(sessionId: pulse.sessionId, expected: pulse.expectedEventCount)
+    }
+
+    /// The same question for a lifecycle arriving in the CONTEXT, which carries
+    /// the count too — the context and the message go out together, so the
+    /// context path must wait exactly as the message does (after review).
+    public func lifecycleIsReady(_ lifecycle: SessionLifecycle) throws -> Bool {
+        guard lifecycle.phase == .finished else { return true }
+        return try isReady(sessionId: lifecycle.sessionId, expected: lifecycle.expectedEventCount)
+    }
+
+    private func isReady(sessionId: String, expected: Int?) throws -> Bool {
+        guard let expected else { return true }
+        return try receivedEventCount(sessionId: sessionId) >= expected
     }
 
     /// Hold a messaged finish until `finishIsReady` or `grace` runs out.
@@ -108,8 +138,15 @@ extension AppDatabase {
         }
     }
 
-    /// Whether a session id was discarded here — or retired by a lifecycle —
-    /// and may never be opened again.
+    /// The same wait for a lifecycle from the context.
+    public func waitForLifecycle(_ lifecycle: SessionLifecycle, grace: TimeInterval = SessionPulse.finishGrace) async {
+        let deadline = Date().addingTimeInterval(grace)
+        while Date() < deadline, !((try? lifecycleIsReady(lifecycle)) ?? true) {
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+    }
+
+    /// Whether a session id was discarded here and may never be opened again.
     public func isTombstoned(sessionId: String) throws -> Bool {
         try writer.read { db in
             try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM session_tombstones WHERE id = ?)",
@@ -120,26 +157,54 @@ extension AppDatabase {
     /// Apply the phone's lifecycle word to THIS store (the watch's).
     ///
     /// A finished or discarded session is closed or thrown away here exactly
-    /// as its missed pulse would have done, and then TOMBSTONED either way —
-    /// so a late copy of its open (message and queue both carry one, in no
-    /// order) cannot put a live row back for `rejoinLiveSession` to adopt.
-    /// That was the third stacked defect behind "Start reappears": the wrist
-    /// re-adopted a closed session and restarted its `HKWorkoutSession`.
+    /// as its missed pulse would have done, so neither the next context push
+    /// nor a late copy of its open (message and queue both carry one, in no
+    /// order) leaves a LIVE row for `rejoinLiveSession` to adopt — the third
+    /// stacked defect behind "Start reappears".
     ///
-    /// An open is not applied: joining is a person's decision (the Join
-    /// button), not a context push's.
+    /// ── A FINISH IS NEVER A TOMBSTONE (after review) ────────────────────────
+    /// A finished session this store never had gets its row, born CLOSED, and
+    /// not a tombstone: a tombstone refuses the late open, and then every
+    /// queued set of that session fails the `set_events` foreign key — and
+    /// `ingest` rolls the whole batch back with it. The closed row makes the
+    /// late open a no-op (`receiveSession` never rewrites a row) and gives the
+    /// events their parent. Only a DISCARD tombstones.
+    ///
+    /// The caller checks `lifecycleIsReady` first; this applies. An open is
+    /// not applied: joining is a person's decision (Join), not a push's.
     @discardableResult
     public func applyLifecycle(_ lifecycle: SessionLifecycle, userId: String) throws -> SessionPulseOutcome {
-        guard lifecycle.phase != .open else { return .unchanged }
-        var outcome = SessionPulseOutcome.unchanged
-        if var row = try session(id: lifecycle.sessionId, userId: userId), row.endedAt == nil {
-            if lifecycle.phase == .finished { row.endedAt = lifecycle.endedAt ?? Date() }
-            outcome = try receiveSession(SessionPulse(row, phase: lifecycle.phase == .finished ? .finished : .discarded))
+        switch lifecycle.phase {
+        case .open:
+            return .unchanged
+        case .finished:
+            if var row = try session(id: lifecycle.sessionId, userId: userId) {
+                guard row.endedAt == nil else { return .unchanged }
+                row.endedAt = lifecycle.endedAt ?? Date()
+                return try receiveSession(SessionPulse(row, phase: .finished))
+            }
+            guard let date = lifecycle.date else { return .unchanged }
+            try writer.write { db in
+                let tombstoned = try Bool.fetchOne(
+                    db, sql: "SELECT EXISTS (SELECT 1 FROM session_tombstones WHERE id = ?)", arguments: [lifecycle.sessionId]
+                ) ?? false
+                guard !tombstoned, try WorkoutSession.fetchOne(db, key: lifecycle.sessionId) == nil else { return }
+                try WorkoutSession(
+                    id: lifecycle.sessionId, userId: userId, dayKey: lifecycle.dayKey, date: date,
+                    startedAt: lifecycle.startedAt, endedAt: lifecycle.endedAt ?? lifecycle.startedAt
+                ).insert(db)
+            }
+            return .unchanged
+        case .discarded:
+            var outcome = SessionPulseOutcome.unchanged
+            if let row = try session(id: lifecycle.sessionId, userId: userId), row.endedAt == nil {
+                outcome = try receiveSession(SessionPulse(row, phase: .discarded))
+            }
+            try writer.write { db in
+                try db.execute(sql: "INSERT OR IGNORE INTO session_tombstones (id) VALUES (?)", arguments: [lifecycle.sessionId])
+            }
+            return outcome
         }
-        try writer.write { db in
-            try db.execute(sql: "INSERT OR IGNORE INTO session_tombstones (id) VALUES (?)", arguments: [lifecycle.sessionId])
-        }
-        return outcome
     }
 }
 

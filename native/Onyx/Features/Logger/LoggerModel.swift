@@ -1720,7 +1720,10 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     func receiveEffort(_ pulse: EffortPulse, now: Date = Date()) {
         guard pulse.sessionId == sessionId else { return }
         let rows = exercises.flatMap(\.rows)
-        let target = pulse.setId.flatMap { id in rows.first { $0.storeId == id } }
+        // The fallback is for a pulse that names NO set. One that names a set
+        // this deck does not hold yet (a wrist-logged set still in the queue)
+        // is dropped, not re-aimed at the previous set (after review).
+        let target = pulse.setId.map { id in rows.first { $0.storeId == id } }
             ?? exercises.first { $0.name == restingExercise }?.rows.last { $0.isDone }
         guard let target else { return }
         provisionalEffort = provisionalEffort.filter { now.timeIntervalSince($0.value.at) < Self.provisionalLifetime }
@@ -2059,6 +2062,9 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     func finish(sessionRpe: Double? = nil) -> Bool {
         let span = Perf.begin("session.finish")
         defer { Perf.end(span) }
+        // The last set's Crown rating has no next tick to commit it: Finish is
+        // that tick (overhaul A3, after review).
+        commitProvisionals()
         guard let store, let sessionId, completedSets > 0 else {
             // Not an error when there is no store (previews) — but a session
             // with nothing in it, or one whose row was never created, must not

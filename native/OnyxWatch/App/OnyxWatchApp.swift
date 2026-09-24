@@ -126,7 +126,7 @@ struct OnyxWatchApp: App {
                             model.cancelSession()
                         }
                         switch screen {
-                        case .rest:
+                        case .rest, .restband:
                             model.seedDebugRest()
                         case .deck, .quality, .pause, .cancel:
                             // Two sets: enough for the deck to show a movement

@@ -207,7 +207,7 @@ struct FoodSlab: View {
                             .minimumScaleFactor(0.8)
                         Text(tiles?.kcalRemaining.map { $0 >= 0 ? "\($0.formatted()) left" : "\((-$0).formatted()) over" } ?? "No target")
                             .font(.system(.caption2, design: .rounded))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(WatchInk.secondary)
                             .lineLimit(1)
                     }
                 }

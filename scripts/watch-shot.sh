@@ -75,6 +75,8 @@ screen_env() {
     nophone) echo "" ;;
     set)     echo "ONYX_WATCH_AUTOSTART=1" ;;
     rest)    echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=rest" ;;
+    # The ladder on a chosen rung (overhaul A3) — the band's ink.
+    restband) echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=restband" ;;
     quality|qualitytags) echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=quality" ;;
     deck|deckswipe) echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=deck" ;;
     pause)   echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=pause" ;;

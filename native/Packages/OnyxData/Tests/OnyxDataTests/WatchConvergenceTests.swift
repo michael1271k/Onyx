@@ -350,7 +350,7 @@ struct WatchConvergenceTests {
 
         let closed = try #require(try phone.closeSession(id: Self.sessionId))
         let finish = SessionPulse(
-            closed, phase: .finished, expectedEventCount: try phone.eventCount(sessionId: Self.sessionId)
+            closed, phase: .finished, expectedEventCount: try phone.authoredEventCount(sessionId: Self.sessionId)
         )
         #expect(finish.expectedEventCount == 3)
         #expect(try watch.finishIsReady(finish) == false, "two sets are still in the queue ahead of it")
@@ -366,6 +366,12 @@ struct WatchConvergenceTests {
         #expect(try watch.finishIsReady(finish))
         #expect(try watch.receiveSession(finish) == .closed)
         #expect(try setIds(watch).count == 3)
+        // The context carries the same count, and its path waits the same way.
+        var started = finish
+        started.startedAt = Self.start   // the harness row has no start
+        let word = try #require(SessionLifecycle(started))
+        #expect(word.expectedEventCount == 3)
+        #expect(try watch.lifecycleIsReady(word))
         // A finish with no count (an older phone, or the queued copy) never waits.
         #expect(try watch.finishIsReady(SessionPulse(closed, phase: .finished)))
     }
@@ -387,16 +393,35 @@ struct WatchConvergenceTests {
         #expect(try watch.applyLifecycle(word, userId: Self.userId) == .unchanged, "idempotent")
 
         // A finished session the wrist NEVER saw: its open arrives after the
-        // context did, by message or by queue, and must not become live.
+        // context did, by message or by queue, and must not become live —
+        // and its queued sets must still find a parent (after review: a
+        // tombstone here made every one of them fail the foreign key).
         var other = live
         other.id = "33333333-3333-3333-3333-333333333333"
         other.startedAt = Self.start
         let retired = SessionLifecycle(sessionId: other.id, phase: .finished, startedAt: Self.start,
-                                       endedAt: Self.start.addingTimeInterval(3_000))
+                                       endedAt: Self.start.addingTimeInterval(3_000),
+                                       date: "2026-09-07", dayKey: "legs_a")
         #expect(try watch.applyLifecycle(retired, userId: Self.userId) == .unchanged)
-        #expect(try watch.isTombstoned(sessionId: other.id))
+        #expect(try watch.isTombstoned(sessionId: other.id) == false, "a finish is never a tombstone")
+        #expect(try watch.session(id: other.id, userId: Self.userId)?.endedAt == retired.endedAt, "born closed")
         #expect(try watch.receiveSession(SessionPulse(other, phase: .open)) == .unchanged)
-        #expect(try watch.session(id: other.id, userId: Self.userId) == nil)
+        #expect(try watch.liveSession(dayKey: "legs_a", date: "2026-09-07", userId: Self.userId) == nil)
+        let phoneOfOther = try store(deviceId: "phone")
+        let otherId = other.id
+        try phoneOfOther.seedRows { db in
+            try WorkoutSession(id: otherId, userId: Self.userId, dayKey: "legs_a", date: "2026-09-07",
+                               startedAt: Self.start).insert(db)
+        }
+        try phoneOfOther.appendSet(sessionId: other.id, snapshot(1, 90))
+        try watch.ingest(try phoneOfOther.setEvents(sessionId: other.id))
+        #expect(try watch.sets(sessionId: other.id).count == 1, "the late set lands in the closed row")
+
+        // A DISCARD is the one that tombstones.
+        let thrown = SessionLifecycle(sessionId: "55555555-5555-5555-5555-555555555555", phase: .discarded,
+                                      startedAt: Self.start)
+        _ = try watch.applyLifecycle(thrown, userId: Self.userId)
+        #expect(try watch.isTombstoned(sessionId: thrown.sessionId))
 
         // An open lifecycle changes nothing: joining is a tap, not a push.
         let open = SessionLifecycle(sessionId: "44444444-4444-4444-4444-444444444444", phase: .open, startedAt: Self.start)
