@@ -66,7 +66,7 @@ struct CompositionFocusFace: View {
 
       HStack(alignment: .firstTextBaseline, spacing: 4) {
         BigValue(value: (fat?.latest ?? b?.fatPct).map { String(format: "%.1f", $0) }, size: 30, color: Color.onyx.textPrimary)
-        Text("%").font(OnyxWidgetType.face(12)).foregroundStyle(Color.onyx.textSecondary)
+        Text("%").onyxWidgetFont { OnyxWidgetType.face(12 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         Spacer(minLength: 0)
         // Down is good here, and only here on this face.
         //
@@ -80,7 +80,7 @@ struct CompositionFocusFace: View {
       // "over 9 d" beside a chip is what stops the reader reading a month into
       // a fortnight's worth of readings.
       Text(OnyxSnapshot.spanCaption(fat) ?? OnyxSnapshot.relativeDay(s?.weight.measuredOn).map { "measured \($0)" } ?? "")
-        .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
 
       Spacer(minLength: 0)
 
@@ -120,10 +120,10 @@ struct CompositionFace: View {
       HStack(alignment: .firstTextBaseline, spacing: 6) {
         BigValue(value: (fat?.latest ?? b?.fatPct).map { String(format: "%.1f", $0) },
                  size: large ? 38 : 30, color: Color.onyx.textPrimary)
-        Text("% fat").font(OnyxWidgetType.face(large ? 13 : 11)).foregroundStyle(Color.onyx.textSecondary)
+        Text("% fat").onyxWidgetFont { OnyxWidgetType.face((large ? 13 : 11) * $0) }.foregroundStyle(Color.onyx.textSecondary)
         Spacer(minLength: 0)
         if let span = OnyxSnapshot.spanCaption(fat) {
-          Text(span).font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+          Text(span).onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
         }
         DeltaChip(delta: fat.map(\.delta) ?? b?.fatPctDelta, decimals: 1, upIsGood: false, monochrome: mono)
       }
@@ -182,7 +182,7 @@ struct CompositionFace: View {
             // a dot, and a dot drawn as a trend is a claim about a shape that
             // does not exist.
             Text("not enough readings for a trend")
-              .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+              .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           }
         }
         .frame(maxHeight: .infinity)

@@ -166,7 +166,8 @@ private struct NutrientCell: View {
     private var tint: Color {
         guard NutrientTargets.isMet(target, total: total) != nil else { return Color.onyx.textTertiary }
         switch target.kind {
-        case .floor:   return NutrientTargets.isMet(target, total: total) == true ? Color.onyx.good : OnyxDomain.fuel.accent
+        // Short of a floor is the nutrient's own ink (`Color.onyx.micro`, W0).
+        case .floor:   return NutrientTargets.isMet(target, total: total) == true ? Color.onyx.good : Color.onyx.micro
         case .ceiling: return NutrientTargets.isMet(target, total: total) == true ? Color.onyx.good : Color.onyx.danger
         }
     }

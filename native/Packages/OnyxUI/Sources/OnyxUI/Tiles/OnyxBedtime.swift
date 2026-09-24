@@ -66,10 +66,10 @@ public struct BedtimeView: View {
       if let wake = OnyxSnapshot.clockTime(sleep?.endTime) {
         HStack(spacing: 3) {
           Image(systemName: "sunrise.fill")
-            .font(OnyxWidgetType.face(9))
+            .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
             .foregroundStyle(accent)
           Text(wake)
-            .font(OnyxWidgetType.figure(12))
+            .onyxWidgetFont { OnyxWidgetType.figure(12 * $0) }
             .foregroundStyle(Color.onyx.textSecondary)
         }
       }
@@ -81,7 +81,7 @@ public struct BedtimeView: View {
       // baseline under five nights, and a first week that invented one would
       // be marking a regularity the athlete has not had time to have.
       Text(sleep?.medianBedtime.map { "Usually \($0)" } ?? "No usual bedtime yet")
-        .font(OnyxWidgetType.face(10, weight: .semibold))
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold) }
         .foregroundStyle(Color.onyx.textSecondary)
         .lineLimit(1).minimumScaleFactor(0.8)
     }

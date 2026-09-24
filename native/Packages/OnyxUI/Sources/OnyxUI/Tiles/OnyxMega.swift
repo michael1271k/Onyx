@@ -168,7 +168,7 @@ public struct MegaView: View {
       if let coach = s?.coach {
         Hairline()
         Text(coach)
-          .font(OnyxWidgetType.face(11))
+          .onyxWidgetFont { OnyxWidgetType.face(11 * $0) }
           .foregroundStyle(Color.onyx.textSecondary)
           .lineLimit(2)
           .minimumScaleFactor(0.85)
@@ -225,7 +225,7 @@ public struct MegaView: View {
         color: mono ? .white : Color.onyx.battery(s?.battery)
       )
       Text("BATTERY")
-        .font(OnyxWidgetType.face(7, weight: .bold)).tracking(0.8)
+        .onyxWidgetFont { OnyxWidgetType.face(7 * $0, weight: .bold) }.tracking(0.8)
         .foregroundStyle(Color.onyx.textSecondary)
     }
     // The CLEAR width inside the innermost ring: its outer diameter less a
@@ -261,17 +261,17 @@ public struct MegaView: View {
       HStack(spacing: 4) {
         Circle().fill(keyColor(ring)).frame(width: 6, height: 6)
         Text(ring.label)
-          .font(OnyxWidgetType.face(8, weight: .heavy)).tracking(1)
+          .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .heavy) }.tracking(1)
           .foregroundStyle(Color.onyx.textSecondary)
       }
       HStack(alignment: .firstTextBaseline, spacing: 3) {
         Text(value ?? "—")
-          .font(OnyxWidgetType.figure(15))
+          .onyxWidgetFont { OnyxWidgetType.figure(15 * $0) }
           .foregroundStyle(Color.onyx.textPrimary)
           .lineLimit(1).minimumScaleFactor(0.7)
         if let goal {
           Text("/ \(goal)")
-            .font(OnyxWidgetType.face(9))
+            .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
             .foregroundStyle(Color.onyx.textTertiary)
             .lineLimit(1)
         }

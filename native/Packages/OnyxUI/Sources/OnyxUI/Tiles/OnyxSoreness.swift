@@ -98,7 +98,7 @@ public struct SorenessView: View {
           VStack(alignment: .leading, spacing: 2) {
             BigValue(value: "\(ranked.count)", size: 26, color: Color.onyx.textPrimary)
             Text(ranked.count == 1 ? "region" : "regions")
-              .font(OnyxWidgetType.face(9))
+              .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
               .foregroundStyle(Color.onyx.textSecondary)
           }
         }
@@ -120,7 +120,7 @@ public struct SorenessView: View {
           ForEach(ranked.prefix(4)) { row($0) }
           if ranked.count > 4 {
             Text("+\(ranked.count - 4) more")
-              .font(OnyxWidgetType.face(9))
+              .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
               .foregroundStyle(Color.onyx.textTertiary)
           }
         }
@@ -172,17 +172,17 @@ public struct SorenessView: View {
   @ViewBuilder private var headline: some View {
     if regions == nil {
       Text("Nothing rated today.")
-        .font(OnyxWidgetType.face(10))
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }
         .foregroundStyle(Color.onyx.textSecondary)
         .lineLimit(1)
     } else if let worst = ranked.first {
       Text("\(worst.landmark) \(Self.word(worst.level).lowercased())")
-        .font(OnyxWidgetType.face(10, weight: .semibold))
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold) }
         .foregroundStyle(Color.onyx.textSecondary)
         .lineLimit(1).minimumScaleFactor(0.8)
     } else {
       Text("Nothing sore.")
-        .font(OnyxWidgetType.face(10, weight: .semibold))
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold) }
         .foregroundStyle(mono ? .white : Color.onyx.good)
         .lineLimit(1)
     }
@@ -200,12 +200,12 @@ public struct SorenessView: View {
         }
       }
       Text(region.landmark)
-        .font(OnyxWidgetType.face(11, weight: .semibold))
+        .onyxWidgetFont { OnyxWidgetType.face(11 * $0, weight: .semibold) }
         .foregroundStyle(Color.onyx.textPrimary)
         .lineLimit(1).minimumScaleFactor(0.8)
       Spacer(minLength: 0)
       Text(Self.word(region.level))
-        .font(OnyxWidgetType.face(9))
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
         .foregroundStyle(Color.onyx.textTertiary)
     }
     .accessibilityElement(children: .ignore)

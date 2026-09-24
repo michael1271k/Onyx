@@ -72,6 +72,11 @@ xcrun simctl bootstatus "$UDID" -b >/dev/null
 # ── The build ──────────────────────────────────────────────────────────────
 # Never `-sdk iphoneos`: it drags a watch AppIcon check into an iPhone-only
 # project and fails on an asset that does not exist.
+# `SHOT_SKIP_BUILD=1` reuses the app the LAST run installed — for shooting the
+# same build under a second and third `SHOT_THEME` without paying a rebuild
+# (and a cold first launch) per theme. Only after a run in this same session
+# built it: the installed app is otherwise whatever was there last.
+if [ -z "${SHOT_SKIP_BUILD:-}" ]; then
 echo "Building…"
 (cd "$ROOT/native" && xcodegen generate >/dev/null)
 # `SHOT_SIGN=1` signs ad hoc so the entitlements are EMBEDDED (W5). An
@@ -91,6 +96,7 @@ xcodebuild -project "$ROOT/native/Onyx.xcodeproj" \
 
 APP="$DERIVED/Build/Products/Debug-iphonesimulator/Onyx.app"
 xcrun simctl install "$UDID" "$APP"
+fi
 
 # ── THE WARM-UP LAUNCH, AND WHY IT IS NOT PARANOIA ─────────────────────────
 # The FIRST launch after an install is slower than every one after it — the
@@ -149,7 +155,9 @@ shoot() {
   # or, on the first launch after an install, a black window: 3.5 s was enough
   # on a warm 402 pt device and produced eight solid-black PNGs on a freshly
   # created one, which is a shot that reviews as "the screen is broken".
-  sleep 8
+  # `SHOT_WAIT` stretches it: with three lanes building at once (load 30–50)
+  # 8 s photographed a black window for half a run (overhaul Lane B).
+  sleep "${SHOT_WAIT:-8}"
   xcrun simctl io "$UDID" screenshot --type=png "$OUT/$screen$suffix.png" >/dev/null
   echo "  $OUT/$screen$suffix.png"
 }

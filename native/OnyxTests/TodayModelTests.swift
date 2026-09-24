@@ -60,12 +60,70 @@ struct TodayModelTests {
         }
     }
 
-    @Test("stagger is deterministic, inside the window, and spreads two ids")
+    @Test("the jiggle's stagger is deterministic, inside its window, and spreads two ids")
     func stagger() {
-        let a = SmartStackView.stagger("sl-sleep"), b = SmartStackView.stagger("sl-vitals")
-        #expect(a == SmartStackView.stagger("sl-sleep"))
-        #expect(a >= 0 && a < SmartStackView.staggerWindowMs)
+        let a = Jiggle.stagger("sl-sleep"), b = Jiggle.stagger("sl-vitals")
+        #expect(a == Jiggle.stagger("sl-sleep"))
+        #expect(a >= 0 && a < Jiggle.staggerWindowMs)
         #expect(a != b)
+    }
+
+    // MARK: - Overhaul B1: every stack its own phase (decision Q10)
+
+    /// The phase used to be a hash mod 7 s (the last 2 s of the 9 s period were
+    /// never used, and two ids could collide), and a linked stack dropped it.
+    @Test("stack phases are distinct, spread evenly over the whole period, and linked stacks keep theirs")
+    func phasesSpread() {
+        let slots = [
+            StackSlot(id: "a", size: .s, items: [.sleep, .vitals], linked: true),
+            StackSlot(id: "single", size: .s, items: [.steps]),
+            StackSlot(id: "b", size: .s, items: [.water, .steps], linked: true),
+            StackSlot(id: "c", size: .m, items: [.train, .daily]),
+        ]
+        let phases = SmartStackView.phases(slots)
+        // A single tile does not rotate and takes no share of the period.
+        #expect(phases["single"] == nil)
+        #expect(phases.count == 3)
+        let sorted = phases.values.sorted()
+        #expect(Set(sorted).count == 3, "every stack its own phase, linked or not")
+        // Evenly spread: the gaps between neighbours, INCLUDING the wrap back
+        // to the first, are all a third of the period.
+        let period = SmartStackView.period
+        let gaps = zip(sorted, sorted.dropFirst() + [sorted[0] + period]).map { $1 - $0 }
+        for gap in gaps { #expect(abs(gap - period / 3) < 1e-9) }
+        #expect(sorted.allSatisfy { $0 >= 0 && $0 < period })
+    }
+
+    @Test("two linked stacks turn over at different moments")
+    func linkedStacksHaveDistinctBeats() {
+        let slots = [
+            StackSlot(id: "sl-sleep", size: .s, items: [.sleep, .vitals], linked: true),
+            StackSlot(id: "sl-vitals", size: .s, items: [.water, .steps], linked: true),
+        ]
+        let phases = SmartStackView.phases(slots)
+        let now = Date(timeIntervalSince1970: 1_757_000_000)
+        let a = SmartStackView.untilNextBeat(now: now, phase: phases["sl-sleep"]!)
+        let b = SmartStackView.untilNextBeat(now: now, phase: phases["sl-vitals"]!)
+        // Two stacks sit half a period apart; the grace floor can pull one of
+        // them in, never both onto the same instant.
+        #expect(abs(a - b) >= SmartStackView.grace)
+    }
+
+    @Test("a touch anywhere on the grid holds the rotation for three seconds; a swipe's touch-up is not a tap")
+    func gridTouch() {
+        let touch = GridTouch()
+        let t0 = Date(timeIntervalSince1970: 1_757_000_000)
+        #expect(touch.quiet(t0))
+        touch.stamp(t0)
+        #expect(!touch.quiet(t0.addingTimeInterval(2.9)))
+        #expect(touch.quiet(t0.addingTimeInterval(3)))
+        #expect(!touch.isSwipe("a", t0))
+        touch.swipe("a", true, now: t0)
+        #expect(touch.isSwipe("a", t0.addingTimeInterval(5)), "a swipe in flight is never a tap")
+        #expect(!touch.isSwipe("b", t0), "a swipe on one stack never swallows a neighbour's tap")
+        touch.swipe("a", false, now: t0)
+        #expect(touch.isSwipe("a", t0.addingTimeInterval(0.2)))
+        #expect(!touch.isSwipe("a", t0.addingTimeInterval(0.5)))
     }
 
     // MARK: - W2: the rotation clock
@@ -75,45 +133,47 @@ struct TodayModelTests {
     /// is a clock and not a countdown.
     @Test("the beats are absolute: on the beat the wait is a full period, and a resume never waits more than one")
     func beats() {
-        let id = "sl-sleep"
-        let phase = TimeInterval(SmartStackView.stagger(id)) / 1000
+        let phase = 3.0
         // 9_000 is a multiple of the 9 s period, so this instant IS a beat. A
         // second past it the next one is 8 s away — which is the property: the
         // wait is read off a grid fixed to the epoch, not counted from whenever
         // this view happened to start.
         let onBeat = Date(timeIntervalSince1970: 9_000 + phase)
-        #expect(abs(SmartStackView.untilNextBeat(now: onBeat + 1, slotId: id) - 8) < 0.001)
-        #expect(abs(SmartStackView.untilNextBeat(now: onBeat + 4.5, slotId: id) - 4.5) < 0.001)
+        #expect(abs(SmartStackView.untilNextBeat(now: onBeat + 1, phase: phase) - 8) < 0.001)
+        #expect(abs(SmartStackView.untilNextBeat(now: onBeat + 4.5, phase: phase) - 4.5) < 0.001)
 
         // The 40-minute-in-the-background case: the beat is already due, and the
         // tile must not flip in the blink the grid came back in.
         let overdue = onBeat.addingTimeInterval(-0.1)
-        #expect(SmartStackView.untilNextBeat(now: overdue, slotId: id) == SmartStackView.grace)
+        #expect(SmartStackView.untilNextBeat(now: overdue, phase: phase) == SmartStackView.grace)
 
         // Whenever the user comes back, the next face is at most a period away —
         // which is the whole of D3. Through the epoch too: `truncatingRemainder`
         // takes the sign of the dividend, so a date before 1970 used to return
         // up to twice a period.
         for step in stride(from: -9_020.0, to: 60.0, by: 0.37) {
-            let wait = SmartStackView.untilNextBeat(now: onBeat.addingTimeInterval(step), slotId: id)
+            let wait = SmartStackView.untilNextBeat(now: onBeat.addingTimeInterval(step), phase: phase)
             #expect(wait > 0 && wait <= SmartStackView.period)
         }
     }
 
-    @Test("a drag is the stack's only when it is far enough AND more vertical than sideways")
+    /// Overhaul B1: the stack pages SIDEWAYS, orthogonal to the page scroll.
+    /// The 30 pt vertical drag is the founder's "scrolling opens a tile" —
+    /// it is never the stack's, so it stays the page's scroll, which cancels
+    /// the tile's button.
+    @Test("a drag is the stack's only when it is far enough AND more sideways than vertical")
     func takesTheDrag() {
         // Under the threshold, whatever the axis.
-        #expect(!SmartStackView.takes(CGSize(width: 0, height: 9)))
-        // Over it, and vertical.
-        #expect(SmartStackView.takes(CGSize(width: 0, height: -12)))
-        // The diagonal a thumb draws still pages: 30 down, 10 across.
-        #expect(SmartStackView.takes(CGSize(width: 10, height: 30)))
-        // Mostly sideways does not, however long it is — `minimumDistance`
-        // measures the VECTOR, so this drag reaches the gesture and has to be
-        // refused here or the grid's scroll latches off for nothing.
-        #expect(!SmartStackView.takes(CGSize(width: 60, height: 40)))
+        #expect(!SmartStackView.takes(CGSize(width: 9, height: 0)))
+        // Over it, and sideways.
+        #expect(SmartStackView.takes(CGSize(width: -12, height: 0)))
+        // The diagonal a thumb draws still pages: 30 across, 10 down.
+        #expect(SmartStackView.takes(CGSize(width: 30, height: 10)))
+        // A vertical drag is the page's, however long it is.
+        #expect(!SmartStackView.takes(CGSize(width: 0, height: 30)))
+        #expect(!SmartStackView.takes(CGSize(width: 40, height: 60)))
         // Exactly on the axis ratio is not enough (strictly greater).
-        #expect(!SmartStackView.takes(CGSize(width: 20, height: 30)))
+        #expect(!SmartStackView.takes(CGSize(width: 30, height: 20)))
     }
 
     @Test("the swipe commits on the throw, or on a drag that went far enough and stopped")
@@ -172,13 +232,13 @@ struct TodayModelTests {
         #expect(model.visibleSlots.map(\.items) == [[.water], [.sleep]])
     }
 
-    /// Two stacks stay out of step with each other — the reason `stagger` exists
+    /// Two stacks stay out of step with each other — the reason phases exist
     /// at all. A countdown restarted on resume loses this; a clock cannot.
     @Test("two slots resuming at the same instant land on different beats")
     func beatsStaySpread() {
         let now = Date(timeIntervalSince1970: 1_757_000_000)
-        let a = SmartStackView.untilNextBeat(now: now, slotId: "sl-sleep")
-        let b = SmartStackView.untilNextBeat(now: now, slotId: "sl-vitals")
+        let a = SmartStackView.untilNextBeat(now: now, phase: 0)
+        let b = SmartStackView.untilNextBeat(now: now, phase: 4.5)
         #expect(abs(a - b) > 0.5)
     }
 
@@ -274,7 +334,6 @@ struct TodayModelTests {
         model.move("sl-sleep", to: "sl-water")
         model.stack("sl-vitals", onto: "sl-sleep")
         model.add(.steps)
-        model.setLinked("sl-sleep", true)
 
         #expect(model.layout == before)
         // The outbox is the half that reaches the other devices, and it is the
@@ -338,26 +397,6 @@ struct TodayModelTests {
 
     // MARK: - W7: connected stacks (A9)
 
-    /// `linked` is the founder's "connected stacks share one window". Every face
-    /// of a slot already gets ONE entry from the grid, so the only thing that is
-    /// genuinely per-slot — and therefore the only thing a connection can share
-    /// — is the rotation phase.
-    @Test("a connected stack drops its phase, so every connected stack beats together")
-    func linkedStacksShareTheBeat() {
-        let now = Date(timeIntervalSince1970: 1_757_000_000)
-        let a = SmartStackView.untilNextBeat(now: now, slotId: "sl-sleep", linked: true)
-        let b = SmartStackView.untilNextBeat(now: now, slotId: "sl-vitals", linked: true)
-        #expect(a == b)
-        // Unconnected is untouched: the two are still spread.
-        #expect(abs(SmartStackView.untilNextBeat(now: now, slotId: "sl-sleep")
-                    - SmartStackView.untilNextBeat(now: now, slotId: "sl-vitals")) > 0.5)
-        // And the one invariant `untilNextBeat` has survives the new argument.
-        for step in stride(from: -9_020.0, to: 60.0, by: 0.37) {
-            let wait = SmartStackView.untilNextBeat(now: now.addingTimeInterval(step), slotId: "sl-sleep", linked: true)
-            #expect(wait > 0 && wait <= SmartStackView.period)
-        }
-    }
-
     /// The flag survives the projection, or a stack the web stored with a
     /// web-only face would silently disconnect on the phone.
     @Test("projecting a slot keeps its connection")
@@ -382,12 +421,12 @@ struct TodayModelTests {
         for id in ["sl-sleep", "sl-vitals", "sl-water", "sl-steps", "sl-daily"] {
             let window = Int(TileFrame<EmptyView>.beat(id) * 1000)
             #expect(window > 0)
-            #expect(SmartStackView.stagger(id) % window < window)
+            #expect(Jiggle.stagger(id) % window < window)
         }
         // Two tiles do not start together, which is the whole point of the
         // offset — if they did the grid would march in step.
         let window = Int(TileFrame<EmptyView>.beat * 1000)
-        #expect(SmartStackView.stagger("sl-sleep") % window != SmartStackView.stagger("sl-vitals") % window)
+        #expect(Jiggle.stagger("sl-sleep") % window != Jiggle.stagger("sl-vitals") % window)
     }
 
     /// The per-tile RATE, which is what stops the grid re-synchronising: a

@@ -108,6 +108,28 @@ struct WidgetSnapshotBuilderTests {
         #expect(families.contains { $0.family == .shoulders && $0.sets == 1 }, "the tile agrees: \(families)")
     }
 
+    /// Overhaul B2: the Fuel faces' key micros are summed from the day's rows
+    /// the way `NutritionModel.nutrients` sums them.
+    @Test("key-micro totals sum fibre and every row's micros bundle")
+    func microTotals() {
+        let at = Date(timeIntervalSince1970: 1_757_000_000)
+        func row(_ id: String, fiber: Double?, micros: String?) -> NutritionEntryRow {
+            NutritionEntryRow(
+                id: id, userId: "u", loggedAt: at, date: today, calories: 500, proteinG: 30,
+                carbsG: 50, fatG: 10, fiberG: fiber, createdAt: at, micros: micros.map { JSONText(raw: $0) }
+            )
+        }
+        let totals = WidgetSnapshotBuilder.microTotals([
+            row("a", fiber: 8, micros: #"{"potassium": 900, "sodium": 1200}"#),
+            row("b", fiber: nil, micros: #"{"potassium": 494}"#),
+            row("c", fiber: 4, micros: "not json"),
+        ])
+        #expect(totals["potassium"] == 1394)
+        #expect(totals["sodium"] == 1200)
+        #expect(totals["fiber"] == 12)
+        #expect(KeyMicro.top(totals: totals).first?.key == "potassium")
+    }
+
     @Test("the full scope carries the route's headline numbers")
     func fullScope() throws {
         let s = try build(try seeded(), .full)
