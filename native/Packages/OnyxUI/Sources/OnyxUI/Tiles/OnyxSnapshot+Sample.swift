@@ -429,7 +429,9 @@ public extension OnyxSnapshot {
       // records, 412 kcal and a mean of 118. The last two are the readings
       // `workout_sessions` has carried since W2 and no face had ever drawn.
       today: Today(durationMin: 68, sessionRpe: 8, volumeKg: 5840, setCount: 21, prCount: 2,
-                   caloriesKcal: 412, avgBpm: 118),
+                   caloriesKcal: 412, avgBpm: 118,
+                   // Up through the compounds, down through the isolation work.
+                   hrSpark: [104, 121, 132, 128, 119, 108]),
       streak: s.streak, context: s.context, cardio: s.cardio,
       calendar: s.calendar, volumeTrend: s.volumeTrend, body: s.body, scores: s.scores,
       readiness: s.readiness, vitals: s.vitals,

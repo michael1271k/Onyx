@@ -195,6 +195,15 @@ struct TodayFace: View {
         // Core B", plus six stats. The masthead measures itself and never
         // truncates the name.
         todayMasthead(s, done, accent: accent)
+        // ── THE MEDIUM'S BAND IS THE HEART RATE (overhaul W5.3) ──────────
+        // The masthead left an empty band where six stats used to be. The
+        // session's six-point spark fills it, in the fixed heart red — the
+        // same line the watch banner and the summary header draw.
+        if !compact, done.spark.count > 1 {
+          Sparkline(points: done.spark, color: mono ? .white : OnyxInk.Fixed.heart)
+            .frame(height: 24)
+            .accessibilityHidden(true)
+        }
         Spacer(minLength: 0)
       } else {
         planned

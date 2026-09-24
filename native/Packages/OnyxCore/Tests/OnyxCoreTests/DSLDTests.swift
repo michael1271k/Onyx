@@ -126,4 +126,27 @@ struct DSLDTests {
         #expect(page.hits.map(\.id) == ["1"])
         #expect(page.total == 2)
     }
+
+    /// Overhaul W5.3 (Lane C open call 2): a label's micros are per ONE unit
+    /// of a count serving. Switching the dose to a mass unit before saving
+    /// RESCALES them to the serving's total — a mass dose credits ×1, so the
+    /// per-cap figure would have under-counted a 2-cap serving by half.
+    @Test("micros are re-based when the dose unit changes before saving")
+    func microsFollowTheSavedUnit() {
+        let twoCaps = DSLD.Prefill(name: "Mag", form: .capsule, doseAmount: 2, doseUnit: .cap,
+                                   micros: ["magnesium": 100, "zinc": 7.5], otherIngredients: [])
+        // Unchanged count unit: per unit, as the label import stored it.
+        #expect(DSLD.micros(twoCaps, amount: 2, unit: .cap) == ["magnesium": 100, "zinc": 7.5])
+        #expect(DSLD.micros(twoCaps, amount: 3, unit: .tab) == ["magnesium": 100, "zinc": 7.5])
+        // Count → mass: the serving's total, credited once.
+        #expect(DSLD.micros(twoCaps, amount: 400, unit: .mg) == ["magnesium": 200, "zinc": 15])
+        // Mass → count: the serving's total split over the units typed.
+        let massServing = DSLD.Prefill(name: "Mag", form: .powder, doseAmount: 5, doseUnit: .g,
+                                       micros: ["magnesium": 200], otherIngredients: [])
+        #expect(DSLD.micros(massServing, amount: 2, unit: .scoop) == ["magnesium": 100])
+        #expect(DSLD.micros(massServing, amount: 5, unit: .g) == ["magnesium": 200])
+        // No micros, nothing to move.
+        let bare = DSLD.Prefill(name: "X", form: nil, doseAmount: nil, doseUnit: nil, micros: [:], otherIngredients: [])
+        #expect(DSLD.micros(bare, amount: 1, unit: .mg).isEmpty)
+    }
 }

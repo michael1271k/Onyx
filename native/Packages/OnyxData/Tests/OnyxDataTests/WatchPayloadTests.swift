@@ -447,4 +447,16 @@ struct WatchPayloadTests {
         row.avgBpm = 131
         #expect(SessionMasthead(session: row, name: "Legs A", samples: samples)?.avgBpm == 131)
     }
+
+    /// Overhaul W5.2 — the phone's Start launches a CLOSED watch app, and only
+    /// that: a reachable app already follows the messaged open, and a watch
+    /// without the app (or no watch) has nothing to launch.
+    @Test("startWatchApp only for a paired watch with the app installed that is not reachable")
+    func watchLaunchDecision() {
+        #expect(WatchLaunch.shouldStartWatchApp(paired: true, installed: true, reachable: false))
+        #expect(!WatchLaunch.shouldStartWatchApp(paired: true, installed: true, reachable: true))
+        #expect(!WatchLaunch.shouldStartWatchApp(paired: true, installed: false, reachable: false))
+        #expect(!WatchLaunch.shouldStartWatchApp(paired: false, installed: false, reachable: false))
+        #expect(!WatchLaunch.shouldStartWatchApp(paired: false, installed: true, reachable: false))
+    }
 }

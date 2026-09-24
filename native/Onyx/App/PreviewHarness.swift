@@ -557,6 +557,8 @@ enum PreviewHarness {
              "telemetry-finish", "telemetry-detail", "hevy-card",
              // Overhaul C1: the inline HR strip over a seeded cache row.
              "session-hr",
+             // Overhaul W5: the replay's share files, with heart rate.
+             "session-share",
              // W3: the mid-session add.
              "logger-add":
             LoggerPreviews.view(screen)
@@ -592,6 +594,8 @@ enum PreviewHarness {
             TodayPreviews.view(screen)
         case "history", "history-week", "history-week-live", "history-week-wrapped",
              "history-week-wrap-open", "session", "session-ledger", "exercise-history",
+             // Overhaul W5: the share files with no heart rate (tonnage bar).
+             "session-share-bars",
              // W2 (refinement): the ledger header's row 2, swapped.
              "session-ledger-assists",
              "session-atlas", "session-edit", "logger-edit", "session-records",

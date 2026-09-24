@@ -99,3 +99,16 @@ public enum WatchWire {
         }
     }
 }
+
+/// Whether the phone's Start should launch the watch app (overhaul W5.2,
+/// founder decision 2026-09-24). Outside the WatchConnectivity fence so
+/// `swift test` holds it.
+///
+/// Only a CLOSED app: a reachable one already follows the messaged open in a
+/// second, and `HKHealthStore.startWatchApp` on a watch without the app (or
+/// with no watch) has nothing to launch.
+public enum WatchLaunch {
+    public static func shouldStartWatchApp(paired: Bool, installed: Bool, reachable: Bool) -> Bool {
+        paired && installed && !reachable
+    }
+}

@@ -105,6 +105,11 @@ struct SessionDetailView: View {
     /// Row 2's series and the names its movements are drawn under.
     @State private var heart: SessionTelemetry.Reading?
     @State private var heartNames: [String: String] = [:]
+    /// The heart-rate read has answered (with or without a series) — the
+    /// replay waits for it so it plays ONE track, not the bar then the trace.
+    @State private var heartLoaded = false
+    /// Row 0's set clocks, `exerciseId|setIndex` → first commit (overhaul W5).
+    @State private var replayClocks: [String: Date]?
 
     /// One long-pressed trophy, frozen at the moment of the press.
     struct PrTarget: Identifiable {
@@ -135,6 +140,8 @@ struct SessionDetailView: View {
         ScrollView {
             VStack(spacing: OnyxSpace.m) {
                 if let page {
+                    // 0 · the replay (overhaul W5) — ten seconds, once
+                    replay(page)
                     // 1 · which session, and what it weighed
                     masthead(page)
                     // 2 · the heart rate, inline — nothing when there is none
@@ -264,6 +271,9 @@ struct SessionDetailView: View {
                 SessionAnalysis.page(database: database, sessionId: id)
             }.value
             missing = page == nil
+            replayClocks = await Task.detached(priority: .userInitiated) {
+                SessionReplay.Input.clocks(database: database, sessionId: id)
+            }.value
             if first, let session = page?.report.session {
                 // Once, on the first load: a cascade re-running the task must
                 // not bring back a line whose figures were adopted on this very
@@ -312,6 +322,7 @@ struct SessionDetailView: View {
             }.value
         }
         heart = next
+        heartLoaded = true
     }
 
     /// Harness only: present the sheet for the first record the page holds.
@@ -579,6 +590,26 @@ struct SessionDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .sessionDayWash(session.dayKey)
             .onyxGlass(.tile)
+    }
+
+    // MARK: - 0 · The replay
+
+    /// Row 0 — the session played back in ten seconds (overhaul W5). Absent
+    /// for a session with no movements: there is nothing to replay.
+    @ViewBuilder
+    private func replay(_ page: SessionAnalysis.Page) -> some View {
+        if !page.report.exercises.isEmpty {
+            let label = SessionAnalysis.dayLabel(page.report.session.dayKey, in: page.program) ?? "Session"
+            ReplayCard(
+                timeline: SessionReplay.timeline(.session(
+                    page, label: label, samples: heart?.samples ?? [], clocks: replayClocks ?? [:]
+                )),
+                dayInk: Color.onyx.day(page.report.session.dayKey),
+                sessionId: sessionId,
+                day: LogicalDay.date(fromISO: page.report.session.date) ?? Date(),
+                ready: heartLoaded && replayClocks != nil
+            )
+        }
     }
 
     // MARK: - 3 · The exercise grid

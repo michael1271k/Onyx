@@ -35,7 +35,14 @@ struct PulseSessionCard: View {
         Button(action: onOpen) {
             Group {
                 if let header, header.id == session.id {
-                    SessionHeaderCard(header: header, totals: totals)
+                    // The shared face (Lane C request, overhaul W5.3): the
+                    // same masthead the Train tab's done card and the page draw.
+                    SessionHeaderCard(header: header, totals: totals, masthead: SessionMasthead(
+                        name: header.label,
+                        durationSec: Int(((session.durationMin ?? 0) * 60).rounded()),
+                        tonnageKg: session.tonnageKg, avgBpm: nil, prCount: header.prCount,
+                        hrSpark: header.hrSpark, startedAt: Date()
+                    ))
                 } else {
                     placeholder
                 }

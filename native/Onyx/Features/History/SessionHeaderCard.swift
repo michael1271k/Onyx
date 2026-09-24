@@ -29,6 +29,9 @@ struct SessionHeader: Identifiable, Sendable, Equatable {
     let stamp: String
     /// What the session was FOR, biggest share of the work first.
     let muscles: [LandmarkMuscle]
+    /// The six-point heart-rate spark off the telemetry cache (overhaul
+    /// W5.3) — empty until the finish prefetch has filled it.
+    var hrSpark: [Double] = []
 }
 
 extension SessionHeader {
@@ -114,6 +117,12 @@ struct SessionHeaderCard: View {
     private func faced(_ masthead: SessionMasthead) -> some View {
         VStack(alignment: .leading, spacing: OnyxSpace.s) {
             OnyxMasthead(masthead, accent: Color.onyx.day(header.dayKey))
+            // The watch banner's line, under the same face (Lane A request).
+            if masthead.hrSpark.count > 1 {
+                Sparkline(points: masthead.hrSpark, color: OnyxInk.Fixed.heart)
+                    .frame(height: 22)
+                    .accessibilityHidden(true)
+            }
             planTags
             muscleRow
         }

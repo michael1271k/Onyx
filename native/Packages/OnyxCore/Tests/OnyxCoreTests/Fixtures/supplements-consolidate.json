@@ -100,6 +100,30 @@
         "07:00 · B — 1",
         "07:00 · A — 2"
       ]
+    },
+    {
+      "name": "a label import's unmapped ingredients close the line; blanks and an empty list print nothing",
+      "input": {
+        "protocol": [
+          {
+            "time": "07:00",
+            "name": "Thorne Basic Nutrients 2/Day",
+            "dose": "2 caps",
+            "notes": "with breakfast",
+            "otherIngredients": ["Rhodiola rosea extract", "  ", " Black pepper extract "]
+          },
+          {
+            "time": "08:00",
+            "name": "Creatine",
+            "dose": "5 g",
+            "otherIngredients": []
+          }
+        ]
+      },
+      "expected": [
+        "07:00 · Thorne Basic Nutrients 2/Day — 2 caps · with breakfast · also Rhodiola rosea extract, Black pepper extract",
+        "08:00 · Creatine — 5 g"
+      ]
     }
   ]
 }

@@ -66,6 +66,15 @@ enum LoggerPreviews {
             NavigationStack { SessionDetailView(sessionId: sessionId) }
                 .environment(LoggerPreviews.environment(over: closed.store))
                 .preferredColorScheme(.dark)
+        // ── OVERHAUL W5: the replay's share files, over the same HR fixture ──
+        case "session-share":
+            let closed = LoggerModel.previewTelemetry(closed: true)
+            let _ = PreviewCatalogue.seed(closed.store)
+            let sessionId = closed.model.sessionId ?? ""
+            let _ = seedHeartRate(closed.store, sessionId: sessionId)
+            ReplayShareHarness(sessionId: sessionId)
+                .environment(LoggerPreviews.environment(over: closed.store))
+                .preferredColorScheme(.dark)
         case "set-row":
             // The ROW, in every state it has — because the states are the
             // design and a card of four identical unlogged rows photographs

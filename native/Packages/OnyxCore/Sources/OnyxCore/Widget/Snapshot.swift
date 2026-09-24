@@ -401,7 +401,14 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
     /// reason duration and RPE are: the mean of two means is a number that
     /// describes neither bout.
     public let avgBpm: Int?
-    public init(durationMin: Int? = nil, sessionRpe: Double? = nil, volumeKg: Double? = nil, setCount: Int? = nil, prCount: Int? = nil, caloriesKcal: Double? = nil, avgBpm: Int? = nil) {
+    /// The longest session's six-point heart-rate spark
+    /// (`SessionMasthead.spark`), for the finished Medium's band (overhaul
+    /// W5.3). Optional ON THE WIRE — a payload written before it existed
+    /// carries no key, and only an Optional tolerates that under synthesised
+    /// `Codable`; faces read `spark`, which is never nil.
+    public let hrSpark: [Double]?
+    public var spark: [Double] { hrSpark ?? [] }
+    public init(durationMin: Int? = nil, sessionRpe: Double? = nil, volumeKg: Double? = nil, setCount: Int? = nil, prCount: Int? = nil, caloriesKcal: Double? = nil, avgBpm: Int? = nil, hrSpark: [Double] = []) {
       self.durationMin = durationMin
       self.sessionRpe = sessionRpe
       self.volumeKg = volumeKg
@@ -409,6 +416,7 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
       self.prCount = prCount
       self.caloriesKcal = caloriesKcal
       self.avgBpm = avgBpm
+      self.hrSpark = hrSpark.isEmpty ? nil : hrSpark
     }
   }
 

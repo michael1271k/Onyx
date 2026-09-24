@@ -1653,6 +1653,8 @@ public struct WeeklyExportBuilder: Sendable {
                 "time": j(c.time), "key": c.schedule?.key ?? c.id, "name": c.name, "dose": c.dose,
                 "trainingDose": j(c.schedule?.trainingDose), "restDose": j(c.schedule?.restDose),
                 "trainingOnly": j(c.schedule?.trainingOnly), "notes": j(c.schedule?.notes),
+                // A label import's unmapped ingredients (overhaul W5.3).
+                "otherIngredients": j(c.otherIngredients?.isEmpty == false ? c.otherIngredients : nil),
             ]
         }
     }

@@ -1,4 +1,22 @@
+import HealthKit
 import SwiftUI
+import WatchKit
+
+/// Owns the app's one `WatchModel`, and receives the phone's
+/// `HKHealthStore.startWatchApp` launch (overhaul W5.2).
+///
+/// ── THE DELEGATE OWNS THE MODEL, NOT THE ROOT VIEW ──────────────────────────
+/// A `startWatchApp` launch can land in the BACKGROUND, where the root view's
+/// `.task` may never run — so a model handed over from there could arrive too
+/// late or never (review). Owned here, it exists before `handle(_:)` is called.
+@MainActor
+final class WatchAppDelegate: NSObject, WKApplicationDelegate {
+    let model = WatchModel()
+
+    func handle(_ workoutConfiguration: HKWorkoutConfiguration) {
+        model.handleWorkoutLaunch()
+    }
+}
 
 /// The Watch logging client.
 ///
@@ -20,9 +38,12 @@ import SwiftUI
 @main
 struct OnyxWatchApp: App {
 
-    /// One model for the whole app, created here so it outlives every view.
-    /// `@State` rather than `@StateObject` — `WatchModel` is `@Observable`.
-    @State private var model = WatchModel()
+    /// Owns the one model for the whole app (so it outlives every view, and
+    /// exists for a background `startWatchApp` launch — W5.2).
+    @WKApplicationDelegateAdaptor private var delegate: WatchAppDelegate
+    /// `WatchModel` is `@Observable`; reading it through the delegate is
+    /// tracked the same way `@State` was.
+    private var model: WatchModel { delegate.model }
 
     var body: some Scene {
         WindowGroup {
@@ -161,14 +182,14 @@ struct OnyxWatchApp: App {
                             // input is a face whose truncation nobody has
                             // reviewed.
                             model.seedDebugSets(3)
-                        case .banner, .join:
+                        case .banner, .join, .replay:
                             // ── THE PHONE'S LIFECYCLE, SEEDED (overhaul A1) ─
                             // The same context every dashboard shot gets,
                             // with a finished or a live session on it — what
                             // `pushLifecycle` sends. Page one then draws the
                             // banner, or Start turned into Join, through
                             // `frontDoor` exactly as a real push would.
-                            model.seedDebugContext(session: WatchModel.debugLifecycle(screen == .banner ? .finished : .open))
+                            model.seedDebugContext(session: WatchModel.debugLifecycle(screen == .join ? .open : .finished))
                         case .restday:
                             // The same seed with today unscheduled — see
                             // `seedDebugContext(restDay:)`. It falls through to

@@ -625,7 +625,10 @@ struct SupplementEditSheet: View {
                 name: cleanName, dose: dose, doseAmount: amount, doseUnit: unit.rawValue,
                 time: cleanTime, days: days.sorted(),
                 color: nil, form: form?.rawValue, notes: nil, trainingOnly: trainingOnly,
-                micros: prefill?.micros, otherIngredients: prefill?.otherIngredients
+                // Re-based to the unit actually saved (W5.3): a count→mass
+                // switch credits the label's whole serving, not one cap of it.
+                micros: prefill.map { DSLD.micros($0, amount: amount, unit: unit) },
+                otherIngredients: prefill?.otherIngredients
             )
         }
         if landed { dismiss() }

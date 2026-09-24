@@ -65,6 +65,8 @@ screen_env() {
     # W2, which is why nobody had looked at it.
     restday) echo "ONYX_WATCH_SCREEN=restday" ;;
     banner)  echo "ONYX_WATCH_SCREEN=banner" ;;
+    # Overhaul W5: the banner tapped — the replay sheet over it.
+    replay)  echo "ONYX_WATCH_SCREEN=replay" ;;
     join)    echo "ONYX_WATCH_SCREEN=join" ;;
     glance)  echo "ONYX_WATCH_SCREEN=glance" ;;
     pulse)   echo "ONYX_WATCH_SCREEN=pulse" ;;
@@ -208,7 +210,7 @@ shoot() {
 
   case "$env" in
     UNKNOWN)
-      echo "  unknown screen '$screen' — known: start restday banner join glance pulse nophone set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget" >&2; return 1 ;;
+      echo "  unknown screen '$screen' — known: start restday banner replay join glance pulse nophone set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget" >&2; return 1 ;;
     NOT_REACHABLE)
       echo "  '$screen' has no launch hook yet: it is presented by navigation" >&2
       echo "  inside a live session. Add a case to WatchModel.DebugScreen and a" >&2

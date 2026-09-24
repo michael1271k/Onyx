@@ -188,6 +188,30 @@ public enum DSLD {
         }
     }
 
+    /// The label's micros, re-based to the dose the sheet actually SAVES
+    /// (overhaul W5.3 — Lane C open call 2: RESCALE, never clear).
+    ///
+    /// `prefill.micros` are per ONE unit when the label's serving is a count
+    /// (`SupplementNutrients.doseUnits` multiplies them back), and the
+    /// serving's total when it is a mass (credited ×1). A dose switched
+    /// between the two before saving would otherwise under- or over-count by
+    /// the serving's unit count. The W5 rule still holds: a mass dose does not
+    /// MOVE the totals — it credits the label's serving, once, whatever mass
+    /// is typed.
+    ///   · count → count: per unit, unchanged;
+    ///   · anything → mass: the serving's total;
+    ///   · mass → count: the serving's total over the units typed.
+    public static func micros(_ prefill: Prefill, amount: Double?, unit: DoseUnit?) -> [String: Double] {
+        let wasCount = prefill.doseUnit?.isCount == true
+        let isCount = unit?.isCount == true
+        if wasCount && isCount { return prefill.micros }
+        let servingUnits = wasCount ? max(prefill.doseAmount ?? 1, 1) : 1
+        let total = prefill.micros.mapValues { $0 * servingUnits }
+        guard isCount else { return total.mapValues(round4) }
+        let units = max(amount ?? 1, 1)
+        return total.mapValues { round4($0 / units) }
+    }
+
     /// The label as the sheet fills it.
     public static func prefill(_ label: Label) -> Prefill {
         let serving = label.servingSizes.first

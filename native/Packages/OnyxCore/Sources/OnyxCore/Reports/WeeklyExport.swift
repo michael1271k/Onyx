@@ -2042,6 +2042,8 @@ public enum WeeklyExport {
         public var restDose: String?
         public var trainingOnly: Bool
         public var notes: String?
+        /// Unmapped label ingredients, trimmed; nil when there are none.
+        public var otherIngredients: [String]? = nil
     }
 
     /// Deduped by NAME, ordered by the scheduled time — the order the day
@@ -2066,7 +2068,11 @@ public enum WeeklyExport {
                 trainingDose: trimmed(s.trainingDose),
                 restDose: trimmed(s.restDose),
                 trainingOnly: s.trainingOnly == true,
-                notes: trimmed(s.notes)
+                notes: trimmed(s.notes),
+                otherIngredients: {
+                    let names = (s.otherIngredients ?? []).compactMap(trimmed)
+                    return names.isEmpty ? nil : names
+                }()
             )
         }
         return order.map { byName[$0]! }.enumerated()
@@ -2090,6 +2096,7 @@ public enum WeeklyExport {
             var parts = ["\(s.time) · \(s.name) — \(dose)"]
             if s.trainingOnly { parts.append("(training days only)") }
             if let notes = s.notes { parts.append("· \(notes)") }
+            if let other = s.otherIngredients { parts.append("· also \(other.joined(separator: ", "))") }
             return parts.joined(separator: " ")
         }
     }
