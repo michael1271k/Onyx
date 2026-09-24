@@ -44,6 +44,56 @@ _Nothing yet._
 
 ---
 
+## [8.5.0] — 2026-09-25 · Replay the session, share it, and the phone wakes the watch
+
+W5 of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record
+"W5").
+
+### iPhone app
+- **Session Replay.** The summary opens with a ten-second replay: the heart-rate
+  trace draws itself, sets drop onto it as dots, records flash gold, the
+  masthead counts up. Plays once, tap to replay; Reduce Motion jumps to the
+  final frame. A session without heart rate replays as a growing tonnage bar.
+- **Share it.** One tap shares a 1080×1080 PNG, a 1080×1920 Stories PNG and a
+  ten-second 1080×1920 video — deep radial of the theme colour over
+  near-black, the data card at 72 % width inside the Stories safe zones, the
+  Onyx mark bottom-centre. Nothing is stored.
+- **Start on the phone wakes a closed watch app** (`startWatchApp`) when the
+  watch has Onyx installed and is not reachable, so the watch adopts the
+  session without you touching it. Needs a real watch to prove.
+- The Pulse workout card uses the shared masthead; the masthead on the summary
+  and on Train carries the same six-point heart-rate line the watch shows.
+- Imported supplements: switching a label's dose from a count to a mass before
+  saving credits the full serving once instead of one capsule's worth.
+
+### Apple Watch app
+- Tap today's banner for a three-second replay of the session.
+
+### Home Screen widgets
+- The Medium finished-workout widget's empty band is the six-point heart-rate
+  line.
+
+### Weekly export
+- Unmapped label ingredients appear in the JSON and AI export on the
+  supplement line. The Markdown golden is unchanged (it has had no supplement
+  section since v5).
+
+### Changed
+- `OnyxInk.Fixed.effortHard` / `.effortVeryHard` named tokens replace the
+  blended RPE band colours.
+- `WidgetSnapshot` finished-session payload gains `hrSpark` (additive).
+
+### Notes
+- Share frames are laid out at 360×640 pt and rendered at 3× (1080×1920 px);
+  the frost on the share card is painted, since `ImageRenderer` draws no blur.
+- Record flashes count record types, matching the masthead's PR count.
+- Open: a supplement section in the Markdown export; a hero number on the
+  share frame; a phone-only session replays on the watch as the trace alone;
+  the share video renders on every share (2.7–4 s on the simulator).
+- OnyxTests: the same baseline names, none new.
+
+---
+
 ## [8.4.0] — 2026-09-24 · The watch knows the workout is over
 
 Lane A of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record
