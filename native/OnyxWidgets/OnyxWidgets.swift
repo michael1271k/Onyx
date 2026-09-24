@@ -194,117 +194,27 @@ struct OnyxWorkoutActivityWidget: Widget {
             // `Expanded` and fails with "generic parameter 'Expanded' could not
             // be inferred" — an error that names none of the actual code.
             DynamicIsland {
-                // ── WHY ALMOST EVERYTHING IS IN `.bottom` ───────────────────
-                // The expanded presentation has four regions and they are NOT
-                // equal. `.leading` and `.trailing` are the narrow columns
-                // either side of the camera and `.center` is the sliver BETWEEN
-                // them — the narrowest of the three. Only `.bottom` spans the
-                // full width. So the flanks hold only what is genuinely short,
-                // and every fact that has a length lives where it can breathe.
-                DynamicIslandExpandedRegion(.leading) {
-                    HStack(spacing: 5) {
-                        // ── THE MARK, NOT THE NAME ──────────────────────────
-                        // This slot used to read `● ONYX`, which was a dot
-                        // that said nothing beside a wordmark for an app that
-                        // no longer has that name. `OnyxMark` is both at once:
-                        // the ring is the brand AND, tinted with the split's
-                        // colour, it is the same coloured token every other
-                        // surface uses to say which session is running.
-                        //
-                        // ── AND THE WORDMARK GAVE ITS SPACE TO THE CLOCK ────
-                        // Top-left now reads TOTAL WORKOUT TIME. It used to
-                        // read `ONYX` beside a ring that already says so, while
-                        // the only clock on the surface was in the opposite
-                        // corner and switched between two different durations.
-                        OnyxMark(size: 12, tint: Color.onyx.day(context.state.dayKey), opacity: 1)
-                        WorkoutElapsed(
-                            state: context.state, startedAt: context.attributes.startedAt
-                        )
-                    }
-                }
-                DynamicIslandExpandedRegion(.trailing) {
-                    // ── THIS WAS `9/22`, AND `WorkoutTotals` SAYS IT AGAIN ──
-                    // Twelve points below this slot, in the bottom region, in
-                    // the same colour: "9/22 sets". A number printed twice on
-                    // a surface this small is a number that has stopped being
-                    // read. The muscle tag takes the slot instead — it is the
-                    // fact the island did not carry, it is what the Lock
-                    // Screen's own header pairs with the session, and the
-                    // bottom region's rows have no width to spare for it.
-                    WorkoutMuscleTag(token: context.state.primaryMuscle)
-                        .frame(maxWidth: 110, alignment: .trailing)
-                }
+                // ── THE MASTHEAD, AND NOTHING NARROW (overhaul B3, C8) ──────
+                // The expanded island is `WorkoutIslandExpanded` in the one
+                // region that spans the width; the camera-flanking columns are
+                // left empty rather than filled with a second, narrower copy
+                // of the same facts.
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        WorkoutTotals(state: context.state)
-                        // The chart that used to sit in the trailing column
-                        // is gone (`WorkoutActivityCard` says why), and the
-                        // set takes the whole width: the exercise name is the
-                        // longest string on this region and it was sharing a
-                        // 76 pt column boundary with a monotonic line.
-                        WorkoutCurrentSet(state: context.state)
-                        // ── `LAST TIME` LEFT WITH `prev` ────────────────────
-                        // Same call, same reason: the founder's, and the row it
-                        // occupied is what the rest controls now stand in. The
-                        // previous load is still on the wire and still drawn by
-                        // `WorkoutCurrentSet` while resting, which is the moment
-                        // it is a decision rather than a table.
-                        //
-                        // Only while the clock is running: controls with nothing
-                        // to control are dead chrome on a surface that has no
-                        // room for any.
-                        // `total:` — the same denominator fix the Lock Screen
-                        // takes. This region draws the same `WorkoutRestBand`,
-                        // so without it the island's bar snapped back toward
-                        // full on every redraw while the card's drained.
-                        if let countdown = restCountdown(
-                            context.state.restEndsAt, total: context.state.restTotalSec
-                        ) {
-                            // No Skip here. Four 34 pt controls plus a bar do
-                            // not fit this region's width, and the phone in the
-                            // hand that just opened the island has the same
-                            // button on the card below.
-                            WorkoutRestBand(
-                                countdown: countdown, state: context.state, showsSkip: false
-                            )
-                        }
-                    }
-                    // ── THE CLIPPED BOTTOM CORNER ───────────────────────────
-                    // The expanded region draws to its own edge and the system
-                    // rounds that edge, so a 34 pt capsule sitting flush at the
-                    // bottom lost its lower corners to the mask. Two points of
-                    // inset is the whole fix; the region has the height.
-                    .padding(.bottom, 2)
+                    WorkoutIslandExpanded(
+                        title: context.attributes.title,
+                        startedAt: context.attributes.startedAt,
+                        state: context.state
+                    )
                 }
             } compactLeading: {
-                // The one place the brand is visible while the phone is in a
-                // pocket-to-hand glance, and it costs nothing a filled dot did
-                // not already cost.
-                OnyxMark(size: 14, tint: Color.onyx.day(context.state.dayKey), opacity: 1)
+                // Exact duration, monospaced — and only that.
+                WorkoutClock(state: context.state, startedAt: context.attributes.startedAt)
             } compactTrailing: {
-                // Whichever number is the answer RIGHT NOW: the rest clock
-                // while resting, the bout's clock on a treadmill, the wrist's
-                // heart rate under the bar, the load with no watch speaking.
-                // Two facts competing for one ~44 pt slot is how the compact
-                // region becomes unreadable, so the branches are ordered and
-                // exactly one draws.
-                //
-                // ── AND IT LIVES IN `Shared/` (W4) ──────────────────────────
-                // It was written out here, and `WidgetPreviews.islandCompact`
-                // — the only thing that PHOTOGRAPHS this slot — carried a
-                // copy of three of its four branches. Adding the heart rate
-                // to this one left the copy behind, so the contact sheet
-                // reviewed a stand-in that no longer matched. One view, both
-                // callers; see `WorkoutCompactTrailing`.
+                // Heart glyph + bpm in the fixed heart red — and only that.
                 WorkoutCompactTrailing(state: context.state)
             } minimal: {
-                // One glyph for the whole activity, so it says what is
-                // happening and not what the app is: resting, walking, or
-                // lifting. A bout under a barbell was the one reading of the
-                // three that was simply untrue.
-                Image(systemName: minimalGlyph(context.state))
-                    .font(OnyxWidgetType.label(12, weight: .bold))
-                    .foregroundStyle(Color.onyx.day(context.state.dayKey))
+                // One slot: the heart and its number.
+                WorkoutCompactTrailing(state: context.state)
             }
             .keylineTint(Color.onyx.day(context.state.dayKey))
         }
@@ -314,21 +224,6 @@ struct OnyxWorkoutActivityWidget: Widget {
         .supplementalActivityFamilies([.small])
     }
 
-    /// The minimal presentation's one glyph, in the order the states shadow
-    /// each other: resting beats walking beats lifting, because a rest clock is
-    /// running on top of whichever of the other two you are between.
-    ///
-    /// Lifted out rather than left a nested ternary in the `minimal` closure:
-    /// the third case is what pushed it past one, and a view builder is the one
-    /// place a mis-parenthesised ternary reports as an unrelated type error.
-    private func minimalGlyph(_ state: OnyxWorkoutAttributes.ContentState) -> String {
-        if state.restEndsAt != nil { return "timer" }
-        // `figure.run` is the symbol the app already draws a bout with — the
-        // Quick Log spoke, the session ledger's cardio card and the Workout
-        // tab all pick it. See `WorkoutTabView`.
-        if state.cardioElapsedSec != nil || state.cardioDistanceKm != nil { return "figure.run" }
-        return "figure.strengthtraining.traditional"
-    }
 }
 
 // MARK: - Lock Screen

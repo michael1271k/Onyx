@@ -122,7 +122,14 @@ public struct OnyxSnapshot: Codable, Sendable, Equatable {
     public let fatGoalG: Double?
     /// Seven days of intake, oldest first. Lifestyle scope.
     public let kcalTrend: [Point]?
-    public init(kcal: Double? = nil, kcalGoal: Double? = nil, proteinG: Double? = nil, proteinGoalG: Double? = nil, carbsG: Double? = nil, carbsGoalG: Double? = nil, fatG: Double? = nil, fatGoalG: Double? = nil, kcalTrend: [Point]? = nil) {
+    /// The day's micronutrients furthest from target, furthest first
+    /// (`KeyMicro.top`, overhaul B2). Optional ON THE WIRE so a payload written
+    /// before it decodes — synthesized `Codable` only tolerates a missing key
+    /// for an Optional — and read through `micros`, which is never nil.
+    public let keyMicros: [KeyMicro]?
+    public var micros: [KeyMicro] { keyMicros ?? [] }
+    public init(kcal: Double? = nil, kcalGoal: Double? = nil, proteinG: Double? = nil, proteinGoalG: Double? = nil, carbsG: Double? = nil, carbsGoalG: Double? = nil, fatG: Double? = nil, fatGoalG: Double? = nil, kcalTrend: [Point]? = nil, keyMicros: [KeyMicro]? = nil) {
+      self.keyMicros = keyMicros
       self.kcal = kcal
       self.kcalGoal = kcalGoal
       self.proteinG = proteinG

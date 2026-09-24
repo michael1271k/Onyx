@@ -491,3 +491,64 @@ Files removed: `native/Onyx/Features/Shell/GymModeSetting.swift`, `native/Packag
 7. `WatchContext.session` has no sender yet (Lane A). The watch still saves `next.theme ?? .default` — `.default` is now Slate.
 8. `AppearanceView` prose still describes nine presets / a 3×3 grid in comments — Lane B's rewrite.
 9. Commit trailer: this wave's commits carry the session's `Claude Opus 5.5` co-author line (the builder's model), not the `Fable 5.1` line the brief named.
+
+---
+
+## Wave record — Lane B
+
+Branch `onyx/wB-faces` (Opus 5.5, worktree `.claude/worktrees/agent-a8181a9aa97a3fb7a`) on `c55173ff` (8.1.0). Commits: `e7b9dadc` B1, `780a0127` B2, `66b71013` B3 masthead/island/Stone, `4c49e027` B3 Appearance, `dfc29469` review fixes, `ae81ea3a` island contact sheet, plus this record. Version NOT bumped (merger takes 8.2.0); CHANGELOG untouched.
+
+**Path corrections.** `TileFrame` is in `Features/Today/`, not `OnyxUI/Dashboard/`. `WidgetSnapshotBuilder` is in **OnyxData/Widget**, not OnyxCore — the selection rule went in `OnyxCore/Widget/KeyMicro.swift` (owned) and the builder took one additive call + `microTotals` (no lane owns OnyxData/Widget; recorded here because the brief tasks the builder).
+
+### B1 — Touch truth (Q9, Q10)
+- `TileFrame`: `Button` + `OnyxPressStyle(scale: 0.97, highlight: true)` (new `highlight` option = +6 % brightness while pressed). The ScrollView's pan now cancels the tap. `.contextMenu` and the edit badges unchanged.
+- `\.onyxInApp` (`@Entry`, default false) + `FaceLink`: all eight widget-face `Link` sites render plain content in the app. Set once at `TodayTabView`'s root so its sheets inherit it (the only in-app host of widget faces; Pulse draws none).
+- `SmartStackView` pages **sideways** (`|dx| ≥ 10 && |dx| > 1.5·|dy|`) with tappable page dots in the bottom gutter; the `paging` latch and `scrollDisabled` are gone. `SmartStackView.phases(_:)` spreads the rotating stacks **evenly over the full 9 s** in layout order — distinct by construction; `linked` no longer touches the beat. `GridTouch` (TodayModel, `@MainActor`): no stack advances within **3 s** of any grid touch (scroll phase, tile tap, stack swipe/dots); a stack swipe's touch-up never opens that stack's sheet (per-slot guard).
+- The **Connected** toggle in Edit Stack is removed — its only effect was the shared beat Q10 abolished. `StackSlot.linked` stays on the wire; `Dashboard.version` stays 4.
+- Tests (`TodayModelTests`): `phasesSpread`, `linkedStacksHaveDistinctBeats`, `gridTouch`, `takesTheDrag` rewritten for the horizontal axis (a 30 pt vertical drag is never the stack's). W7's `linkedStacksShareTheBeat` deleted (superseded by Q10).
+- **UI-level check** (no XCUITest target exists): on the booted sim, a 30 pt vertical drag over the Recovery tile scrolled and presented nothing; a tap on the same point opened the Recovery sheet — two screenshots reviewed.
+
+### B2 — Sleep, vitals, water, food (Q6, Q7, Q8; W0 open calls 3, 4, 5)
+- **Sleep:** `DepthArc` restored in `SleepArcFace`/`SleepDepthFace`/`SleepLargeFace` (the `e6a48f2b` layouts) and in Pulse `SleepHeroCell` (arc 96×56 beside the Dynamic Type duration; `DepthArc(showsLabel:)` keeps its bowl empty there). `DepthStrip`, `StageKey`, `SleepStripAxis`, `DepthBar` deleted (no callers). One stage rule: `OnyxCore.SleepStage.segments` (depth order; nil absent, zero kept) used by tiles, Pulse and `SleepEditSheet` — the three spellings disagreed (deep-core-REM vs deep-REM-core). Legends use text tokens; `sleepDeep` is fill only.
+- **Vitals:** `VitalSparkFace` is the Vitals (`.panel`) tile: 2 / 3 / 5 readings by size in `VitalSpec.ranked` order, each a 7-night sparkline laid on the calendar with today's dot, themed ink, value + unit. `Sparkline(gapped: [Double?])` lifts the pen over a missed night; the `[Double]` init forwards.
+- **Water:** `PitcherFigure` (rounded trapezoid, spout, handle, level clip, 2 pt meniscus) in fixed `Color.onyx.water` on all three water faces; `+250 ml` button unchanged. `GlassArc` view deleted; its arithmetic kept as `Glasses`.
+- **Food:** `OnyxSnapshot.Macros.keyMicros: [KeyMicro]?` (Optional on the wire — synthesized Codable only tolerates a missing key for an Optional; faces read non-optional `micros`). `KeyMicro.top` excludes the Macros group, stack-delivered nutrients (the widget sums food only) and unmeasured ones; deviation = shortfall on a floor, overage on a ceiling. Fuel Medium shows 2, Fuel Large and Macros Large 3, as compact rails in `Color.onyx.micro`. Layout goldens NOT regenerated (no WidgetId changed).
+- **Inks (open calls 3, 4):** `Color.onyx.calories` on the Fuel Small/Medium/Large and Macros Large headline registers, the Daily fuel quadrant, the Deficit Ledger, the fuel accessory, and `NutritionTabView`'s estimated-day dot; the water accessory reads `Color.onyx.water` (it was `fuel.accent`); `NutrientsView` short-of-floor ink is `Color.onyx.micro`.
+- **Dynamic Type in-app:** every `.font(OnyxWidgetType.x(size))` in `Tiles/` (220 sites) became `.onyxWidgetFont { … size * $0 }`, scaled by `\.onyxFaceScale` — 1 on the Home Screen, `@ScaledMetric(relativeTo: .body)` clamped to **1.0…1.2** in `TodayTabView` (a tile is a fixed shape).
+- Tests: `OverhaulFacesTests` (stage order, key-micro selection incl. surplus-on-a-floor, old-payload decode + round trip), `W6FigureTests` (pitcher level, gapped runs, vitals calendar week), `WidgetSnapshotBuilderTests.microTotals`.
+
+### B3 — Masthead, Stone, Appearance (Q17; concepts 1, 7, 8; C1, C8; W0 open call 8)
+- **`OnyxMasthead`** (`OnyxUI/Tiles/OnyxMasthead.swift`, public, cross-platform): name (accent bar, `lineLimit(2)`, never truncated) · clock · tonnage · heart (`OnyxInk.Fixed.heart`) · PR trophies (`record`). `ViewThatFits`: one row → 2×2 → 2×2 caption tier that shrinks. `init(_ SessionMasthead, accent:)` for Lanes A/C; `Clock` = `.elapsed / .running / .frozen`.
+- Consumers: Today widget Small/Medium/Large finished state (`todayMasthead`, capped at xLarge) — the `DONE` caption, `TodayStats` and the Small's "68′ · 5.8 t" line are gone; the Daily quadrant's name wraps to 2 lines with "✓ 5.8 t"; the Fuel ledger's "Label ✓" became a check glyph + label.
+- **Live Activity:** Lock Screen card opens with the masthead (live clock, running tonnage, current bpm, PRs). **Dynamic Island** compact leading = `WorkoutClock` (elapsed, monospaced), compact trailing = `WorkoutCompactTrailing` (heart + bpm in heart red, "—" with no watch), minimal = heart + bpm, expanded = `WorkoutIslandExpanded` (masthead + rest band only while resting) in the bottom region. `minimalGlyph` deleted. The rest countdown no longer shows in the compact island, by design (C8).
+- **Stone:** `.onyxGlass` = `.thinMaterial` + `Color.onyx.slab` (#0B0B0E) at `slabTint` 0.78, a 1 px lit top edge fading to 0.04, **no drop shadows** at any level; `OnyxCorner` row/tile/sheet = **12 / 20 / 28**; Reduce Transparency draws the slab solid. No call site changed.
+- **Appearance:** fixed 2×4 in preset order; swatch = slab with the accent as a diagonal seam of light, selected = accent ring + check; name under the swatch (capped at xxLarge); live preview of the DRAFT (tile, chip, protein rail, pitcher) in a clear Form row; still locked in a session, still commits on leave; stale nine-preset/3×3 comments and footer rewritten.
+
+### Shots reviewed (round 1 → one batch of fixes → round 2, per sub-wave)
+- **B1** (today, today-stack-linked, today-sheet, today-edit; Slate/Clay/Iris; default + AX5): dots horizontal in the bottom gutter. Found "RECOVE / RY" wrapping on the Recovery Medium → `Caption` is `lineLimit(1)` + 0.7 scale everywhere. Round 2 clean.
+- **B2** (today-mega, today-sheet, today-sheet-vitals, day-hero, sleep-edit, fuel, nutrients + 30 widget pages): **half of the first run was solid black frames** (load 30–50 with three lanes building) → `SHOT_WAIT` added to `native-shot.sh`; re-shot at 14–16 s with no black frames. Found: the corner mark sat on "7 nights" and "avg 2.7 L" (→ `faceInset`), the vitals Large drew 0.5 % SpO₂ noise as full-height waves (→ capped at 36 pt), the Macros Large had an empty band (→ key micros), the spout read as a stick (→ reshaped).
+- **B3** (appearance, appearance-locked, today, today-sheet-vitals, fuel, train, session, logger, logger-timer; 3 themes; + widgets incl. activity/island): Stone slabs read as near-black with a lit edge on every tab. The preview strip was a card inside a Form card (→ clear row), AX5 names sat on eight baselines and truncated "Rose…" (→ capped), and the island contact sheet still drew the pre-B3 arrangement (→ it calls the shipped views). Round 2 (Iris) clean.
+- Contrast: text over the slab uses the same tokens over ≥ 78 % #0B0B0E, so `textSecondary` stays > 4.5:1. `sleepDeep` is never text.
+- PNGs deleted after each round.
+
+### Gates
+- App + widget extension build (iPhone 15 sim) green after every commit.
+- `swift:core` 737/737; `swift:data` 773/773 (the known `SeamBenchmarkTests` flake failed once earlier and passed on re-run).
+- **OnyxTests** on `B5C31206…`: 205 tests (203 + 3 new − 1 deleted). Failing names are exactly the 9-name baseline: `HistoryWeeksTests.weekZero`, `.capsulesFoldByWeek`; `LiveStatsFixtureTests.fixtureFeedsTheArrows`; `SessionSummaryHotfixTests.incredibleDurationYieldsNoDelta`, `.credibleDurationStillCompares`, `.treadmillIsNamed`, `.noPreviousSetsInTheLedger`; `WorkoutWeekTests.finishFeedsTheTab`, `.progressionNeedsTwoSessions`. OnyxDataTests on the sim also failed the same Keychain blob and seam-benchmark pair W0 recorded. **No new names.**
+- `code-reviewer` on the whole diff: 0 high, 2 medium (key-micro surplus on a floor; the masthead's last tier could not shrink), 5 low. All are fixed in `dfc29469` except "rest countdown left the compact island", which is the C8 decision.
+- `npm run check`: **green** — version, types, body, atlas, mirror (up to date), doms, report, `swift:ui` 48/48 (incl. the new figure tests), `check:watch` BUILD SUCCEEDED.
+- `graphify update .` run; `graphify-out/` left uncommitted.
+
+### Requests for other lanes
+1. **Lane C — `SessionHeaderCard`:** drop in `OnyxMasthead(masthead, accent: Color.onyx.day(dayKey))`, or the memberwise init with `.elapsed(seconds:)`. It wraps the name and shrinks the figures itself — do not add `lineLimit(1)`.
+2. **Lane A — watch banner:** `OnyxMasthead` is cross-platform (no `OnyxWidgetType`); feed it `SessionLifecycle.summary`. `OnyxCorner.row` is now 12, and watch rows inherit it. `OnyxAccessory`'s rectangular "done" sub is still a word; Lane A owns the complication redesign.
+3. **Lanes A/C — Stone:** anything that draws its own `.shadow` under an `.onyxGlass` card to fake depth should drop it; the slab has none.
+4. **Merger:** `native-shot.sh` gained `SHOT_SKIP_BUILD` and `SHOT_WAIT`. The Stone radii (tile 16 → 20) change the corners in every screenshot, as expected.
+
+### Open calls
+1. **Nutrition inks do NOT react to cut/bulk/deload (W0 open call 2).** They stay as W0 shipped them: the trio must stay recognisable, and the phase already moves every themed accent. To change it, read `spec` instead of the default hexes in `OnyxTheme.init`.
+2. The Today widget's finished **Medium** has an empty band under the masthead (it used to hold six stats). Options: session RPE + calories as a caption row, or the 6-point HR spark once the snapshot carries it (`OnyxSnapshot.Today` has no HR series; it would be an additive field for W5).
+3. The Live Activity masthead drops "9/22 sets", which was in `WorkoutTotals`. The set line below still says "Set 3 of 4". It could return as a fifth figure.
+4. `onyxFaceScale` is capped at 1.2×. Larger in-app type needs taller tiles, which is a layout-golden change.
+5. The Stone slab tint (0.78) is a judgement between "frosted" (C1) and "onyx". It is one constant, `Color.onyx.slabTint`.
+6. The project `.claude/CLAUDE.md` end-of-wave protocol (merge, purge caches) was NOT run: the lane brief forbids merging, and the caches are shared with lanes A/C.

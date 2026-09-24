@@ -3,52 +3,30 @@ import OnyxCore
 import OnyxData
 import OnyxUI
 
-/// Nine themes, each shown as the palette it actually becomes.
+/// Eight Stone themes in a fixed 2 × 4, with a live preview of the draft above
+/// them (overhaul B3, decision Q17).
 ///
 /// ── WHY THIS IS A SCREEN AND NOT A SECTION ──────────────────────────────────
-/// The chips were meant to sit inline on the Settings hub. They cannot. A theme
-/// write changes `@AppStorage(OnyxTheme.key)`, `OnyxApp`'s `.id` hangs off that
-/// value, and re-identifying the root throws away the entire view tree — the
-/// `NavigationStack`'s path and the `TabView`'s selection with it. Inline,
-/// tapping a preset would apply the theme AND throw the user out of Settings in
-/// the same tap, which reads as a crash rather than as a choice.
-///
+/// A theme write changes `@AppStorage(OnyxTheme.key)`, `OnyxApp`'s `.id` hangs
+/// off that value, and re-identifying the root throws away the entire view
+/// tree — the `NavigationStack`'s path and the `TabView`'s selection with it.
 /// Every tap therefore edits a DRAFT, and the draft is committed once, on the
-/// way out — the shape `OnyxNumberField` already uses for a number, and the one
-/// moment when throwing the tree away costs nothing, because this screen is
-/// being torn down anyway.
-///
-/// ── WHAT W2 TOOK OFF THIS SCREEN, AND WHY ───────────────────────────────────
-/// Two `ColorPicker`s, two mood sliders, a four-capsule preview of the derived
-/// ramps and a "Reset to Ion" button. All five were ways of describing a
-/// palette; the grid below IS the palette. Each swatch is a live mesh of the
-/// four domain accents the theme resolves to, so what used to be a preview
-/// under the controls is now the control.
-///
-/// The pickers went for a second reason: an arbitrary pair of hues is a theme
-/// nothing was measured against. The nine in `OnyxTheme.presets` are solved
-/// inside the contrast guard and spread ≥ 35° apart on the hue circle; a
-/// hand-picked pair is neither, and the hue band the contrast sweep found
-/// (114°–160° of primary rotation) was reachable only through a picker. With
-/// them gone, the palette is always one of nine known-good ones — and
-/// `Color.onyxHex`, `OnyxTheme.picked` and `OnyxTheme.swatch`, which existed
-/// only to serve a picker, went with them.
+/// way out: the one moment throwing the tree away costs nothing, because this
+/// screen is being torn down anyway. The preview strip is how the draft is
+/// SEEN before that moment — it draws `OnyxTheme(spec: draft)` directly, not
+/// `OnyxTheme.current`.
 ///
 /// ── AND WHY IT REFUSES TO WRITE DURING A WORKOUT ────────────────────────────
 /// The same rebuild takes `WorkoutTabView`'s live `LoggerModel` with it
-/// (`AppEnvironment.isSessionLive`). No set would be lost — they are in the
-/// event log the moment they are logged — but the clock, the rest timer and the
-/// deck cursor would be, mid-session. The section says so and refuses.
+/// (`AppEnvironment.isSessionLive`): the clock, the rest timer and the deck
+/// cursor would go mid-session. The section says so and refuses.
 struct AppearanceView: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.scenePhase) private var scenePhase
 
-    /// What the grid edits. Seeded from the live theme, never written back to
-    /// it until `commit` — see the note above.
-    ///
-    /// `base` and not `spec`: `current.spec` carries the training block's mood
-    /// offset, and seeding from it would light no chip during a cut and then
-    /// commit the shifted spec back over the user's pick.
+    /// What the grid edits. Seeded from the live theme's PICK (`base`, not
+    /// `spec`, which carries the training block's mood offset), never written
+    /// back to it until `commit`.
     @State private var draft = OnyxTheme.current.base
 
     private var locked: Bool { environment.isSessionLive }
@@ -56,12 +34,17 @@ struct AppearanceView: View {
     var body: some View {
         Form {
             Section {
+                AppearancePreview(theme: OnyxTheme(spec: draft))
+                    // The preview IS a slab; the Form row must not draw a
+                    // second card around it (B3 shot).
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+            }
+            Section {
                 presets
             } header: {
-                // Only when it is locked. An "Appearance" header under an
-                // "Appearance" title is the same word twice, and at AX5 it was
-                // the largest thing on the screen — a heading that repeats the
-                // title is not a heading, it is an obstacle to the controls.
+                // Only when it is locked — an "Appearance" header under an
+                // "Appearance" title is the same word twice.
                 if locked {
                     HStack(spacing: OnyxSpace.xs) {
                         Image(systemName: "lock.fill")
@@ -78,150 +61,74 @@ struct AppearanceView: View {
         .navigationTitle("Appearance")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear(perform: commit)
-        // iOS never calls `onDisappear` on a process it jettisons, so a pick
-        // made and then backgrounded would be lost without this. `commit` is
+        // iOS never calls `onDisappear` on a process it jettisons; `commit` is
         // guarded and idempotent, so the two paths cannot double-write.
         .onChange(of: scenePhase) { _, phase in if phase != .active { commit() } }
     }
 
     // MARK: - The grid
 
-    /// Three fixed columns, nine themes, three rows.
+    /// Two fixed rows of four, in `OnyxTheme.presets` order: Slate · Lagoon ·
+    /// Sage · Iris, then Clay · Ochre · Moss · Rosewood.
     ///
-    /// FIXED and not `.adaptive`: the grid is a 3 × 3 and reads as one, and an
-    /// adaptive minimum would reflow it to 2 × 5 at the first Dynamic Type step
-    /// that made a name wide — which turns a square of swatches into a list and
-    /// loses the one thing the layout is for. The names are carried by
-    /// `minimumScaleFactor` instead: nine names, the longest "Verdigris", and
-    /// shrinking one by a third at AX5 is a legible name where truncating it to
-    /// "Verdigr…" is a theme picker that has stopped naming its themes.
+    /// FIXED and not `.adaptive`: an adaptive minimum reflows the grid to a
+    /// list at the first Dynamic Type step that makes a name wide. Names carry
+    /// `minimumScaleFactor(0.5)` instead ("Rosewood" in a ~76 pt column at AX5),
+    /// and every chip is TOP-aligned so names scaled by different factors do
+    /// not put their swatches at different heights (a W2 AX5 trap).
     ///
     /// Selection is DERIVED — `draft == preset.spec` — so exactly one chip is
-    /// lit and there is no tenth "Custom" state to maintain.
-    ///
-    /// ── LOCKED, THE CHIPS KEEP THEIR INK ────────────────────────────────────
-    /// `.disabled` on the section desaturated the swatches, and a grey swatch
-    /// is a broken control rather than an unavailable one — it also takes away
-    /// the one question a locked Appearance screen can still answer, which is
-    /// which theme is on. So the grid stops taking touches and keeps its
-    /// colour, and the header above says why.
+    /// lit. Locked, the grid stops taking touches but keeps its colour: a grey
+    /// swatch reads as broken, and a locked screen still answers "which theme".
     private var presets: some View {
         LazyVGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: OnyxSpace.s), count: 3),
+            columns: Array(repeating: GridItem(.flexible(), spacing: OnyxSpace.s), count: 4),
             spacing: OnyxSpace.m
         ) {
             ForEach(OnyxTheme.presets.indices, id: \.self) { index in
                 let preset = OnyxTheme.presets[index]
                 Button { draft = preset.spec } label: { chip(preset) }
-                    .buttonStyle(.plain)
+                    .buttonStyle(OnyxPressStyle(scale: 0.95))
                     .accessibilityLabel(preset.name)
-                    .accessibilityValue(preset.spec.moodWord)
                     .accessibilityAddTraits(draft == preset.spec ? [.isButton, .isSelected] : .isButton)
             }
         }
         .padding(.vertical, OnyxSpace.xs)
         .allowsHitTesting(!locked)
-        // `allowsHitTesting` stops a finger, not the rotor: without this a
-        // locked screen would still let VoiceOver activate a chip and move the
-        // selection ring to a theme that is never written — the one thing a
-        // locked Appearance screen has to get right.
+        // `allowsHitTesting` stops a finger, not the rotor.
         .accessibilityRespondsToUserInteraction(!locked)
     }
 
-    /// One preset: its palette, its name, its mood.
-    ///
-    /// ── THE TWO THINGS A FIXED 3-UP GRID GETS WRONG AT AX5, AND THE FIXES ───
-    /// `minimumScaleFactor` is 0.5 and not 0.6, because "Nocturne" at the
-    /// largest accessibility size in a 110 pt column needs 0.55 and the first
-    /// shot of this screen came out reading "Noctur…".
-    ///
-    /// And the chip is TOP-aligned in its cell. A `LazyVGrid` row is as tall as
-    /// its tallest cell and centres the others in it, so three names that
-    /// scaled by three different factors put their three swatches at three
-    /// different heights — a grid of squares that photographed as a staircase.
     private func chip(_ preset: (name: String, spec: OnyxThemeSpec)) -> some View {
         let selected = draft == preset.spec
         return VStack(spacing: OnyxSpace.xs) {
-            swatch(OnyxTheme(spec: preset.spec), selected: selected)
+            StoneSwatch(accent: OnyxTheme(spec: preset.spec).ramp(.train).start, selected: selected)
             Text(preset.name)
                 .onyxType(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(Color.onyx.textPrimary)
+                .fontWeight(selected ? .bold : .semibold)
+                .foregroundStyle(selected ? Color.onyx.textPrimary : Color.onyx.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-            // What the chroma/lift column comes to, in one word. The two
-            // sliders said the same thing in two numbers nobody could read as
-            // a colour; `OnyxThemeSpec.moodWord` derives this from those exact
-            // numbers, so the label cannot drift from the mood it names.
-            Text(preset.spec.moodWord)
-                .onyxType(.micro)
-                .foregroundStyle(Color.onyx.textSecondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
+                // Capped: eight names in ~76 pt columns scaled by eight
+                // different factors at AX5 sat on eight baselines and
+                // truncated "Rose…" (B3 shot). The swatch carries the choice;
+                // VoiceOver reads the full name.
+                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .contentShape(Rectangle())
-    }
-
-    /// The palette itself: a 2 × 2 mesh of the four domain accents this theme
-    /// resolves to, drawn from `OnyxTheme(spec:)` rather than from `current`.
-    ///
-    /// ── WHY THE FOUR DOMAINS AND NOT THE TWO CHOSEN HUES ────────────────────
-    /// The old chip drew a hard 50/50 split of the primary and the secondary,
-    /// which is the two hexes a picker edited — and with the picker gone, those
-    /// two are no longer what a theme IS. Train and Fuel are the picks; Body
-    /// and Recover are derived and carry the whole of the mood knob, so a
-    /// swatch without them shows the half of a theme that never moves. Four
-    /// corners, one per `OnyxDomain`, in `allCases` order.
-    ///
-    /// Each corner is the domain's ACCENT — `ramp(_:).start`, which is what
-    /// `OnyxDomain.accent` is — and not a point along the ramp: the two-stop
-    /// ramp exists for gradients, and a midpoint of Solar is the muddy salmon
-    /// `OnyxDomain.accent` already refuses to draw. The mesh does the blending.
-    ///
-    /// The tick sits INSIDE the swatch so the grid does not reflow when the
-    /// selection moves, and it is `base` — true black — because black on any
-    /// colour the contrast guard allows is at least 4.77:1, measured across the
-    /// hue circle at both clamp edges.
-    private func swatch(_ theme: OnyxTheme, selected: Bool) -> some View {
-        let corners = OnyxDomain.allCases.map { theme.ramp($0).start }
-        return MeshGradient(
-            width: 2,
-            height: 2,
-            points: [.init(0, 0), .init(1, 0), .init(0, 1), .init(1, 1)],
-            colors: corners
-        )
-        .aspectRatio(1, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: OnyxCorner.row, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: OnyxCorner.row, style: .continuous)
-                .strokeBorder(
-                    selected ? Color.onyx.textPrimary : Color.onyx.hairline,
-                    lineWidth: selected ? 2 : 0.5
-                )
-        }
-        .overlay {
-            if selected {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Color.onyx.base)
-            }
-        }
     }
 
     // MARK: - Copy
 
     private var footer: String {
         let what = """
-            Each swatch is the theme's own four accents — training, nutrition, \
-            body and recovery — blended. Picking one moves the app's accents \
-            and, a little, its nutrition colours; water, heart rate, sleep and \
-            the sixteen muscles keep their own colours in every theme. The word \
-            under each name is its mood: how saturated and how light the \
-            derived colours sit. A cut, a bulk or a deload week then shifts \
-            that mood on its own, and shifts back when the block ends; the two \
-            accents at the top of each swatch never move. Widgets and the watch \
-            follow on their next refresh.
+            The swatch is the theme's accent, drawn as the seam of light in \
+            the stone. It moves the app's accents and, a little, its nutrition \
+            colours; water, heart rate, sleep and the sixteen muscles keep \
+            their own colours in every theme. A cut, a bulk or a deload week \
+            shifts the mood on its own and shifts back when the block ends. \
+            Widgets and the watch follow on their next refresh.
             """
         guard locked else { return what }
         return what + "\n\n" + """
@@ -233,19 +140,103 @@ struct AppearanceView: View {
 
     // MARK: - The one write
 
-    /// Persist the draft, then tell the two processes that do not share this
-    /// one's memory.
-    ///
-    /// `save` normalises, so what lands may not be exactly what was picked —
-    /// which is why nothing here reads the draft back afterwards: the view is
-    /// already on its way out and the next appearance seeds from `current`.
+    /// Persist the draft, then tell the widget and watch processes.
     private func commit() {
         // `normalised()` on BOTH sides: `current.base` is always normalised, so
-        // comparing a raw draft against it says "changed" for any pick the
-        // contrast guard moved — and then spends a widget reload and a watch
-        // push writing a blob that is byte-identical to the one already there.
+        // a raw draft would read as "changed" for any pick the guard moved.
         guard !locked, draft.normalised() != OnyxTheme.current.base else { return }
         OnyxTheme.save(draft, to: AppDatabase.appGroupDefaults())
         environment.themeDidChange()
+    }
+}
+
+/// One theme as a slab of stone with its accent as a diagonal seam of light —
+/// the app icon's own image, not a four-colour mesh (B3). The selected slab
+/// wears a ring in the accent and a check in text ink.
+private struct StoneSwatch: View {
+    let accent: Color
+    let selected: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: OnyxCorner.row, style: .continuous)
+        ZStack {
+            shape.fill(Color.onyx.slab)
+            // The seam: a thin diagonal band, lower-left to upper-right, lit
+            // at its core and fading at both edges.
+            GeometryReader { geo in
+                let w = geo.size.width
+                Rectangle()
+                    .fill(LinearGradient(
+                        colors: [accent.opacity(0), accent, Color.white.opacity(0.85), accent, accent.opacity(0)],
+                        startPoint: .leading, endPoint: .trailing
+                    ))
+                    .frame(width: w * 0.14, height: w * 1.6)
+                    .rotationEffect(.degrees(45))
+                    .position(x: w / 2, y: geo.size.height / 2)
+                    .blur(radius: 0.6)
+            }
+            .clipShape(shape)
+            if selected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.onyx.textPrimary)
+                    .padding(4)
+                    .background(Circle().fill(Color.onyx.slab))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(4)
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .overlay {
+            shape.strokeBorder(selected ? accent : Color.white.opacity(0.10), lineWidth: selected ? 2 : 1)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// The draft, drawn: a tile, a chip, a macro rail and the water pitcher —
+/// three themed inks and one fixed, so the choice is seen against the colour
+/// that does not move.
+private struct AppearancePreview: View {
+    let theme: OnyxTheme
+
+    private var accent: Color { theme.ramp(.train).start }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: OnyxSpace.m) {
+            VStack(alignment: .leading, spacing: OnyxSpace.s) {
+                HStack(spacing: OnyxSpace.xs) {
+                    Circle().fill(accent).frame(width: 6, height: 6)
+                    Text("TRAINING").onyxType(.micro, tracking: 0.12).foregroundStyle(accent)
+                }
+                Text("12.4 t")
+                    .onyxType(.display).onyxNumeral()
+                    .foregroundStyle(Color.onyx.textPrimary)
+                Text("Delts & Arms")
+                    .onyxType(.caption).fontWeight(.semibold)
+                    .foregroundStyle(accent)
+                    .padding(.horizontal, OnyxSpace.s).padding(.vertical, 3)
+                    .background(Capsule().fill(accent.opacity(0.16)))
+                HStack(spacing: OnyxSpace.xs) {
+                    Text("P").onyxType(.micro).fontWeight(.bold).foregroundStyle(theme.proteinInk)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.onyx.hairline)
+                            Capsule().fill(theme.proteinInk).frame(width: geo.size.width * 0.72)
+                        }
+                    }
+                    .frame(height: 4)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            PitcherFigure(ml: 1900, goalMl: 3000)
+                .frame(width: 56, height: 70)
+        }
+        .padding(OnyxSpace.m)
+        .onyxGlass(.tile)
+        // A picture of a tile: tiles cap their type, so the picture does too.
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Preview of the selected theme")
     }
 }

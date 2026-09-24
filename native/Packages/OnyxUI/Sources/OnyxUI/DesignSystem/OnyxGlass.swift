@@ -27,8 +27,8 @@ public enum GlassLevel: Sendable {
 
     public var material: Material {
         switch self {
-        case .row, .tile: .ultraThinMaterial
-        case .sheet:      .thinMaterial
+        // Stone (overhaul B3, challenge C1): the frost under every slab.
+        case .row, .tile, .sheet: .thinMaterial
         case .chrome:     .regularMaterial
         }
     }
@@ -56,8 +56,8 @@ public enum GlassLevel: Sendable {
     /// none, because a shadow under something that has not lifted is just dirt.
     public var shadow: (radius: CGFloat, y: CGFloat)? {
         switch self {
-        case .sheet: (24, 12)
-        case .row, .tile, .chrome: nil
+        // Stone has no drop shadows: depth is the lit edge and the radius.
+        case .row, .tile, .sheet, .chrome: nil
         }
     }
 }
@@ -65,33 +65,43 @@ public enum GlassLevel: Sendable {
 private struct OnyxGlassModifier: ViewModifier {
     let level: GlassLevel
 
-    /// Frostier and opaque when the system asks for it. A translucent surface is
-    /// a legibility bet, and this setting is the user saying they do not want it
-    /// taken on their behalf.
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
+    // ── STONE (overhaul B3, concept 1 + challenge C1) ───────────────────────
+    // Every level is one slab: `.thinMaterial` so what scrolls behind frosts,
+    // the near-black `slab` over it at `slabTint` so the card is onyx and not
+    // grey glass (which is also what holds text contrast over the frost), one
+    // lit top edge, and no drop shadow. Reduce Transparency draws the slab
+    // solid. The call sites never changed — `.onyxGlass(_:)` is the door.
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: level.radius, style: .continuous)
         return content
             .background {
                 if reduceTransparency {
-                    shape.fill(Color.onyx.base)
-                    shape.fill(Color.white.opacity(0.10))
+                    shape.fill(Color.onyx.slab)
                 } else {
                     shape.fill(level.material)
+                    shape.fill(Color.onyx.slab.opacity(Color.onyx.slabTint))
                 }
             }
             .overlay {
                 if level.drawsHairline {
-                    shape.strokeBorder(Color.onyx.hairline, lineWidth: 0.5)
+                    // One pixel of light on the top edge, fading down the
+                    // sides into the hairline weight — the icon's bevel.
+                    shape.strokeBorder(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(0.12), location: 0),
+                                .init(color: .white.opacity(0.04), location: 0.3),
+                                .init(color: .white.opacity(0.04), location: 1),
+                            ],
+                            startPoint: .top, endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
                 }
             }
             .clipShape(shape)
-            .shadow(
-                color: .black.opacity(level.shadow == nil ? 0 : 0.35),
-                radius: level.shadow?.radius ?? 0,
-                y: level.shadow?.y ?? 0
-            )
     }
 }
 

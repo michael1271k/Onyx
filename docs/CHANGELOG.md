@@ -44,6 +44,57 @@ _Nothing yet._
 
 ---
 
+## [8.2.0] — 2026-09-24 · Faces: tiles you can scroll past, the sleep ring returns, stone and glass
+
+Lane B of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record
+"Lane B"). Every surface that draws a tile, a widget, a card or the Appearance
+grid changed; the logger, the summary and the watch land in 8.3.0 and 8.4.0.
+
+### iPhone app
+- **Scrolling over a tile no longer opens it.** Tiles are real buttons with a
+  pressed state; a scroll that starts on a tile scrolls. Widget-face links do
+  not fire inside the app any more (they used to switch tabs).
+- **Stacks page sideways** with tappable dots, and every stack turns over at
+  its own moment across the 9-second cycle — no more grid-wide flip. Nothing
+  turns within 3 s of a touch. The "connected" toggle, which only made stacks
+  flip together, is gone.
+- **The sleep half-ring is back** on all three sleep tile sizes and on the
+  Pulse sleep card, drawn in the fixed stage ramp.
+- **Vitals tile:** a 7-day sparkline per reading with today's dot (2 / 3 / 5
+  readings by size).
+- **Water is a pitcher**, always blue; the +250 ml button stays.
+- **Fuel tiles show the day's key micronutrients** (top three by distance from
+  target) under protein, carbs and fat. Calorie and micronutrient inks are
+  the fixed/weighted tokens from 8.1.0 everywhere.
+- **Tile text follows the phone's text size** in the app (up to 1.2×).
+- **Stone material.** Every card is a near-black slab over frosted glass with a
+  lit top edge and no drop shadow; corners 28 / 20 / 12 by depth.
+- **Appearance is a 2×4 grid** of the eight stones; each swatch is a slab with
+  the theme's colour as a diagonal seam of light, and a live preview of the
+  pick sits above the grid.
+
+### Home Screen widgets and Live Activity
+- **Finished-workout widget** draws the new session masthead — name, duration,
+  tonnage, heart rate in red, PR trophies — and the name wraps instead of
+  truncating "Done".
+- **Dynamic Island:** compact = elapsed time + heart and bpm in red; minimal =
+  heart + bpm; expanded = the masthead. The rest countdown left the compact
+  view on purpose.
+
+### Changed
+- `WidgetSnapshot.Macros.keyMicros` (additive, defaults empty).
+- `scripts/native-shot.sh` gains `SHOT_WAIT` and `SHOT_SKIP_BUILD` for busy
+  machines and multi-theme runs.
+
+### Notes
+- Screenshot goldens differ at every tile corner (16 → 20 pt); expected.
+- Open: the Medium finished-workout widget has an empty band under the
+  masthead; nutrition inks do not react to cut/bulk/deload; the slab tint is
+  one constant (`Color.onyx.slabTint`).
+- OnyxTests: the same nine baseline names, no new ones.
+
+---
+
 ## [8.1.0] — 2026-09-23 · The contract wave: eight stones, fixed inks, and the watch wire
 
 Wave 0 of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`). It lays the

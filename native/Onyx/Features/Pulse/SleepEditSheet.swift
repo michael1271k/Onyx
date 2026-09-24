@@ -133,12 +133,10 @@ struct SleepEditSheet: View {
     /// zero draws no segment, which is what the tile does with an absent one.
     private var previewSegments: [(OnyxSleepStage, Int)] {
         let trimmed = preview
-        return [
-            (OnyxSleepStage.deep, Int(trimmed.deepMin)),
-            (.rem, Int(trimmed.remMin)),
-            (.core, Int(trimmed.coreMin)),
-            (.awake, Int(trimmed.awakeMin)),
-        ].filter { $0.1 > 0 }
+        return OnyxSleepStage.segments(
+            deep: Int(trimmed.deepMin), core: Int(trimmed.coreMin),
+            rem: Int(trimmed.remMin), awake: Int(trimmed.awakeMin)
+        )
     }
 
     private var canSave: Bool {

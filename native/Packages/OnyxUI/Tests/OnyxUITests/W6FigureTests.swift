@@ -35,26 +35,57 @@ struct W6FigureTests {
         }
     }
 
-    // ── GlassArc ────────────────────────────────────────────────────────────
+    // ── Glasses ────────────────────────────────────────────────────────────
 
     @Test("the goal decides how many segments, and a glass is 250 ml")
     func glassArcSegments() {
         // 3 L is twelve glasses; 1 900 ml is seven of them, and the eighth
         // part-drunk is NOT one — a segment is a glass.
-        let three = GlassArc.segments(ml: 1900, goalMl: 3000)
+        let three = Glasses.segments(ml: 1900, goalMl: 3000)
         #expect(three?.total == 12)
         #expect(three?.filled == 7)
         // The brief's eight segments are what a 2 L goal comes to.
-        #expect(GlassArc.segments(ml: 0, goalMl: 2000)?.total == 8)
+        #expect(Glasses.segments(ml: 0, goalMl: 2000)?.total == 8)
         // Over the goal fills the arc and never wraps it.
-        #expect(GlassArc.segments(ml: 9000, goalMl: 2000)?.filled == 8)
+        #expect(Glasses.segments(ml: 9000, goalMl: 2000)?.filled == 8)
         // No goal is no segments — there is nothing to be a fraction of.
-        #expect(GlassArc.segments(ml: 1900, goalMl: nil) == nil)
-        #expect(GlassArc.segments(ml: 1900, goalMl: 0) == nil)
+        #expect(Glasses.segments(ml: 1900, goalMl: nil) == nil)
+        #expect(Glasses.segments(ml: 1900, goalMl: 0) == nil)
         // No reading with a goal is an empty arc, not an absent one.
-        #expect(GlassArc.segments(ml: nil, goalMl: 2000)?.filled == 0)
+        #expect(Glasses.segments(ml: nil, goalMl: 2000)?.filled == 0)
         // A goal past the clamp draws sixteen, not sixty.
-        #expect(GlassArc.segments(ml: 0, goalMl: 15_000)?.total == GlassArc.maxSegments)
+        #expect(Glasses.segments(ml: 0, goalMl: 15_000)?.total == Glasses.maxSegments)
+    }
+
+    // ── Overhaul B2: the pitcher, the gapped spark, the vitals week ──────────
+
+    @Test("the pitcher's level is the day against its goal, clamped, and nothing without a goal")
+    func pitcherLevel() {
+        #expect(Glasses.level(ml: 1500, goalMl: 3000) == 0.5)
+        #expect(Glasses.level(ml: 9000, goalMl: 3000) == 1)
+        #expect(Glasses.level(ml: nil, goalMl: 3000) == 0)
+        #expect(Glasses.level(ml: 1500, goalMl: nil) == nil)
+        #expect(Glasses.level(ml: 1500, goalMl: 0) == nil)
+    }
+
+    @Test("a gapped series lifts the pen: one run per unbroken stretch")
+    func sparkRuns() {
+        #expect(Sparkline.runs([1, 2, nil, 4, nil, nil, 7, 8]) == [0...1, 3...3, 6...7])
+        #expect(Sparkline.runs([nil, nil]).isEmpty)
+        #expect(Sparkline.runs([1, 2, 3]) == [0...2])
+    }
+
+    @Test("a vital's week sits on the calendar: seven slots ending today, a missed night is nil")
+    func vitalWeek() {
+        let trend = [
+            OnyxSnapshot.Point(d: "2026-09-17", v: 40),   // outside the window
+            OnyxSnapshot.Point(d: "2026-09-19", v: 50),
+            OnyxSnapshot.Point(d: "2026-09-24", v: 54),
+        ]
+        let week = VitalSparkFace.week(trend, endingOn: "2026-09-24")
+        #expect(week.count == 7)
+        #expect(week == [nil, 50, nil, nil, nil, nil, 54])
+        #expect(VitalSparkFace.week(trend, endingOn: nil).isEmpty)
     }
 
     // ── HeatStrip ───────────────────────────────────────────────────────────
