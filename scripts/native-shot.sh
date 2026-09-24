@@ -155,7 +155,9 @@ shoot() {
   # or, on the first launch after an install, a black window: 3.5 s was enough
   # on a warm 402 pt device and produced eight solid-black PNGs on a freshly
   # created one, which is a shot that reviews as "the screen is broken".
-  sleep 8
+  # `SHOT_WAIT` stretches it: with three lanes building at once (load 30–50)
+  # 8 s photographed a black window for half a run (overhaul Lane B).
+  sleep "${SHOT_WAIT:-8}"
   xcrun simctl io "$UDID" screenshot --type=png "$OUT/$screen$suffix.png" >/dev/null
   echo "  $OUT/$screen$suffix.png"
 }

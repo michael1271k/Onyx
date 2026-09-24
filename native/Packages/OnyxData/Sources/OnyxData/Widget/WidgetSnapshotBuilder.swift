@@ -483,7 +483,10 @@ public struct WidgetSnapshotBuilder: Sendable {
                 fatG: nutri?.fatG, fatGoalG: resolvedGoals.fat,
                 kcalTrend: wantsLifestyle ? Self.points(WidgetDerive.dailySeries(
                     rows.nutrition.map { DatedValue(date: $0.date, value: $0.calories) }, limit: Self.trendDays
-                )) : nil
+                )) : nil,
+                keyMicros: wantsLifestyle
+                    ? KeyMicro.top(totals: Self.microTotals(rows.nutrition.filter { $0.date == date }))
+                    : nil
             ),
             water: OnyxSnapshot.Water(
                 // `WaterTruth` and not the rule that used to be written out
@@ -1109,6 +1112,23 @@ public struct WidgetSnapshotBuilder: Sendable {
             if let p = s.pairId, !p.isEmpty { pairs.insert(p) } else { solo += 1 }
         }
         return solo + pairs.count
+    }
+
+    /// A day's FOOD micronutrients, summed the way `NutritionModel.nutrients`
+    /// sums them: fibre from its column, the rest from each row's `micros`
+    /// bundle, keyed as `NutrientTargets` keys them. The supplement stack is
+    /// not added — `KeyMicro.top` skips the stack-delivered nutrients for
+    /// exactly that reason.
+    static func microTotals(_ rows: [NutritionEntryRow]) -> [String: Double] {
+        var out: [String: Double] = [:]
+        for row in rows {
+            if let fiber = row.fiberG { out["fiber", default: 0] += fiber }
+            guard let micros = row.micros,
+                  let bundle = try? JSONDecoder().decode([String: Double].self, from: Data(micros.raw.utf8))
+            else { continue }
+            for (key, value) in bundle { out[key, default: 0] += value }
+        }
+        return out
     }
 
     static func points(_ trend: [TrendPoint]) -> [OnyxSnapshot.Point] {

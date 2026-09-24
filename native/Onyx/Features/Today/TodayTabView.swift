@@ -29,6 +29,7 @@ struct TodayTabView: View {
     var onOpenPulse: () -> Void = {}
 
     @State private var resolved: TodayModel?
+    @ScaledMetric(relativeTo: .body) private var faceScale: CGFloat = 1
     /// Bumped when a PULL finishes — the only sync §3.4 gives a haptic, because
     /// it is the only one the user is waiting on.
     @State private var pulls = 0
@@ -77,6 +78,9 @@ struct TodayTabView: View {
         // tile's own button owns the tap. Set at the root so the sheets this
         // screen presents inherit it too.
         .environment(\.onyxInApp, true)
+        // The faces' fixed point sizes follow Dynamic Type here, clamped
+        // (`OnyxFaceScale`); on the Home Screen they stay WidgetKit's.
+        .environment(\.onyxFaceScale, OnyxFaceScale.clamp(faceScale))
         .task {
             if resolved == nil {
                 resolved = seeded ?? TodayModel(database: environment.database, userId: environment.userIdString)

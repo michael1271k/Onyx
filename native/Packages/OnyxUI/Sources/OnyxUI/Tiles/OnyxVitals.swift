@@ -76,9 +76,10 @@ public struct VitalsView: View {
   @ViewBuilder private var face: some View {
     let vitals = entry.snapshot?.vitals
     switch (focus, OnyxSize(family)) {
-    case (.panel, .small):         VitalLeadFace(entry: entry, mono: mono, spec: VitalSpec.lead(vitals))
-    case (.panel, .medium):        VitalsPanelFace(entry: entry, mono: mono, large: false, spec: VitalSpec.lead(vitals))
-    case (.panel, .large):         VitalsPanelFace(entry: entry, mono: mono, large: true, spec: VitalSpec.lead(vitals))
+    // The Vitals tile (overhaul B2, decision Q7): a week per reading.
+    case (.panel, .small):         VitalSparkFace(entry: entry, mono: mono, count: 2)
+    case (.panel, .medium):        VitalSparkFace(entry: entry, mono: mono, count: 3)
+    case (.panel, .large):         VitalSparkFace(entry: entry, mono: mono, count: 5)
 
     case (.recovery, .small):      VitalLeadFace(entry: entry, mono: mono, spec: VitalSpec.lead(vitals))
     case (.recovery, .medium):     VitalsPanelFace(entry: entry, mono: mono, large: false, spec: VitalSpec.lead(vitals))
@@ -214,13 +215,13 @@ struct VitalChip: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 1) {
       Text(spec.label)
-        .font(OnyxWidgetType.face(7, weight: .bold))
+        .onyxWidgetFont { OnyxWidgetType.face(7 * $0, weight: .bold) }
         .foregroundStyle(mono ? .white : spec.color)
         .lineLimit(1)
         .minimumScaleFactor(0.6)
       HStack(spacing: 3) {
         Text(OnyxSnapshot.fixed(vital?.value, decimals: spec.decimals) ?? "—")
-          .font(OnyxWidgetType.figure(dense ? 11 : 12))
+          .onyxWidgetFont { OnyxWidgetType.figure((dense ? 11 : 12) * $0) }
           .foregroundStyle(Color.onyx.textPrimary)
           .lineLimit(1)
           .minimumScaleFactor(0.7)
@@ -306,15 +307,15 @@ struct VitalRow: View {
     VStack(alignment: .leading, spacing: 3) {
       HStack(spacing: 4) {
         Text(spec.label)
-          .font(OnyxWidgetType.face(8, weight: .bold))
+          .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .bold) }
           .foregroundStyle(mono ? .white : spec.color)
           .lineLimit(1)
         Spacer(minLength: 0)
         Text(OnyxSnapshot.fixed(vital?.value, decimals: spec.decimals) ?? "—")
-          .font(OnyxWidgetType.face(12, weight: .bold, design: .monospaced))
+          .onyxWidgetFont { OnyxWidgetType.face(12 * $0, weight: .bold, design: .monospaced) }
           .foregroundStyle(Color.onyx.textPrimary)
         Text(spec.unit)
-          .font(OnyxWidgetType.face(8))
+          .onyxWidgetFont { OnyxWidgetType.face(8 * $0) }
           .foregroundStyle(Color.onyx.textSecondary)
         DeltaChip(delta: vital?.delta, decimals: spec.decimals,
                   upIsGood: spec.upIsGood, monochrome: mono)
@@ -349,7 +350,7 @@ struct VitalLeadFace: View {
         DeltaChip(delta: vital?.delta, decimals: spec.decimals,
                   upIsGood: spec.upIsGood, monochrome: mono)
         Text(baselineLine)
-          .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
       }
 
       Spacer(minLength: 0)
@@ -421,12 +422,12 @@ struct VitalsPanelFace: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
           BigValue(value: OnyxSnapshot.fixed(vital?.value, decimals: spec.decimals),
                    size: large ? 38 : 30, color: Color.onyx.textPrimary)
-          Text(spec.unit).font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+          Text(spec.unit).onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           DeltaChip(delta: vital?.delta, decimals: spec.decimals,
                     upIsGood: spec.upIsGood, monochrome: mono)
           Spacer(minLength: 0)
           Text(baselineLine)
-            .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+            .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
         }
         VitalBar(spec: spec, vital: vital, mono: mono)
 
@@ -463,7 +464,7 @@ struct VitalsPanelFace: View {
         // with nothing on the wrist. Both are absence, and absence gets a
         // sentence rather than five rows of em dashes.
         Text("no overnight readings yet")
-          .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
       }
 
@@ -526,15 +527,122 @@ struct GoalStat: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 3) {
       HStack(spacing: 4) {
-        Text(label).font(OnyxWidgetType.face(7, weight: .bold)).foregroundStyle(Color.onyx.textSecondary)
+        Text(label).onyxWidgetFont { OnyxWidgetType.face(7 * $0, weight: .bold) }.foregroundStyle(Color.onyx.textSecondary)
         Spacer(minLength: 0)
         Text(value ?? "—")
-          .font(OnyxWidgetType.face(11, weight: .bold, design: .monospaced))
+          .onyxWidgetFont { OnyxWidgetType.face(11 * $0, weight: .bold, design: .monospaced) }
           .foregroundStyle(Color.onyx.textPrimary)
           .lineLimit(1)
       }
       Rail(progress: progress, color: color, height: 3)
     }
+  }
+}
+
+
+// MARK: - Vital sparks (overhaul B2, decision Q7)
+
+/// One seven-day sparkline per reading: the reading's name, the week as a
+/// line with today's dot, and tonight's figure in its unit. Small shows the
+/// two most deviant readings, Medium three, Large all five — the same
+/// `VitalSpec.ranked` order every other Vitals face uses, so the reading that
+/// moved is always on screen.
+///
+/// The week is laid on the CALENDAR (`week(_:endingOn:)`): a night the watch
+/// missed is a gap the pen lifts over, never a line joined across it — the
+/// stress sparkline's "joins across an unanswered day" caveat is exactly what
+/// `Sparkline(gapped:)` exists to stop.
+struct VitalSparkFace: View {
+  let entry: OnyxTileEntry
+  let mono: Bool
+  /// How many readings: 2 (Small), 3 (Medium), 5 (Large).
+  let count: Int
+
+  private var s: OnyxSnapshot? { entry.snapshot }
+  private var specs: [VitalSpec] { Array(VitalSpec.ranked(s?.vitals).prefix(count)) }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: count > 3 ? 6 : 8) {
+      HStack(spacing: 4) {
+        Caption("VITALS", color: mono ? .white : OnyxDomain.recover.accent)
+        Spacer(minLength: 0)
+        Text("7 nights")
+          .onyxWidgetFont { OnyxWidgetType.face(8 * $0) }
+          .foregroundStyle(Color.onyx.textSecondary)
+        if entry.isStale { StaleTag(age: entry.age) }
+      }
+      ForEach(Array(specs.enumerated()), id: \.element.label) { index, spec in
+        if index > 0 { Hairline() }
+        VitalSparkRow(spec: spec, vitals: s?.vitals, date: s?.date, mono: mono, stacked: count <= 2)
+          .frame(maxHeight: .infinity)
+      }
+    }
+  }
+
+  /// A reading's trend laid onto the seven calendar days ending on `endingOn`,
+  /// oldest first, nil where no reading landed. Empty without a date.
+  nonisolated static func week(_ trend: [OnyxSnapshot.Point]?, endingOn date: String?) -> [Double?] {
+    guard let date, let end = ISODate.dayNumber(date) else { return [] }
+    let byDay = Dictionary((trend ?? []).map { ($0.d, $0.v) }, uniquingKeysWith: { _, last in last })
+    return ((end - 6)...end).map { byDay[ISODate.iso(dayNumber: $0)] }
+  }
+}
+
+/// One reading's row. `stacked` (the Small) puts the line under the name and
+/// figure; wider tiles put it between them.
+struct VitalSparkRow: View {
+  let spec: VitalSpec
+  let vitals: OnyxSnapshot.Vitals?
+  let date: String?
+  let mono: Bool
+  var stacked = false
+
+  private var vital: OnyxSnapshot.Vital? { spec.read(vitals) }
+  private var ink: Color { mono ? .white : spec.color }
+
+  var body: some View {
+    if stacked {
+      VStack(alignment: .leading, spacing: 3) {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+          name
+          Spacer(minLength: 0)
+          figure
+        }
+        spark
+      }
+    } else {
+      HStack(alignment: .center, spacing: 10) {
+        name.frame(width: 64, alignment: .leading)
+        spark
+        figure.frame(minWidth: 58, alignment: .trailing)
+      }
+    }
+  }
+
+  private var name: some View {
+    Text(spec.label)
+      .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .bold) }
+      .foregroundStyle(ink)
+      .lineLimit(1)
+      .minimumScaleFactor(0.8)
+  }
+
+  private var figure: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 2) {
+      Text(OnyxSnapshot.fixed(vital?.value, decimals: spec.decimals) ?? "—")
+        .onyxWidgetFont { OnyxWidgetType.face(13 * $0, weight: .bold, design: .monospaced) }
+        .foregroundStyle(Color.onyx.textPrimary)
+      Text(spec.unit)
+        .onyxWidgetFont { OnyxWidgetType.face(8 * $0) }
+        .foregroundStyle(Color.onyx.textSecondary)
+    }
+    .lineLimit(1)
+    .minimumScaleFactor(0.8)
+  }
+
+  private var spark: some View {
+    Sparkline(gapped: VitalSparkFace.week(vital?.trend, endingOn: date), baseline: vital?.baseline, color: ink)
+      .frame(maxWidth: .infinity, minHeight: 14, maxHeight: .infinity)
   }
 }
 

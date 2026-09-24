@@ -70,7 +70,7 @@ struct FocusSpec {
       // only one of them is the one you act on.
       sub: MacroRemainder.text(s?.macros.proteinG, s?.macros.proteinGoalG).map { "protein \($0)" },
       progress: OnyxSnapshot.progress(s?.macros.kcal, s?.macros.kcalGoal),
-      accent: OnyxDomain.fuel.accent)
+      accent: Color.onyx.calories)
   }
 
   static func steps(_ s: OnyxSnapshot?) -> FocusSpec {
@@ -239,7 +239,7 @@ struct FocusFace: View {
       }
       BigValue(value: spec.hero, size: 30, color: Color.onyx.textPrimary)
       if let sub = spec.sub {
-        Text(sub).font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+        Text(sub).onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
       }
       Spacer(minLength: 0)
       Rail(progress: spec.progress, color: accent)
@@ -278,12 +278,12 @@ struct CalorieLedgerFace: View {
   private var heroColumn: some View {
     VStack(alignment: .leading, spacing: 4) {
       HStack(spacing: 4) {
-        Caption("KCAL LEFT", color: tint(OnyxDomain.fuel.accent))
+        Caption("KCAL LEFT", color: tint(Color.onyx.calories))
         if entry.isStale { StaleTag(age: entry.age) }
       }
-      BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 30, color: Color.onyx.textPrimary)
+      BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 26, color: Color.onyx.textPrimary)
       Rail(progress: OnyxSnapshot.progress(s?.macros.kcal, s?.macros.kcalGoal),
-           color: tint(OnyxDomain.fuel.accent), height: 5)
+           color: tint(Color.onyx.calories), height: 5)
 
       Spacer(minLength: 2)
 
@@ -296,6 +296,7 @@ struct CalorieLedgerFace: View {
                 color: tint(Color.onyx.carbs))
       MacroRail(label: "F", value: s?.macros.fatG, goal: s?.macros.fatGoalG,
                 color: tint(Color.onyx.fat))
+      MicroRails(micros: Array((s?.macros.micros ?? []).prefix(2)), mono: mono)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -314,11 +315,11 @@ struct CalorieLedgerFace: View {
       // then the one thing that is not a number.
       HStack(alignment: .firstTextBaseline, spacing: 6) {
         Text("TODAY")
-          .font(OnyxWidgetType.face(10, weight: .semibold)).tracking(0.6)
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold) }.tracking(0.6)
           .foregroundStyle(Color.onyx.textSecondary)
         Spacer(minLength: 4)
         Text(nextSessionText(s) ?? "—")
-          .font(OnyxWidgetType.face(12, weight: .bold))
+          .onyxWidgetFont { OnyxWidgetType.face(12 * $0, weight: .bold) }
           .foregroundStyle(mono ? .white : Color.onyx.dayLabel(s?.workout.dayKey))
           .lineLimit(1)
           .minimumScaleFactor(0.7)
@@ -336,10 +337,33 @@ struct CalorieLedgerFace: View {
 // question is how many more glasses, and the answer was a subtraction, a
 // division and a rounding away.
 //
-// `GlassArc` is the figure now — `goal ÷ 250 ml` segments, as many of them full
-// as there are glasses in the day — and on the Home Screen the button beside it
-// adds the next one without opening anything. See `EnvironmentValues
-// .onyxWaterButton` for why the button is handed in rather than written here.
+// The pitcher is the figure now (overhaul B2, decision Q8) — the day filling
+// against its goal, in the fixed water blue — with the glass count beside it,
+// and on the Home Screen the button adds the next one without opening
+// anything. See `EnvironmentValues.onyxWaterButton` for why the button is
+// handed in rather than written here.
+
+/// The pitcher and the glass count beside it — every water face's figure.
+struct PitcherCount: View {
+  let s: OnyxSnapshot?
+  let mono: Bool
+  var size: CGFloat = 26
+  var caption: (Int) -> String = { "of \($0)" }
+
+  var body: some View {
+    let counts = Glasses.segments(ml: s?.water.ml, goalMl: s?.water.goalMl)
+    HStack(alignment: .center, spacing: 8) {
+      PitcherFigure(ml: s?.water.ml, goalMl: s?.water.goalMl, monochrome: mono)
+      VStack(alignment: .leading, spacing: 0) {
+        BigValue(value: counts.map { "\($0.filled)" }, size: size, color: Color.onyx.textPrimary)
+        Text(counts.map { caption($0.total) } ?? "glasses")
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
+          .lineLimit(1)
+      }
+      .fixedSize()
+    }
+  }
+}
 
 /// Small · the glasses, the count, and the tap.
 struct WaterGlassFace: View {
@@ -348,10 +372,6 @@ struct WaterGlassFace: View {
   @Environment(\.onyxWaterButton) private var button
 
   private var s: OnyxSnapshot? { entry.snapshot }
-  private var counts: (total: Int, filled: Int)? {
-    GlassArc.segments(ml: s?.water.ml, goalMl: s?.water.goalMl)
-  }
-
   var body: some View {
     VStack(alignment: .leading, spacing: 3) {
       HStack(spacing: 4) {
@@ -359,19 +379,11 @@ struct WaterGlassFace: View {
         Spacer(minLength: 0)
         if entry.isStale { StaleTag(age: entry.age) }
       }
-      ZStack {
-        GlassArc(ml: s?.water.ml, goalMl: s?.water.goalMl,
-                 tint: Color.onyx.water, lineWidth: 9, monochrome: mono)
-        VStack(spacing: 0) {
-          BigValue(value: counts.map { "\($0.filled)" }, size: 26, color: Color.onyx.textPrimary)
-          Text(counts.map { "of \($0.total)" } ?? "glasses")
-            .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
-        }
-      }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      PitcherCount(s: s, mono: mono)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       HStack(spacing: 4) {
         Text(litresText(s) ?? "—")
-          .font(OnyxWidgetType.face(9, weight: .semibold))
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .semibold) }
           .foregroundStyle(Color.onyx.textSecondary)
           .lineLimit(1)
         Spacer(minLength: 0)
@@ -413,30 +425,17 @@ struct WaterLedgerFace: View {
     }
   }
 
-  private var counts: (total: Int, filled: Int)? {
-    GlassArc.segments(ml: s?.water.ml, goalMl: s?.water.goalMl)
-  }
-
   private var heroColumn: some View {
     VStack(alignment: .leading, spacing: 4) {
       HStack(spacing: 4) {
         Caption("WATER", color: tint(Color.onyx.water))
         if entry.isStale { StaleTag(age: entry.age) }
       }
-      ZStack {
-        GlassArc(ml: s?.water.ml, goalMl: s?.water.goalMl,
-                 tint: Color.onyx.water, lineWidth: 9, monochrome: mono)
-        VStack(spacing: 0) {
-          BigValue(value: counts.map { "\($0.filled)" }, size: 24, color: Color.onyx.textPrimary)
-          Text(counts.map { "of \($0.total) glasses" } ?? "glasses")
-            .font(OnyxWidgetType.face(8)).foregroundStyle(Color.onyx.textSecondary)
-            .lineLimit(1)
-        }
-      }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      PitcherCount(s: s, mono: mono, size: 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       HStack(spacing: 4) {
         Text(litresLeft ?? litresText(s) ?? "—")
-          .font(OnyxWidgetType.face(9, weight: .semibold)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .semibold) }.foregroundStyle(Color.onyx.textSecondary)
           .lineLimit(1)
         Spacer(minLength: 0)
         if let button { button.make() }
@@ -452,7 +451,7 @@ struct WaterLedgerFace: View {
         Spacer(minLength: 0)
         if let mean = weeklyMean {
           Text(String(format: "avg %.1f L", mean / 1000))
-            .font(OnyxWidgetType.face(8)).foregroundStyle(Color.onyx.textSecondary)
+            .onyxWidgetFont { OnyxWidgetType.face(8 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         }
       }
       BarChart(points: s?.water.trend ?? [], goal: s?.water.goalMl,
@@ -483,36 +482,29 @@ struct WaterLedgerFace: View {
   }
 }
 
-// MARK: - Sleep · the depth strip at three sizes
+// MARK: - Sleep · the half-ring at three sizes
 //
-// ── WHY THE GAUGE GAVE WAY TO THE STRIP (W6) ─────────────────────────────────
-// `DepthArc` answers two questions at once — was it long enough, and what was
-// it made of — and that is exactly what made it hard to read: a semicircle
-// whose SWEEP means duration and whose FILL means composition asks the eye to
-// hold two scales on one shape. The composition is the interesting half (the
-// duration is a number, and the number is right there), so it gets the figure
-// to itself and the goal becomes a rail under it.
+// ── WHY THE GAUGE CAME BACK (overhaul B2, decision Q6) ───────────────────────
+// W6 (6.3.0) swapped `DepthArc` for a depth strip on the grounds that a
+// semicircle whose SWEEP is duration and whose FILL is composition holds two
+// scales on one shape. The founder's answer was that the half-ring is the
+// sleep figure: it is the one shape on the grid that says "a night" before a
+// number is read, and the sleep sheet, the edit sheet and Pulse all draw it.
+// Four surfaces, one figure. The stages are the FIXED four-stop ramp
+// (`OnyxInk.Fixed.sleep`) in every theme; legends use text tokens, never
+// `sleepDeep` (2.6:1 on black — a fill only).
 //
-// `DepthStrip` is that figure. It is NOT a hypnogram and its own header says
-// why at length: the builder reads `sleep_sessions`, which carries four stage
-// TOTALS and no instant, so the axis is share of night and the layout is by
-// depth. Sample-level stages are the stated ceiling.
-//
-//   Small   the strip    what the night was made of, and how long it was
-//   Medium  + seven      is this a normal night for you
-//   Large   + rows       how much of each stage, in minutes and in share
+//   Small   the arc, the score and the window
+//   Medium  the arc beside four stage rows
+//   Large   the arc and the night's facts, the stage rows, seven nights
 
-/// The stages, as `DepthBar` and `DepthArc` both want them. A stage with no
-/// reading is ABSENT, not zero — the difference between "you had no deep sleep"
-/// and "the watch did not report deep sleep".
+/// The stages, as `DepthBar` and `DepthArc` both want them — `SleepStage`'s
+/// one rule (depth order; nil absent, zero kept).
 public func sleepSegments(_ s: OnyxSnapshot?) -> [(OnyxSleepStage, Int)] {
   guard let sleep = s?.sleep else { return [] }
-  return [
-    (OnyxSleepStage.deep, sleep.deepMin),
-    (OnyxSleepStage.core, sleep.coreMin),
-    (OnyxSleepStage.rem, sleep.remMin),
-    (OnyxSleepStage.awake, sleep.awakeMin),
-  ].compactMap { stage, minutes in minutes.map { (stage, $0) } }
+  return OnyxSleepStage.segments(
+    deep: sleep.deepMin, core: sleep.coreMin, rem: sleep.remMin, awake: sleep.awakeMin
+  )
 }
 
 /// "21:48 → 07:03". Both ends or neither — half a window is a riddle.
@@ -522,7 +514,8 @@ public func sleepWindowText(_ s: OnyxSnapshot?) -> String? {
   return "\(from) → \(to)"
 }
 
-/// Small · the duration, the strip, and how much of the goal it covered.
+/// Small · the arc — its sweep is the night against the goal, its fill the
+/// stages — with the score and the window under it.
 struct SleepArcFace: View {
   let entry: OnyxTileEntry
   let mono: Bool
@@ -537,67 +530,26 @@ struct SleepArcFace: View {
         if entry.isStale { StaleTag(age: entry.age) }
       }
 
-      HStack(alignment: .firstTextBaseline, spacing: 4) {
-        BigValue(value: sleepDuration(s), size: 26, color: Color.onyx.textPrimary)
+      DepthArc(segments: sleepSegments(s), minutes: s?.sleep.minutes,
+               goalMin: s?.sleep.goalMin, lineWidth: 11, monochrome: mono)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+      HStack(spacing: 4) {
         if let score = s?.sleep.score {
-          Text("· \(score)").font(OnyxWidgetType.face(10, weight: .semibold)).foregroundStyle(Color.onyx.textSecondary)
+          Text("score \(score)").onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold) }.foregroundStyle(Color.onyx.textPrimary)
+        }
+        Spacer(minLength: 0)
+        if let window = sleepWindowText(s) {
+          Text(window).onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
         }
       }
-
-      DepthStrip(segments: sleepSegments(s), monochrome: mono)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      SleepStripAxis(s: s, mono: mono, compact: true)
-
-      // The goal is the rail the arc's sweep used to be. A proportion belongs
-      // on a bar; the composition belongs on the strip; neither has to carry
-      // the other's scale now.
-      Rail(progress: OnyxSnapshot.progress(
-             s?.sleep.minutes.map(Double.init),
-             s?.sleep.goalMin.map(Double.init) ?? 480),
-           color: mono ? .white : OnyxDomain.recover.accent, height: 4)
     }
   }
 }
 
-/// The strip's caption: what the axis means, and the window it covers.
-///
-/// The words "share of night" are the whole reason the strip is allowed to look
-/// like a hypnogram — see `DepthStrip`. They are not decoration and must not be
-/// dropped to save a line.
-struct SleepStripAxis: View {
-  let s: OnyxSnapshot?
-  let mono: Bool
-  var compact = false
-  /// The Medium prints the window in its own header and must not print it
-  /// twice — the axis's job is the WORDS, and the window is a passenger on a
-  /// line that would otherwise be half empty.
-  var showsWindow = true
-
-  var body: some View {
-    HStack(spacing: 4) {
-      Text("share of night")
-        .font(OnyxWidgetType.face(compact ? 7 : 8))
-        .foregroundStyle(Color.onyx.textTertiary)
-      Spacer(minLength: 0)
-      if showsWindow, let window = sleepWindowText(s) {
-        Text(window)
-          .font(OnyxWidgetType.face(compact ? 8 : 9))
-          .foregroundStyle(Color.onyx.textSecondary)
-          .lineLimit(1)
-      }
-    }
-  }
-}
-
-/// Medium · the strip, and the week it sits in.
-///
-/// ── WHY THE SEVEN NIGHTS MOVED DOWN FROM THE LARGE (W6) ──────────────────────
-/// The Medium used to be the arc plus four stage rows — the same composition
-/// the strip now draws, said again in minutes and percentages. The register a
-/// Medium was missing is the one that makes last night MEAN anything: 6h14m is
-/// a bad night or an ordinary one depending entirely on the six before it, and
-/// `BarChart` over `sleep.trend` has been in the payload the whole time. The
-/// stage rows are what a Large is for, and they are still there.
+/// Medium · a bigger arc, and the stages as rows beside it. Minutes AND share
+/// of night: "68m deep" and "14% deep" answer different questions, and the
+/// second is the one that travels between nights of different length.
 struct SleepDepthFace: View {
   let entry: OnyxTileEntry
   let mono: Bool
@@ -612,70 +564,35 @@ struct SleepDepthFace: View {
         Caption("SLEEP", color: mono ? .white : OnyxDomain.recover.accent)
         Spacer(minLength: 0)
         if let window = sleepWindowText(s) {
-          Text(window).font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          Text(window).onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         }
         if let score = s?.sleep.score {
-          Text("score \(score)").font(OnyxWidgetType.face(9, weight: .semibold)).foregroundStyle(Color.onyx.textPrimary)
+          Text("score \(score)").onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .semibold) }.foregroundStyle(Color.onyx.textPrimary)
         }
         if entry.isStale { StaleTag(age: entry.age) }
       }
       // The corner belongs to the mark; this row's content runs to the edge.
       .padding(.trailing, OnyxMark.faceInset)
 
-      HStack(alignment: .firstTextBaseline, spacing: 6) {
-        BigValue(value: sleepDuration(s), size: 24, color: Color.onyx.textPrimary)
-        if let goal = s?.sleep.goalMin {
-          Text("of \(OnyxSnapshot.formatSleep(goal))")
-            .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
-        }
-        Spacer(minLength: 0)
-        StageKey(segments: segments, total: total, mono: mono)
-      }
+      // `DepthArc` reserves its own line width, so its caps sit inside the
+      // 120 pt column rather than on the tile's edge and in the rows.
+      HStack(spacing: 10) {
+        DepthArc(segments: segments, minutes: s?.sleep.minutes,
+                 goalMin: s?.sleep.goalMin, lineWidth: 10, monochrome: mono)
+          .frame(width: 120)
+          .padding(.top, 4)
 
-      DepthStrip(segments: segments, monochrome: mono)
-        .frame(maxHeight: .infinity)
-      SleepStripAxis(s: s, mono: mono, showsWindow: false)
-
-      Hairline()
-
-      // The week behind last night. Labelled so a short Wednesday is legible
-      // as a Wednesday and not as "the fifth bar".
-      BarChart(points: s?.sleep.trend ?? [],
-               goal: s?.sleep.goalMin.map(Double.init) ?? 480,
-               color: mono ? .white : OnyxDomain.recover.accent,
-               label: { OnyxSnapshot.weekdayInitial($0.d) })
-        .frame(maxHeight: .infinity)
-    }
-  }
-}
-
-/// The four stages as four dots and their share — the legend the strip needs
-/// and the space a Medium has for.
-///
-/// Shares, not minutes: "68m deep" and "16% deep" answer different questions,
-/// and the percentage is the one that travels between nights of different
-/// length — which is the comparison the seven-night chart underneath invites.
-private struct StageKey: View {
-  let segments: [(OnyxSleepStage, Int)]
-  let total: Int
-  let mono: Bool
-
-  var body: some View {
-    HStack(spacing: 6) {
-      ForEach(OnyxSleepStage.allCases, id: \.self) { stage in
-        if let minutes = segments.first(where: { $0.0 == stage })?.1, minutes > 0, total > 0 {
-          HStack(spacing: 2) {
-            Circle()
-              .fill(mono ? Color.white.opacity(DepthStrip.opacity(stage)) : stage.color)
-              .frame(width: 5, height: 5)
-            Text("\(Int((Double(minutes) / Double(total) * 100).rounded()))%")
-              .font(OnyxWidgetType.face(8, weight: .semibold)).monospacedDigit()
-              .foregroundStyle(Color.onyx.textSecondary)
+        VStack(spacing: 5) {
+          ForEach(OnyxSleepStage.allCases, id: \.self) { stage in
+            StageRow(stage: stage,
+                     minutes: segments.first(where: { $0.0 == stage })?.1,
+                     total: total, mono: mono)
           }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
+      .frame(maxHeight: .infinity)
     }
-    .lineLimit(1)
   }
 }
 
@@ -687,47 +604,41 @@ private struct StageRow: View {
   let mono: Bool
 
   var body: some View {
-    // Each fixed column is sized to the longest string it can actually hold —
-    // "AWAKE", "251m", "57%" — rather than to a round number. The fourteen
-    // points that frees go to the gauge beside it, which had none.
+    // Each fixed column is sized to the longest string it can hold — "AWAKE",
+    // "251m", "57%" — and the rail, the only elastic thing, takes the rest.
     HStack(spacing: 5) {
       Circle()
         .fill(mono ? Color.white : stage.color)
         .frame(width: 6, height: 6)
       Text(stage.label)
-        .font(OnyxWidgetType.face(9, weight: .bold))
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .bold) }
         .foregroundStyle(Color.onyx.textSecondary)
-        // 38, which is what "AWAKE" measures — and then pinned to one line
-        // anyway. A stage name that wraps takes the row's height with it and
-        // pushes the fourth row out of the tile, which is a worse failure than
-        // the two points it was saving.
         .lineLimit(1)
         .minimumScaleFactor(0.85)
         .frame(width: 38, alignment: .leading)
       Rail(progress: share, color: mono ? .white : stage.color, height: 4)
       Text(minutes.map { "\($0)m" } ?? "—")
-        .font(OnyxWidgetType.face(10, weight: .semibold, design: .monospaced))
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold, design: .monospaced) }
         .foregroundStyle(Color.onyx.textPrimary)
         .frame(width: 30, alignment: .trailing)
       Text(share.map { "\(Int(($0 * 100).rounded()))%" } ?? "")
-        .font(OnyxWidgetType.face(9))
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
         .foregroundStyle(Color.onyx.textSecondary)
         .frame(width: 22, alignment: .trailing)
     }
   }
 
-  /// Share of the STAGED total, not of the goal — this is a composition, and a
-  /// composition that does not add to 100% is not one.
+  /// Share of the STAGED total, not of the goal — a composition that does not
+  /// add to 100% is not one.
   private var share: Double? {
     guard let minutes, total > 0 else { return nil }
     return Double(minutes) / Double(total)
   }
 }
 
-/// Large · three registers, where it used to be the Medium and a hand's width of
-/// obsidian. The seven-night register is what fills it, and it is the register
-/// that makes last night mean anything: 6h14m is a bad night or an ordinary one
-/// depending entirely on the six before it.
+/// Large · three registers: the arc with the night's facts, the stage rows,
+/// and the seven nights that make last night mean anything — 6h14m is a bad
+/// night or an ordinary one depending entirely on the six before it.
 struct SleepLargeFace: View {
   let entry: OnyxTileEntry
   let mono: Bool
@@ -740,21 +651,28 @@ struct SleepLargeFace: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 9) {
       Register(title: "LAST NIGHT", accent: tint(OnyxDomain.recover.accent)) {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-          BigValue(value: sleepDuration(s), size: 30, color: Color.onyx.textPrimary)
-          if let score = s?.sleep.score {
-            Text("score \(score)").font(OnyxWidgetType.face(10, weight: .semibold))
-              .foregroundStyle(Color.onyx.textSecondary)
+        HStack(spacing: 12) {
+          DepthArc(segments: segments, minutes: s?.sleep.minutes,
+                   goalMin: s?.sleep.goalMin, lineWidth: 11, monochrome: mono)
+            .frame(width: 124, height: 74)
+          VStack(alignment: .leading, spacing: 4) {
+            if let score = s?.sleep.score {
+              HStack(alignment: .firstTextBaseline, spacing: 5) {
+                BigValue(value: "\(score)", size: 24, color: Color.onyx.textPrimary)
+                Text("sleep score").onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
+              }
+            }
+            if let window = sleepWindowText(s) {
+              Text(window).onyxWidgetFont { OnyxWidgetType.face(11 * $0, weight: .semibold) }.foregroundStyle(Color.onyx.textPrimary)
+            }
+            if let debt = debtText {
+              Text(debt).onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
+            }
+            Spacer(minLength: 0)
+            if entry.isStale { StaleTag(age: entry.age) }
           }
-          Spacer(minLength: 0)
-          if let debt = debtText {
-            Text(debt).font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
-          }
-          if entry.isStale { StaleTag(age: entry.age) }
+          .frame(maxWidth: .infinity, alignment: .leading)
         }
-        DepthStrip(segments: segments, monochrome: mono)
-          .frame(height: 56)
-        SleepStripAxis(s: s, mono: mono)
       }
 
       Hairline()
@@ -822,13 +740,13 @@ struct CompositionRow: View {
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 6) {
       Text(label)
-        .font(OnyxWidgetType.face(compact ? 8 : 9, weight: .bold))
+        .onyxWidgetFont { OnyxWidgetType.face((compact ? 8 : 9) * $0, weight: .bold) }
         .foregroundStyle(Color.onyx.textSecondary)
         .lineLimit(1)
         .minimumScaleFactor(0.8)
       Spacer(minLength: 4)
       BigValue(value: value.map { String(format: "%.1f", $0) }, size: compact ? 12 : 14, color: color)
-      Text(unit).font(OnyxWidgetType.face(8)).foregroundStyle(Color.onyx.textSecondary)
+      Text(unit).onyxWidgetFont { OnyxWidgetType.face(8 * $0) }.foregroundStyle(Color.onyx.textSecondary)
       DeltaChip(delta: delta, decimals: 1, upIsGood: upIsGood, monochrome: mono)
     }
   }
@@ -853,7 +771,7 @@ struct WeightFocusFace: View {
 
       HStack(alignment: .firstTextBaseline, spacing: 4) {
         BigValue(value: s?.weight.kg.map { String(format: "%.1f", $0) }, size: 27, color: Color.onyx.textPrimary)
-        Text("kg").font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+        Text("kg").onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         DeltaChip(delta: s?.weight.deltaKg, decimals: 1, upIsGood: false, monochrome: mono)
       }
 
@@ -894,7 +812,7 @@ struct WeightTrendFace: View {
         Caption("WEIGHT", color: mono ? .white : OnyxDomain.body.accent)
         Spacer(minLength: 0)
         if let measured = OnyxSnapshot.relativeDay(s?.weight.measuredOn) {
-          Text(measured).font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          Text(measured).onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         }
         if entry.isStale { StaleTag(age: entry.age) }
       }
@@ -903,7 +821,7 @@ struct WeightTrendFace: View {
 
       HStack(alignment: .firstTextBaseline, spacing: 6) {
         BigValue(value: s?.weight.kg.map { String(format: "%.1f", $0) }, size: 28, color: Color.onyx.textPrimary)
-        Text("kg").font(OnyxWidgetType.face(11)).foregroundStyle(Color.onyx.textSecondary)
+        Text("kg").onyxWidgetFont { OnyxWidgetType.face(11 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         // Down is the good direction here, and only here. `deltaVerdict.ts`
         // makes the same point on the web: the sign does not decide the verdict,
         // the phase does.
@@ -920,14 +838,14 @@ struct WeightTrendFace: View {
         if let baseline = s?.weight.prevWeekMeanKg {
           Label {
             Text(String(format: "last wk %.1f", baseline))
-              .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+              .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           } icon: {
             Rectangle().fill(Color.onyx.textSecondary).frame(width: 8, height: 1)
           }
         }
         Spacer(minLength: 0)
         if let togo {
-          Text(togo).font(OnyxWidgetType.face(9, weight: .semibold)).foregroundStyle(Color.onyx.textSecondary)
+          Text(togo).onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .semibold) }.foregroundStyle(Color.onyx.textSecondary)
             .lineLimit(1)
         }
       }
@@ -973,12 +891,12 @@ struct WeightLargeFace: View {
       Register(title: "THE SCALE", accent: tint(OnyxDomain.body.accent)) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
           BigValue(value: s?.weight.kg.map { String(format: "%.1f", $0) }, size: 36, color: Color.onyx.textPrimary)
-          Text("kg").font(OnyxWidgetType.face(12)).foregroundStyle(Color.onyx.textSecondary)
+          Text("kg").onyxWidgetFont { OnyxWidgetType.face(12 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           DeltaChip(delta: s?.weight.deltaKg, decimals: 1, upIsGood: false, monochrome: mono)
           Spacer(minLength: 0)
           if entry.isStale { StaleTag(age: entry.age) }
           if let measured = OnyxSnapshot.relativeDay(s?.weight.measuredOn) {
-            Text(measured).font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+            Text(measured).onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           }
         }
         if let target = s?.weight.targetKg, let now = s?.weight.kg {
@@ -986,7 +904,7 @@ struct WeightLargeFace: View {
           Text(gap < 0.05
                ? String(format: "at target %.1f kg", target)
                : String(format: "%.1f kg to target %.1f", gap, target))
-            .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+            .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         }
       }
 
@@ -1040,9 +958,9 @@ private struct TraceRow: View {
   var body: some View {
     HStack(spacing: 8) {
       VStack(alignment: .leading, spacing: 1) {
-        Text(title).font(OnyxWidgetType.face(8, weight: .bold)).foregroundStyle(Color.onyx.textSecondary)
+        Text(title).onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .bold) }.foregroundStyle(Color.onyx.textSecondary)
         Text(points.last.map { String(format: "%.1f \(unit)", $0) } ?? "—")
-          .font(OnyxWidgetType.face(12, weight: .bold, design: .rounded))
+          .onyxWidgetFont { OnyxWidgetType.face(12 * $0, weight: .bold, design: .rounded) }
           .monospacedDigit()
           .foregroundStyle(color)
       }
@@ -1077,20 +995,20 @@ struct CalorieDayFace: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 9) {
-      Register(title: "LEFT TO EAT", accent: tint(OnyxDomain.fuel.accent)) {
+      Register(title: "LEFT TO EAT", accent: tint(Color.onyx.calories)) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
           BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 34, color: Color.onyx.textPrimary)
-          Text("kcal").font(OnyxWidgetType.face(11)).foregroundStyle(Color.onyx.textSecondary)
+          Text("kcal").onyxWidgetFont { OnyxWidgetType.face(11 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           if let goal = s?.macros.kcalGoal {
             Text("of \(Int(goal.rounded()))")
-              .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+              .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           }
           Spacer(minLength: 0)
           if entry.isStale { StaleTag(age: entry.age) }
           BatteryRing(pct: s?.battery, size: 38, lineWidth: 5, monochrome: mono)
         }
         Rail(progress: OnyxSnapshot.progress(s?.macros.kcal, s?.macros.kcalGoal),
-             color: tint(OnyxDomain.fuel.accent), height: 5)
+             color: tint(Color.onyx.calories), height: 5)
         HStack(spacing: 5) {
           MacroChip(label: "P", value: s?.macros.proteinG, goal: s?.macros.proteinGoalG,
                     color: tint(Color.onyx.protein))
@@ -1099,6 +1017,7 @@ struct CalorieDayFace: View {
           MacroChip(label: "F", value: s?.macros.fatG, goal: s?.macros.fatGoalG,
                     color: tint(Color.onyx.fat))
         }
+        MicroRails(micros: Array((s?.macros.micros ?? []).prefix(3)), mono: mono)
       }
 
       Hairline()
@@ -1120,9 +1039,9 @@ struct CalorieDayFace: View {
 
       Hairline()
 
-      Register(title: "SEVEN DAYS", accent: tint(OnyxDomain.fuel.accent)) {
+      Register(title: "SEVEN DAYS", accent: tint(Color.onyx.calories)) {
         BarChart(points: s?.macros.kcalTrend ?? [], goal: s?.macros.kcalGoal,
-                 color: tint(OnyxDomain.fuel.accent),
+                 color: tint(Color.onyx.calories),
                  label: { OnyxSnapshot.weekdayInitial($0.d) })
           .frame(maxHeight: .infinity)
       }
@@ -1152,10 +1071,10 @@ private struct MacroChip: View {
   var body: some View {
     HStack(spacing: 3) {
       Text(label)
-        .font(OnyxWidgetType.face(8, weight: .bold, design: .rounded))
+        .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .bold, design: .rounded) }
         .foregroundStyle(color)
       Text(figures)
-        .font(OnyxWidgetType.face(9, weight: .medium, design: .monospaced))
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .medium, design: .monospaced) }
         .foregroundStyle(Color.onyx.textSecondary)
         .lineLimit(1)
     }
@@ -1176,11 +1095,11 @@ private struct Gauge: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 3) {
       HStack(alignment: .firstTextBaseline, spacing: 4) {
-        Text(label).font(OnyxWidgetType.face(9, weight: .heavy)).tracking(0.8).foregroundStyle(Color.onyx.textSecondary)
+        Text(label).onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .heavy) }.tracking(0.8).foregroundStyle(Color.onyx.textSecondary)
         Spacer(minLength: 4)
         BigValue(value: value, size: 15, color: color)
         if !unit.isEmpty {
-          Text(unit).font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          Text(unit).onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         }
       }
       Rail(progress: progress, color: color, height: 3)
@@ -1194,7 +1113,7 @@ private struct Foot: View {
   let color: Color
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
-      Text(label).font(OnyxWidgetType.face(8, weight: .heavy)).tracking(0.8).foregroundStyle(Color.onyx.textSecondary)
+      Text(label).onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .heavy) }.tracking(0.8).foregroundStyle(Color.onyx.textSecondary)
       BigValue(value: value, size: 14, color: color)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1219,7 +1138,7 @@ private struct WeekColumns: View {
         Caption("7 DAYS", color: Color.onyx.textSecondary)
         Spacer(minLength: 0)
         if let goal = entry.snapshot?.steps.goal {
-          Text("goal \(goal / 1000)k").font(OnyxWidgetType.face(8)).foregroundStyle(Color.onyx.textSecondary)
+          Text("goal \(goal / 1000)k").onyxWidgetFont { OnyxWidgetType.face(8 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         }
       }
       if trend.count >= 2 {
@@ -1232,14 +1151,14 @@ private struct WeekColumns: View {
                 highlighted: point.d == entry.snapshot?.date
               )
               Text(OnyxSnapshot.weekdayInitial(point.d))
-                .font(OnyxWidgetType.face(7, weight: .bold))
+                .onyxWidgetFont { OnyxWidgetType.face(7 * $0, weight: .bold) }
                 .foregroundStyle(Color.onyx.textSecondary)
             }
           }
         }
       } else {
         Text("a week of steps appears here\nonce there are two days of them")
-          .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       }
     }
@@ -1276,7 +1195,7 @@ struct MacroFocusFace: View {
       }
       HStack(alignment: .firstTextBaseline, spacing: 4) {
         BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 22, color: Color.onyx.textPrimary)
-        Text("kcal left").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+        Text("kcal left").onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
       }
       Spacer(minLength: 0)
       MacroRail(label: "P", value: s?.macros.proteinG, goal: s?.macros.proteinGoalG,
@@ -1311,7 +1230,7 @@ struct MacroFace: View {
         Caption("MACROS", color: tint(OnyxDomain.fuel.accent))
         Spacer(minLength: 0)
         BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 20, color: Color.onyx.textPrimary)
-        Text("kcal left").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+        Text("kcal left").onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         if entry.isStale { StaleTag(age: entry.age) }
       }
       // The corner belongs to the mark; this row's content runs to the edge.
@@ -1352,7 +1271,7 @@ private struct MacroLine: View {
   var body: some View {
     HStack(spacing: 8) {
       Text(name)
-        .font(OnyxWidgetType.face(9, weight: .bold))
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .bold) }
         .foregroundStyle(color)
         .frame(width: 52, alignment: .leading)
 
@@ -1365,7 +1284,7 @@ private struct MacroLine: View {
       // and always did; the digits carry the remainder alone, and the column
       // they had to share is now wide enough for the sentence.
       Text(remainder)
-        .font(OnyxWidgetType.face(10, weight: .bold, design: .rounded))
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .bold, design: .rounded) }
         .monospacedDigit()
         .foregroundStyle(remainderColor)
         .frame(width: 74, alignment: .trailing)
@@ -1408,16 +1327,16 @@ struct MacroLargeFace: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
-      Register(title: "TODAY'S FUEL", accent: tint(OnyxDomain.fuel.accent)) {
+      Register(title: "TODAY'S FUEL", accent: tint(Color.onyx.calories)) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
           BigValue(value: s?.caloriesRemaining.map { "\($0)" }, size: 32, color: Color.onyx.textPrimary)
-          Text("kcal left").font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+          Text("kcal left").onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           Spacer(minLength: 0)
           if entry.isStale { StaleTag(age: entry.age) }
           BatteryRing(pct: s?.battery, size: 38, lineWidth: 5, monochrome: mono)
         }
         Rail(progress: OnyxSnapshot.progress(s?.macros.kcal, s?.macros.kcalGoal),
-             color: tint(OnyxDomain.fuel.accent))
+             color: tint(Color.onyx.calories))
       }
 
       Hairline()
@@ -1507,7 +1426,7 @@ private struct EnergySplit: View {
             HStack(spacing: 3) {
               Circle().fill(color).frame(width: 5, height: 5)
               Text("\(name) \(Int((kcal / total * 100).rounded()))%")
-                .font(OnyxWidgetType.face(8, weight: .bold)).foregroundStyle(Color.onyx.textSecondary)
+                .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .bold) }.foregroundStyle(Color.onyx.textSecondary)
                 .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1516,7 +1435,7 @@ private struct EnergySplit: View {
       }
     } else {
       Text("logged protein, carbs and fat all three\nand the split appears here")
-        .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
     }
   }
 }
@@ -1535,11 +1454,11 @@ private struct MacroRail: View {
     VStack(alignment: .leading, spacing: 2) {
       HStack(spacing: 4) {
         Text(label)
-          .font(OnyxWidgetType.face(8, weight: .bold, design: .rounded))
+          .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .bold, design: .rounded) }
           .foregroundStyle(color)
         Spacer(minLength: 0)
         Text(figures)
-          .font(OnyxWidgetType.face(9, weight: .medium, design: .monospaced))
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .medium, design: .monospaced) }
           .foregroundStyle(Color.onyx.textSecondary)
           .lineLimit(1)
       }
@@ -1553,6 +1472,38 @@ private struct MacroRail: View {
   /// The rail still carries the proportion, so the fraction is not lost; what
   /// changes is which of the two is spelled in digits.
   private var figures: String { MacroRemainder.text(value, goal) ?? "—" }
+}
+
+/// The day's key micronutrients as compact rails in one row (overhaul B2, W0
+/// open call 3): name, share of target, a 3 pt rail in `Color.onyx.micro`.
+/// Absent — no row, no height — when the payload carries none: an old
+/// payload, a day nothing measured, or the Small scope that never asks.
+struct MicroRails: View {
+  let micros: [KeyMicro]
+  let mono: Bool
+
+  var body: some View {
+    if !micros.isEmpty {
+      HStack(spacing: 8) {
+        ForEach(micros) { micro in
+          VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 3) {
+              Text(micro.name)
+                .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .semibold) }
+                .foregroundStyle(Color.onyx.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+              Spacer(minLength: 0)
+              Text("\(Int((micro.pct * 100).rounded()))%")
+                .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .medium, design: .monospaced) }
+                .foregroundStyle(Color.onyx.textPrimary)
+            }
+            Rail(progress: min(1, max(0, micro.pct)), color: mono ? .white : Color.onyx.micro, height: 3)
+          }
+        }
+      }
+    }
+  }
 }
 
 /// The one place the "what is left" wording is decided.
@@ -1588,36 +1539,24 @@ struct WaterLargeFace: View {
 
   private var s: OnyxSnapshot? { entry.snapshot }
   private func tint(_ c: Color) -> Color { mono ? .white : c }
-  private var counts: (total: Int, filled: Int)? {
-    GlassArc.segments(ml: s?.water.ml, goalMl: s?.water.goalMl)
-  }
-
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       Register(title: "HYDRATION", accent: tint(Color.onyx.water)) {
         HStack(spacing: 12) {
-          ZStack {
-            GlassArc(ml: s?.water.ml, goalMl: s?.water.goalMl,
-                     tint: Color.onyx.water, lineWidth: 10, monochrome: mono)
-            VStack(spacing: 0) {
-              BigValue(value: counts.map { "\($0.filled)" }, size: 28, color: Color.onyx.textPrimary)
-              Text(counts.map { "of \($0.total)" } ?? "glasses")
-                .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
-            }
-          }
-          .frame(width: 92, height: 92)
+          PitcherCount(s: s, mono: mono, size: 28)
+            .frame(height: 92)
 
           VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
               Text(litresText(s) ?? "—")
-                .font(OnyxWidgetType.face(16, weight: .bold, design: .rounded))
+                .onyxWidgetFont { OnyxWidgetType.face(16 * $0, weight: .bold, design: .rounded) }
                 .foregroundStyle(Color.onyx.textPrimary)
                 .lineLimit(1)
               Spacer(minLength: 0)
               if entry.isStale { StaleTag(age: entry.age) }
             }
             if let left = litresLeft {
-              Text(left).font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+              Text(left).onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
             }
             Spacer(minLength: 0)
             if let button { button.make() }
@@ -1705,7 +1644,7 @@ struct OffWristMark: View {
   let note: OffWristNote
   var body: some View {
     Image(systemName: "applewatch.slash")
-      .font(OnyxWidgetType.face(9, weight: .semibold))
+      .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .semibold) }
       .foregroundStyle(Color.onyx.textSecondary)
       .accessibilityLabel(note.sentence)
   }
@@ -1737,7 +1676,7 @@ struct RecoveryChargeFace: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       Text(recoveryWord(s) ?? "no verdict yet")
-        .font(OnyxWidgetType.face(11, weight: .bold))
+        .onyxWidgetFont { OnyxWidgetType.face(11 * $0, weight: .bold) }
         .foregroundStyle(recoveryWord(s) == nil ? Color.onyx.textSecondary : accent)
         .lineLimit(1)
         .minimumScaleFactor(0.75)
@@ -1806,7 +1745,7 @@ struct WellbeingLedgerFace: View {
         // bedtime the watch never saw is the one caption this face cannot
         // truthfully print.
         Text(offWristNote(s)?.short ?? chargeCaption(s) ?? "no bedtime logged")
-          .font(OnyxWidgetType.face(8)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(8 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           .lineLimit(1).minimumScaleFactor(0.7)
           .accessibilityLabel(offWristNote(s)?.sentence ?? chargeCaption(s) ?? "no bedtime logged")
       }
@@ -1835,27 +1774,27 @@ struct WellbeingLedgerFace: View {
             // that eventually will not fit: shrinking is legible and truncation
             // is not, and the column keeps its width either way.
             Text(name)
-              .font(OnyxWidgetType.face(8, weight: .bold))
+              .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .bold) }
               .foregroundStyle(Color.onyx.textSecondary)
               .lineLimit(1)
               .minimumScaleFactor(0.7)
               .frame(width: 52, alignment: .leading)
             Rail(progress: value.map { min(1, max(0, $0 / 100)) }, color: color, height: 4)
             Text(value.map { "\(Int($0.rounded()))" } ?? "—")
-              .font(OnyxWidgetType.face(9, weight: .semibold, design: .monospaced))
+              .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .semibold, design: .monospaced) }
               .foregroundStyle(Color.onyx.textPrimary)
               .frame(width: 20, alignment: .trailing)
           }
         }
         HStack(spacing: 6) {
           Text(recoveryWord(s) ?? "no verdict yet")
-            .font(OnyxWidgetType.face(10, weight: .bold))
+            .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .bold) }
             .foregroundStyle(recoveryWord(s) == nil ? Color.onyx.textSecondary : (mono ? .white : OnyxDomain.recover.accent))
             .lineLimit(1).minimumScaleFactor(0.8)
           Spacer(minLength: 0)
           if let battery = s?.battery {
             Text("\(battery)%")
-              .font(OnyxWidgetType.figure(10))
+              .onyxWidgetFont { OnyxWidgetType.figure(10 * $0) }
               .foregroundStyle(mono ? .white : Color.onyx.battery(battery))
           }
         }
@@ -1897,18 +1836,18 @@ struct WellbeingFace: View {
 
         VStack(alignment: .leading, spacing: 4) {
           Text(recoveryWord(s) ?? "no verdict yet")
-            .font(OnyxWidgetType.face(15, weight: .bold))
+            .onyxWidgetFont { OnyxWidgetType.face(15 * $0, weight: .bold) }
             .foregroundStyle(recoveryWord(s) == nil ? Color.onyx.textSecondary : tint(OnyxDomain.recover.accent))
             .lineLimit(2).minimumScaleFactor(0.8)
           if let caption = chargeCaption(s) {
-            Text(caption).font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+            Text(caption).onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           }
           if let battery = s?.battery {
             HStack(spacing: 4) {
               Text("\(battery)")
-                .font(OnyxWidgetType.figure(13))
+                .onyxWidgetFont { OnyxWidgetType.figure(13 * $0) }
                 .foregroundStyle(mono ? .white : Color.onyx.battery(battery))
-              Text("% battery").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+              Text("% battery").onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
             }
           }
           Spacer(minLength: 0)
@@ -1929,7 +1868,7 @@ struct WellbeingFace: View {
         ForEach(wellbeingParts(s, mono: mono), id: \.0) { name, value, color in
           HStack(spacing: 8) {
             Text(name)
-              .font(OnyxWidgetType.face(8, weight: .bold))
+              .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .bold) }
               .foregroundStyle(Color.onyx.textSecondary)
               // Same rule as the Medium: one alignment line for every rail,
               // and a word that outgrows the column shrinks rather than losing
@@ -1939,7 +1878,7 @@ struct WellbeingFace: View {
               .frame(width: 62, alignment: .leading)
             Rail(progress: value.map { min(1, max(0, $0 / 100)) }, color: color, height: 4)
             Text(value.map { "\(Int($0.rounded()))" } ?? "—")
-              .font(OnyxWidgetType.face(10, weight: .semibold, design: .monospaced))
+              .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold, design: .monospaced) }
               .foregroundStyle(Color.onyx.textPrimary)
               .frame(width: 22, alignment: .trailing)
           }
@@ -1957,7 +1896,7 @@ struct WellbeingFace: View {
         // was off the wrist (W6), the reason is that it was built from fewer
         // signals than it would have been.
         Text(readiness.offWrist?.sentence ?? readiness.reason)
-          .font(OnyxWidgetType.face(10))
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }
           .foregroundStyle(Color.onyx.textSecondary)
           .lineLimit(2)
           .minimumScaleFactor(0.85)
@@ -1966,7 +1905,7 @@ struct WellbeingFace: View {
         // state rather than an error — and saying so is better than a gap where
         // a sentence was yesterday.
         Text("today's verdict appears once the battery has a reading")
-          .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
       }
     }
   }

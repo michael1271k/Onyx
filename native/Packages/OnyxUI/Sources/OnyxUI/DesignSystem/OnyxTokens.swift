@@ -762,6 +762,21 @@ public enum OnyxSleepStage: CaseIterable, Sendable {
         case .awake: "Awake"
         }
     }
+
+    public init(_ stage: SleepStage) {
+        switch stage {
+        case .deep:  self = .deep
+        case .core:  self = .core
+        case .rem:   self = .rem
+        case .awake: self = .awake
+        }
+    }
+
+    /// `SleepStage.segments` — the one stage-order rule (OnyxCore) — in this
+    /// module's inks. Every sleep figure builds its segments here.
+    public static func segments(deep: Int?, core: Int?, rem: Int?, awake: Int?) -> [(OnyxSleepStage, Int)] {
+        SleepStage.segments(deep: deep, core: core, rem: rem, awake: awake).map { (OnyxSleepStage($0.0), $0.1) }
+    }
 }
 
 

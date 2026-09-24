@@ -210,7 +210,7 @@ struct TodayFace: View {
       }
 
       if let sub {
-        Text(sub).font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+        Text(sub).onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
       }
 
       Spacer(minLength: 0)
@@ -242,7 +242,7 @@ struct TodayFace: View {
         Hairline()
         HStack(spacing: 5) {
           Text(weekText)
-            .font(OnyxWidgetType.face(9, weight: .semibold)).foregroundStyle(Color.onyx.textSecondary)
+            .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .semibold) }.foregroundStyle(Color.onyx.textSecondary)
             .lineLimit(1)
           Spacer(minLength: 4)
           SessionChips(entry: entry, mono: mono)
@@ -257,7 +257,7 @@ struct TodayFace: View {
       // and a headline that stayed put would have read as the smaller half of
       // its own tile. `lineLimit(2)` and the scale factor are what keep "Legs
       // & Core B" inside 338 pt at the larger size.
-      .font(OnyxWidgetType.label(compact ? 15 : 20, weight: .bold))
+      .onyxWidgetFont { OnyxWidgetType.label((compact ? 15 : 20) * $0, weight: .bold) }
       .foregroundStyle(Color.onyx.textPrimary)
       .lineLimit(2)
       .minimumScaleFactor(0.8)
@@ -311,8 +311,8 @@ private struct StartChip: View {
 
   var body: some View {
     HStack(spacing: 3) {
-      Image(systemName: "play.fill").font(OnyxWidgetType.face(8))
-      Text("START").font(OnyxWidgetType.face(9, weight: .heavy)).tracking(0.8)
+      Image(systemName: "play.fill").onyxWidgetFont { OnyxWidgetType.face(8 * $0) }
+      Text("START").onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .heavy) }.tracking(0.8)
     }
     .foregroundStyle(accent)
     .padding(.horizontal, 6)
@@ -356,7 +356,7 @@ private struct SessionChips: View {
         ForEach(week) { day in
           let color = mono ? Color.white : Color.onyx.day(day.dayKey)
           Text(shortLabel(day))
-            .font(OnyxWidgetType.face(8, weight: .bold))
+            .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .bold) }
             .lineLimit(1)
             .foregroundStyle(day.logged ? Color.onyx.base : color)
             .padding(.horizontal, 4)
@@ -402,7 +402,7 @@ private struct TodayHeader: View {
   var body: some View {
     HStack(spacing: 5) {
       Image(systemName: glyph)
-        .font(OnyxWidgetType.face(10, weight: .semibold))
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold) }
         .foregroundStyle(isRest ? Color.onyx.textSecondary : accent)
       Caption(caption, color: isRest ? Color.onyx.textSecondary : accent)
       Spacer(minLength: 0)
@@ -550,7 +550,7 @@ struct TodayLargeFace: View {
         FaceLink(OnyxLink.workout ?? OnyxLink.home) {
           HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(s?.workout.label ?? "—")
-              .font(OnyxWidgetType.face(24, weight: .bold))
+              .onyxWidgetFont { OnyxWidgetType.face(24 * $0, weight: .bold) }
               .foregroundStyle(Color.onyx.textPrimary)
               .lineLimit(1)
               .minimumScaleFactor(0.7)
@@ -562,7 +562,7 @@ struct TodayLargeFace: View {
           TodayStats(done: done, mono: mono)
         } else if s?.workout.isRestDay == true {
           Text("recovery is the session")
-            .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+            .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         } else if let s {
           // Was "not logged yet" — true, and nothing you could act on, on the
           // largest surface in the gallery.
@@ -575,7 +575,7 @@ struct TodayLargeFace: View {
       Register(title: "THE LAST SEVEN DAYS", accent: mono ? .white : OnyxDomain.train.accent) {
         if recent.isEmpty {
           Text("no scheduled days on record yet")
-            .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+            .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         } else {
           VStack(spacing: 0) {
             ForEach(Array(recent.enumerated()), id: \.element.id) { index, day in
@@ -617,7 +617,7 @@ private struct DayRow: View {
         .strokeBorder(day.scheduled ? color.opacity(0.6) : Color.onyx.textSecondary.opacity(0.3), lineWidth: 1.5)
         .frame(width: 10, height: 10)
       Text(OnyxSnapshot.weekdayInitial(day.d) + (OnyxSnapshot.dayOfMonth(day.d).map { " \($0)" } ?? ""))
-        .font(OnyxWidgetType.face(11, weight: isToday ? .bold : .semibold))
+        .onyxWidgetFont { OnyxWidgetType.face(11 * $0, weight: isToday ? .bold : .semibold) }
         .foregroundStyle(isToday ? Color.onyx.textPrimary : Color.onyx.textSecondary)
         .frame(width: 42, alignment: .leading)
       // The plan's own name for the session, which the payload now carries. A
@@ -625,17 +625,17 @@ private struct DayRow: View {
       // happened, never which ones — and which ones is the whole question a rest
       // day is asking.
       Text(day.label ?? state)
-        .font(OnyxWidgetType.face(11, weight: .medium))
+        .onyxWidgetFont { OnyxWidgetType.face(11 * $0, weight: .medium) }
         .foregroundStyle(day.logged ? Color.onyx.textPrimary : Color.onyx.textSecondary)
         .lineLimit(1)
       Text(state)
-        .font(OnyxWidgetType.face(9))
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
         .foregroundStyle(stateColor)
         .lineLimit(1)
       Spacer(minLength: 4)
       if let volume = OnyxSnapshot.tonnes(day.volumeKg) {
         Text(volume)
-          .font(OnyxWidgetType.face(11, weight: .bold, design: .monospaced))
+          .onyxWidgetFont { OnyxWidgetType.face(11 * $0, weight: .bold, design: .monospaced) }
           .foregroundStyle(Color.onyx.textPrimary)
       }
     }
@@ -675,12 +675,12 @@ struct Stat: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(value ?? "—")
-        .font(OnyxWidgetType.face(size, weight: .bold, design: .monospaced))
+        .onyxWidgetFont { OnyxWidgetType.face(size * $0, weight: .bold, design: .monospaced) }
         .foregroundStyle(color)
         .lineLimit(1)
         .minimumScaleFactor(0.7)
       Text(label)
-        .font(OnyxWidgetType.face(size >= 15 ? 8 : 7, weight: .bold))
+        .onyxWidgetFont { OnyxWidgetType.face((size >= 15 ? 8 : 7) * $0, weight: .bold) }
         .foregroundStyle(Color.onyx.textSecondary)
         .lineLimit(1)
     }
@@ -761,10 +761,10 @@ struct CalendarFace: View {
         if !compact, let streak = s?.streak, streak.current > 0 {
           HStack(spacing: 3) {
             Image(systemName: "flame.fill")
-              .font(OnyxWidgetType.face(9))
+              .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
               .foregroundStyle(mono ? .white : OnyxDomain.train.accent)
             Text("\(streak.current)")
-              .font(OnyxWidgetType.face(10, weight: .bold, design: .monospaced))
+              .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .bold, design: .monospaced) }
               .foregroundStyle(Color.onyx.textPrimary)
           }
         }
@@ -772,7 +772,7 @@ struct CalendarFace: View {
 
       if days.isEmpty {
         Text("no scheduled days yet")
-          .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
       } else {
         MonthGrid(days: days, today: s?.date, mono: mono, showHeader: !compact)
@@ -834,7 +834,7 @@ struct MonthGrid: View {
             // True by construction: `rows` padded column zero to Sunday.
             ForEach(Array(["S", "M", "T", "W", "T", "F", "S"].enumerated()), id: \.offset) { _, letter in
               Text(letter)
-                .font(OnyxWidgetType.face(8, weight: .bold))
+                .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .bold) }
                 .foregroundStyle(Color.onyx.textSecondary)
                 .frame(maxWidth: .infinity)
             }
@@ -921,7 +921,7 @@ private struct DayCell: View {
       }
 
       Text(OnyxSnapshot.dayOfMonth(day.d).map { "\($0)" } ?? "")
-        .font(OnyxWidgetType.figure(max(7, size * 0.42)))
+        .onyxWidgetFont { OnyxWidgetType.figure((max(7, size * 0.42)) * $0) }
         .fontWeight(day.logged ? .bold : .semibold)
         .foregroundStyle(textColor)
         // 0.6, not 0.7: a Small month is six rows, so the cell is smaller than
@@ -997,7 +997,7 @@ struct VolumeFocusFace: View {
       }
       BigValue(value: OnyxSnapshot.tonnes(s?.week.volumeKg), size: 28, color: Color.onyx.textPrimary)
       HStack(spacing: 5) {
-        Text("this week").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+        Text("this week").onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         DeltaChip(delta: volumeDeltaTonnes(s), decimals: 1, suffix: " t", monochrome: mono)
       }
       Spacer(minLength: 0)
@@ -1005,7 +1005,7 @@ struct VolumeFocusFace: View {
       strip
       if let behind = strip.laggard {
         Text("\(behind.muscle) \(Int(behind.sets.rounded()))/\(behind.target)")
-          .font(OnyxWidgetType.face(9, weight: .semibold))
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .semibold) }
           .foregroundStyle(Color.onyx.textSecondary)
           .lineLimit(1)
           .minimumScaleFactor(0.8)
@@ -1042,7 +1042,7 @@ struct VolumeFace: View {
         }
         Spacer(minLength: 0)
         BigValue(value: OnyxSnapshot.tonnes(s?.week.volumeKg), size: 30, color: Color.onyx.textPrimary)
-        Text("this week").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+        Text("this week").onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         DeltaChip(delta: volumeDeltaTonnes(s), decimals: 1, suffix: " t", monochrome: mono)
         Spacer(minLength: 0)
         Hairline()
@@ -1069,7 +1069,7 @@ struct VolumeFace: View {
         // says which muscle, and a sixteen-cell ladder has no room for labels.
         Text(strip.laggard.map { "\($0.muscle) is furthest behind — \(Int($0.sets.rounded())) of \($0.target)" }
              ?? "every muscle at or past its target")
-          .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           .lineLimit(1).minimumScaleFactor(0.8)
       }
       .frame(maxWidth: .infinity)
@@ -1111,7 +1111,7 @@ struct VolumeLargeFace: View {
         strip.frame(maxHeight: .infinity)
         Text(strip.laggard.map { "\($0.muscle) is furthest behind — \(Int($0.sets.rounded())) of \($0.target)" }
              ?? "every muscle at or past its target")
-          .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           .lineLimit(1)
       }
       .frame(maxHeight: .infinity)
@@ -1207,12 +1207,12 @@ struct StreakFace: View {
 
       HStack(alignment: .center, spacing: 8) {
         Image(systemName: "flame.fill")
-          .font(OnyxWidgetType.face(26))
+          .onyxWidgetFont { OnyxWidgetType.face(26 * $0) }
           .foregroundStyle(mono ? .white : (current ?? 0) > 0 ? OnyxDomain.train.accent : Color.onyx.textSecondary)
         BigValue(value: current.map { "\($0)" }, size: 34, color: Color.onyx.textPrimary)
       }
 
-      Text(subtitle).font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+      Text(subtitle).onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
 
       Spacer(minLength: 0)
     }
@@ -1274,7 +1274,7 @@ struct ConsistencyFace: View {
         Spacer(minLength: 0)
         HStack(alignment: .center, spacing: 6) {
           Image(systemName: "flame.fill")
-            .font(OnyxWidgetType.face(large ? 30 : 22))
+            .onyxWidgetFont { OnyxWidgetType.face((large ? 30 : 22) * $0) }
             .foregroundStyle((s?.streak?.current ?? 0) > 0 ? accent : Color.onyx.textSecondary)
           // `.map` on the STREAK, not on `current` — `streak` is the optional and
           // `current` is a plain Int, so `s?.streak?.current.map` asks an Int for
@@ -1282,7 +1282,7 @@ struct ConsistencyFace: View {
           BigValue(value: s?.streak.map { "\($0.current)" }, size: large ? 40 : 30, color: Color.onyx.textPrimary)
         }
         Text("day streak")
-          .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
+          .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary).lineLimit(1)
         Spacer(minLength: 0)
       }
       .frame(width: large ? 130 : 104, alignment: .leading)
@@ -1322,7 +1322,7 @@ private struct AdherenceStrip: View {
   var body: some View {
     if days.isEmpty {
       Text("no scheduled days behind you yet")
-        .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
     } else {
       // Ten a row keeps the dots legible at both sizes; a single row of thirty
       // shrinks each one to a speck on a Medium.

@@ -70,14 +70,14 @@ public struct StressView: View {
           )
           if let band = model?.band, let label = Stress.bandLabel(band) {
             Text(label)
-              .font(OnyxWidgetType.face(11, weight: .semibold))
+              .onyxWidgetFont { OnyxWidgetType.face(11 * $0, weight: .semibold) }
               .foregroundStyle(accent)
               .lineLimit(1).minimumScaleFactor(0.8)
           }
           Spacer(minLength: 0)
           if size != .small, line.count >= 2 {
             Text("\(line.count) of \(model?.series14.count ?? 0) d")
-              .font(OnyxWidgetType.face(9))
+              .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
               .foregroundStyle(Color.onyx.textTertiary)
           }
         }

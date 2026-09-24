@@ -116,47 +116,19 @@ struct ChargeArc: View {
   }
 }
 
-// MARK: - Glass arc
+// MARK: - Pitcher
 
-/// The day's water as `goal ÷ 250 ml` discrete segments around an arc.
-///
-/// ── WHY SEGMENTS AND NOT A RAIL ──────────────────────────────────────────────
-/// Water is the one lifestyle reading that is LOGGED in units. Nobody drinks
-/// 63 % of a goal; they drink a glass, and then another one. A continuous rail
-/// makes the reader convert their own action into a proportion and back again,
-/// and it cannot answer the only question the tile is ever asked, which is how
-/// many more.
-///
-/// The segment count follows the GOAL rather than being a fixed eight, because
-/// eight segments against a 2.5 L goal would make each one 312 ml and the
-/// button beside it adds 250. Clamped to sixteen: past that the gaps are wider
-/// than the segments and the arc reads as a dashed line.
-struct GlassArc: View {
-  /// Millilitres drunk. Nil draws the empty track.
-  let ml: Double?
-  /// Millilitres targeted. Nil means no goal, and no goal means no segments to
-  /// be a fraction of — the arc then draws one continuous sweep of nothing,
-  /// which is the same refusal `Rail` makes.
-  let goalMl: Double?
-  let tint: Color
-  var lineWidth: CGFloat = 12
-  var monochrome = false
-
-  /// One glass — a face that segmented at 200 would show a tap filling four
-  /// fifths of a segment.
-  ///
-  /// `PendingWater.glassMl` itself since W4, not a literal promising to match
-  /// it: that enum left `Shared/` for OnyxCore when the wrist grew a water
-  /// button, and this package links OnyxCore, so the promise can be the
-  /// reference it was always describing.
+/// Counting glasses — the arithmetic the water faces share. It outlived the
+/// segmented arc it was written for (`GlassArc`, W6), which the pitcher
+/// replaced in B2.
+enum Glasses {
+  /// One glass — `PendingWater.glassMl`, the amount the +250 ml button adds.
   static let glassMl: Double = PendingWater.glassMl
   static let maxSegments = 16
 
-  /// How many segments the goal is worth, and how many of them are full.
-  ///
-  /// Internal so a test can state it: a 3 L goal is twelve glasses, 1 900 ml is
-  /// seven of them full and the eighth part-drunk — which this reports as seven,
-  /// because a segment is a glass and three quarters of a glass is not one.
+  /// How many glasses the goal is worth, and how many of them are full.
+  /// A 3 L goal is twelve glasses; 1 900 ml is seven of them, because three
+  /// quarters of a glass is not one.
   static func segments(ml: Double?, goalMl: Double?) -> (total: Int, filled: Int)? {
     guard let goalMl, goalMl > 0 else { return nil }
     let total = min(maxSegments, max(1, Int((goalMl / glassMl).rounded())))
@@ -164,147 +136,102 @@ struct GlassArc: View {
     return (total, filled)
   }
 
-  private var ink: Color { monochrome ? .white : tint }
+  /// The day's fill, 0…1. Nil with no goal — a level of nothing.
+  static func level(ml: Double?, goalMl: Double?) -> Double? {
+    guard let goalMl, goalMl > 0 else { return nil }
+    return min(1, max(0, (ml ?? 0) / goalMl))
+  }
+}
 
-  var body: some View {
-    GeometryReader { geo in
-      let d = min(geo.size.width, geo.size.height) - lineWidth
-      if let counts = Self.segments(ml: ml, goalMl: goalMl) {
-        // A 280° sweep with the gap at the bottom: a full circle has no start
-        // and no end, so a viewer cannot tell a full arc from an empty one at
-        // a glance. The opening is where the counting begins.
-        let sweep = 0.78
-        let slice = sweep / Double(counts.total)
-        // A tenth of a slice of air between segments — enough to separate
-        // twelve of them, small enough that four still read as one gauge.
-        let gap = slice * 0.16
-        ZStack {
-          ForEach(0..<counts.total, id: \.self) { index in
-            let from = Double(index) * slice
-            Circle()
-              .trim(from: from, to: from + slice - gap)
-              .stroke(
-                index < counts.filled ? ink : Color.onyx.hairline,
-                style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt)
-              )
-          }
-        }
-        // The gap is centred at the bottom: rotate so the run starts one half
-        // of the missing arc past nine o'clock.
-        .rotationEffect(.degrees(90 + (1 - sweep) * 180))
-        .frame(width: d, height: d)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.easeOut(duration: 0.35), value: counts.filled)
-      } else {
-        Circle()
-          .stroke(Color.onyx.hairline, lineWidth: lineWidth)
-          .frame(width: d, height: d)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-      }
+/// The pitcher's body: a rounded trapezoid, wider at the foot, with a spout
+/// lifted off its top-left corner. One closed path, so the same shape is the
+/// outline AND the clip the water is poured into.
+struct PitcherBody: Shape {
+  /// Where the rim sits, as a fraction of the height. The level is measured
+  /// from the foot to here.
+  static let rim: CGFloat = 0.14
+
+  func path(in r: CGRect) -> Path {
+    let w = r.width, h = r.height
+    let top = r.minY + h * Self.rim, bottom = r.maxY
+    let tl = CGPoint(x: r.minX + w * 0.20, y: top)
+    let tr = CGPoint(x: r.minX + w * 0.74, y: top)
+    let br = CGPoint(x: r.minX + w * 0.80, y: bottom)
+    let bl = CGPoint(x: r.minX + w * 0.14, y: bottom)
+    let radius = w * 0.08
+    return Path { p in
+      // The spout: out and up from the rim's left end, then back down into
+      // the wall a little below it.
+      p.move(to: CGPoint(x: tl.x, y: tl.y + h * 0.08))
+      p.addLine(to: CGPoint(x: r.minX + w * 0.04, y: r.minY + h * 0.02))
+      p.addQuadCurve(to: tl, control: CGPoint(x: r.minX + w * 0.12, y: top - h * 0.02))
+      p.addLine(to: tr)
+      // The right wall, and a rounded foot at both corners.
+      p.addLine(to: CGPoint(x: br.x, y: bottom - radius))
+      p.addQuadCurve(to: CGPoint(x: br.x - radius, y: bottom), control: br)
+      p.addLine(to: CGPoint(x: bl.x + radius, y: bottom))
+      p.addQuadCurve(to: CGPoint(x: bl.x, y: bottom - radius), control: bl)
+      p.closeSubpath()
     }
   }
 }
 
-// MARK: - Depth strip
-
-/// The night's four stages as blocks at their own depth.
-///
-/// ── WHAT THIS IS, AND WHAT IT REFUSES TO BE ──────────────────────────────────
-/// It is NOT a hypnogram. A hypnogram plots stage against the CLOCK, and the
-/// ordering that implies is not in this data: the builder reads `sleep_sessions`
-/// and nothing else, so what exists is four totals — `deepMin`, `coreMin`,
-/// `remMin`, `awakeMin` — and no instant belongs to any of them. Drawing those
-/// four totals along a time axis would invent a night.
-///
-/// So the axis is SHARE OF NIGHT and the blocks are laid out by DEPTH, deepest
-/// at the floor and awake on the roof, in the ramp's own order — which makes
-/// the silhouette a strictly rising staircase. That is what makes the
-/// composition readable at 30 pt, and it is also what stops the drawing from
-/// claiming anything: no real night rises monotonically, so this cannot be
-/// mistaken for a timeline. The widths are proportions and the caption under it
-/// says so.
-///
-/// ponytail: sample-level stages are the stated ceiling. A true hypnogram needs
-/// per-sample rows (a `sleep_samples` table HealthKit can fill and this app has
-/// never written); the fix is that table, never an assumed ordering here.
-struct DepthStrip: View {
-  /// `(stage, minutes)` — a stage with no reading is absent, not zero.
-  let segments: [(OnyxSleepStage, Int)]
-  var monochrome = false
-  /// A one-pixel rule at each lane, so an eye can see which depth a block sits
-  /// at rather than inferring it from the block's own height.
-  var showsLanes = true
-
-  private var total: Int { segments.reduce(0) { $0 + $1.1 } }
-
-  /// The four lanes, TOP first: awake, REM, core, deep. `allCases` runs deep →
-  /// awake — the ramp's order and the order lightness runs in — so the lane a
-  /// stage sits in is its index counted from the other end.
-  private func laneFromTop(_ stage: OnyxSleepStage) -> Int {
-    let all = OnyxSleepStage.allCases
-    return all.count - 1 - (all.firstIndex(of: stage) ?? 0)
+/// The handle: an open C on the right wall. Stroked, never filled.
+struct PitcherHandle: Shape {
+  func path(in r: CGRect) -> Path {
+    let w = r.width, h = r.height
+    return Path { p in
+      p.move(to: CGPoint(x: r.minX + w * 0.755, y: r.minY + h * 0.26))
+      p.addCurve(
+        to: CGPoint(x: r.minX + w * 0.785, y: r.minY + h * 0.66),
+        control1: CGPoint(x: r.minX + w * 1.0, y: r.minY + h * 0.24),
+        control2: CGPoint(x: r.minX + w * 1.0, y: r.minY + h * 0.68)
+      )
+    }
   }
+}
+
+/// The day's water as a pitcher filling (decision Q8).
+///
+/// Water is fixed blue (`OnyxInk.Fixed.water`) in every theme. The level is
+/// the day against its goal; the meniscus is a 2 pt lighter band on the
+/// surface so a quarter-full pitcher reads as water and not as a shaded foot.
+struct PitcherFigure: View {
+  let ml: Double?
+  let goalMl: Double?
+  var monochrome = false
+
+  private var ink: Color { monochrome ? .white : Color.onyx.water }
 
   var body: some View {
     GeometryReader { geo in
-      if total > 0 {
-        let lanes = OnyxSleepStage.allCases
-        let laneHeight = geo.size.height / CGFloat(lanes.count)
-        let blockHeight = max(3, laneHeight * 0.7)
-        ZStack(alignment: .topLeading) {
-          if showsLanes {
-            VStack(spacing: 0) {
-              ForEach(lanes, id: \.self) { _ in
-                ZStack(alignment: .bottom) {
-                  Color.clear
-                  Rectangle().fill(Color.onyx.hairline.opacity(0.5)).frame(height: 1)
-                }
-                .frame(height: laneHeight)
-              }
-            }
+      // The figure keeps its own proportion (4:5) inside whatever it is given.
+      let h = min(geo.size.height, geo.size.width * 1.25)
+      let w = h * 0.8
+      let level = CGFloat(Glasses.level(ml: ml, goalMl: goalMl) ?? 0)
+      let fillTop = h * (PitcherBody.rim + (1 - PitcherBody.rim) * (1 - level))
+      ZStack(alignment: .topLeading) {
+        PitcherBody().fill(Color.onyx.hairline.opacity(0.35))
+        if level > 0 {
+          ZStack(alignment: .topLeading) {
+            Rectangle().fill(ink.opacity(monochrome ? 0.8 : 1))
+              .frame(height: h - fillTop)
+              .offset(y: fillTop)
+            Rectangle().fill(Color.white.opacity(0.45))
+              .frame(height: 2)
+              .offset(y: fillTop)
           }
-          // ── A STAIRCASE, AND DELIBERATELY A MONOTONIC ONE ─────────────────
-          // Left to right the blocks run deep → core → REM → awake, which is
-          // the ramp's order and produces a strictly rising silhouette. That is
-          // the point: no real night rises monotonically, so the shape cannot
-          // be misread as a timeline the way a zig-zag would be. What it does
-          // carry is the composition — each block's WIDTH is that stage's share
-          // — and its depth, which is the lane it sits in.
-          HStack(spacing: 2) {
-            ForEach(lanes, id: \.self) { stage in
-              if let minutes = segments.first(where: { $0.0 == stage })?.1, minutes > 0 {
-                VStack(spacing: 0) {
-                  Spacer(minLength: 0)
-                    .frame(height: CGFloat(laneFromTop(stage)) * laneHeight + (laneHeight - blockHeight) / 2)
-                  RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(monochrome ? Color.white.opacity(Self.opacity(stage)) : stage.color)
-                    .frame(height: blockHeight)
-                  Spacer(minLength: 0)
-                }
-                .frame(width: max(2, geo.size.width * CGFloat(minutes) / CGFloat(total)))
-              }
-            }
-          }
+          .frame(width: w, height: h, alignment: .topLeading)
+          .clipShape(PitcherBody())
+          .animation(.easeOut(duration: 0.35), value: level)
         }
-      } else {
-        // A night synced as a duration with no stages at all is a real state.
-        // An empty track says so; four zero-width blocks do not.
-        RoundedRectangle(cornerRadius: 2, style: .continuous)
-          .fill(Color.onyx.hairline)
-          .frame(maxHeight: .infinity)
+        PitcherBody().stroke(Color.onyx.textSecondary, lineWidth: 1.5)
+        PitcherHandle().stroke(Color.onyx.textSecondary, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
       }
+      .frame(width: w, height: h)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-  }
-
-  /// In tinted mode the ramp survives as opacity, so depth is still legible —
-  /// the same table `DepthBar` uses, for the same reason.
-  static func opacity(_ stage: OnyxSleepStage) -> Double {
-    switch stage {
-    case .deep: return 1.0
-    case .core: return 0.75
-    case .rem: return 0.5
-    case .awake: return 0.3
-    }
+    .accessibilityHidden(true)
   }
 }
 

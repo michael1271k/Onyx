@@ -160,28 +160,28 @@ struct TrophyFace: View {
   private var row: some View {
     HStack(alignment: .center, spacing: 8) {
       Image(systemName: "trophy.fill")
-        .font(OnyxWidgetType.face(13))
+        .onyxWidgetFont { OnyxWidgetType.face(13 * $0) }
         .foregroundStyle(gold)
         .frame(width: 16)
       VStack(alignment: .leading, spacing: 0) {
         Text(record.exercise)
-          .font(OnyxWidgetType.face(10, weight: .semibold))
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .semibold) }
           .foregroundStyle(Color.onyx.textPrimary)
           .lineLimit(1)
           .minimumScaleFactor(0.8)
         Text(record.axisLabel)
-          .font(OnyxWidgetType.face(8))
+          .onyxWidgetFont { OnyxWidgetType.face(8 * $0) }
           .foregroundStyle(Color.onyx.textSecondary)
           .lineLimit(1)
       }
       Spacer(minLength: 4)
       Text(record.display)
-        .font(OnyxWidgetType.hero(15))
+        .onyxWidgetFont { OnyxWidgetType.hero(15 * $0) }
         .foregroundStyle(gold)
         .lineLimit(1)
         .minimumScaleFactor(0.7)
       Text(record.marginText ?? "1st")
-        .font(OnyxWidgetType.face(9, weight: .bold))
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .bold) }
         .foregroundStyle(marginInk)
         .frame(width: 52, alignment: .trailing)
         .lineLimit(1)
@@ -200,17 +200,17 @@ struct TrophyFace: View {
     VStack(alignment: .leading, spacing: 2) {
       HStack(spacing: 6) {
         Image(systemName: "trophy.fill")
-          .font(OnyxWidgetType.face(12))
+          .onyxWidgetFont { OnyxWidgetType.face(12 * $0) }
           .foregroundStyle(gold)
         Text(record.exercise)
-          .font(OnyxWidgetType.face(11, weight: .semibold))
+          .onyxWidgetFont { OnyxWidgetType.face(11 * $0, weight: .semibold) }
           .foregroundStyle(Color.onyx.textPrimary)
           .lineLimit(2)
           .minimumScaleFactor(0.8)
       }
       HStack(alignment: .firstTextBaseline, spacing: 5) {
         Text(record.display)
-          .font(OnyxWidgetType.hero(20))
+          .onyxWidgetFont { OnyxWidgetType.hero(20 * $0) }
           .foregroundStyle(gold)
           .lineLimit(1)
           .minimumScaleFactor(0.7)
@@ -218,14 +218,14 @@ struct TrophyFace: View {
         // `relativeDay` says the record is fresh and nothing about how much of
         // a record it is.
         Text(record.marginText ?? "first on the board")
-          .font(OnyxWidgetType.face(10, weight: .bold))
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0, weight: .bold) }
           .foregroundStyle(marginInk)
           .lineLimit(1)
           .minimumScaleFactor(0.7)
       }
       Text([record.axisLabel, OnyxSnapshot.relativeDay(record.achievedOn)]
              .compactMap { $0 }.joined(separator: " · "))
-        .font(OnyxWidgetType.face(9))
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
         .foregroundStyle(Color.onyx.textSecondary)
         .lineLimit(1)
       // What the margin is measured FROM, so the number above it cannot be read
@@ -233,7 +233,7 @@ struct TrophyFace: View {
       // have no line to spare and drop it rather than truncate it.
       if let caption = record.marginCaption {
         Text(caption)
-          .font(OnyxWidgetType.face(8))
+          .onyxWidgetFont { OnyxWidgetType.face(8 * $0) }
           .foregroundStyle(Color.onyx.textTertiary)
           .lineLimit(1)
           .minimumScaleFactor(0.8)
@@ -264,12 +264,12 @@ struct RecordFocusFace: View {
         Spacer(minLength: 0)
         if let prs = s?.week.prs, prs > 0 {
           Text("\(prs) this week")
-            .font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+            .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         }
       } else {
         // A week without a record is an ordinary week, not a failure.
         Text("no records in the book yet")
-          .font(OnyxWidgetType.face(11)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(11 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         Spacer(minLength: 0)
       }
     }
@@ -305,7 +305,7 @@ struct RecordLedgerFace: View {
         // and not a reading of its own, so it is typed as one.
         if let week = s?.week {
           Text("\(week.prs) this week")
-            .font(OnyxWidgetType.face(9, weight: .semibold))
+            .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .semibold) }
             .foregroundStyle(Color.onyx.textSecondary)
           DeltaChip(delta: prDelta, decimals: 0, monochrome: mono)
         }
@@ -316,7 +316,7 @@ struct RecordLedgerFace: View {
 
       if records.isEmpty {
         Text("no records in the book yet")
-          .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       } else {
         // Three, not "up to six": a fourth trophy at this height is a row of
@@ -384,7 +384,7 @@ struct RecordGridFace: View {
         // height so the register keeps its share of the face instead of
         // collapsing and dumping its space on whatever sits below.
         Text("no new records in the book yet")
-          .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       } else {
         VStack(spacing: 5) {
@@ -445,9 +445,9 @@ struct OneRepMaxFocusFace: View {
 
       if let top {
         BigValue(value: String(format: "%.1f", top.kg), size: 28, color: Color.onyx.textPrimary)
-        Text("kg").font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+        Text("kg").onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         Text(top.exercise)
-          .font(OnyxWidgetType.face(11, weight: .semibold))
+          .onyxWidgetFont { OnyxWidgetType.face(11 * $0, weight: .semibold) }
           .foregroundStyle(Color.onyx.textPrimary)
           .lineLimit(2)
           .minimumScaleFactor(0.8)
@@ -455,7 +455,7 @@ struct OneRepMaxFocusFace: View {
         DeltaChip(delta: top.deltaKg, decimals: 1, suffix: " kg", monochrome: mono)
       } else {
         Text("log a few working sets and an\nestimate appears here")
-          .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
         Spacer(minLength: 0)
       }
     }
@@ -482,14 +482,14 @@ struct OneRepMaxLedgerFace: View {
         Caption("ESTIMATED 1RM", color: accent)
         Spacer(minLength: 0)
         if entry.isStale { StaleTag(age: entry.age) }
-        Text("since 28 days").font(OnyxWidgetType.face(8)).foregroundStyle(Color.onyx.textSecondary)
+        Text("since 28 days").onyxWidgetFont { OnyxWidgetType.face(8 * $0) }.foregroundStyle(Color.onyx.textSecondary)
       }
       // The corner belongs to the mark; this row's content runs to the edge.
       .padding(.trailing, OnyxMark.faceInset)
 
       if lifts.isEmpty {
         Text("log a few working sets and the main lifts appear here")
-          .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       } else {
         let peak = lifts.map(\.kg).max() ?? 1
@@ -528,15 +528,15 @@ private struct LiftRow: View {
       VStack(alignment: .leading, spacing: 3) {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
           Text(lift.exercise)
-            .font(OnyxWidgetType.face(large ? 12 : 11, weight: .semibold))
+            .onyxWidgetFont { OnyxWidgetType.face((large ? 12 : 11) * $0, weight: .semibold) }
             .foregroundStyle(Color.onyx.textPrimary)
             .lineLimit(1)
           Spacer(minLength: 4)
           Text(String(format: "%.1f", lift.kg))
-            .font(OnyxWidgetType.face(large ? 14 : 12, weight: .bold, design: .rounded))
+            .onyxWidgetFont { OnyxWidgetType.face((large ? 14 : 12) * $0, weight: .bold, design: .rounded) }
             .monospacedDigit()
             .foregroundStyle(color)
-          Text("kg").font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+          Text("kg").onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           DeltaChip(delta: lift.deltaKg, decimals: 1, suffix: " kg", monochrome: mono)
         }
         // Against the heaviest of the tracked lifts, because there is no target
@@ -578,7 +578,7 @@ struct FamilySplit: View {
   var body: some View {
     if families.allSatisfy({ $0.sets == 0 }) {
       Text("no sets logged this week")
-        .font(OnyxWidgetType.face(10)).foregroundStyle(Color.onyx.textSecondary)
+        .onyxWidgetFont { OnyxWidgetType.face(10 * $0) }.foregroundStyle(Color.onyx.textSecondary)
     } else {
       let peak = families.map(\.sets).max() ?? 1
       HStack(alignment: .bottom, spacing: 6) {
@@ -595,10 +595,10 @@ struct FamilySplit: View {
             }
             .frame(height: height)
             Text(family.family.rawValue.prefix(4).uppercased())
-              .font(OnyxWidgetType.face(7, weight: .bold)).foregroundStyle(Color.onyx.textSecondary)
+              .onyxWidgetFont { OnyxWidgetType.face(7 * $0, weight: .bold) }.foregroundStyle(Color.onyx.textSecondary)
             // Fractional by design — a secondary mover earns half a set.
             Text(String(format: "%.0f", family.sets))
-              .font(OnyxWidgetType.face(8, weight: .semibold)).monospacedDigit()
+              .onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .semibold) }.monospacedDigit()
               .foregroundStyle(Color.onyx.textPrimary)
           }
           .frame(maxWidth: .infinity)
@@ -618,7 +618,7 @@ private struct WeekCell: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
-      Text(label).font(OnyxWidgetType.face(8, weight: .heavy)).tracking(0.7).foregroundStyle(Color.onyx.textSecondary)
+      Text(label).onyxWidgetFont { OnyxWidgetType.face(8 * $0, weight: .heavy) }.tracking(0.7).foregroundStyle(Color.onyx.textSecondary)
       BigValue(value: value, size: 17, color: color ?? Color.onyx.textPrimary)
       DeltaChip(delta: delta, decimals: decimals, monochrome: mono)
     }
@@ -640,33 +640,33 @@ private struct RecordRow: View {
   var body: some View {
     HStack(spacing: 8) {
       Image(systemName: record.axisSymbol)
-        .font(OnyxWidgetType.face(9))
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0) }
         .foregroundStyle(mono ? .white : Color.onyx.record)
         .frame(width: 12)
       VStack(alignment: .leading, spacing: 0) {
         Text(record.exercise)
-          .font(OnyxWidgetType.face(11, weight: .semibold)).foregroundStyle(Color.onyx.textPrimary)
+          .onyxWidgetFont { OnyxWidgetType.face(11 * $0, weight: .semibold) }.foregroundStyle(Color.onyx.textPrimary)
           .lineLimit(1)
         // The axis, named. Without it a 440 kg per-set VOLUME record and a 105 kg
         // heaviest LOAD are the same sentence.
         Text(record.axisLabel)
-          .font(OnyxWidgetType.face(8)).foregroundStyle(Color.onyx.textSecondary)
+          .onyxWidgetFont { OnyxWidgetType.face(8 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           .lineLimit(1)
       }
       Spacer(minLength: 4)
       Text(record.display)
-        .font(OnyxWidgetType.face(12, weight: .bold, design: .rounded)).monospacedDigit()
+        .onyxWidgetFont { OnyxWidgetType.face(12 * $0, weight: .bold, design: .rounded) }.monospacedDigit()
         .foregroundStyle(mono ? .white : Color.onyx.record)
       // The margin travels with the record everywhere it is drawn (W6), so the
       // ledger and the trophy report the same thing about the same row.
       Text(record.marginText ?? "1st")
-        .font(OnyxWidgetType.face(9, weight: .bold))
+        .onyxWidgetFont { OnyxWidgetType.face(9 * $0, weight: .bold) }
         .foregroundStyle(marginInk)
         .frame(width: 48, alignment: .trailing)
         .lineLimit(1)
         .minimumScaleFactor(0.8)
       if showDate, let when = OnyxSnapshot.relativeDay(record.achievedOn) {
-        Text(when).font(OnyxWidgetType.face(9)).foregroundStyle(Color.onyx.textSecondary)
+        Text(when).onyxWidgetFont { OnyxWidgetType.face(9 * $0) }.foregroundStyle(Color.onyx.textSecondary)
           .frame(width: 52, alignment: .trailing)
       }
     }
