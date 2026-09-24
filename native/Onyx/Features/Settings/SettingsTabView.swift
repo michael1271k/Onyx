@@ -58,6 +58,7 @@ struct SettingsTabView: View {
 private struct SettingsForm: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var typeSize
     let model: SettingsModel
 
     /// Mirrors `ExerciseCardView`'s key — a per-device view preference, not an
@@ -416,8 +417,10 @@ private struct SettingsForm: View {
                     .font(.subheadline).fontWeight(.medium)
                     .foregroundStyle(Color.onyx.textPrimary)
                     // One line: a value that wrapped under its label (Levers)
-                    // cost the row a third line.
-                    .lineLimit(1)
+                    // cost the row a third line. Not at an accessibility
+                    // size: there the value already sits under its label, and
+                    // one line cut "5 days · 37 m…" (W6 polish).
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
                     .minimumScaleFactor(0.85)
             }
         } label: {

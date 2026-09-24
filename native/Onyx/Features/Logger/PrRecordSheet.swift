@@ -77,8 +77,7 @@ struct PrRecordSheet: View {
                 ToolbarItem(placement: .principal) {
                     VStack(spacing: 0) {
                         Text("New record")
-                            .onyxMicro()
-                            .foregroundStyle(Color.onyx.record)
+                            .onyxMicro(Color.onyx.record)
                         Text(exerciseName)
                             .onyxType(.body).fontWeight(.semibold)
                             .lineLimit(1)
@@ -111,8 +110,7 @@ struct PrRecordSheet: View {
                 .background(Circle().fill(Color.onyx.record.opacity(0.12)))
             VStack(alignment: .leading, spacing: 1) {
                 Text(record.axis.displayName)
-                    .onyxMicro()
-                    .foregroundStyle(Color.onyx.record)
+                    .onyxMicro(Color.onyx.record)
                 Text(value(record.axis, record.mark.value))
                     .onyxType(.body).fontWeight(.bold).onyxNumeral()
                     .foregroundStyle(Color.onyx.textPrimary)

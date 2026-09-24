@@ -115,9 +115,9 @@ struct EffortPickerSheet: View {
                 }
             }
             HStack {
-                Text("easier").onyxMicro().foregroundStyle(Color.onyx.textTertiary)
+                Text("easier").onyxMicro(Color.onyx.textTertiary)
                 Spacer(minLength: 0)
-                Text("failure").onyxMicro().foregroundStyle(Color.onyx.textTertiary)
+                Text("failure").onyxMicro(Color.onyx.textTertiary)
             }
             .accessibilityHidden(true)
         }

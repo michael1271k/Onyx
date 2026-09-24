@@ -192,11 +192,18 @@ public extension View {
         onyxType(.caption).foregroundStyle(Color.onyx.textSecondary)
     }
 
-    /// A register label: uppercase, tracked out, tertiary ink. The case is part
-    /// of the role — a register caption in sentence case is just small body text.
-    func onyxMicro() -> some View {
+    /// A register label: uppercase, tracked out. The case is part of the role —
+    /// a register caption in sentence case is just small body text.
+    ///
+    /// Secondary ink by default since 9.0.0 (W6 polish): a register label
+    /// ("SCORE", "THIS WEEK") is the only copy of what the figure under it
+    /// means, and tertiary (40 %) fails 4.5:1 on the slab by design — it is for
+    /// unit suffixes only. The ink is a PARAMETER because a `.foregroundStyle`
+    /// chained after this call never won: the inner style is the one SwiftUI
+    /// draws, so eight "accent" labels had been rendering tertiary.
+    func onyxMicro(_ ink: Color = Color.onyx.textSecondary) -> some View {
         onyxType(.micro)
             .textCase(.uppercase)
-            .foregroundStyle(Color.onyx.textTertiary)
+            .foregroundStyle(ink)
     }
 }

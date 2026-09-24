@@ -191,9 +191,9 @@ struct HevyCompareCard: View {
             Grid(alignment: .leading, horizontalSpacing: OnyxSpace.m, verticalSpacing: OnyxSpace.s) {
                 GridRow {
                     Text("").onyxMicro()
-                    Text("ONYX").onyxMicro().foregroundStyle(OnyxDomain.train.accent)
+                    Text("ONYX").onyxMicro(OnyxDomain.train.accent)
                         .gridColumnAlignment(.trailing)
-                    Text(source.uppercased()).onyxMicro().foregroundStyle(Color.onyx.textTertiary)
+                    Text(source.uppercased()).onyxMicro(Color.onyx.textTertiary)
                         .gridColumnAlignment(.trailing)
                 }
                 ForEach(rows, id: \.label) { row in

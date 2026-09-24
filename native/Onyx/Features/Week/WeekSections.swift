@@ -495,8 +495,7 @@ struct WeekNutritionSection: View {
         if !report.flaggedMicros.isEmpty {
             VStack(alignment: .leading, spacing: OnyxSpace.s) {
                 Label("MICRONUTRIENTS TO WATCH", systemImage: "exclamationmark.triangle")
-                    .onyxMicro()
-                    .foregroundStyle(OnyxDomain.fuel.accent)
+                    .onyxMicro(OnyxDomain.fuel.accent)
                 ForEach(report.flaggedMicros) { row in
                     Shoulders(.firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 1) {
@@ -778,8 +777,7 @@ struct WeekRecordsSection: View {
         if !report.records.isEmpty {
             VStack(alignment: .leading, spacing: OnyxSpace.s) {
                 Label("NEW RECORDS", systemImage: "trophy.fill")
-                    .onyxMicro()
-                    .foregroundStyle(Color.onyx.record)
+                    .onyxMicro(Color.onyx.record)
                 ForEach(Array(report.topRecords.enumerated()), id: \.offset) { _, pr in
                     row(pr)
                 }

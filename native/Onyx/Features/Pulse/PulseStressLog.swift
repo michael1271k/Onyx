@@ -45,7 +45,7 @@ enum StressStamp {
     static func label(_ reading: StressReading) -> String {
         let when = clock(reading) ?? reading.slot.label
         guard let word = PsychStress.level(reading.level)?.label else { return when }
-        return "\(when) · \(word)"
+        return "\(when)\u{00A0}· \(word)"
     }
 
     /// The same fact, spelled for a reader who cannot see the capsule.

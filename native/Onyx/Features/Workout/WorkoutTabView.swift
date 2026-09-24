@@ -538,8 +538,7 @@ struct WorkoutTabView: View {
     private func wrapTitle(_ wrap: WeeklyWrap.Summary) -> some View {
         HStack(spacing: OnyxSpace.xs) {
             Text(wrap.isDeload ? "Deload wrapped" : "Week wrapped")
-                .onyxMicro()
-                .foregroundStyle(OnyxDomain.train.accent)
+                .onyxMicro(OnyxDomain.train.accent)
             Image(systemName: "chevron.right")
                 .onyxType(.micro)
                 .foregroundStyle(OnyxDomain.train.accent.opacity(0.7))
@@ -593,9 +592,10 @@ struct WorkoutTabView: View {
             Text(cell.initial)
                 .onyxType(.micro)
                 .textCase(.uppercase)
-                // Today's letter is the one thing in the row that is not
-                // tertiary, so the eye lands on it before it counts anything.
-                .foregroundStyle(cell.isToday ? Color.onyx.textPrimary : Color.onyx.textTertiary)
+                // Today's letter is primary and the rest secondary, so the eye
+                // lands on it first. Not tertiary: a weekday is a label, and
+                // 40 % white fails 4.5:1 on the slab (W6 polish).
+                .foregroundStyle(cell.isToday ? Color.onyx.textPrimary : Color.onyx.textSecondary)
             ZStack {
                 if cell.isToday {
                     Circle().strokeBorder(Color.onyx.hairline, lineWidth: 1).frame(width: 32, height: 32)
@@ -1027,7 +1027,10 @@ struct WorkoutTabView: View {
                 }
                 Text(trendsCaption)
                     .onyxType(.micro)
-                    .foregroundStyle(Color.onyx.textTertiary)
+                    // Secondary, not tertiary: the caption CARRIES a value
+                    // ("on pace 13.0 t"), and tertiary is 40 % white — under
+                    // 4.5:1 on the slab by design, units only (W6 polish).
+                    .foregroundStyle(Color.onyx.textSecondary)
                     // NO `lineLimit`. The caption is a sentence and the figure
                     // it exists to carry is at its END — `on pace 13.0 t` — so
                     // any cap at all puts the payload inside the ellipsis. One
@@ -1491,8 +1494,14 @@ struct WorkoutTabView: View {
     private func startButton(title: String, detail: String?, icon: String) -> some View {
         Button(action: start) {
             HStack(spacing: OnyxSpace.m) {
-                Image(systemName: icon)
-                    .onyxType(.display)
+                // Decorative, and at a `.display` size it took a third of the
+                // row at AX5 and hyphenated the title into "work- / out" (W6
+                // polish). The title is the button; the glyph goes first.
+                if !typeSize.isAccessibilitySize {
+                    Image(systemName: icon)
+                        .onyxType(.display)
+                        .accessibilityHidden(true)
+                }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .onyxType(.body).fontWeight(.semibold)
