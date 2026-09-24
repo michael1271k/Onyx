@@ -640,6 +640,13 @@ public enum OnyxInk {
         public static var sleep: [Color] { [sleepDeep, sleepCore, sleepREM, sleepAwake] }
         public static var good: Color { Color.onyx.good }
         public static var record: Color { Color.onyx.record }
+        /// RPE "hard" — amber: the record gold a quarter of the way to the
+        /// heart red, taken in Oklab. Named since W5.3; it shipped in 8.4.0 as
+        /// `record.mix(with: heart, by: 0.25)` (`EffortBandInk`), and
+        /// `OnyxThemeTests` holds the token within ΔE 2 of that mix.
+        public static let effortHard = Color(hex: 0xFBB359)
+        /// RPE "very hard" — clay: the same walk, 60 % of the way.
+        public static let effortVeryHard = Color(hex: 0xF38554)
         /// A landmark's anatomical colour (decision Q18).
         public static func muscle(_ muscle: LandmarkMuscle) -> Color {
             Color(hex: Color.onyx.defaultMuscleHex[muscle]!)

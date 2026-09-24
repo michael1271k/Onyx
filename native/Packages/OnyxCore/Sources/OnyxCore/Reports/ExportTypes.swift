@@ -19,6 +19,10 @@ public struct ExportSupplement: Codable, Equatable, Sendable {
     public var restDose: String?
     public var trainingOnly: Bool?
     public var notes: String?
+    /// A label import's ingredients the nutrient table has no key for
+    /// (`custom_supplements.other_ingredients`, overhaul C3 → W5.3) — kept by
+    /// name so the stack is described whole. Nil for a hand-added item.
+    public var otherIngredients: [String]?
 }
 
 public struct SupplementLogEntry: Codable, Equatable, Sendable {

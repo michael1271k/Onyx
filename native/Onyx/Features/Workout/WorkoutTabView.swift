@@ -676,7 +676,7 @@ struct WorkoutTabView: View {
                         name: header.label,
                         durationSec: Int(jsRound((minutes ?? 0) * 60)),
                         tonnageKg: volumeKg, avgBpm: nil, prCount: prCount,
-                        hrSpark: [], startedAt: Date()
+                        hrSpark: header.hrSpark, startedAt: Date()
                     ))
                 } else {
                     // The header is a career-wide read; the label, the four

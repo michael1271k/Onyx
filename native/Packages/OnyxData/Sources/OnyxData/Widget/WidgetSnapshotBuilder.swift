@@ -543,7 +543,15 @@ public struct WidgetSnapshotBuilder: Sendable {
                     let all = todaySessions.compactMap { $0.session.caloriesBurned }
                     return all.isEmpty ? nil : Double(all.reduce(0, +))
                 }(),
-                avgBpm: longest?.session.avgBpm
+                avgBpm: longest?.session.avgBpm,
+                // The telemetry cache the session page and the watch banner
+                // read — empty until the finish prefetch has filled it.
+                hrSpark: {
+                    guard let id = longest?.session.id,
+                          let cache = (try? database.telemetryCache(sessionId: id)) ?? nil
+                    else { return [] }
+                    return SessionMasthead.spark((cache.samples ?? []).map { Double($0.bpm) })
+                }()
             ),
             streak: OnyxSnapshot.Streak(current: streak, best: streak),
             context: context,

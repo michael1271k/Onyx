@@ -239,6 +239,28 @@ struct WidgetSnapshotBuilderTests {
         #expect(s.sleep.medianBedtime == nil)
     }
 
+    // ── OVERHAUL W5.3: the finished Medium's heart-rate band ────────────────
+
+    @Test("today's spark is the telemetry cache in six points, and empty (no key) without one")
+    func todaySparkFromTheCache() throws {
+        let db = try seeded()
+        #expect(try build(db, .full).today?.spark == [])
+        #expect(try build(db, .full).today?.hrSpark == nil, "an empty spark stays off the wire")
+
+        let samples = (0..<12).map { HRSample(at: now.addingTimeInterval(Double($0) * 60), bpm: 110 + $0) }
+        try db.writeTelemetryCache(sessionId: "s-today", samples: samples, segments: [], source: "health", fetchedAt: now)
+        let spark = try #require(try build(db, .full).today?.spark)
+        #expect(spark == SessionMasthead.spark(samples.map { Double($0.bpm) }))
+        #expect(spark.count == 6)
+    }
+
+    @Test("a Today payload written before hrSpark existed still decodes")
+    func todayWithoutSparkDecodes() throws {
+        let old = #"{"durationMin":68,"volumeKg":5840,"prCount":2}"#
+        let today = try JSONDecoder().decode(OnyxSnapshot.Today.self, from: Data(old.utf8))
+        #expect(today.spark == [] && today.durationMin == 68)
+    }
+
     // ── THE SPRINT'S W4 FACES ───────────────────────────────────────────────
 
     @Test("the week's rings count the days the goals were actually met")

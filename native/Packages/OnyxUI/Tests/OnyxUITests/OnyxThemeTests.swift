@@ -478,3 +478,25 @@ private extension Color {
         return (level(c.red) << 16) | (level(c.green) << 8) | level(c.blue)
     }
 }
+
+/// Overhaul W5.3 — the two warm effort bands became named tokens. 8.4.0 drew
+/// them as `record.mix(with: heart, by:)` at draw time; the tokens must stay
+/// within ΔE 2 (Oklab × 100) of what shipped.
+@Suite("Effort band tokens")
+struct EffortInkTokenTests {
+    @Test("effortHard and effortVeryHard sit within ΔE 2 of the 8.4.0 mixes")
+    func effortInksMatchTheMix() {
+        func lab(_ o: OKLCH) -> (Double, Double, Double) {
+            (o.l, o.c * cos(o.h * .pi / 180), o.c * sin(o.h * .pi / 180))
+        }
+        for (token, weight) in [(OnyxInk.Fixed.effortHard, 0.25), (OnyxInk.Fixed.effortVeryHard, 0.6)] {
+            let shipped = OnyxInk.Fixed.record.mix(with: OnyxInk.Fixed.heart, by: weight)
+            let (l1, a1, b1) = lab(OKLCHConvert.oklch(fromHex: token.onyxHex))
+            let (l2, a2, b2) = lab(OKLCHConvert.oklch(fromHex: shipped.onyxHex))
+            let deltaE = ((l1 - l2) * (l1 - l2) + (a1 - a2) * (a1 - a2) + (b1 - b2) * (b1 - b2)).squareRoot() * 100
+            #expect(deltaE < 2, "weight \(weight): ΔE \(deltaE)")
+        }
+        #expect(EffortBand.hard.ink == OnyxInk.Fixed.effortHard)
+        #expect(EffortBand.veryHard.ink == OnyxInk.Fixed.effortVeryHard)
+    }
+}

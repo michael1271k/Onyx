@@ -99,7 +99,9 @@ struct WeeklyExportBuilderTests {
 
             try CustomSupplementRow(id: "c1", userId: user, name: "Creatine Monohydrate", dose: "5 g", time: "15:00",
                                     schedule: JSONText(raw: #"{"key":"creatine","slot":"Lunch"}"#),
-                                    micros: JSONText(raw: #"{"creatine":5000}"#), createdAt: iso("2026-08-01T00:00:00Z"), sortOrder: 0).insert(conn)
+                                    micros: JSONText(raw: #"{"creatine":5000}"#), createdAt: iso("2026-08-01T00:00:00Z"), sortOrder: 0,
+                                    // A label import's unmapped ingredients reach the JSON (overhaul W5.3).
+                                    otherIngredients: JSONText(raw: #"["Rhodiola rosea extract","Black pepper extract"]"#)).insert(conn)
             try CustomSupplementRow(id: "c2", userId: user, name: "Caffeine", dose: "200 mg", time: "11:45",
                                     schedule: JSONText(raw: #"{"key":"caffeine","trainingOnly":true}"#),
                                     createdAt: iso("2026-08-02T00:00:00Z"), sortOrder: 0).insert(conn)
@@ -447,7 +449,8 @@ struct WeeklyExportBuilderTests {
         {"date": "2026-08-24", "slot": "evening", "level": 4, "label": "Strained", "tags": ["work"], "note": "deadline; again"}
       ],
       "supplementProtocol": [
-        {"time": "15:00", "key": "creatine", "name": "Creatine Monohydrate", "dose": "5 g"},
+        {"time": "15:00", "key": "creatine", "name": "Creatine Monohydrate", "dose": "5 g",
+         "otherIngredients": ["Rhodiola rosea extract", "Black pepper extract"]},
         {"time": "11:45", "key": "caffeine", "name": "Caffeine", "dose": "200 mg", "trainingOnly": true},
         {"time": "15:00", "key": "omega3", "name": "Omega-3", "dose": "2 caps"}
       ],

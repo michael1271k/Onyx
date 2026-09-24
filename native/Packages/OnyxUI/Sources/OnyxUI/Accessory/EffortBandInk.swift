@@ -15,18 +15,18 @@ import OnyxCore
 /// watchOS and this is the one folder both platforms compile.
 public extension EffortBand {
     ///
-    /// ── MIXED FROM TWO FIXED TOKENS, NOT NEW HEXES ──────────────────────────
-    /// Raw colour lives in the token files only (`TokenDisciplineTests`), and
-    /// this folder is not one. The warm band is the record gold walked toward
-    /// the heart red: a quarter of the way is amber (gold-adjacent but not the
-    /// PR gold, which `Color.onyx.effort` rightly refuses to share), past half
-    /// is clay, all the way is failure. Fixed in every theme, because both ends
-    /// are. Request for W6: lift these two into `OnyxInk.Fixed` by name.
+    /// ── NAMED TOKENS (overhaul W5.3) ────────────────────────────────────────
+    /// The warm band is the record gold walked toward the heart red: a quarter
+    /// of the way is amber (gold-adjacent but not the PR gold, which
+    /// `Color.onyx.effort` rightly refuses to share), past half is clay, all
+    /// the way is failure. 8.4.0 mixed them here at draw time; they are
+    /// `OnyxInk.Fixed.effortHard` / `.effortVeryHard` now, within ΔE 2 of
+    /// that mix. Fixed in every theme, because both ends are.
     var ink: Color {
         switch self {
         case .steady: OnyxInk.Themed.accent
-        case .hard: OnyxInk.Fixed.record.mix(with: OnyxInk.Fixed.heart, by: 0.25)
-        case .veryHard: OnyxInk.Fixed.record.mix(with: OnyxInk.Fixed.heart, by: 0.6)
+        case .hard: OnyxInk.Fixed.effortHard
+        case .veryHard: OnyxInk.Fixed.effortVeryHard
         case .failure: OnyxInk.Fixed.heart
         }
     }
