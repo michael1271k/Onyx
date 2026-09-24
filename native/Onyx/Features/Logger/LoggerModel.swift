@@ -1675,6 +1675,9 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         // terminal in the log and gets pushed. The row still has to have
         // happened, which for a cardio set is `isCardio`.
         guard (row.reps ?? 0) > 0 || row.isCardio else { return false }
+        // The wrist's Crown rated the LAST set during the rest this tick ends
+        // (overhaul A3): the tick is the commit (decision Q2).
+        commitProvisionals()
         row.isDone = true
         appendInStore(row, in: exercise)
         refreshLivePrs()
@@ -1711,6 +1714,80 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         guard row.isDone else { return }
         amendInStore(row, in: exercise)
         refreshLivePrs()
+    }
+
+    // MARK: - The wrist's Crown RPE (overhaul A3, decision Q2)
+
+    /// A rating the watch's Crown is scrubbing for a set, not yet written.
+    struct ProvisionalEffort: Equatable {
+        let rpe: Double
+        let band: EffortBand
+        let at: Date
+    }
+
+    /// Provisional ratings by `SetRow.storeId`. Drawn as tinted ink with a
+    /// band capsule on the deck card; NEVER persisted — nothing here reaches
+    /// `set_events` until `commitProvisional` writes it through the ordinary
+    /// `commitEdit`, and only onto a ticked set (an unticked set's RPE is not
+    /// a fact yet — the same rule `commitEdit` enforces).
+    private(set) var provisionalEffort: [String: ProvisionalEffort] = [:]
+
+    /// How long a provisional rating is worth showing. A scrub is seconds;
+    /// ten minutes is the rest after it and then some.
+    static let provisionalLifetime: TimeInterval = 10 * 60
+
+    /// Take a Crown pulse. The set is the pulse's own id when this deck holds
+    /// it, else the last ticked set of the movement resting now — a W0 sender,
+    /// or a wrist that never folded the session.
+    func receiveEffort(_ pulse: EffortPulse, now: Date = Date()) {
+        guard pulse.sessionId == sessionId else { return }
+        let rows = exercises.flatMap(\.rows)
+        // The fallback is for a pulse that names NO set. One that names a set
+        // this deck does not hold yet (a wrist-logged set still in the queue)
+        // is dropped, not re-aimed at the previous set (after review).
+        let target = pulse.setId.map { id in rows.first { $0.storeId == id } }
+            ?? exercises.first { $0.name == restingExercise }?.rows.last { $0.isDone }
+        guard let target else { return }
+        provisionalEffort = provisionalEffort.filter { now.timeIntervalSince($0.value.at) < Self.provisionalLifetime }
+        provisionalEffort[target.storeId] = ProvisionalEffort(rpe: pulse.rpe, band: pulse.band, at: now)
+    }
+
+    /// The provisional rating to draw for a row: fresh, and different from
+    /// what the row already holds. A stale one clears itself here.
+    func provisional(for row: SetRow, now: Date = Date()) -> ProvisionalEffort? {
+        guard let p = provisionalEffort[row.storeId] else { return nil }
+        guard now.timeIntervalSince(p.at) < Self.provisionalLifetime, p.rpe != row.rpe else { return nil }
+        return p
+    }
+
+    /// Write a provisional rating — a tap on its capsule, or the next tick.
+    /// A ticked set only; an unticked one keeps it provisional.
+    func commitProvisional(_ row: SetRow, in exercise: ExerciseState) {
+        guard let p = provisional(for: row), row.isDone else { return }
+        row.rpe = p.rpe
+        row.rpeStale = false
+        provisionalEffort[row.storeId] = nil
+        commitEdit(row, in: exercise)
+    }
+
+    #if DEBUG
+    /// The `logger-effort` shot: a provisional rating on a row, as a Crown
+    /// pulse would leave it — the preview deck has no session id to match.
+    func seedProvisionalForPreview(_ row: SetRow, rpe: Double) {
+        provisionalEffort[row.storeId] = ProvisionalEffort(rpe: rpe, band: EffortBand(rpe: rpe), at: Date())
+    }
+    #endif
+
+    /// Every provisional rating on a ticked set, committed — the tick of the
+    /// NEXT set is the moment the rest it was scrubbed during is over.
+    private func commitProvisionals() {
+        guard !provisionalEffort.isEmpty else { return }
+        for exercise in exercises {
+            for row in exercise.rows where provisionalEffort[row.storeId] != nil {
+                commitProvisional(row, in: exercise)
+            }
+        }
+        provisionalEffort = provisionalEffort.filter { Date().timeIntervalSince($0.value.at) < Self.provisionalLifetime }
     }
 
     /// Every record these rows hold, for the sheet the trophy opens.
@@ -2007,6 +2084,9 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     func finish(sessionRpe: Double? = nil) -> Bool {
         let span = Perf.begin("session.finish")
         defer { Perf.end(span) }
+        // The last set's Crown rating has no next tick to commit it: Finish is
+        // that tick (overhaul A3, after review).
+        commitProvisionals()
         guard let store, let sessionId, completedSets > 0 else {
             // Not an error when there is no store (previews) — but a session
             // with nothing in it, or one whose row was never created, must not

@@ -173,10 +173,23 @@ struct RestView: View {
             let next = rung + (direction == .increment ? 1 : -1)
             rung = min(Double(Effort.ladder.count - 1), max(-1, next))
         }
+        // ── ONE AMEND PER SCRUB, NOT PER DETENT (overhaul A3) ───────────────
+        // This called `model.rate` on every detent: five rungs, five
+        // permanent events. The model now debounces — a provisional pulse to
+        // the phone 150 ms after the Crown rests, one amend after a second of
+        // stillness, and the cover leaving settles it at once.
         .onChange(of: chosen?.value) { _, value in
             guard let value else { return }
-            model.rate(value)
+            model.scrubEffort(value)
         }
+        .onDisappear { model.finishScrub() }
+        #if DEBUG
+        // `restband`: the ladder on a chosen rung, so the band ink can be
+        // photographed — a simulator has no Crown to turn.
+        .onChange(of: model.debugScreen, initial: true) { _, screen in
+            if screen == .restband { rung = Double(Effort.rpeStopIndex(9.5)) }
+        }
+        #endif
         .task(id: pulse.endsAt) { await countdown() }
     }
 
@@ -436,9 +449,19 @@ struct RestView: View {
         .minimumScaleFactor(0.6)
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity)
+        // ── THE BAND IS THE FILL (overhaul A3) ──────────────────────────────
+        // A chosen rung washes the pill in its `EffortBand` ink — steady in
+        // the theme's accent, hard amber, very hard clay, failure red — the
+        // same colour the phone's deck card paints the provisional rating,
+        // so the two devices agree at a glance. The word stays primary ink:
+        // the colour is the band, the word is the rung.
         .background(
             RoundedRectangle(cornerRadius: OnyxCorner.row, style: .continuous)
-                .fill(chosen == nil ? WatchInk.fill : WatchInk.fillActive)
+                .fill(chosen.map { EffortBand(rpe: $0.value).ink.opacity(0.32) } ?? WatchInk.fill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: OnyxCorner.row, style: .continuous)
+                .strokeBorder(chosen.map { EffortBand(rpe: $0.value).ink } ?? .clear, lineWidth: 1)
         )
     }
 

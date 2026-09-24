@@ -33,7 +33,8 @@ import WatchConnectivity
 /// | `updateApplicationContext` | the schedule context and the signed-in user | ONE slot, replaced by the newest, delivered on next wake even if the app was never launched. It is STATE, and a queue of stale states is worse than one current one. |
 /// | `transferUserInfo` | `SetEvent`s | queued, persisted across relaunch and reboot, FIFO, delivered when the counterpart is not running. The delivery guarantee a set needs. |
 /// | `sendMessage` | the pencil claim, and the live rest timer | immediate, needs reachability — which is correct: a rest timer that arrives four minutes late is noise, and a pencil claim that cannot reach the other device should fall back to the log's own resolution. |
-/// | `transferUserInfo` | a session opening, finishing or being discarded (W4) | the events' own FIFO — see `send(session:)`. An open (and a join) is ALSO messaged when reachable; a finish never is, or it could overtake queued sets. |
+/// | `transferUserInfo` | a session opening, finishing or being discarded (W4) | the events' own FIFO — see `send(session:)`. An open (and a join) is ALSO messaged when reachable; a finish only when it carries `expectedEventCount`, which the receiver waits for, so it cannot overtake queued sets. |
+/// | `updateApplicationContext` | `WatchContext.session`, the phone's lifecycle word (overhaul Lane A) | the same one slot, pushed at once on open/finish/discard — the state the watch reads whatever the queue has or has not delivered. |
 ///
 /// `transferUserInfo` for a set and `sendMessage` for a timer is not a
 /// preference. `sendMessage` fails outright when the counterpart is unreachable
@@ -42,57 +43,12 @@ import WatchConnectivity
 /// countdown that expired minutes ago.
 public final class WatchLink: NSObject, Sendable {
 
-    /// What arrived, already decoded. The host does the storing — this type
-    /// knows about a wire and nothing about a database, which is what lets it
-    /// be tested with no store at all.
-    public enum Inbound: Sendable, Equatable {
-        /// Events from the other device. Hand to `AppDatabase.ingest`.
-        case events([SetEvent])
-        /// A pencil claim. Hand to `AppDatabase.ingestOwnership`.
-        case ownership(LiveSessionOwner)
-        /// The phone's resolved schedule and user. Watch side only.
-        case context(WatchContext)
-        /// The rest clock started, changed or stopped on the other device.
-        /// `nil` ends it.
-        case rest(RestPulse?)
-        /// Millilitres of water tapped on the WRIST (W4). Watch → phone only.
-        ///
-        /// ── WHY THE WATCH CANNOT JUST LOG IT ────────────────────────────────
-        /// It has no water to log into. The wrist's store holds sets and
-        /// nothing else (`OnyxWatchApp`'s header), the day's ledger lives in
-        /// the phone's `water_intake`, and an App Group is per DEVICE — so the
-        /// `PendingWater` mailbox the phone's Control Center button drops a
-        /// glass into is a container on a different chip. The wrist's button
-        /// therefore posts the millilitres and the phone drops them in the
-        /// SAME mailbox, drained by the same `drainPendingWater` through the
-        /// same `addWaterGlass`. One row, one code path, two devices.
-        case water(Double)
-        /// A session opened, finished or discarded on the other device (App
-        /// Store W4). Both directions. Hand to `AppDatabase.receiveSession`.
-        case session(SessionPulse)
-        /// A provisional RPE the wrist's Crown is scrubbing (overhaul W0).
-        /// Watch → phone, message-only. NEVER persisted — see `EffortPulse`.
-        case effort(EffortPulse)
-    }
-
-    /// A payload key. Free functions rather than a `Codable` envelope because
-    /// WatchConnectivity dictionaries are `[String: Any]` with a documented list
-    /// of allowed value types, and `Data` is on it — so one key naming the case
-    /// and one carrying JSON is the whole protocol.
-    enum Key {
-        static let kind = "k"
-        static let payload = "p"
-    }
-
-    enum Kind {
-        static let events = "events"
-        static let ownership = "pencil"
-        static let context = "context"
-        static let rest = "rest"
-        static let water = "water"
-        static let session = "session"
-        static let effort = "effort"
-    }
+    /// What arrived, already decoded. Declared outside this fence as
+    /// `WatchInbound` (`WatchWire.swift`) so `swift test` reaches the decode
+    /// on macOS, where WatchConnectivity does not exist (overhaul Lane A).
+    public typealias Inbound = WatchInbound
+    typealias Key = WatchWire.Key
+    typealias Kind = WatchWire.Kind
 
     private let onInbound: @Sendable (Inbound) -> Void
 
@@ -294,7 +250,15 @@ public final class WatchLink: NSObject, Sendable {
     public func send(session pulse: SessionPulse) {
         guard let data = try? OnyxJSON.encoder.encode(pulse) else { return }
         queue(Kind.session, data)
-        if pulse.phase == .open || pulse.phase == .joined, let wc = active(), wc.isReachable {
+        // ── AND A FINISH THAT CARRIES ITS COUNT (overhaul Lane A) ───────────
+        // The receiver holds a messaged finish until its own log has caught
+        // up to `expectedEventCount` (or `SessionPulse.finishGrace`), so the
+        // copy cannot overtake the sets queued ahead of it — and the wrist
+        // learns the workout ended in a second rather than when the queue
+        // drains, which on a simulator is never.
+        let messaged = pulse.phase == .open || pulse.phase == .joined
+            || (pulse.phase == .finished && pulse.expectedEventCount != nil)
+        if messaged, let wc = active(), wc.isReachable {
             wc.sendMessage([Key.kind: Kind.session, Key.payload: data], replyHandler: nil) { _ in }
         }
     }
@@ -329,49 +293,11 @@ public final class WatchLink: NSObject, Sendable {
 
     // MARK: - Receiving
 
-    /// The one decode path, shared by all three delivery callbacks.
-    ///
-    /// Unknown kinds are ignored rather than treated as errors: a newer build on
-    /// the other wrist may send something this one has never heard of, and the
-    /// correct response to that is to carry on logging.
+    /// Every delivery callback funnels here; the decode itself is
+    /// `WatchWire.decode`, outside the fence, where `swift test` reaches it.
     func receive(_ message: [String: Any]) {
-        guard let kind = message[Key.kind] as? String else { return }
-        let data = message[Key.payload] as? Data
-        switch kind {
-        case Kind.events:
-            guard let data, let events = try? OnyxJSON.decoder.decode([SetEvent].self, from: data) else { return }
-            onInbound(.events(events))
-        case Kind.ownership:
-            guard let data, let claim = try? OnyxJSON.decoder.decode(LiveSessionOwner.self, from: data) else { return }
-            onInbound(.ownership(claim))
-        case Kind.context:
-            guard let data, let context = try? OnyxJSON.decoder.decode(WatchContext.self, from: data) else { return }
-            onInbound(.context(context))
-        case Kind.rest:
-            guard let data else { return onInbound(.rest(nil)) }
-            guard let pulse = try? OnyxJSON.decoder.decode(RestPulse.self, from: data) else { return }
-            onInbound(.rest(pulse))
-        case Kind.water:
-            // A bare `Double`, not JSON: `Double` is on WatchConnectivity's
-            // documented list of allowed dictionary value types, and a
-            // one-number payload does not need an encoder. The cast is where
-            // a malformed transfer dies — quietly, like every other kind here.
-            guard let ml = message[Key.payload] as? Double, ml > 0 else { return }
-            onInbound(.water(ml))
-        case Kind.session:
-            // Logged, unlike the other kinds' quiet drops: a pulse that does
-            // not decode is a session the other device will never follow.
-            guard let data, let pulse = try? OnyxJSON.decoder.decode(SessionPulse.self, from: data) else {
-                return Logger(subsystem: "app.onyx.link", category: "wire")
-                    .error("a session pulse arrived and did not decode")
-            }
-            onInbound(.session(pulse))
-        case Kind.effort:
-            guard let data, let pulse = try? OnyxJSON.decoder.decode(EffortPulse.self, from: data) else { return }
-            onInbound(.effort(pulse))
-        default:
-            return
-        }
+        guard let inbound = WatchWire.decode(message) else { return }
+        onInbound(inbound)
     }
 }
 

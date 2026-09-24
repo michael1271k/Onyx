@@ -114,6 +114,55 @@ public struct WatchTiles: Codable, Sendable, Equatable {
     /// Optional, so a payload from an older phone still decodes.
     public let offWrist: OffWristNote?
 
+    // ── ADDED BY OVERHAUL LANE A, OPTIONAL AND LAST ─────────────────────────
+    //
+    // The Fuel page's food face draws a three-segment macro bar, and the wire
+    // carried protein alone; carbs and fat ride beside it now. `nextDose` is
+    // the sixth complication's one reading (decision Q5) — filled on the
+    // phone by `PhoneWatchBridge` from the stack, because the snapshot this
+    // payload is otherwise cut from has no supplement schedule in it. `var`,
+    // for that reason: the bridge sets it after the projection.
+
+    public let carbsG: Int?
+    public let fatG: Int?
+    public var nextDose: NextDose?
+    /// Today's finished session, for the Workout complication's "done" face
+    /// (overhaul Lane A, Lane B's request): name · tonnage · avg HR · PRs.
+    /// Set on the WATCH from `WatchContext.session.summary` when it saves the
+    /// tiles for its complications — the phone leaves it nil on the wire.
+    public var finished: SessionMasthead?
+
+    /// The next supplement slot today — its first item's name (and how many
+    /// ride with it) and when. Nil when nothing is left today.
+    public struct NextDose: Codable, Sendable, Equatable {
+        public let name: String
+        public let at: Date
+        public init(name: String, at: Date) {
+            self.name = name
+            self.at = at
+        }
+        enum CodingKeys: String, CodingKey { case name = "n", at = "a" }
+
+        /// The first slot of `slots` due after `nowMinutes` on `date`, or nil.
+        /// `slots` come in time order (`Supplements.customSlotsForDate`); a
+        /// slot with no time ("—") is not a dose anybody can be reminded of.
+        public static func next(in slots: [SupplementSlot], date: String, nowMinutes: Int,
+                                calendar: Calendar = .current) -> NextDose? {
+            let ymd = date.split(separator: "-").compactMap { Int($0) }
+            guard ymd.count == 3 else { return nil }
+            for slot in slots {
+                let hm = slot.time.split(separator: ":").compactMap { Int($0) }
+                guard hm.count == 2, hm[0] * 60 + hm[1] > nowMinutes, let first = slot.items.first,
+                      let at = calendar.date(from: DateComponents(year: ymd[0], month: ymd[1], day: ymd[2],
+                                                                   hour: hm[0], minute: hm[1]))
+                else { continue }
+                let more = slot.items.count - 1
+                return NextDose(name: more > 0 ? "\(first.name) +\(more)" : first.name, at: at)
+            }
+            return nil
+        }
+    }
+
     public init(
         date: String, battery: Int? = nil, score: Int? = nil,
         sleepMin: Int? = nil, sleepScore: Int? = nil,
@@ -125,7 +174,8 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         week: [WeekDay]? = nil, medianBedtime: String? = nil, lastBedtime: String? = nil,
         weekSets: Int? = nil, weekVolumeKg: Double? = nil,
         proteinG: Int? = nil, proteinGoalG: Int? = nil,
-        offWrist: OffWristNote? = nil
+        offWrist: OffWristNote? = nil,
+        carbsG: Int? = nil, fatG: Int? = nil, nextDose: NextDose? = nil, finished: SessionMasthead? = nil
     ) {
         self.date = date
         self.battery = battery
@@ -151,6 +201,10 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         self.proteinG = proteinG
         self.proteinGoalG = proteinGoalG
         self.offWrist = offWrist
+        self.carbsG = carbsG
+        self.fatG = fatG
+        self.nextDose = nextDose
+        self.finished = finished
     }
 
     enum CodingKeys: String, CodingKey {
@@ -167,6 +221,7 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         case weekSets = "ws", weekVolumeKg = "wv"
         case proteinG = "p", proteinGoalG = "pg"
         case offWrist = "ow"
+        case carbsG = "cg", fatG = "fg", nextDose = "nd", finished = "fs"
     }
 
     /// The projection. ONE place cuts the snapshot down, so the phone's
@@ -200,7 +255,9 @@ public struct WatchTiles: Codable, Sendable, Equatable {
             weekVolumeKg: s.week.volumeKg,
             proteinG: s.macros.proteinG.map { Int($0.rounded()) },
             proteinGoalG: s.macros.proteinGoalG.map { Int($0.rounded()) },
-            offWrist: s.readiness?.offWrist
+            offWrist: s.readiness?.offWrist,
+            carbsG: s.macros.carbsG.map { Int($0.rounded()) },
+            fatG: s.macros.fatG.map { Int($0.rounded()) }
         )
     }
 
@@ -250,8 +307,18 @@ public struct WatchTiles: Codable, Sendable, Equatable {
             stressIndex: stressIndex, sorenessCount: sorenessCount,
             week: week, medianBedtime: medianBedtime, lastBedtime: lastBedtime,
             weekSets: weekSets, weekVolumeKg: weekVolumeKg,
-            proteinG: proteinG, proteinGoalG: proteinGoalG, offWrist: offWrist
+            proteinG: proteinG, proteinGoalG: proteinGoalG, offWrist: offWrist,
+            carbsG: carbsG, fatG: fatG, nextDose: nextDose, finished: finished
         )
+    }
+
+    /// These tiles if they are about `day`, else nil — what a complication
+    /// draws after midnight (overhaul A2). The phone builds them for ITS day;
+    /// past 00:00 every figure is yesterday's and the Train face would still
+    /// say yesterday's session is due, so the face says "—" until the phone
+    /// pushes the new day.
+    public func current(on day: String) -> WatchTiles? {
+        date == day ? self : nil
     }
 
     /// Fractional progress toward a goal, clamped, nil when unknown.

@@ -159,7 +159,15 @@ public struct AccessoryFace: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(r.title).font(AccessoryType.title).lineLimit(1)
-                Text(r.sub).font(AccessoryType.sub).foregroundStyle(.secondary).lineLimit(1)
+                // Full colour (the watch's dashboard slabs, a full-colour face)
+                // draws the caption in the grey text token: the hierarchical
+                // `.secondary` resolved to the SLAB's tint at low opacity
+                // there — "of 3000 ml" in dim blue on a blue wash, about
+                // 2.5:1 (overhaul A2 shots). Accented and vibrant modes keep
+                // the system's own secondary level.
+                Text(r.sub).font(AccessoryType.sub)
+                    .foregroundStyle(mode == .fullColor ? AnyShapeStyle(Color.onyx.textSecondary) : AnyShapeStyle(.secondary))
+                    .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .accessibilityLabel(r.spokenSub ?? r.sub)
             }
@@ -236,6 +244,16 @@ struct WeekMarks: View {
 // readings print "—", never a zero (`WatchTiles`' header).
 
 struct AccessoryReading {
+    /// A finished session in one short line: "8.4 t · 131 bpm · 2 PR".
+    /// Tonnes to one place, like the Train page's volume face; the heart rate
+    /// and the records only when there are some.
+    static func doneLine(_ m: SessionMasthead) -> String {
+        var parts = [String(format: "%.1f t", m.tonnageKg / 1000)]
+        if let bpm = m.avgBpm { parts.append("\(bpm) bpm") }
+        if m.prCount > 0 { parts.append("\(m.prCount) PR") }
+        return parts.joined(separator: " · ")
+    }
+
     let glyph: String
     /// The number in a ring or a corner — short, because a 40 pt ring holds
     /// four characters.
@@ -288,9 +306,15 @@ struct AccessoryReading {
             // first word reads as a category.
             hero = t == nil || label.isEmpty ? dash : rest ? "Rest" : String(label.split(separator: " ").first ?? "—")
             progress = nil
-            title = t == nil || label.isEmpty ? dash : label
-            sub = t == nil ? "Open Onyx on iPhone" : rest ? "rest day" : logged ? "done" : "due"
-            inline = title
+            let heading = t == nil || label.isEmpty ? dash : label
+            title = heading
+            // ── DONE IS THE MASTHEAD'S FIGURES (overhaul Lane A) ────────────
+            // "done" said nothing the check glyph had not; with the session's
+            // masthead on the tiles the second line is its tonnage, average
+            // heart rate and records — the watch banner's figures, one line.
+            let figures = logged ? t?.finished.map(Self.doneLine) : nil
+            sub = t == nil ? "Open Onyx on iPhone" : rest ? "rest day" : logged ? (figures ?? "done") : "due"
+            inline = figures.map { "\(heading) · \($0)" } ?? heading
             accent = OnyxDomain.train.accent
 
         case .fuel:

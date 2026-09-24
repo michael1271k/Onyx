@@ -277,3 +277,43 @@ public enum WatchPanel {
         return 1
     }
 }
+
+/// The Glance page's geometry (overhaul A2, decision Q4): the readiness ring
+/// in the middle of a square, four petals in its corners.
+///
+/// ── THE SQUARE IS WHATEVER THE PAGE HAS ─────────────────────────────────────
+/// `min(width, height)` of the page's own content area, measured by a
+/// `GeometryReader` on the device — so the 49 mm case gets its bigger ring and
+/// the 40 mm case gets one that fits, from one rule and no case switch. The
+/// test replays both cases against the content areas measured off
+/// `axe describe-ui`.
+///
+/// ── CORNERS, NOT A CIRCLE OF PETALS ─────────────────────────────────────────
+/// A petal in a corner sits (S − p)/√2 from the centre; on an axis it would sit
+/// only S/2 − p/2 away and eat the ring. The corners are where a square has
+/// room the circle does not use.
+public enum WatchGlance {
+
+    /// The ring's diameter as a share of the square.
+    public static let ringShare = 0.68
+    /// Each petal's diameter as a share of the square.
+    public static let petalShare = 0.27
+    /// The readiness ring's stroke, points.
+    public static let ringStroke: Double = 8
+
+    public struct Layout: Equatable, Sendable {
+        public let square: Double
+        public let ring: Double
+        public let petal: Double
+        /// Clear space between the ring's outer edge and a petal's nearest
+        /// edge. Positive, or they touch.
+        public var clearance: Double {
+            (square - petal) / 2.0.squareRoot() - petal / 2 - ring / 2
+        }
+    }
+
+    public static func layout(width: Double, height: Double) -> Layout {
+        let square = max(0, min(width, height))
+        return Layout(square: square, ring: square * ringShare, petal: square * petalShare)
+    }
+}

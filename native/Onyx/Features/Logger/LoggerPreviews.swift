@@ -115,6 +115,31 @@ enum LoggerPreviews {
             .onyxScreen(.train)
             .environment(AppEnvironment.preview)
             .preferredColorScheme(.dark)
+        case "logger-effort":
+            // ── THE WRIST'S CROWN ON THE DECK CARD (overhaul A3) ────────────
+            // Three ticked sets, each holding a provisional rating from a
+            // different band — hard, very hard, failure — so one shot reviews
+            // the three fixed inks; the fourth row is ticked and rated to show
+            // the plain word beside them.
+            let model = LoggerModel.previewUpperB(logged: true)
+            let exercise = model.exercises.first { !$0.rows.contains(where: \.isCardio) }!
+            let _ = {
+                while exercise.rows.count < 4 { model.addSet(to: exercise) }
+                for (i, row) in exercise.rows.prefix(4).enumerated() {
+                    row.weightKg = 42.5; row.reps = 10 - i
+                    if !row.isDone { model.toggleDone(row, in: exercise) }
+                }
+                exercise.rows[3].rpe = 7.5
+                model.stopRest()
+                for (row, rpe) in zip(exercise.rows, [8.5, 9.5, 10]) { model.seedProvisionalForPreview(row, rpe: rpe) }
+            }()
+            ScrollView {
+                ExerciseCardView(exercise: exercise, model: model, position: (0, model.exercises.count))
+                    .padding(.horizontal, OnyxSpace.m)
+            }
+            .onyxScreen(.train)
+            .environment(AppEnvironment.preview)
+            .preferredColorScheme(.dark)
         case "set-row-split":
             // ── THE PAIR, IN ALL THREE OF ITS LAYOUTS ──────────────────────
             // A unilateral movement's set box is one box whatever the two

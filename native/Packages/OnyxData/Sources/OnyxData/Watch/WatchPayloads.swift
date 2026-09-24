@@ -167,8 +167,24 @@ public struct SessionPulse: Codable, Sendable, Equatable {
     /// guard — the one input to `duration_min` the receiver cannot read off
     /// its own copy of the log. Nil takes the default, as it does locally.
     public var restTargetSec: Double?
+    /// How many `set_events` the SENDER holds for this session when it
+    /// finished it (overhaul Lane A, decision Q1). Set on a phone finish only,
+    /// and that is what lets the finish ALSO travel as a message: the
+    /// receiver applies a finish that carries it only once its own log has
+    /// caught up to the count (`AppDatabase.finishIsReady`) or after
+    /// `finishGrace` — so the rule "a finish never overtakes the queued sets"
+    /// still holds while the wrist hears about it in a second instead of
+    /// whenever the queue drains. OPTIONAL AND LAST: an old peer sends and
+    /// reads none, and a nil finish is applied at once, as it always was.
+    public var expectedEventCount: Int?
 
-    public init(_ session: WorkoutSession, phase: Phase, restTargetSec: Double? = nil) {
+    /// The longest a messaged finish waits for the queue behind it. Five
+    /// seconds, the brief's number: long enough for a queue that IS draining,
+    /// and short enough that a simulator — whose queue never drains — still
+    /// shows the banner.
+    public static let finishGrace: TimeInterval = 5
+
+    public init(_ session: WorkoutSession, phase: Phase, restTargetSec: Double? = nil, expectedEventCount: Int? = nil) {
         self.phase = phase
         self.sessionId = session.id
         self.userId = session.userId
@@ -177,6 +193,7 @@ public struct SessionPulse: Codable, Sendable, Equatable {
         self.startedAt = session.startedAt
         self.endedAt = phase == .finished ? session.endedAt : nil
         self.restTargetSec = restTargetSec
+        self.expectedEventCount = phase == .finished ? expectedEventCount : nil
     }
 }
 
@@ -201,13 +218,28 @@ public struct SessionLifecycle: Codable, Hashable, Sendable {
     public var endedAt: Date?
     /// The finished session in one line. Nil unless `phase == .finished`.
     public var summary: SessionMasthead?
+    /// The row's `date` and `day_key` (overhaul Lane A). OPTIONAL AND LAST,
+    /// the `WatchContext` story: what lets the wrist JOIN a session whose
+    /// queued open never arrived — it can build the row from the context
+    /// alone — and ask "is this today's?" by the phone's own date rather
+    /// than by a clock reading of `startedAt`.
+    public var date: String?
+    public var dayKey: String?
+    /// A finish's `SessionPulse.expectedEventCount`, carried on the context
+    /// too: the context and the message leave together, and the context path
+    /// must wait for the queued sets exactly as the message does.
+    public var expectedEventCount: Int?
 
-    public init(sessionId: String, phase: Phase, startedAt: Date, endedAt: Date? = nil, summary: SessionMasthead? = nil) {
+    public init(sessionId: String, phase: Phase, startedAt: Date, endedAt: Date? = nil, summary: SessionMasthead? = nil,
+                date: String? = nil, dayKey: String? = nil, expectedEventCount: Int? = nil) {
         self.sessionId = sessionId
         self.phase = phase
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.summary = summary
+        self.date = date
+        self.dayKey = dayKey
+        self.expectedEventCount = phase == .finished ? expectedEventCount : nil
     }
 }
 
@@ -223,14 +255,23 @@ public struct EffortPulse: Codable, Hashable, Sendable {
     /// On the 0.5 grid `Effort.ladder` scrubs.
     public var rpe: Double
     public var band: EffortBand
+    /// The set's own id — the one both logs share, since every event carries
+    /// it (overhaul Lane A). OPTIONAL AND LAST: `exerciseId` + `setIndex` are
+    /// spelled differently on the two devices (slug vs catalogue uuid), and the
+    /// id is the one key the phone's deck row (`SetRow.storeId`) can match
+    /// exactly. Nil from a W0 sender; the phone then falls back to the resting
+    /// movement's last ticked set.
+    public var setId: String?
 
     /// `band` defaults to the ladder's own fold of `rpe`.
-    public init(sessionId: String, exerciseId: String, setIndex: Int, rpe: Double, band: EffortBand? = nil) {
+    public init(sessionId: String, exerciseId: String, setIndex: Int, rpe: Double, band: EffortBand? = nil,
+                setId: String? = nil) {
         self.sessionId = sessionId
         self.exerciseId = exerciseId
         self.setIndex = setIndex
         self.rpe = rpe
         self.band = band ?? EffortBand(rpe: rpe)
+        self.setId = setId
     }
 }
 

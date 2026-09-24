@@ -3,43 +3,35 @@ import WidgetKit
 import OnyxCore
 import OnyxUI
 
-/// The watch's complications (W7) and its live-workout card (W4).
+/// The watch's complications and its live-workout card.
 ///
-/// Ten complication kinds, one per wearable `WidgetId`, every one a
-/// `StaticConfiguration`: a complication has no picker on the wrist — the
-/// FACE is the choice, made in the watch-face editor — so ten kinds is what
-/// "every dashboard tile as a complication" means here, where on the phone it
-/// is one kind with an intent.
+/// ── SIX COMPLICATIONS, NOT TEN (overhaul A2, decision Q5) ───────────────────
+/// Readiness, Workout, Water, Sleep, Heart Rate and Next Dose. The first four
+/// keep the `kind:` strings they shipped with (`OnyxWatch.recovery`,
+/// `.train`, `.water`, `.sleep`), so a face that already wears one keeps it.
+/// Heart Rate (`OnyxWatch.heartRate`) and Next Dose (`OnyxWatch.nextDose`) are
+/// new kinds. Removed — and every placed copy of them with them, which is why
+/// the changelog names them: `OnyxWatch.fuel`, `.steps`, `.bedtime`,
+/// `.stress`, `.soreness`, `.weekRings`. Their faces still draw on the
+/// dashboard pages and the phone's Lock Screen; only the watch-face kinds
+/// went.
 ///
-/// ── ELEVEN, WITHOUT GIVING ONE UP (W4) ──────────────────────────────────────
-/// `@WidgetBundleBuilder` caps at ten **elements**, and W7's note here read
-/// that as ten widgets — so this wave was planned around picking a
-/// complication to delete. It is not: a NESTED bundle is one element, which is
-/// the same trick `OnyxControls` uses on the phone. `WatchComplications` is
-/// one element, `WatchLive` is the second, and the eleventh widget cost
-/// nothing. Verified by compiling it, not by reading a doc.
+/// ── NESTED BUNDLES, STILL ───────────────────────────────────────────────────
+/// `@WidgetBundleBuilder` caps at ten ELEMENTS and a nested bundle is one
+/// element (W4) — kept, so a later complication costs nothing.
 ///
 /// ── WHERE THE NUMBERS COME FROM ─────────────────────────────────────────────
-/// Not from a store. The phone cuts `WatchTiles` out of the same snapshot its
-/// Home Screen widgets draw and sends it inside the application context; the
-/// watch app parks it in the App Group suite and reloads every timeline.
-/// This extension reads that one value and hands it to `OnyxTile.accessory`,
-/// which is the SAME view the phone's Lock Screen draws — one face, both
-/// devices, by construction.
+/// The four tile kinds read `WatchTiles` — the phone's, parked in the App
+/// Group suite by the watch app — through `OnyxTile.accessory`, the SAME view
+/// the phone's Lock Screen draws. Heart Rate reads `LastHeartRate`, the one
+/// reading only this wrist takes; Next Dose reads `WatchTiles.nextDose`.
 ///
-/// The live card's source is different and deliberately so: `WatchModel`
-/// writes `LiveWorkoutSnapshot` into the same suite on every commit and every
-/// rest pulse, because the phone cannot know what a wrist logged with the
-/// phone in a locker — and the heart rate has exactly one source on this pair.
-///
-/// ⚠️ `kind:` strings are load-bearing, as on the phone: a kind that
-/// disappears takes every placed complication with it.
+/// ⚠️ `kind:` strings are load-bearing: a kind that disappears takes every
+/// placed complication with it.
 @main
 struct OnyxWatchWidgets: WidgetBundle {
-    /// The palette the phone last sent, parked in the suite by `WatchModel`
-    /// beside the tiles. Per bundle launch AND per timeline (`WatchTileProvider`),
-    /// for the reason `OnyxWidgets.init` on the phone gives: a reload re-runs
-    /// the provider in a process that may already be warm.
+    /// The palette before any view is built. `load` is the one read of the
+    /// suite the watch app writes (`OnyxTheme.save(…, to: WatchTiles.defaults())`).
     init() {
         MainActor.assumeIsolated {
             OnyxTheme.load(WatchTiles.defaults())
@@ -53,27 +45,21 @@ struct OnyxWatchWidgets: WidgetBundle {
     }
 }
 
-/// The ten watch-face complications. A sub-bundle, so the root counts them as
-/// ONE of its ten elements — see `OnyxWatchWidgets`. No `@main`: a bundle
-/// that is nested is constructed by its parent.
+/// The watch-face complications. A sub-bundle, so the root counts them as ONE
+/// of its ten elements.
 struct WatchComplications: WidgetBundle {
     @WidgetBundleBuilder
     var body: some Widget {
         RecoveryComplication()
         TrainComplication()
-        FuelComplication()
         WaterComplication()
-        StepsComplication()
         SleepComplication()
-        BedtimeComplication()
-        StressComplication()
-        SorenessComplication()
-        WeekRingsComplication()
+        HeartRateComplication()
+        NextDoseComplication()
     }
 }
 
-/// The Smart Stack card. Alone in its own sub-bundle because the ten above
-/// have already spent the root's other element.
+/// The Smart Stack card.
 struct WatchLive: WidgetBundle {
     @WidgetBundleBuilder
     var body: some Widget {
@@ -83,33 +69,22 @@ struct WatchLive: WidgetBundle {
 
 // MARK: - One kind per id
 //
-// Ten structs and not one struct with an `id` parameter, because `Widget`
-// requires `init()` — a `WidgetBundle` constructs its members itself, so
-// the id has to be in the TYPE. Each is one line over `tileConfiguration`.
+// One struct per kind, because `Widget` requires `init()` — a `WidgetBundle`
+// constructs its members itself, so the id has to be in the TYPE.
 
 struct RecoveryComplication: Widget { var body: some WidgetConfiguration { tileConfiguration(.recovery) } }
 struct TrainComplication: Widget { var body: some WidgetConfiguration { tileConfiguration(.train) } }
-struct FuelComplication: Widget { var body: some WidgetConfiguration { tileConfiguration(.fuel) } }
 struct WaterComplication: Widget { var body: some WidgetConfiguration { tileConfiguration(.water) } }
-struct StepsComplication: Widget { var body: some WidgetConfiguration { tileConfiguration(.steps) } }
 struct SleepComplication: Widget { var body: some WidgetConfiguration { tileConfiguration(.sleep) } }
-struct BedtimeComplication: Widget { var body: some WidgetConfiguration { tileConfiguration(.bedtime) } }
-struct StressComplication: Widget { var body: some WidgetConfiguration { tileConfiguration(.stress) } }
-struct SorenessComplication: Widget { var body: some WidgetConfiguration { tileConfiguration(.soreness) } }
-struct WeekRingsComplication: Widget { var body: some WidgetConfiguration { tileConfiguration(.weekRings) } }
 
 /// `OnyxWatch.<rawValue>` — namespaced so a phone kind and a watch kind can
 /// never collide in a log, and stable across renames of the title.
-///
-/// `@MainActor` because `Widget.body` is, and the configuration modifiers are
-/// main-actor methods returning a non-`Sendable` value; a nonisolated helper
-/// cannot hand that back under strict concurrency.
 @MainActor
 private func tileConfiguration(_ id: WidgetId) -> some WidgetConfiguration {
     StaticConfiguration(kind: "OnyxWatch.\(id.rawValue)", provider: WatchTileProvider()) { entry in
         WatchTileFace(id: id, entry: entry)
     }
-    .configurationDisplayName(id.title)
+    .configurationDisplayName(id == .train ? "Workout" : id == .recovery ? "Readiness" : id.title)
     .description(description(for: id))
     .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline, .accessoryCorner])
 }
@@ -119,22 +94,14 @@ private func description(for id: WidgetId) -> String {
     switch id {
     case .recovery: "Today's battery and readiness score."
     case .train: "Today's session — due, done or a rest day."
-    case .fuel: "Calories left against today's target."
     case .water: "Water logged against today's goal."
-    case .steps: "Steps against today's goal."
     case .sleep: "Last night's hours and sleep score."
-    case .bedtime: "Last night's bedtime and your usual one."
-    case .stress: "Today's stress index and its band."
-    case .soreness: "How many muscles are sore today."
-    case .weekRings: "Seven days of training, fuel and sleep marks."
     default: id.title
     }
 }
 
 /// The family is read here rather than in the package: `widgetFamily` is a
-/// real value inside WidgetKit and a get-only default outside it, so the face
-/// takes it as a parameter and this four-line wrapper is the one place that
-/// reads the environment.
+/// real value inside WidgetKit and a get-only default outside it.
 struct WatchTileFace: View {
     let id: WidgetId
     let entry: WatchTileEntry
@@ -152,40 +119,47 @@ struct WatchTileEntry: TimelineEntry {
     let tiles: WatchTiles?
 }
 
-/// One entry, no schedule.
+/// Two entries: now, and the next local midnight.
 ///
-/// ── `.never`, BECAUSE THE APP IS THE CLOCK ───────────────────────────────────
-/// The numbers change when the phone pushes, and the watch app reloads every
-/// timeline the moment a push lands. A timeline of future entries would be a
-/// guess about numbers this process cannot compute — it has no store — so the
-/// honest schedule is "draw what you were given, until told otherwise".
-///
-/// ponytail: a face that outlives the day (the phone slept through midnight)
-/// keeps saying yesterday's session is due; `WatchTiles.date` is carried so a
-/// later wave can blank the today-fields past midnight without a second push.
+/// ── THE STALE FACE AFTER MIDNIGHT (overhaul A2) ─────────────────────────────
+/// This was one entry and `.never`, on the reasoning that the watch app
+/// reloads every timeline when a push lands. But the phone does not push AT
+/// midnight unless it is awake then, and the face kept saying yesterday's
+/// session was due, yesterday's water, yesterday's sleep, until the phone next
+/// ran. The midnight entry draws the tiles through `current(on:)` — nil once
+/// they are yesterday's, so the face says "—" — and the policy asks again
+/// after it. The watch app ALSO reloads at its own midnight (`WatchModel`),
+/// for the case the system spends the entry late.
 struct WatchTileProvider: TimelineProvider {
     // `TimelineProviderContext` spelled out: OnyxCore exports a `Context` (the
-    // nutrition one) that shadows `Self.Context` here, and the compiler's only
-    // word on that is "does not conform" — the phone's provider says the same.
+    // nutrition one) that shadows `Self.Context` here.
     func placeholder(in context: TimelineProviderContext) -> WatchTileEntry {
         WatchTileEntry(date: Date(), tiles: nil)
     }
 
     func getSnapshot(in context: TimelineProviderContext, completion: @escaping (WatchTileEntry) -> Void) {
-        completion(entry())
+        completion(entry(at: Date()))
     }
 
     func getTimeline(in context: TimelineProviderContext, completion: @escaping (Timeline<WatchTileEntry>) -> Void) {
-        completion(Timeline(entries: [entry()], policy: .never))
+        let now = Date()
+        let midnight = WatchMidnight.next(after: now)
+        completion(Timeline(entries: [entry(at: now), entry(at: midnight)], policy: .after(midnight)))
     }
 
-    /// The suite, every time — the theme too, for the warm-process reason on
-    /// the bundle's `init`.
-    private func entry() -> WatchTileEntry {
+    private func entry(at date: Date) -> WatchTileEntry {
         // The suite is looked up twice rather than passed across the
-        // `assumeIsolated` boundary: `UserDefaults` is not `Sendable`, and
-        // `suiteName` lookups are cached by Foundation.
+        // `assumeIsolated` boundary: `UserDefaults` is not `Sendable`.
         MainActor.assumeIsolated { OnyxTheme.load(WatchTiles.defaults()) }
-        return WatchTileEntry(date: Date(), tiles: WatchTiles.load())
+        return WatchTileEntry(date: date, tiles: WatchTiles.load()?.current(on: LogicalDay.iso(date)))
+    }
+}
+
+/// The next local 00:00 — DST-aware, the phone's own rule (`AppEnvironment`).
+enum WatchMidnight {
+    static func next(after date: Date, calendar: Calendar = .current) -> Date {
+        calendar.nextDate(after: date, matching: DateComponents(hour: 0, minute: 0, second: 0), matchingPolicy: .nextTime)
+            ?? calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: date))
+            ?? date.addingTimeInterval(3600)
     }
 }

@@ -228,3 +228,35 @@ public struct LiveWorkoutSnapshot: Codable, Sendable, Equatable {
     /// the trap `w1a-week-wrapped` recorded about a `View`'s statics.
     public static let widgetKind = "OnyxWatch.liveWorkout"
 }
+
+/// The last heart rate this wrist measured, and when — the Heart Rate
+/// complication's one reading (overhaul Lane A, decision Q5).
+///
+/// ── WHY NOT `LiveWorkoutSnapshot.bpm` ───────────────────────────────────────
+/// That snapshot is cleared the moment a session ends and refused after 45
+/// minutes, which is right for a live card and wrong for a face that sits on
+/// the clock all day. This outlives the session: the complication prints the
+/// number with its age, in the fixed heart red, and says "—" only when the
+/// watch has never measured one.
+public struct LastHeartRate: Codable, Sendable, Equatable {
+    public let bpm: Int
+    public let at: Date
+
+    public init(bpm: Int, at: Date) {
+        self.bpm = bpm
+        self.at = at
+    }
+
+    public static let key = "onyx.watch.lastBpm"
+    /// The complication's `kind:` — here for the reason `widgetKind` is.
+    public static let widgetKind = "OnyxWatch.heartRate"
+
+    public static func load(from defaults: UserDefaults = WatchTiles.defaults()) -> LastHeartRate? {
+        defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(LastHeartRate.self, from: $0) }
+    }
+
+    public func save(to defaults: UserDefaults = WatchTiles.defaults()) {
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        defaults.set(data, forKey: Self.key)
+    }
+}

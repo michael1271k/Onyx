@@ -327,4 +327,138 @@ struct WatchConvergenceTests {
         #expect(await server.sets.count == 4, "the watch's set never left the phone")
         #expect(await server.sets.values.contains { $0.weightKg == 105 })
     }
+
+    // MARK: - The lifecycle (overhaul Lane A, decision Q1)
+    //
+    // The phone's finish used to reach the wrist ONLY down the queue, behind
+    // the sets — on hardware whenever it drained, on a simulator never. These
+    // three are the rules that let it travel faster without breaking that
+    // order, and that stop a finished session being adopted twice.
+
+    private static let start = Date(timeIntervalSince1970: 1_788_000_000)
+
+    @Test("a messaged finish waits for the queue behind it, then closes over every set")
+    func messagedFinishWaitsForTheQueue() async throws {
+        let phone = try store(deviceId: "phone")
+        let watch = try store(deviceId: "watch")
+        for index in 1...3 {
+            try phone.appendSet(sessionId: Self.sessionId, snapshot(index, 100))
+        }
+        // Only the first set's transfer has reached the wrist.
+        let events = try phone.setEvents(sessionId: Self.sessionId)
+        try watch.ingest(Array(events.prefix(1)))
+
+        let closed = try #require(try phone.closeSession(id: Self.sessionId))
+        let finish = SessionPulse(
+            closed, phase: .finished, expectedEventCount: try phone.authoredEventCount(sessionId: Self.sessionId)
+        )
+        #expect(finish.expectedEventCount == 3)
+        #expect(try watch.finishIsReady(finish) == false, "two sets are still in the queue ahead of it")
+
+        // The grace runs out on a queue that never drains (a simulator's) —
+        // the wait returns and the banner still arrives.
+        let began = Date()
+        await watch.waitForFinish(finish, grace: 0.3)
+        #expect(Date().timeIntervalSince(began) >= 0.3)
+
+        // The queue drains: now it is ready, and the close covers all three.
+        try watch.ingest(events)
+        #expect(try watch.finishIsReady(finish))
+        #expect(try watch.receiveSession(finish) == .closed)
+        #expect(try setIds(watch).count == 3)
+        // The context carries the same count, and its path waits the same way.
+        var started = finish
+        started.startedAt = Self.start   // the harness row has no start
+        let word = try #require(SessionLifecycle(started))
+        #expect(word.expectedEventCount == 3)
+        #expect(try watch.lifecycleIsReady(word))
+        // A finish with no count (an older phone, or the queued copy) never waits.
+        #expect(try watch.finishIsReady(SessionPulse(closed, phase: .finished)))
+    }
+
+    @Test("a context that says finished retires a session whose pulse never arrived")
+    func lifecycleRetiresAMissedFinish() throws {
+        let watch = try store(deviceId: "watch")
+        try watch.appendSet(sessionId: Self.sessionId, snapshot(1, 100))
+        let live = try #require(try watch.liveSession(dayKey: "legs_a", date: "2026-09-07", userId: Self.userId))
+
+        // The open arrived; the queued finish did not. The context says it.
+        let word = SessionLifecycle(sessionId: Self.sessionId, phase: .finished, startedAt: Self.start,
+                                    endedAt: Self.start.addingTimeInterval(3_000), date: "2026-09-07", dayKey: "legs_a")
+        #expect(try watch.applyLifecycle(word, userId: Self.userId) == .closed)
+        #expect(try watch.liveSession(dayKey: "legs_a", date: "2026-09-07", userId: Self.userId) == nil,
+                "nothing live is left for rejoinLiveSession to adopt")
+        #expect(try watch.session(id: Self.sessionId, userId: Self.userId)?.endedAt == word.endedAt)
+        #expect(try setIds(watch).count == 1, "closed, not thrown away — the set stays")
+        #expect(try watch.applyLifecycle(word, userId: Self.userId) == .unchanged, "idempotent")
+
+        // A finished session the wrist NEVER saw: its open arrives after the
+        // context did, by message or by queue, and must not become live —
+        // and its queued sets must still find a parent (after review: a
+        // tombstone here made every one of them fail the foreign key).
+        var other = live
+        other.id = "33333333-3333-3333-3333-333333333333"
+        other.startedAt = Self.start
+        let retired = SessionLifecycle(sessionId: other.id, phase: .finished, startedAt: Self.start,
+                                       endedAt: Self.start.addingTimeInterval(3_000),
+                                       date: "2026-09-07", dayKey: "legs_a")
+        #expect(try watch.applyLifecycle(retired, userId: Self.userId) == .unchanged)
+        #expect(try watch.isTombstoned(sessionId: other.id) == false, "a finish is never a tombstone")
+        #expect(try watch.session(id: other.id, userId: Self.userId)?.endedAt == retired.endedAt, "born closed")
+        #expect(try watch.receiveSession(SessionPulse(other, phase: .open)) == .unchanged)
+        #expect(try watch.liveSession(dayKey: "legs_a", date: "2026-09-07", userId: Self.userId) == nil)
+        let phoneOfOther = try store(deviceId: "phone")
+        let otherId = other.id
+        try phoneOfOther.seedRows { db in
+            try WorkoutSession(id: otherId, userId: Self.userId, dayKey: "legs_a", date: "2026-09-07",
+                               startedAt: Self.start).insert(db)
+        }
+        try phoneOfOther.appendSet(sessionId: other.id, snapshot(1, 90))
+        try watch.ingest(try phoneOfOther.setEvents(sessionId: other.id))
+        #expect(try watch.sets(sessionId: other.id).count == 1, "the late set lands in the closed row")
+
+        // A DISCARD is the one that tombstones.
+        let thrown = SessionLifecycle(sessionId: "55555555-5555-5555-5555-555555555555", phase: .discarded,
+                                      startedAt: Self.start)
+        _ = try watch.applyLifecycle(thrown, userId: Self.userId)
+        #expect(try watch.isTombstoned(sessionId: thrown.sessionId))
+
+        // An open lifecycle changes nothing: joining is a tap, not a push.
+        let open = SessionLifecycle(sessionId: "44444444-4444-4444-4444-444444444444", phase: .open, startedAt: Self.start)
+        #expect(try watch.applyLifecycle(open, userId: Self.userId) == .unchanged)
+        #expect(try watch.isTombstoned(sessionId: open.sessionId) == false)
+    }
+
+    @Test("two-a-day: after the banner, Start another opens a second session and the first stays closed")
+    func startAnotherOpensASecondSession() throws {
+        let phone = try store(deviceId: "phone")
+        let watch = try store(deviceId: "watch")
+        try phone.appendSet(sessionId: Self.sessionId, snapshot(1, 100))
+        try watch.ingest(try phone.setEvents(sessionId: Self.sessionId))
+        var first = try #require(try phone.closeSession(id: Self.sessionId))
+        first.startedAt = Self.start
+        #expect(try watch.receiveSession(SessionPulse(first, phase: .finished)) == .closed)
+
+        var context = WatchContext(userId: Self.userId, today: "2026-09-07",
+                                   schedule: ScheduleContext(programId: "onyx5", phase: .cut))
+        context.session = SessionLifecycle(SessionPulse(first, phase: .finished))
+        guard case .banner = WatchFrontDoor.resolve(context) else {
+            Issue.record("a finished session today is the banner, not Start")
+            return
+        }
+
+        // "Start another" is the ordinary open. The closed row is not live,
+        // so a NEW row is made rather than the finished one re-adopted.
+        let second = try watch.openSession(userId: Self.userId, dayKey: "legs_a", date: "2026-09-07")
+        #expect(second.id != Self.sessionId)
+        #expect(try phone.receiveSession(SessionPulse(second, phase: .open)) == .opened(superseded: nil),
+                "the phone's finished session is no rival for the split")
+        #expect(try phone.session(id: Self.sessionId, userId: Self.userId)?.endedAt != nil)
+
+        // The phone now publishes the second as open; the wrist that started
+        // it has adopted it, and one that has not is offered Join.
+        let secondWord = try #require(SessionLifecycle(SessionPulse(second, phase: .open)))
+        context.session = secondWord
+        #expect(WatchFrontDoor.resolve(context) == .join(secondWord))
+    }
 }

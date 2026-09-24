@@ -188,4 +188,52 @@ struct WatchTilesTests {
         #expect(tiles.kcalRemaining == nil)
         #expect(tiles.restDay)
     }
+
+    // MARK: - Overhaul Lane A: carbs, fat, the next dose
+
+    @Test("Lane A's three fields cost the wire under 80 bytes, round-trip, and a pre-Lane-A payload decodes")
+    func laneAFieldsAreCheapAndOptional() throws {
+        var with = WatchTiles(
+            date: full.date, battery: full.battery, score: full.score,
+            todayLabel: full.todayLabel, todayLogged: full.todayLogged, restDay: full.restDay,
+            carbsG: 212, fatG: 64
+        )
+        with.nextDose = WatchTiles.NextDose(name: "Magnesium +2", at: Date(timeIntervalSince1970: 1_790_000_000))
+        let without = WatchTiles(
+            date: full.date, battery: full.battery, score: full.score,
+            todayLabel: full.todayLabel, todayLogged: full.todayLogged, restDay: full.restDay
+        )
+        let grew = try JSONEncoder().encode(with).count - (try JSONEncoder().encode(without).count)
+        #expect(grew > 0 && grew < 80, "Lane A added \(grew) B to the wire")
+        #expect(try JSONDecoder().decode(WatchTiles.self, from: try JSONEncoder().encode(with)) == with)
+        let legacy = #"{"d":"2026-09-18","b":72,"sc":81,"tl":"Rest","td":false,"r":true}"#
+        let old = try JSONDecoder().decode(WatchTiles.self, from: Data(legacy.utf8))
+        #expect(old.carbsG == nil && old.fatG == nil && old.nextDose == nil)
+        // The optimistic glass carries them through.
+        #expect(with.addingWater(250).nextDose == with.nextDose)
+        #expect(with.addingWater(250).carbsG == 212)
+    }
+
+    @Test("the next dose is the first timed slot after now, named by its first item")
+    func nextDoseIsTheFirstLaterSlot() throws {
+        func slot(_ time: String, _ names: [String]) -> SupplementSlot {
+            SupplementSlot(key: "stack-\(time)", time: time, label: "Stack", accent: "#8E9AAC",
+                           items: names.map { Supplement(key: $0, name: $0, dose: "1") })
+        }
+        let slots = [slot("—", ["Untimed"]), slot("07:30", ["Creatine"]), slot("13:00", ["Omega 3"]),
+                     slot("21:45", ["Magnesium", "Zinc", "Glycine"])]
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "Europe/Berlin"))
+
+        let noon = try #require(WatchTiles.NextDose.next(in: slots, date: "2026-09-24", nowMinutes: 12 * 60, calendar: calendar))
+        #expect(noon.name == "Omega 3")
+        #expect(noon.at == calendar.date(from: DateComponents(year: 2026, month: 9, day: 24, hour: 13)))
+
+        let evening = try #require(WatchTiles.NextDose.next(in: slots, date: "2026-09-24", nowMinutes: 13 * 60, calendar: calendar))
+        #expect(evening.name == "Magnesium +2", "a slot's due time itself is past, not next")
+
+        #expect(WatchTiles.NextDose.next(in: slots, date: "2026-09-24", nowMinutes: 22 * 60, calendar: calendar) == nil,
+                "nothing left today is nil, never tomorrow's first dose")
+        #expect(WatchTiles.NextDose.next(in: slots, date: "not a date", nowMinutes: 0) == nil)
+    }
 }

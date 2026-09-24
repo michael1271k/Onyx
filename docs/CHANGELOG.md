@@ -44,6 +44,56 @@ _Nothing yet._
 
 ---
 
+## [8.4.0] — 2026-09-24 · The watch knows the workout is over
+
+Lane A of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record
+"Lane A"). Phone↔watch lifecycle, the watch dashboard, complications, Crown RPE.
+
+### Apple Watch app
+- **No more "Start" after the phone finished.** The phone now tells the watch
+  the state of today's session (open / finished / discarded, with a summary)
+  through the application context the instant it changes, and a phone finish
+  also goes as an immediate message; the watch closes only after the phone's
+  sets have arrived or 5 s have passed. A finished session can never be
+  re-adopted. The first screen is **Start**, **Join** (the phone is mid-workout)
+  or **today's banner** — name, tonnage, average heart rate in red, PR count and
+  a six-point heart-rate line. Long-press the banner to start a second workout.
+- **Glance page.** The watch opens on a readiness ring with four petals
+  (sleep, water, food, heart); the Digital Crown moves between petals and a
+  tap opens that page. The other pages use the new frosted `WatchSlab` cards;
+  Fuel gets a food card with a macro bar. A theme change on the phone repaints
+  the whole watch immediately.
+- **Crown RPE.** Turning the Crown during rest rates the last set live; one
+  rating is saved when you stop, not one per click. The phone's deck card shows
+  the rating as a dashed coloured capsule while it is provisional; it is
+  committed by a tap, the next ticked set or Finish, never onto an unticked set.
+
+### Watch complications
+- Cut to six: readiness, water, workout, sleep, **heart rate** (new) and
+  **next dose** (new). Removed: `OnyxWatch.fuel`, `.steps`, `.bedtime`,
+  `.stress`, `.soreness`, `.weekRings` — a face that carried one shows an
+  empty slot until you pick another. Faces no longer show yesterday's figures
+  after midnight.
+
+### iPhone app
+- The live deck card draws the watch's provisional RPE band.
+
+### Changed
+- `WatchContext.session` (lifecycle) and the `EffortPulse` message are now
+  sent and honoured on both sides. `WatchTiles.nextDose` is new.
+
+### Notes
+- Proven on the 26.5 simulator pair: Join on relaunch; adoption of a phone
+  start within a second. Needs hardware: queued transfers arriving, a context
+  reaching a running watch app, the live band on the phone, complications with
+  real data, the midnight reload.
+- Open: the phone does not launch a closed watch app yet (8.5.0); a watch finish
+  still reaches the phone by the queue on purpose; Glance petals are 35 pt at
+  40 mm.
+- OnyxTests: the same baseline names, none new.
+
+---
+
 ## [8.3.0] — 2026-09-24 · The summary on one screen, the treadmill by its name, labels from the database
 
 Lane C of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record

@@ -89,6 +89,9 @@ final class PhoneWatchBridge {
         var opened: String?
     }
     private(set) var news = WristNews()
+    /// The last provisional RPE the wrist's Crown sent (overhaul A3). Read
+    /// by the live logger; never persisted.
+    private(set) var effort: EffortPulse?
     /// `.notice`, so `log show` returns it — the phone's half of the watch's
     /// own session log (App Store W4).
     private let log = Logger(subsystem: "app.onyx.phone", category: "watch")
@@ -243,16 +246,139 @@ final class PhoneWatchBridge {
     /// number moved, and the watch would open on "Open Onyx on your iPhone"
     /// between two pushes.
     func send(userId: String, today: String, schedule: ScheduleContext, tiles: WatchTiles?) {
-        link?.send(
-            context: WatchContext(
-                userId: userId, today: today, schedule: resolved(schedule),
-                // The wrist wears what the phone wears. The watch has no
-                // Settings screen for this, and a second place to set a theme
-                // is a second place for the two to disagree.
-                theme: OnyxTheme.current.spec,
-                tiles: tiles
-            )
+        var tiles = tiles
+        // The Next Dose complication's reading (overhaul Lane A, decision Q5):
+        // the snapshot the tiles are cut from carries no supplement schedule,
+        // so the stack is read here, where the push is assembled.
+        let isTraining = !(tiles?.restDay ?? false)
+        tiles?.nextDose = nextDose(today: today, isTraining: isTraining)
+        var context = WatchContext(
+            userId: userId, today: today, schedule: resolved(schedule),
+            // The wrist wears what the phone wears. The watch has no
+            // Settings screen for this, and a second place to set a theme
+            // is a second place for the two to disagree.
+            theme: OnyxTheme.current.spec,
+            tiles: tiles
         )
+        // Every push carries the lifecycle — sign-in, the midnight roll, a
+        // theme pick and the throttled tiles alike — so the one slot never
+        // says less about today's session than the last push did.
+        context.session = lifecycle(for: context)
+        lastContext = context
+        link?.send(context: context)
+    }
+
+    // MARK: - The session's lifecycle (overhaul Lane A, decision Q1)
+
+    /// The phone's word on today's session — open, finished or discarded —
+    /// as it last changed, and whose it is.
+    ///
+    /// ── PERSISTED, BECAUSE THE SLOT MUST NEVER REGRESS ──────────────────────
+    /// Every context push rewrites the watch's ONE application-context slot.
+    /// A phone relaunched after a finish that held this only in memory would
+    /// push the next tiles with no lifecycle, and the wrist would go back to
+    /// offering Start for a workout that is over — the reported bug, one
+    /// jetsam later. Keyed on the user, so an account switch cannot hand one
+    /// person's banner to another.
+    private struct Word: Codable {
+        var userId: String
+        var lifecycle: SessionLifecycle
+    }
+    private static let wordKey = "onyx.watch.lifecycle"
+    private var word: Word? {
+        get { UserDefaults.standard.data(forKey: Self.wordKey).flatMap { try? OnyxJSON.decoder.decode(Word.self, from: $0) } }
+        set { UserDefaults.standard.set(newValue.flatMap { try? OnyxJSON.encoder.encode($0) }, forKey: Self.wordKey) }
+    }
+
+    /// The last context sent, so a lifecycle change can go out NOW with the
+    /// last known tiles on it rather than wait for a fresh `.full` build.
+    private var lastContext: WatchContext?
+
+    /// The lifecycle moved. `AppEnvironment.pushLifecycle` — the unthrottled
+    /// push. Nil in the harness and the tests, where the bridge re-sends its
+    /// own last context instead.
+    var onLifecycleChanged: (() -> Void)?
+
+    /// What `context` should say about the session: the stored word when it is
+    /// this user's and still about today — an OPEN session is carried whatever
+    /// its date, a finished one only on its own day. A finished session's
+    /// masthead is rebuilt on every push, because the heart-rate spark lands
+    /// in the telemetry cache AFTER the finish (`sessionFinished`'s prefetch),
+    /// and that write is a commit that throttles its own push through here.
+    private func lifecycle(for context: WatchContext) -> SessionLifecycle? {
+        guard var word, word.userId == context.userId else { return nil }
+        guard word.lifecycle.phase == .open || word.lifecycle.isOn(context.today) else { return nil }
+        // An OPEN word is checked against the row: a session closed or thrown
+        // away by a path that never came through here (a crash, a history
+        // delete) must not keep offering the wrist a Join.
+        if word.lifecycle.phase == .open {
+            guard let row = try? database.session(id: word.lifecycle.sessionId, userId: word.userId) else { return nil }
+            if let ended = row.endedAt {
+                word.lifecycle.phase = .finished
+                word.lifecycle.endedAt = ended
+            }
+        }
+        if word.lifecycle.phase == .finished,
+           let summary = try? database.sessionMasthead(
+               sessionId: word.lifecycle.sessionId, userId: word.userId,
+               name: dayName(word.lifecycle.dayKey, in: context.schedule)
+           ) {
+            word.lifecycle.summary = summary
+        }
+        return word.lifecycle
+    }
+
+    /// Re-send the last context with the current lifecycle on it. False when
+    /// nothing has been sent this launch — the caller builds a whole one.
+    @discardableResult
+    func pushLifecycle() -> Bool {
+        guard var context = lastContext else { return false }
+        context.session = lifecycle(for: context)
+        lastContext = context
+        link?.send(context: context)
+        return true
+    }
+
+    /// A session opened, finished or was discarded — on this phone or on the
+    /// wrist. Stored, then pushed without the tiles' throttle.
+    private func record(_ pulse: SessionPulse) {
+        guard let lifecycle = SessionLifecycle(pulse) else { return }
+        // ── NEVER BACKWARDS (after review) ──────────────────────────────────
+        // The same three rules the wrist's `noteWord` keeps: a pulse about an
+        // OLDER session than the stored word, the discard of a losing rival
+        // while the winner is open, and a late open for a session the word
+        // has already closed all leave the word alone. Otherwise every later
+        // context told the wrist the live session had been discarded.
+        if let current = word?.lifecycle, word?.userId == pulse.userId {
+            if current.sessionId != lifecycle.sessionId, current.startedAt > lifecycle.startedAt { return }
+            if current.sessionId != lifecycle.sessionId, current.phase == .open, lifecycle.phase == .discarded { return }
+            if current.sessionId == lifecycle.sessionId, current.phase != .open, lifecycle.phase == .open { return }
+        }
+        word = Word(userId: pulse.userId, lifecycle: lifecycle)
+        log.notice("lifecycle \(lifecycle.phase.rawValue, privacy: .public) \(lifecycle.sessionId, privacy: .public)")
+        if let onLifecycleChanged { onLifecycleChanged() } else { pushLifecycle() }
+    }
+
+    /// The next timed slot of today's stack, through the same resolver the
+    /// Stack screen draws (`customSlotsForDate` → `stackForDate`), so the
+    /// complication and the phone cannot name different doses. Read once per
+    /// push — a small table, and pushes are throttled to one per 30 s.
+    private func nextDose(today: String, isTraining: Bool, now: Date = Date()) -> WatchTiles.NextDose? {
+        guard let rows = try? database.read({ db in try CustomSupplementRow.fetchAll(db) }), !rows.isEmpty else { return nil }
+        let active = Supplements.active(rows.map(AppDatabase.custom), on: today)
+        let weekday = ISODate.weekday(today) ?? 0
+        let slots = Supplements.stackForDate(
+            Supplements.customSlotsForDate(active, on: today, weekday: weekday, isTraining: isTraining),
+            isTraining: isTraining, weekday: weekday
+        )
+        let clock = Calendar.current.dateComponents([.hour, .minute], from: now)
+        return .next(in: slots, date: today, nowMinutes: (clock.hour ?? 0) * 60 + (clock.minute ?? 0))
+    }
+
+    /// The split's own name for the banner — the deck's label, else the key
+    /// tidied, the rule `SessionAnalysis.dayLabel` follows.
+    private func dayName(_ dayKey: String?, in schedule: ScheduleContext) -> String {
+        SessionAnalysis.dayLabel(dayKey, in: schedule.activeProgram) ?? "Workout"
     }
 
     /// Fill in `ProgramExercise.exerciseId` wherever the routine payload left
@@ -323,8 +449,19 @@ final class PhoneWatchBridge {
 
     /// Tell the wrist a session opened, finished or was discarded here (App
     /// Store W4). See `WatchLink.send(session:)` for the channels.
+    ///
+    /// A FINISH carries this store's event count for the session (overhaul
+    /// Lane A), which is what lets `WatchLink` message it as well as queue it:
+    /// the wrist holds the messaged copy until its own log has caught up. The
+    /// flush first, so every set of ours is queued ahead of the finish.
     func send(session pulse: SessionPulse) {
+        var pulse = pulse
+        if pulse.phase == .finished {
+            flush()
+            pulse.expectedEventCount = try? database.authoredEventCount(sessionId: pulse.sessionId)
+        }
         link?.send(session: pulse)
+        record(pulse)
     }
 
     // MARK: - Inbound
@@ -377,10 +514,12 @@ final class PhoneWatchBridge {
                 // next picked up. Signed out it does nothing and the key
                 // waits, which is `drainPendingWater`'s own behaviour.
                 onWaterQueued?()
-            case .effort:
-                // Overhaul W0 contract: decoded, not yet drawn. Lane A turns
-                // it into provisional ink on the deck card; it is never stored.
-                break
+            case .effort(let pulse):
+                // The wrist's Crown, mid-scrub (overhaul A3). Held here for
+                // the logger to read — `LiveLoggerView` hands it to
+                // `LoggerModel.receiveEffort`, which draws it as provisional
+                // ink. Never stored: the wire says so and so does this.
+                effort = pulse
             case .session(let pulse):
                 // ── THE WRIST'S SESSION, IN THIS STORE (App Store W4) ───────
                 // The row first — `ingestFromWatch` refuses a set whose
@@ -405,9 +544,13 @@ final class PhoneWatchBridge {
                         news.ended.insert(superseded.id)
                     }
                     news.opened = pulse.sessionId
+                    record(pulse)
                     onSessionOpened?()
                 case .closed, .discarded:
                     news.ended.insert(pulse.sessionId)
+                    // The phone owns the lifecycle whoever ended it: a
+                    // wrist-finished session gets its banner the same way.
+                    record(pulse)
                     // A start banked for this split would otherwise be adopted
                     // by the next Start on it today — a dead session's clock
                     // on a new one. Finish and cancel clear it; this is their
