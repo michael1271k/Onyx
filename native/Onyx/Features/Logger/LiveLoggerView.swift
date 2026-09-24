@@ -710,9 +710,11 @@ struct LiveLoggerView: View {
                     }
                     // A session is not a contract with the program: the
                     // machine was taken, the shoulder asked for something
-                    // else. Live decks only — an edit deck already carries
-                    // every movement the session or its plan named.
-                    if !model.isEditing { addMovement }
+                    // else. The EDIT deck offers it too (overhaul C2): a set
+                    // forgotten on a movement the session never named had no
+                    // way onto the record. Its seed is the session's own split
+                    // (`programDay`), and Discard takes the card back out.
+                    addMovement
                 }
                 // 12 rather than the 16 the rest of the app uses. The set row
                 // inside these cards is within a few points of the width of a

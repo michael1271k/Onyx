@@ -145,7 +145,7 @@ enum HistoryPreviews {
         // `pairId` and has for some time — see `SessionDetailView.canEdit`), so
         // either day shoots now. Left on the leg day so the shot is comparable
         // with the ones already in `docs/shots`.
-        case "session-edit":
+        case "session-edit", "logger-edit":
             NavigationStack { SessionDetailView(sessionId: "s-2026-08-30", startAtEditor: true) }
                 .environment(environment())
         case "exercise-history":

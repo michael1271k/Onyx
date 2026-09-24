@@ -557,38 +557,21 @@ private struct HeartRatePanel: ViewModifier {
 ///
 /// Nothing at all when the session has no series — a phone-only workout has
 /// no watch on the wrist, and an empty state here would be chrome saying so.
+///
+/// The PAGE reads the series and hands it in (`SessionDetailView.loadHeart`):
+/// a `.task` on a view that draws nothing never runs, which is how the first
+/// cut of this strip never appeared at all (shot round 2).
 struct HeartStrip: View {
-    let sessionId: String
+    let reading: SessionTelemetry.Reading
+    let names: [String: String]
 
-    @Environment(AppEnvironment.self) private var environment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    @State private var reading: SessionTelemetry.Reading?
-    @State private var names: [String: String] = [:]
     @State private var selected: HRSegment?
 
     private var ink: Color { OnyxInk.Fixed.heart }
 
     var body: some View {
-        Group {
-            if let reading, !reading.isEmpty {
-                strip(reading)
-            }
-        }
-        .task(id: environment.telemetryGeneration) {
-            let telemetry = environment.telemetry
-            let database = environment.database
-            let next = await telemetry.reading(sessionId: sessionId)
-            if names.isEmpty, next?.isEmpty == false {
-                names = await Task.detached(priority: .userInitiated) {
-                    Dictionary(
-                        ((try? database.exercises()) ?? []).map { ($0.id, $0.name) },
-                        uniquingKeysWith: { first, _ in first }
-                    )
-                }.value
-            }
-            reading = next
-        }
+        strip(reading)
     }
 
     private func strip(_ reading: SessionTelemetry.Reading) -> some View {
@@ -682,7 +665,7 @@ struct HeartStrip: View {
     /// `Incline DB Press · 128 bpm · 6 min` — the tapped movement, every piece
     /// of it (a pause splits one movement into two segments).
     private func callout(_ segment: HRSegment) -> String {
-        let pieces = reading?.segments.filter { $0.exerciseId == segment.exerciseId } ?? [segment]
+        let pieces = reading.segments.filter { $0.exerciseId == segment.exerciseId }
         let seconds = pieces.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) }
         let weighted = pieces.compactMap { p in p.avgBpm.map { (Double($0), p.end.timeIntervalSince(p.start)) } }
         let span = weighted.reduce(0) { $0 + $1.1 }

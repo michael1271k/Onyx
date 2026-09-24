@@ -532,6 +532,7 @@ struct CardioKind {
     var label: String {
         switch key {
         case CardioImport.walk: "Walk"
+        case CardioImport.treadmill: "Treadmill"
         case CardioImport.run: "Run"
         case CardioImport.cycling: "Cycling"
         case CardioImport.rowing: "Rowing"
@@ -544,6 +545,7 @@ struct CardioKind {
     var symbol: String {
         switch key {
         case CardioImport.walk: "figure.walk"
+        case CardioImport.treadmill: "figure.walk.treadmill"
         case CardioImport.run: "figure.run"
         case CardioImport.cycling: "figure.outdoor.cycle"
         case CardioImport.rowing: "figure.rower"

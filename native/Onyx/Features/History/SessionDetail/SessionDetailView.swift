@@ -102,6 +102,9 @@ struct SessionDetailView: View {
     @State private var ledgerFor: SessionAnalysis.ExerciseReport?
     /// The Progression sheet — the split's chart and the metric grid (row 5).
     @State private var showProgression = false
+    /// Row 2's series and the names its movements are drawn under.
+    @State private var heart: SessionTelemetry.Reading?
+    @State private var heartNames: [String: String] = [:]
 
     /// One long-pressed trophy, frozen at the moment of the press.
     struct PrTarget: Identifiable {
@@ -135,7 +138,9 @@ struct SessionDetailView: View {
                     // 1 · which session, and what it weighed
                     masthead(page)
                     // 2 · the heart rate, inline — nothing when there is none
-                    HeartStrip(sessionId: sessionId)
+                    if let heart, !heart.isEmpty {
+                        HeartStrip(reading: heart, names: heartNames)
+                    }
                     if let foreign { hevy(page, foreign) }
                     // 3 · every movement, one chip each
                     exerciseGrid(page.report)
@@ -162,6 +167,9 @@ struct SessionDetailView: View {
             .padding(.vertical, OnyxSpace.s)
         }
         .onyxScreen(.train)
+        // Keyed on the telemetry generation, like the finish sheet's card: a
+        // strip that opened empty fills in when the watch's late samples land.
+        .task(id: environment.telemetryGeneration) { await loadHeart() }
         .tint(OnyxDomain.train.accent)
         .navigationTitle(report.map { SessionRow.date($0.session.date) } ?? "Session")
         .navigationBarTitleDisplayMode(.inline)
@@ -291,6 +299,19 @@ struct SessionDetailView: View {
                     ?? exercises.first
             }
         }
+    }
+
+    /// Row 2's read: the series, then the catalogue names its movements carry.
+    private func loadHeart() async {
+        let telemetry = environment.telemetry, database = environment.database
+        let next = await telemetry.reading(sessionId: sessionId)
+        if heartNames.isEmpty, next?.isEmpty == false {
+            heartNames = await Task.detached(priority: .userInitiated) {
+                Dictionary(((try? database.exercises()) ?? []).map { ($0.id, $0.name) },
+                           uniquingKeysWith: { first, _ in first })
+            }.value
+        }
+        heart = next
     }
 
     /// Harness only: present the sheet for the first record the page holds.
@@ -557,7 +578,7 @@ struct SessionDetailView: View {
             masthead: SessionMasthead(page: page, label: label),
             dayKey: session.dayKey,
             // The start time only: the bar's title already names the date.
-            stamp: session.startedAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "",
+            stamp: session.startedAt.map { "Started " + $0.formatted(date: .omitted, time: .shortened) } ?? "",
             tonnageInk: page.tonnageDelta.flatMap { abs($0) >= 0.5 ? SetRow.deltaInk($0, upIsGood: true) : nil }
         )
     }
@@ -1405,7 +1426,7 @@ struct SessionDetailView: View {
         }
         if let bpm = bout?.avgHr, bpm > 0 {
             tags.append(.init("\(jsIntegerString(jsRound(bpm))) bpm",
-                              symbol: "heart.fill", tint: Color.onyx.cardio))
+                              symbol: "heart.fill", tint: OnyxInk.Fixed.heart))
         }
         // The app's own glyph for "this came from Apple Health" — the same one
         // the weigh-in sheet's fill button wears.

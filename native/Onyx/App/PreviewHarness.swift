@@ -282,8 +282,33 @@ enum PreviewHarness {
         return environment
     }
 
-    @MainActor @ViewBuilder
+    /// The harness screen, plus `--onyx-measure` (overhaul C1/C3): four seconds
+    /// after launch, print the tallest scroll view's content and visible
+    /// heights as `ONYXMEASURE content=… container=…` on stdout. A `List` or
+    /// `Form` is a collection view SwiftUI's own scroll geometry cannot read,
+    /// and "≤ 1.1 screens" is a claim that needs a number.
+    @MainActor
     static func view(_ screen: String) -> some View {
+        screenView(screen).task {
+            guard ProcessInfo.processInfo.arguments.contains("--onyx-measure") else { return }
+            try? await Task.sleep(for: .seconds(4))
+            var tallest: UIScrollView?
+            func walk(_ view: UIView) {
+                if let scroll = view as? UIScrollView,
+                   scroll.contentSize.height > (tallest?.contentSize.height ?? 0) { tallest = scroll }
+                view.subviews.forEach(walk)
+            }
+            UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }.flatMap(\.windows).forEach(walk)
+            if let s = tallest {
+                let visible = s.bounds.height - s.adjustedContentInset.top - s.adjustedContentInset.bottom
+                print("ONYXMEASURE content=\(s.contentSize.height) container=\(visible)")
+            }
+        }
+    }
+
+    @MainActor @ViewBuilder
+    static func screenView(_ screen: String) -> some View {
         let _ = applyRequestedTheme()
         let model = sharedSettingsModel
         switch screen {
@@ -489,6 +514,8 @@ enum PreviewHarness {
              "set-row", "set-row-split", "set-row-cardio", "set-row-records", "set-options", "effort-picker",
              // W5: the heart-rate chart (seeded Health) and the Hevy card (fixture).
              "telemetry-finish", "telemetry-detail", "hevy-card",
+             // Overhaul C1: the inline HR strip over a seeded cache row.
+             "session-hr",
              // W3: the mid-session add.
              "logger-add":
             LoggerPreviews.view(screen)
@@ -526,7 +553,7 @@ enum PreviewHarness {
              "history-week-wrap-open", "session", "session-ledger", "exercise-history",
              // W2 (refinement): the ledger header's row 2, swapped.
              "session-ledger-assists",
-             "session-atlas", "session-edit", "session-records",
+             "session-atlas", "session-edit", "logger-edit", "session-records",
              // W10: the two seconds a record row opens on.
              "session-margin",
              // W4: the pair table, and a day that is only a bout.

@@ -240,12 +240,10 @@ public struct ExportExercise: Codable, Equatable, Sendable {
     public var sets: [ExportSet]
     public var restTargetSec: Double?
     public var restPlanSec: Double?
-    /// The MEAN measured rest between this exercise's sets, in seconds —
-    /// `workout_sets.actual_rest_sec`, written by the logger as the gap between
-    /// committing one set and the next. Nil for every session logged before the
-    /// column shipped and for every session committed from the web, where it
-    /// means "not measured" and the renderer prints the plan alone.
-    public var restActualSec: Double?
+    // `restActualSec` (the mean commit-to-commit gap) was removed in the
+    // overhaul (decision Q16): the rest is the plan's, and the ±15 s timer
+    // nudges are visual only. A decoder still reading an old payload ignores
+    // the key.
     /// The landmark muscles the movement trains, spelled for a reader.
     /// Resolved in the builder so `exercises.muscle_groups` is honoured.
     public var primaryMuscles: [String]?

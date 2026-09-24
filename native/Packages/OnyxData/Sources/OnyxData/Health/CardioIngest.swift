@@ -74,16 +74,28 @@ public extension HealthSync {
     /// to — a decision `ingestCardio` already makes correctly.
     @discardableResult
     func syncCardioBouts(
-        now: Date = Date(), calendar: Calendar = .current, days: Int = 2
+        now: Date = Date(), calendar: Calendar = .current, days: Int = 2,
+        doorKey: String = HealthSync.treadmillDoorKey
     ) async throws -> CardioIngestReport {
+        // ── THE TREADMILL DOOR (overhaul C2) ────────────────────────────────
+        // Once per install, the first pass walks back the backfill quarter so
+        // every indoor walk an older build filed as `walk` is relabelled by
+        // `ingestCardio` (the relabel rides the uuid match). Only when Health
+        // can answer: a pass that could read nothing must not close the door.
+        let defaults = UserDefaults.standard
+        let door = !defaults.bool(forKey: doorKey) && reader.isAvailable
         var day = LogicalDayISO.string(now, calendar: calendar)
         var out = CardioIngestReport()
-        for _ in 0..<max(1, days) {
+        for _ in 0..<max(1, door ? max(days, 90) : days) {
             out = out + (try await ingestCardio(day: day, now: now, calendar: calendar))
             day = NightWindow.previousDay(day)
         }
+        if door { defaults.set(true, forKey: doorKey) }
         return out
     }
+
+    /// Set once the 90-day treadmill relabel has run on this install.
+    public static let treadmillDoorKey = "onyx.backfill.treadmill.v1"
 
     /// One local day's bouts.
     ///
@@ -228,12 +240,22 @@ public extension HealthSync {
             // would rewrite the row on every launch for the rest of the day.
             let adoptsKey = stored[index].hkUuid == nil
 
+            // ── A TREADMILL FILED AS A WALK TAKES ITS NAME BACK (C2) ────────
+            // Health's word for the activity, on a row Health filed. The match
+            // above already treats walk ≡ treadmill (`sameActivity`), so this
+            // is the one place the older label is corrected — and it is the
+            // backfill too: a 90-day `syncCardioBouts` visits every such row.
+            // A hand-typed walk keeps the athlete's own word.
+            let relabels = stored[index].fromHealthkit == true && stored[index].kind != kind
+                && CardioImport.sameActivity(stored[index].kind, kind)
+
             // A write that changes nothing is a row version, an outbox item and
             // a push for no reason. Most launches land here.
-            if after == before && !adoptsKey && !startDrifted { continue }
+            if after == before && !adoptsKey && !startDrifted && !relabels { continue }
 
             var row = stored[index]
             row.apply(after)
+            if relabels { row.kind = kind }
             if adoptsKey { row.hkUuid = key }
             if startDrifted { row.createdAt = bout.start }
             try Task.checkCancellation()

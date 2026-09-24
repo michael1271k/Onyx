@@ -198,4 +198,45 @@ struct SessionEditModeTests {
         let stored = try #require(try database.sets(sessionId: Self.sessionId).first { $0.id == "set-1" })
         #expect(stored.weightKg == 60, "the amend must reach the projection, not just the event log")
     }
+
+    // MARK: - Overhaul C2 · Discard and Add a movement
+
+    /// `revertSessionEdits` answers nil for a sitting that changed nothing, and
+    /// its contract says the caller still closes the screen. `cancelEdit`
+    /// reported that as a failure, so Discard on an untouched editor did
+    /// nothing at all — no banner, no dismissal, the mark still standing.
+    @Test("Discard on a sitting that changed nothing closes the editor")
+    func discardNoOpDismisses() throws {
+        let database = try store()
+        let model = try attached(database)
+        #expect(model.editWatermarked, "the editor opened with a mark to go back to")
+
+        #expect(model.cancelEdit() == true)
+        #expect(model.editWatermarked == false)
+        #expect(model.storeError == nil)
+        #expect(try database.sets(sessionId: Self.sessionId).count == 3)
+    }
+
+    /// The edit deck offers "Add a movement" now. A set logged on it is a real
+    /// set of THIS session (not a new one), and Discard takes it — and its
+    /// card — back out.
+    @Test("a movement added while editing persists, and Discard removes it")
+    func addedMovementPersistsAndReverts() throws {
+        let database = try store()
+        let model = try attached(database)
+
+        let added = try #require(model.addExercise(named: "Hip Thrust"))
+        let row = try #require(added.rows.first)
+        row.weightKg = 80
+        row.reps = 10
+        model.toggleDone(row, in: added)
+
+        let sets = try database.sets(sessionId: Self.sessionId)
+        #expect(sets.count == 4, "the added set lands on the session being edited")
+        #expect(try database.read { db in try WorkoutSession.fetchCount(db) } == 1)
+
+        #expect(model.cancelEdit() == true)
+        #expect(try database.sets(sessionId: Self.sessionId).count == 3)
+        #expect(!model.exercises.contains { $0.name == "Hip Thrust" }, "the card added during the sitting goes with it")
+    }
 }
