@@ -77,7 +77,16 @@ for (const s of sets) {
 }
 
 // ── 3 · compare with the stored figures, finished sessions only ─────────────
-const sessions = await get("workout_sessions?select=id,user_id,started_at,day_key,set_count,working_set_count,ended_at&ended_at=not.is.null");
+const sessions = [];
+after = "";
+for (;;) {
+  const page = await get(
+    `workout_sessions?select=id,user_id,started_at,day_key,set_count,working_set_count,ended_at&ended_at=not.is.null&order=id.asc&limit=${PAGE}` + (after ? `&id=gt.${after}` : "")
+  );
+  if (page.length === 0) break;
+  sessions.push(...page);
+  after = page[page.length - 1].id;
+}
 const perUser = new Map();
 const changes = [];
 for (const ws of sessions) {

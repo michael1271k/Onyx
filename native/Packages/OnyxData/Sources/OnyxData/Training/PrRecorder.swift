@@ -260,6 +260,16 @@ public enum PrRecorder {
                 sql: "session_id IN (SELECT id FROM workout_sessions WHERE date < ?)",
                 arguments: [before]
             )
+        } else if let date {
+            // The set bar on the same bound as the floors (`upTo`): an edited
+            // OLD session's `pr_count` is judged against what stood on its
+            // day, not against sets logged after it. `<=`, like the floors —
+            // a same-day earlier session stands; the session's own rows are
+            // already excluded above.
+            query = query.filter(
+                sql: "session_id IN (SELECT id FROM workout_sessions WHERE date <= ?)",
+                arguments: [date]
+            )
         }
         let prior = try query.fetchAll(db)
         return PrEngine.buildBaselines(
@@ -356,9 +366,8 @@ public enum PrRecorder {
             }
             // `absorb` keeps whichever side is the better mark for the axis, so
             // this is a max (a min on a timed lift) and never a downgrade.
-            // A row with no `achieved_on` predates the column and counts.
             if standingRecords, let owner = row.sessionId, owner != excludingSession,
-               date == nil || (row.achievedOn ?? "") <= date! {
+               date == nil || row.achievedOn <= date! {
                 floor.absorb(axis: axis, value: row.value, timed: timed)
             }
             out[row.exerciseKey] = floor
@@ -401,11 +410,15 @@ public enum PrRecorder {
         // session against what stood BEFORE it and a stale row from an older
         // formula cannot survive as a bar nothing can beat. `retract` queues
         // the deletes; every axis won back drops its own delete on the way in.
+        // Only rows whose session this device HOLDS THE SETS FOR: a record
+        // filed by a web session that was never pulled is not this device's
+        // to retract, and a delete queued for it would reach the server.
+        let replayable = "session_id IN (SELECT DISTINCT session_id FROM workout_sets)"
         let keys = try String.fetchAll(
-            db, sql: "SELECT DISTINCT exercise_key FROM personal_records WHERE user_id = ? AND session_id IS NOT NULL",
+            db, sql: "SELECT DISTINCT exercise_key FROM personal_records WHERE user_id = ? AND " + replayable,
             arguments: [userId]
         )
-        for key in keys { try retract(db, userId: userId, exerciseKey: key) }
+        for key in keys { try retract(db, userId: userId, exerciseKey: key, onlySessions: replayable) }
         let sessions = try WorkoutSession
             .filter(Column("user_id") == userId && Column("ended_at") != nil)
             .order(Column("date"), Column("started_at"), Column("rowid"))
@@ -583,12 +596,17 @@ public enum PrRecorder {
     /// written by a set and no replay can win them back, so they stay — and
     /// the replay reads them first (`floors`) as the bar every session is
     /// judged against.
+    /// - Parameter onlySessions: an SQL predicate on `session_id` narrowing
+    ///   the retract to rows this device can re-file (`recomputeAll`); nil
+    ///   retracts every session-backed row for the key (`replay`, which is
+    ///   handed a key whose sets are local by construction).
     private static func retract(
-        _ db: Database, userId: String, exerciseKey: String
+        _ db: Database, userId: String, exerciseKey: String, onlySessions: String? = nil
     ) throws {
-        let rows = try PersonalRecordRow
+        var query = PersonalRecordRow
             .filter(Column("user_id") == userId && Column("exercise_key") == exerciseKey && Column("session_id") != nil)
-            .fetchAll(db)
+        if let onlySessions { query = query.filter(sql: onlySessions) }
+        let rows = try query.fetchAll(db)
         for row in rows {
             // A record that stood on a floor hands the axis BACK to the
             // floor rather than emptying it: the bar the book asserted is

@@ -293,12 +293,16 @@ extension AppDatabase {
                     // one to keep — but a server NULL on a session THIS device
                     // has the sets for would blank a figure the tab renders.
                     // Server first, ours as the fallback.
-                    totalVolumeKg: row.totalVolumeKg ?? existing?.totalVolumeKg,
-                    setCount: row.setCount ?? existing?.setCount,
-                    prCount: row.prCount ?? existing?.prCount,
-                    // Same rule (Precision Lane C): a whole-row save without
-                    // it would blank the figure on every pull.
-                    workingSetCount: row.workingSetCount ?? existing?.workingSetCount,
+                    // AND THE LOCAL FIGURE WINS WHILE ITS PUSH IS QUEUED (Lane
+                    // C): the recount door rewrites these and queues the
+                    // session; a pull landing before the push drained wrote
+                    // the server's old numbers back over them, and the queued
+                    // item then pushed the OLD row up. `local` is the guard
+                    // every other column here already has.
+                    totalVolumeKg: local(existing?.totalVolumeKg, row.totalVolumeKg) ?? existing?.totalVolumeKg,
+                    setCount: local(existing?.setCount, row.setCount) ?? existing?.setCount,
+                    prCount: local(existing?.prCount, row.prCount) ?? existing?.prCount,
+                    workingSetCount: local(existing?.workingSetCount, row.workingSetCount) ?? existing?.workingSetCount,
                     // Local-only and never on the wire: a pull has no opinion
                     // about who typed the duration, so the flag survives it.
                     // Without this line, one sync would hand a hand-corrected

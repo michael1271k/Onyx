@@ -197,6 +197,9 @@ public actor HealthSync {
         var out: [IngestReport] = []
         var day = today
         for _ in 0..<days {
+            // `sync(day:)` swallows a cancelled metric read; a sign-out
+            // mid-door must still stop the loop before the next day's write.
+            try Task.checkCancellation()
             day = NightWindow.previousDay(day)
             out.append(try await sync(day: day, isToday: false, now: now, calendar: calendar))
         }

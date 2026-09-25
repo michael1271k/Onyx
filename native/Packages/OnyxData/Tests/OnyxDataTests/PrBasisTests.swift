@@ -100,6 +100,24 @@ struct PrBasisTests {
         #expect(try records(db).isEmpty)
     }
 
+    @Test("a rebuild keeps the record of a session this device holds no set for")
+    func recomputeKeepsRemoteRecords() throws {
+        let db = try store()
+        try db.writer.write { conn in
+            try Exercise(id: "ex-curl", name: "Seated Leg Curl", slug: "onyx-seated-leg-curl").save(conn)
+            try PersonalRecordRow(userId: user, exerciseKey: "Seated Leg Curl", axis: "volume",
+                                  value: 700, reps: 14, weightKg: 50, sessionId: "s-remote", achievedOn: "2026-08-15").insert(conn)
+            try conn.execute(sql: "DELETE FROM outbox")
+        }
+        _ = try db.recomputeAllPrs(userId: user)
+        let kept = try #require(try records(db).first { $0.axis == "volume" })
+        #expect(kept.value == 700 && kept.sessionId == "s-remote", "a web session's record is not this device's to retract")
+        let deletes = try db.writer.read { conn in
+            try Int.fetchOne(conn, sql: "SELECT count(*) FROM outbox WHERE idempotency_key LIKE 'rowdel:personal_records:%'") ?? 0
+        }
+        #expect(deletes == 0, "and no delete reaches the server")
+    }
+
     @Test("a rebuild starts from the asserted floors and replaces a stale ledger row")
     func recomputeStartsFromFloors() throws {
         let db = try store()

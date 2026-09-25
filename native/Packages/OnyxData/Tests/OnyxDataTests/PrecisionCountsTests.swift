@@ -87,6 +87,21 @@ struct PrecisionCountsTests {
         #expect(try db.recountSessionTotals(userId: user) == 0, "a second pass changes nothing")
     }
 
+    @Test("a pull does not overwrite recounted figures whose push is still queued")
+    func pullKeepsQueuedRecount() throws {
+        let db = try store()
+        try seed(db)
+        _ = try db.closeSession(id: "s")   // 1528.8 / 6 / 4, and a queued `session:s`
+        let start = LogicalDay.date(fromISO: "2026-09-24")!
+        _ = try db.applyPulledSessions([
+            RemoteSessionRow(id: "s", userId: user, startedAt: start, splitDay: "upper", endedAt: start.addingTimeInterval(3600),
+                             dayKey: "cb_b", totalVolumeKg: 960, setCount: 6, prCount: 0)   // the web's old figures
+        ])
+        let row = try #require(try db.session(id: "s"))
+        #expect(row.totalVolumeKg == 1528.8 && row.setCount == 6 && row.workingSetCount == 4,
+                "the server's stale row must not win over a figure still on its way up")
+    }
+
     @Test("a session whose sets this device never pulled is left alone")
     func recountSkipsSetlessSessions() throws {
         let db = try store()

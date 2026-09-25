@@ -29,7 +29,10 @@ struct SessionEditingTests {
             // the retraction has to notice. Its second set is deliberately
             // lighter than the newer session's, or the record would simply
             // stay where it is and prove nothing.
-            for (id, date, loads) in [("s-old", older, [100.0, 70.0]), ("s-new", newer, [80.0, 80.0])] {
+            // `s-prior` makes the lift session-backed (Q12, Lane C): a
+            // first-ever session files nothing, so without it the 100 kg
+            // session would own no record to retract.
+            for (id, date, loads) in [("s-prior", "2026-08-03", [60.0, 60.0]), ("s-old", older, [100.0, 70.0]), ("s-new", newer, [80.0, 80.0])] {
                 let start = LogicalDay.date(fromISO: date)!
                 try WorkoutSession(
                     id: id, userId: user, dayKey: "cb_a", date: date,
@@ -112,11 +115,10 @@ struct SessionEditingTests {
     func theFirstSessionIsTheBaseline() throws {
         let db = try store()
         try history(db)
-        // 100 kg on 10 August is the oldest set for this lift, so a replay
-        // judges it against an empty index and awards no axis. The 80 kg on
-        // 24 August is the first thing with a bar to beat — and it does not
-        // beat 100, so raising the OLDER session can empty the ledger outright.
-        _ = try db.amendSet(sessionId: "s-old", setId: "s-old-1", weightKg: 90)
+        // 3 August is the FIRST session for this lift, so a replay marks its
+        // sets as baselines and awards no axis whatever they lift (Q12). Raise
+        // its opener to 200 and nothing later beats it — the ledger empties.
+        _ = try db.amendSet(sessionId: "s-prior", setId: "s-prior-1", weightKg: 200)
         #expect(try records(db).isEmpty)
     }
 
