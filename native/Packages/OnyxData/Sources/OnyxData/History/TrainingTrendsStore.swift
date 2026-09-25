@@ -57,12 +57,17 @@ public extension AppDatabase {
                 .order(Column("fold_order").asc, Column("set_index").asc)
                 .fetchAll(db)
             let bySession = Dictionary(grouping: sets, by: \.sessionId)
-            return sessions.map { session in
+            // The weigh-in and the bodyweight flags `closeSession` reads (Q13).
+            let isBodyweight = try SessionEditing.bodyweightResolver(db)
+            return try sessions.map { session in
                 let own = bySession[session.id] ?? []
                 return TrendSession(
                     session: session,
                     sets: own.map { TrendSet(set: $0, exerciseName: names[$0.exerciseId] ?? $0.exerciseId) },
-                    volumeKg: WidgetSnapshotBuilder.volume(own)
+                    volumeKg: WidgetSnapshotBuilder.volume(
+                        own, bodyWeightKg: try SessionEditing.bodyWeightKg(db, userId: session.userId, on: session.date),
+                        isBodyweight: isBodyweight
+                    )
                 )
             }
         }
