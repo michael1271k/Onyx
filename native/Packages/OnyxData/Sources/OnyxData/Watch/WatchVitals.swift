@@ -83,9 +83,9 @@ public final class WatchVitals {
     @ObservationIgnored private let store = HKHealthStore()
     @ObservationIgnored private var observers: [HKObserverQuery] = []
     @ObservationIgnored private var stream: HKAnchoredObjectQuery?
-    /// Called when `heart` moved — the model reloads the heart complications
-    /// (WidgetKit stays out of this package).
-    @ObservationIgnored public var onHeart: (@MainActor (LastHeartRate) -> Void)?
+    /// Called when `heart` or the trail moved — the model reloads the two
+    /// heart complications (WidgetKit stays out of this package).
+    @ObservationIgnored public var onChange: (@MainActor () -> Void)?
     @ObservationIgnored private let log = Logger(subsystem: "app.onyx.watch", category: "vitals")
 
     // Computed and `nonisolated`: the HealthKit handlers below run on
@@ -95,6 +95,9 @@ public final class WatchVitals {
     nonisolated private static var variability: HKQuantityType { HKQuantityType(.heartRateVariabilitySDNN) }
 
     public init() {
+        // A trail that will not decode restarts empty — and its anchor must
+        // go with it, or the last 24 hours would never be re-read.
+        if HeartTrail.load() == nil { VitalsAnchor.save(nil, HKQuantityTypeIdentifier.heartRate.rawValue) }
         trail = HeartTrail.load() ?? HeartTrail()
         heart = LastHeartRate.load()
         hrv = LastHRV.load()
@@ -170,19 +173,26 @@ public final class WatchVitals {
         let query = HKAnchoredObjectQuery(
             type: type, predicate: since, anchor: VitalsAnchor.load(identifier), limit: HKObjectQueryNoLimit
         ) { @Sendable [weak self] _, samples, _, anchor, error in
-            // Saved here, off the main actor: `UserDefaults` is thread-safe
-            // and the anchor never has to cross an isolation boundary.
-            if error == nil { VitalsAnchor.save(anchor, identifier) }
+            // The anchor is saved AFTER the fold and only if the fold ran: a
+            // position saved first would skip these samples for good if the
+            // process died in between (review). `HKQueryAnchor` is Sendable.
+            let ok = error == nil
             if identifier == Self.heartRate.identifier {
                 let heart = Self.heartSamples(samples)
                 Task { @MainActor in
-                    self?.fold(heart: heart, streamed: false)
+                    if let self {
+                        self.fold(heart: heart, streamed: false)
+                        if ok { VitalsAnchor.save(anchor, identifier) }
+                    }
                     done?()
                 }
             } else {
                 let latest = Self.hrvSample(samples)
                 Task { @MainActor in
-                    self?.fold(hrv: latest)
+                    if let self {
+                        self.fold(hrv: latest)
+                        if ok { VitalsAnchor.save(anchor, identifier) }
+                    }
                     done?()
                 }
             }
@@ -213,12 +223,19 @@ public final class WatchVitals {
             }
             lastDelivery = now
         }
+        let before = trail
         trail.merge(samples, now: now)
-        trail.save()
-        guard let adopted = WatchHeart.adopt(samples, over: LastHeartRate.load() ?? heart) else { return }
-        adopted.save()
-        heart = adopted
-        onHeart?(adopted)
+        let trailMoved = trail != before
+        if trailMoved { trail.save() }
+        let adopted = WatchHeart.adopt(samples, over: LastHeartRate.load() ?? heart)
+        if let adopted {
+            adopted.save()
+            heart = adopted
+        }
+        // A trail-only change counts: after a workout the first fetch merges
+        // the session's samples, none newer than the rate the session wrote,
+        // and the Live Heart arc still has to show the block (review).
+        if trailMoved || adopted != nil { onChange?() }
     }
 
     private func fold(hrv sample: LastHRV?) {

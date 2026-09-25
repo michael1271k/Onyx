@@ -89,6 +89,17 @@ struct RootView: View {
                 PetalDetailView(petal: petal)
             }
         }
+        // ── A SESSION STARTING OR ENDING CLEARS THE STACK (Precision D3) ────
+        // The idle root pushes now (a petal's detail), and the root under it
+        // swaps between `DashboardView` and `SetView` on the session. A Heart
+        // detail left on top when the phone starts a workout would cover the
+        // set with a back chevron (review). The shot loop's pushes are exempt.
+        .onChange(of: model.sessionId) {
+            #if DEBUG
+            guard model.debugScreen == nil else { return }
+            #endif
+            path = NavigationPath()
+        }
         #if DEBUG
         // ── `onChange`, NOT `onAppear` ──────────────────────────────────────
         // `onAppear` fires when this view appears, and the seeding runs in the

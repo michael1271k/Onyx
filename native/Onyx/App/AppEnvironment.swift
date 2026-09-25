@@ -1336,6 +1336,10 @@ public final class AppEnvironment {
     /// App Group defaults and repaints this process, and the send, which
     /// reads `OnyxTheme.current`) happen in the same order they always did.
     private func pushWatchContext(userID: UUID) {
+        // Any push carries the fuel numbers, so it answers a pending fuel
+        // flag too — else a sign-in or midnight push would leave the flag
+        // for the next SET commit to skip the throttle on (review).
+        _ = watchBridge.takeFuelCommit()
         watchPush?.cancel()
         watchPush = nil
         guard watchBuild == nil else {

@@ -18,6 +18,11 @@ import GRDB
 /// foreground, and letting it skip the throttle would put the snapshot build
 /// back on every pull. The water glass writes `water_intake` beside it, and
 /// that is the table that fires.
+///
+/// A mirror pull re-saves these rows too (windowed/whole-table pulls), and
+/// that fires the signal. Left alone on purpose: the pull already schedules a
+/// throttled push, and the bypass sends that SAME one push 28 s earlier —
+/// `pushWatchContext` cancels the pending throttle — so it adds no build.
 public extension AppDatabase {
 
     /// Water, food and the supplement stack.

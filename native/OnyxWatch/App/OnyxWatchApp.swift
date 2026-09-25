@@ -17,6 +17,13 @@ final class WatchAppDelegate: NSObject, WKApplicationDelegate {
     func handle(_ workoutConfiguration: HKWorkoutConfiguration) {
         model.handleWorkoutLaunch()
     }
+
+    /// A background launch — HealthKit's hourly wake (Precision D2) — may
+    /// never run the root's `.task`, and the observer queries have to be
+    /// registered for the wake to be answered. `start()` is idempotent.
+    func applicationDidFinishLaunching() {
+        model.start()
+    }
 }
 
 /// The Watch logging client.

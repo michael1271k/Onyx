@@ -33,9 +33,11 @@ struct LiveHeartEntry: TimelineEntry {
     let blocks: [Int?]
 }
 
-/// Now; the moment the reading goes stale (`WatchHeart.freshFor`), so the
-/// number dims on time without a reload; and midnight. The watch app reloads
-/// this kind whenever `WatchVitals` or a workout saves a newer rate.
+/// Now; every hour until midnight, because the six blocks are relative to the
+/// entry's date and a face reloaded at 08:00 must not draw the 08:00 day at
+/// 14:00 (review); the moment the reading goes stale (`WatchHeart.freshFor`);
+/// and midnight. The watch app reloads this kind when the rate or the trail
+/// moves outside a session.
 struct LiveHeartProvider: TimelineProvider {
     func placeholder(in context: TimelineProviderContext) -> LiveHeartEntry {
         LiveHeartEntry(date: Date(), heart: nil, blocks: Array(repeating: nil, count: 6))
@@ -49,11 +51,13 @@ struct LiveHeartProvider: TimelineProvider {
         let now = Date()
         let midnight = WatchMidnight.next(after: now)
         var dates = [now]
+        var hour = now.addingTimeInterval(3600)
+        while hour < midnight { dates.append(hour); hour.addTimeInterval(3600) }
         if let at = LastHeartRate.load()?.at.addingTimeInterval(WatchHeart.freshFor), at > now, at < midnight {
             dates.append(at)
         }
         dates.append(midnight)
-        completion(Timeline(entries: dates.map(entry(at:)), policy: .after(midnight)))
+        completion(Timeline(entries: dates.sorted().map(entry(at:)), policy: .after(midnight)))
     }
 
     private func entry(at date: Date) -> LiveHeartEntry {

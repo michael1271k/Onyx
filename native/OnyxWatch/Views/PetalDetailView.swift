@@ -430,10 +430,18 @@ private struct HeartDetail: View {
         WatchSlab(tint: OnyxInk.Fixed.heart) {
             VStack(alignment: .leading, spacing: OnyxSpace.xs) {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    DetailFigure(value: vitals.heart.map { "\($0.bpm)" } ?? "—", unit: "bpm")
+                    // A rate past `WatchHeart.freshFor` is the LAST one, not
+                    // now: secondary ink, and its day when it is not today's
+                    // (review) — the petal has already gone hollow for it.
+                    DetailFigure(value: vitals.heart.map { "\($0.bpm)" } ?? "—", unit: "bpm",
+                                 ink: WatchHeart.freshness(vitals.heart) == .stale ? WatchInk.secondary : WatchInk.primary)
                     Spacer(minLength: 0)
                     if let at = vitals.heart?.at {
-                        Text(at, style: .time)
+                        // "at 14:47": a bare time beside a rate reads as the
+                        // clock, not as when the rate was taken (polish).
+                        Text(Calendar.current.isDateInToday(at)
+                             ? "at " + at.formatted(date: .omitted, time: .shortened)
+                             : at.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
                             .font(WatchType.label)
                             .foregroundStyle(WatchInk.secondary)
                             .lineLimit(1)
@@ -485,7 +493,11 @@ private struct HeartSpark: View {
             Canvas { ctx, size in
                 let now = tick.date
                 let start = now.addingTimeInterval(-HeartTrail.window)
-                let bpms = trail.samples.map(\.bpm)
+                // Pruned here too: the stored trail is only re-windowed when
+                // something new arrives, and a quiet morning would otherwise
+                // scale the line by yesterday's samples (review).
+                let live = HeartTrail(samples: trail.samples.filter { $0.at >= start })
+                let bpms = live.samples.map(\.bpm)
                 guard let lo = bpms.min(), let hi = bpms.max() else {
                     var base = Path()
                     base.move(to: CGPoint(x: 0, y: size.height - 1))
@@ -499,7 +511,7 @@ private struct HeartSpark: View {
                     let y = 1 - (Double(s.bpm - lo) + (span - Double(hi - lo)) / 2) / span
                     return CGPoint(x: size.width * x, y: 2 + (size.height - 4) * y)
                 }
-                for run in trail.runs() {
+                for run in live.runs() {
                     if run.count == 1 {
                         let p = point(run[0])
                         ctx.fill(Path(ellipseIn: CGRect(x: p.x - 1.5, y: p.y - 1.5, width: 3, height: 3)),

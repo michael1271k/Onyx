@@ -588,8 +588,12 @@ final class WatchModel {
         // rejoin below can find it live and restart its workout.
         applyLifecycle()
         rejoinLiveSession()
-        // A new rate reloads the two faces that draw one — never all eleven.
-        vitals.onHeart = { _ in
+        // A new rate reloads the two faces that draw one — never all eleven —
+        // and never during a session: there `publishLiveSnapshot` owns the
+        // heart reloads, de-duped per bpm, and a stream left running under a
+        // lowered wrist would otherwise spend two reloads a sample (review).
+        vitals.onChange = { [weak self] in
+            guard self?.sessionId == nil else { return }
             WidgetCenter.shared.reloadTimelines(ofKind: LastHeartRate.widgetKind)
             WidgetCenter.shared.reloadTimelines(ofKind: HeartTrail.widgetKind)
         }
