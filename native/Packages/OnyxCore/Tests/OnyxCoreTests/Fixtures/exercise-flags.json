@@ -4632,19 +4632,40 @@
         "unilateral": false,
         "timed": false,
         "icon": "Barbell",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings",
+            "lower back"
+          ]
+        },
+        "groups": [
+          "quadriceps",
+          "glutes",
+          "hamstrings",
+          "lower back"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings",
+            "lower back"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "quadriceps"
           ],
           "secondary": [
+            "glutes",
             "hamstrings",
-            "quads"
+            "lower back"
           ]
         }
       }
@@ -5047,19 +5068,36 @@
         "unilateral": false,
         "timed": false,
         "icon": "Bodyweight",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "chest"
+          ],
+          "secondary": [
+            "triceps",
+            "front_delts"
+          ]
+        },
+        "groups": [
+          "chest",
+          "triceps",
+          "front_delts"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "chest"
+          ],
+          "secondary": [
+            "triceps",
+            "front_delts"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "chest"
           ],
           "secondary": [
-            "hamstrings",
-            "quads"
+            "triceps",
+            "front_delts"
           ]
         }
       }
@@ -5081,19 +5119,36 @@
         "unilateral": false,
         "timed": false,
         "icon": "Exercise",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "chest"
+          ],
+          "secondary": [
+            "triceps",
+            "front_delts"
+          ]
+        },
+        "groups": [
+          "chest",
+          "triceps",
+          "front_delts"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "chest"
+          ],
+          "secondary": [
+            "triceps",
+            "front_delts"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "chest"
           ],
           "secondary": [
-            "hamstrings",
-            "quads"
+            "triceps",
+            "front_delts"
           ]
         }
       }
@@ -5149,19 +5204,40 @@
         "unilateral": false,
         "timed": false,
         "icon": "Hanging",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "lats"
+          ],
+          "secondary": [
+            "upper back",
+            "biceps",
+            "forearms"
+          ]
+        },
+        "groups": [
+          "lats",
+          "upper back",
+          "biceps",
+          "forearms"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "lats"
+          ],
+          "secondary": [
+            "upper back",
+            "biceps",
+            "forearms"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "lats"
           ],
           "secondary": [
-            "hamstrings",
-            "quads"
+            "upper back",
+            "biceps",
+            "forearms"
           ]
         }
       }
@@ -5183,19 +5259,40 @@
         "unilateral": false,
         "timed": false,
         "icon": "Exercise",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "lats",
+            "biceps"
+          ],
+          "secondary": [
+            "upper back",
+            "forearms"
+          ]
+        },
+        "groups": [
+          "lats",
+          "biceps",
+          "upper back",
+          "forearms"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "lats",
+            "biceps"
+          ],
+          "secondary": [
+            "upper back",
+            "forearms"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "lats",
+            "biceps"
           ],
           "secondary": [
-            "hamstrings",
-            "quads"
+            "upper back",
+            "forearms"
           ]
         }
       }
@@ -5251,19 +5348,36 @@
         "unilateral": false,
         "timed": false,
         "icon": "Exercise",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "chest",
+            "triceps"
+          ],
+          "secondary": [
+            "front_delts"
+          ]
+        },
+        "groups": [
+          "chest",
+          "triceps",
+          "front_delts"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "chest",
+            "triceps"
+          ],
+          "secondary": [
+            "front_delts"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "chest",
+            "triceps"
           ],
           "secondary": [
-            "hamstrings",
-            "quads"
+            "front_delts"
           ]
         }
       }
@@ -5353,19 +5467,40 @@
         "unilateral": false,
         "timed": false,
         "icon": "Hanging",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "lats"
+          ],
+          "secondary": [
+            "upper back",
+            "biceps",
+            "forearms"
+          ]
+        },
+        "groups": [
+          "lats",
+          "upper back",
+          "biceps",
+          "forearms"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "lats"
+          ],
+          "secondary": [
+            "upper back",
+            "biceps",
+            "forearms"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "lats"
           ],
           "secondary": [
-            "hamstrings",
-            "quads"
+            "upper back",
+            "biceps",
+            "forearms"
           ]
         }
       }
@@ -5604,19 +5739,40 @@
         "unilateral": false,
         "timed": false,
         "icon": "Exercise",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings",
+            "lower back"
+          ]
+        },
+        "groups": [
+          "quadriceps",
+          "glutes",
+          "hamstrings",
+          "lower back"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings",
+            "lower back"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "quadriceps"
           ],
           "secondary": [
+            "glutes",
             "hamstrings",
-            "quads"
+            "lower back"
           ]
         }
       }
@@ -6026,19 +6182,40 @@
         "unilateral": true,
         "timed": false,
         "icon": "Dumbbell",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "upper back"
+          ],
+          "secondary": [
+            "lats",
+            "biceps",
+            "forearms"
+          ]
+        },
+        "groups": [
+          "upper back",
+          "lats",
+          "biceps",
+          "forearms"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "upper back"
+          ],
+          "secondary": [
+            "lats",
+            "biceps",
+            "forearms"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "upper back"
           ],
           "secondary": [
-            "hamstrings",
-            "quads"
+            "lats",
+            "biceps",
+            "forearms"
           ]
         }
       }
@@ -6274,19 +6451,36 @@
         "unilateral": true,
         "timed": false,
         "icon": "Exercise",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings"
+          ]
+        },
+        "groups": [
+          "quadriceps",
+          "glutes",
+          "hamstrings"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "quadriceps"
           ],
           "secondary": [
-            "hamstrings",
-            "quads"
+            "glutes",
+            "hamstrings"
           ]
         }
       }
@@ -6308,19 +6502,36 @@
         "unilateral": true,
         "timed": false,
         "icon": "Exercise",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings"
+          ]
+        },
+        "groups": [
+          "quadriceps",
+          "glutes",
+          "hamstrings"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "quadriceps"
           ],
           "secondary": [
-            "hamstrings",
-            "quads"
+            "glutes",
+            "hamstrings"
           ]
         }
       }
@@ -6376,19 +6587,36 @@
         "unilateral": true,
         "timed": false,
         "icon": "Exercise",
-        "muscles": null,
-        "groups": null,
-        "movers": {
-          "primary": [],
-          "secondary": []
-        },
-        "moversStored": {
+        "muscles": {
           "primary": [
+            "quadriceps",
             "glutes"
           ],
           "secondary": [
-            "hamstrings",
-            "quads"
+            "hamstrings"
+          ]
+        },
+        "groups": [
+          "quadriceps",
+          "glutes",
+          "hamstrings"
+        ],
+        "movers": {
+          "primary": [
+            "quadriceps",
+            "glutes"
+          ],
+          "secondary": [
+            "hamstrings"
+          ]
+        },
+        "moversStored": {
+          "primary": [
+            "quadriceps",
+            "glutes"
+          ],
+          "secondary": [
+            "hamstrings"
           ]
         }
       }
@@ -6478,19 +6706,40 @@
         "unilateral": true,
         "timed": false,
         "icon": "Exercise",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings",
+            "lower back"
+          ]
+        },
+        "groups": [
+          "quadriceps",
+          "glutes",
+          "hamstrings",
+          "lower back"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings",
+            "lower back"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "quadriceps"
           ],
           "secondary": [
+            "glutes",
             "hamstrings",
-            "quads"
+            "lower back"
           ]
         }
       }
@@ -6614,19 +6863,48 @@
         "unilateral": true,
         "timed": false,
         "icon": "Exercise",
-        "muscles": null,
-        "groups": null,
-        "movers": {
-          "primary": [],
-          "secondary": []
-        },
-        "moversStored": {
+        "muscles": {
           "primary": [
+            "hamstrings",
             "glutes"
           ],
           "secondary": [
+            "lower back",
+            "upper back",
+            "traps",
+            "forearms"
+          ]
+        },
+        "groups": [
+          "hamstrings",
+          "glutes",
+          "lower back",
+          "upper back",
+          "traps",
+          "forearms"
+        ],
+        "movers": {
+          "primary": [
             "hamstrings",
-            "quads"
+            "glutes"
+          ],
+          "secondary": [
+            "lower back",
+            "upper back",
+            "traps",
+            "forearms"
+          ]
+        },
+        "moversStored": {
+          "primary": [
+            "hamstrings",
+            "glutes"
+          ],
+          "secondary": [
+            "lower back",
+            "upper back",
+            "traps",
+            "forearms"
           ]
         }
       }
@@ -6707,19 +6985,36 @@
         "unilateral": false,
         "timed": false,
         "icon": "Exercise",
-        "muscles": null,
-        "groups": null,
-        "movers": {
-          "primary": [],
-          "secondary": []
-        },
-        "moversStored": {
+        "muscles": {
           "primary": [
+            "quadriceps",
             "glutes"
           ],
           "secondary": [
-            "hamstrings",
-            "quads"
+            "hamstrings"
+          ]
+        },
+        "groups": [
+          "quadriceps",
+          "glutes",
+          "hamstrings"
+        ],
+        "movers": {
+          "primary": [
+            "quadriceps",
+            "glutes"
+          ],
+          "secondary": [
+            "hamstrings"
+          ]
+        },
+        "moversStored": {
+          "primary": [
+            "quadriceps",
+            "glutes"
+          ],
+          "secondary": [
+            "hamstrings"
           ]
         }
       }
@@ -6968,19 +7263,40 @@
         "unilateral": false,
         "timed": false,
         "icon": "Barbell",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings",
+            "lower back"
+          ]
+        },
+        "groups": [
+          "quadriceps",
+          "glutes",
+          "hamstrings",
+          "lower back"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings",
+            "lower back"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "quadriceps"
           ],
           "secondary": [
+            "glutes",
             "hamstrings",
-            "quads"
+            "lower back"
           ]
         }
       }
@@ -7104,19 +7420,40 @@
         "unilateral": false,
         "timed": false,
         "icon": "Bodyweight",
-        "muscles": null,
-        "groups": null,
+        "muscles": {
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings",
+            "lower back"
+          ]
+        },
+        "groups": [
+          "quadriceps",
+          "glutes",
+          "hamstrings",
+          "lower back"
+        ],
         "movers": {
-          "primary": [],
-          "secondary": []
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings",
+            "lower back"
+          ]
         },
         "moversStored": {
           "primary": [
-            "glutes"
+            "quadriceps"
           ],
           "secondary": [
+            "glutes",
             "hamstrings",
-            "quads"
+            "lower back"
           ]
         }
       }

@@ -170,11 +170,12 @@ struct ExerciseCSVTests {
     /// A bare list has no header and its first line is a movement, not a
     /// heading.
     @Test func aHeaderlessListIsStillAList() {
-        let out = ExerciseCSV.parse("Lat Pulldown\nZercher Squat\n")
-        #expect(out.rows.map(\.name) == ["Lat Pulldown", "Zercher Squat"])
+        let out = ExerciseCSV.parse("Lat Pulldown\nSled Push\n")
+        #expect(out.rows.map(\.name) == ["Lat Pulldown", "Sled Push"])
         #expect(out.rows[0].line == 1)
-        // `MuscleMap` knows the pulldown; it does not know the Zercher squat,
-        // and that row carried no muscle column.
+        // `MuscleMap` knows the pulldown; it does not know the sled push, and
+        // that row carried no muscle column. (It was the Zercher squat until
+        // Precision A1 taught the map a bare `squat`.)
         #expect(out.rows[0].isUnclassified == false)
         #expect(out.rows[1].isUnclassified == true)
         #expect(out.unclassified == 1)

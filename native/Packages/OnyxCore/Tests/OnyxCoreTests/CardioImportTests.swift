@@ -229,4 +229,20 @@ extension CardioImportTests {
         #expect(!CardioImport.sameActivity(CardioImport.treadmill, CardioImport.run))
         #expect(CardioImport.sameActivity(CardioImport.hiit, CardioImport.hiit))
     }
+
+    // MARK: - The opener is the bout you did (Precision A2, Q5)
+
+    @Test("the opener repeats the ACTUAL bout; only a three-hour sanity ceiling cuts it")
+    func openerIsTheActualBout() throws {
+        // A 24-minute bout used to come back cut to ten minutes and 1.12 km —
+        // the "1 km / 10 min" the founder never walked.
+        let walk = WarmupCardio.Bout(name: "Treadmill", durationSec: 1_440, distanceKm: 2.69, inclinePct: 3)
+        #expect(WarmupCardio.seed(from: walk) == walk)
+        // Past three hours it is a logging error, not a warm-up: cut, pace kept.
+        let absurd = WarmupCardio.Bout(name: "Treadmill", durationSec: 21_600, distanceKm: 30)
+        let cut = try #require(WarmupCardio.seed(from: absurd))
+        #expect(cut.durationSec == 10_800)
+        #expect(cut.distanceKm == 15)
+        #expect(WarmupCardio.seed(from: WarmupCardio.Bout(name: "Treadmill", durationSec: 0)) == nil)
+    }
 }

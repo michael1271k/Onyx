@@ -55,9 +55,9 @@ struct LiveLoggerView: View {
     @State private var showPhase = false
     @State private var showFinish = false
     @State private var showTimer = false
-    /// The catalogue the "Add a movement" picker lists, read when it opens —
-    /// nil while it is closed (W3).
-    @State private var adding: [Exercise]?
+    /// What the "Add a movement" shelf lists, read when it opens — nil while
+    /// it is closed (W3, Precision A1).
+    @State private var adding: ExerciseLibrary?
     /// Bumped to scroll the deck to `focus` — see the picker's handler.
     @State private var scrollTick = 0
     /// The SET stopwatch, owned here and lent to `TimerSheet`.
@@ -70,6 +70,8 @@ struct LiveLoggerView: View {
     @State private var watchStart: Date?
     @State private var watchAccumulated: TimeInterval = 0
     @State private var watchLaps: [TimeInterval] = []
+    /// Whether the stopwatch is unfolded above the rail (Precision A4).
+    @State private var stopwatchOpen = false
     @State private var confirmCancel = false
 
     /// Which face, and how it got here — the animation travels with it.
@@ -151,7 +153,8 @@ struct LiveLoggerView: View {
         model: LoggerModel,
         activity: LiveActivityController? = nil,
         face: LoggerFace = .workout,
-        paused: Bool = false
+        paused: Bool = false,
+        stopwatchLaps: [TimeInterval]? = nil
     ) {
         _model = State(initialValue: model)
         _activity = State(initialValue: activity ?? LiveActivityController())
@@ -167,6 +170,13 @@ struct LiveLoggerView: View {
             : (model.currentSet?.exercise.id ?? model.exercises.first?.id))
         _selection = State(initialValue: LoggerFaceSelection(face: face))
         if paused { model.pause() }
+        // The harness's way to photograph the stopwatch unfolded, stopped on
+        // these laps — a long press a shot script cannot make.
+        if let stopwatchLaps {
+            _stopwatchOpen = State(initialValue: true)
+            _watchLaps = State(initialValue: stopwatchLaps)
+            _watchAccumulated = State(initialValue: stopwatchLaps.reduce(0, +))
+        }
     }
 
     private var accent: Color { Color.onyx.day(model.day.key) }
@@ -210,10 +220,7 @@ struct LiveLoggerView: View {
             guard !model.isEditing else { return }
             activity.update(model: model, clock: clock)
         } content: {
-            TimerSheet(
-                clock: clock, accent: accent,
-                watchStart: $watchStart, accumulated: $watchAccumulated, laps: $watchLaps
-            )
+            TimerSheet(clock: clock, accent: accent)
         }
         .sheet(isPresented: $showDistribution) { MuscleDistributionSheet(model: model) }
         .sheet(isPresented: $showPhase) {
@@ -227,7 +234,7 @@ struct LiveLoggerView: View {
         }
         .sheet(isPresented: Binding(get: { adding != nil }, set: { if !$0 { adding = nil } })) {
             ExercisePickerSheet(
-                catalogue: adding ?? [],
+                library: adding ?? ExerciseLibrary(catalogue: []),
                 createNote: "Adds it to this session."
             ) { name, picked in
                 // To the card — the new one, or the one already on the deck.
@@ -411,6 +418,10 @@ struct LiveLoggerView: View {
         // face-down on a bench when it happens.
         .sensoryFeedback(.success, trigger: restExpiries)
         .onChange(of: model.phase) { _, next in storedPhase = next.rawValue }
+        // Latched for the finish sheet's heart-rate guard (Precision A5).
+        .onChange(of: environment?.watchBridge.liveBpm) { _, bpm in
+            if bpm != nil { model.wristBpmSeen = true }
+        }
     }
 
     private func stack(page: CGFloat) -> some View {
@@ -735,6 +746,21 @@ struct LiveLoggerView: View {
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
+            // The session's clocks, under the deck and never scrolled away
+            // (Precision A4). Not on an edit deck: a finished session has no
+            // running clock, no rest and nothing to pause.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !model.isEditing {
+                    TimerRail(
+                        clock: clock, accent: accent,
+                        rest: restCountdown(model.restEndsAt, total: Int(model.restDuration)),
+                        onSkipRest: { withAnimation(OnyxMotion.drawer) { model.stopRest() } },
+                        onAdjustRest: { model.adjustRest(by: $0) },
+                        watchStart: $watchStart, watchAccumulated: $watchAccumulated,
+                        watchLaps: $watchLaps, stopwatchOpen: $stopwatchOpen
+                    )
+                }
+            }
             .onChange(of: scrollTick) {
                 guard let focus else { return }
                 withAnimation(OnyxMotion.move) { proxy.scrollTo(focus, anchor: .top) }
@@ -759,7 +785,7 @@ struct LiveLoggerView: View {
 
     /// The last thing on the deck, where the next movement would go (W3).
     private var addMovement: some View {
-        Button { adding = model.catalogue() } label: {
+        Button { adding = model.library() } label: {
             Label("Add a movement", systemImage: "plus")
                 .onyxType(.body).fontWeight(.semibold)
                 .foregroundStyle(accent)

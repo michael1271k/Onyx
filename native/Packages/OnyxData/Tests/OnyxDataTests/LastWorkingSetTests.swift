@@ -110,4 +110,65 @@ struct LastWorkingSetTests {
         #expect(try db.lastWorkingSet(named: name, userId: user) == nil)
         #expect(try db.lastWorkingSet(named: "Hack Squat", userId: user) == nil)
     }
+
+    // MARK: - The library's batch (Precision A1)
+
+    @Test("the batch answers every name exactly as the single lookup does, in one read")
+    func batchAgreesWithSingle() throws {
+        let db = try AppDatabase.inMemory(deviceId: "d")
+        try db.writer.write { conn in
+            try Exercise(id: "uuid-1", name: name).insert(conn)
+            try Exercise(id: "uuid-2", name: "Lateral Raise").insert(conn)
+            try Exercise(id: "uuid-3", name: "Hack Squat").insert(conn)
+            try session(conn, "a", "2026-09-01", dayKey: "push_a")
+            try set(conn, "a1", in: "a", index: 1, 30, 12)
+            try set(conn, "a2", in: "a", exercise: "uuid-2", index: 2, 10, 15)
+            try set(conn, "a3", in: "a", exercise: "uuid-2", index: 3, 5, 20, type: "dropset")
+            try session(conn, "b", "2026-09-08", dayKey: "pull_a")
+            // The slug, the pair and the warm-up: every rule the single
+            // lookup applies, crossed once.
+            try set(conn, "b1", in: "b", exercise: ExerciseSlug.id(name), index: 1, 32.5, 11)
+            try set(conn, "b2", in: "b", exercise: "uuid-2", index: 1, 12.5, 12, side: "left", pair: "p")
+            try set(conn, "b3", in: "b", exercise: "uuid-2", index: 2, 10, 14, side: "right", pair: "p")
+            try set(conn, "b4", in: "b", exercise: "uuid-3", index: 3, 60, 10, type: "warmup")
+            try session(conn, "live", "2026-09-22", dayKey: "upper_a")
+            try set(conn, "l1", in: "live", index: 1, 35, 10)
+        }
+        let names = [name, "Lateral Raise", "Hack Squat", "Never Lifted"]
+        let batch = try db.lastWorkingSets(names: names, userId: user, excludingSession: "live")
+        for n in names {
+            #expect(batch[n] == (try db.lastWorkingSet(named: n, userId: user, excludingSession: "live")), "\(n)")
+        }
+        #expect(batch[name]?.weightKg == 32.5)
+        #expect(batch["Lateral Raise"] == LastWorkingSet(weightKg: 10, reps: 12, date: "2026-09-08"), "the pair at its weaker side")
+        #expect(batch["Hack Squat"] == nil, "warm-ups only is not evidence")
+        #expect(batch["Never Lifted"] == nil)
+    }
+
+    @Test("recent is the last distinct movements, newest first, this account only")
+    func recentNewestFirst() throws {
+        let db = try AppDatabase.inMemory(deviceId: "d")
+        try db.writer.write { conn in
+            try Exercise(id: "uuid-1", name: name).insert(conn)
+            try Exercise(id: "uuid-2", name: "Lateral Raise").insert(conn)
+            try Exercise(id: "uuid-3", name: "Hack Squat").insert(conn)
+            try Exercise(id: "uuid-4", name: "Leg Press").insert(conn)
+            try session(conn, "old", "2026-09-01", dayKey: "legs_a")
+            try set(conn, "o1", in: "old", exercise: "uuid-3", index: 1, 100, 10)
+            try set(conn, "o2", in: "old", exercise: "uuid-4", index: 2, 200, 10)
+            try session(conn, "new", "2026-09-08", dayKey: "upper_a")
+            try set(conn, "n1", in: "new", index: 1, 30, 12)
+            try set(conn, "n2", in: "new", exercise: "uuid-2", index: 2, 10, 15)
+            // Hack Squat again, older than today's session but newer than
+            // its first appearance: distinct means it is listed once.
+            try session(conn, "mid", "2026-09-05", dayKey: "legs_b")
+            try set(conn, "m1", in: "mid", exercise: "uuid-3", index: 1, 110, 8)
+            try session(conn, "theirs", "2026-09-20", dayKey: "x", user: "u2")
+            try set(conn, "t1", in: "theirs", exercise: "uuid-4", index: 1, 1, 1)
+        }
+        // Within a session the LAST movement performed is the most recent.
+        #expect(try db.recentMovements(userId: user, limit: 10) == ["Lateral Raise", name, "Hack Squat", "Leg Press"])
+        #expect(try db.recentMovements(userId: user, limit: 2) == ["Lateral Raise", name])
+        #expect(try db.recentMovements(userId: user, limit: 10, excludingSession: "new") == ["Hack Squat", "Leg Press"])
+    }
 }

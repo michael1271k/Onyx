@@ -481,6 +481,25 @@ targets:
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Onyx.app/Onyx"
         BUNDLE_LOADER: "$(TEST_HOST)"
 
+  # ── The one UI test (Precision A4) ───────────────────────────────────────
+  #
+  # What no unit test can watch: the rail's elapsed reading is ticked by the
+  # system, so proving it skips no second means launching the harness and
+  # reading it twice, ten seconds apart.
+  OnyxAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: OnyxAppUITests
+    dependencies:
+      - target: Onyx
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.onyx.health.michael.native.uitests
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Onyx
+
 schemes:
   # ── The Watch scheme ──────────────────────────────────────────────────────
   # A target alone is not enough for `xcodebuild`: building `-target OnyxWatch`
@@ -513,6 +532,7 @@ schemes:
       # everything, which is what a person actually expects it to do.
       targets:
         - OnyxTests
+        - OnyxAppUITests
         - package: OnyxCore/OnyxCoreTests
         - package: OnyxData/OnyxDataTests
         - package: OnyxUI/OnyxUITests

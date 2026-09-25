@@ -378,6 +378,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         /// question the muscle sheet asks is different: two warm-up sets of leg
         /// press are two sets of leg press as far as the quads are concerned.
         /// It is also the number Hevy prints, and Hevy counts them.
+        ///
+        /// Precision seam 1: `SessionCounts.total` (OnyxCore, Lane C) becomes
+        /// the one rule for this figure and for `workingSets` below — warm-ups
+        /// and cardio bouts in, pairs once, ghosts out. The names stay; the
+        /// close-out wave points both bodies at it.
         var physicalSets: Int {
             LoggerModel.physical(rows.filter { $0.isDone && $0.kind != .ghost })
         }
@@ -707,6 +712,23 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     // MARK: - Derived
 
     var totalVolumeKg: Double { exercises.reduce(0) { $0 + $1.volumeKg } }
+    /// Planned working sets still unticked — never stored, and kept in the
+    /// plan (`RoutineOrder.merge`). The finish sheet says so (Precision A6).
+    ///
+    /// In the Sets tile's own unit — `plannedSets` against `completedSets` —
+    /// so the sheet cannot print "8/18" above "11 left": counting rows here
+    /// read a unilateral pair twice, the rows-vs-sets slip 3.10.0 fixed once.
+    var untickedSets: Int { max(0, plannedSets - completedSets) }
+    /// A live bpm reached the phone during this session — one of the three
+    /// signals that a watch was on the wrist (`FinishSheet`, Precision A5).
+    /// In memory, and latched: a watch that went quiet at the end still saw it.
+    var wristBpmSeen = false
+    /// Whether the store holds wrist evidence for this session — see
+    /// `AppDatabase.hasWristEvidence`.
+    func wristEvidence() -> Bool {
+        guard let store, let session = sessionRow else { return false }
+        return (try? store.hasWristEvidence(sessionId: session.id, userId: userId, date: session.date)) ?? false
+    }
     var completedSets: Int { exercises.reduce(0) { $0 + $1.workingSets } }
     var plannedSets: Int { day.plannedSets(for: phase) }
     /// Records claimed so far — AXES, not rows.
@@ -1087,8 +1109,27 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// nil for a storeless model. That is a PREVIEW, not an athlete, and a
     /// fixture that wants the card hands one in (`warmupBout:`) rather than
     /// being given somebody's numbers by default.
+    ///
+    /// ── THE LAST TREADMILL, FROM EITHER PLACE ONE LIVES (Precision A2) ──────
+    /// Any kind used to answer, and the founder's any-kind answer was an
+    /// outdoor walk — cut to ten minutes, proposed as "1 km / 10 min" on a
+    /// treadmill. Now: the newest `treadmill` row in `cardio_logs` (Health's
+    /// indoor walks, Quick Log, and every deck bout filed at close since
+    /// `recordSessionCardio`) against the newest treadmill set logged inside a
+    /// deck (every bout before that). Newest DAY wins, then the later start; a
+    /// tie is one bout seen twice, and the deck's row is the one an edit
+    /// would have corrected.
     private static func lastBout(_ store: AppDatabase?, userId: String) -> WarmupCardio.Bout? {
-        guard let store, let row = try? store.lastCardioBout(userId: userId) else { return nil }
+        guard let store else { return nil }
+        let filed = (try? store.lastCardioBout(userId: userId, kind: CardioImport.treadmill)) ?? nil
+        let logged = (try? store.lastLoggedBout(named: WarmupCardio.name, userId: userId)) ?? nil
+        if let logged, filed.map({ ($0.date, $0.createdAt ?? .distantPast) <= (logged.date, logged.start ?? .distantPast) }) ?? true {
+            return WarmupCardio.Bout(
+                name: WarmupCardio.name, durationSec: logged.durationSec,
+                distanceKm: logged.distanceKm, inclinePct: logged.inclinePct
+            )
+        }
+        guard let row = filed else { return nil }
         return WarmupCardio.Bout(
             name: CardioKind(row.kind).label,
             durationSec: Int(((row.durationMin ?? 0) * 60).rounded()),
@@ -1185,11 +1226,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     private func seedRows(_ plan: ProgramExercise, count: Int, warmups: Bool = true) -> [SetRow] {
         let seeded = seed.exercises.first { ExerciseAliases.canonicalName($0.name) == ExerciseAliases.canonicalName(plan.name) }
         // ── A MOVEMENT ADDED MID-SESSION (W3) ───────────────────────────────
-        // No seed entry, and the narrow lookup found it lifted somewhere: every
-        // row opens on that set, the way the history tier repeats a set it has
-        // one of. `seeded == nil` is the gate — a card the day opened with
-        // never reads this, whatever `lastTimes` holds.
-        if seeded == nil, let last = lastTimes[canonicalKey(plan.name)] {
+        // No HISTORY entry, and the narrow lookup found it lifted somewhere:
+        // every row opens on that set, the way the history tier repeats a set
+        // it has one of. `lastTimes` is only ever filled by `appendCard`, so a
+        // card the day opened with never reads this.
+        if seeded?.source != .history, let last = lastTimes[canonicalKey(plan.name)] {
             let rows = (0..<max(0, count)).map { _ in
                 SetRow(weightKg: last.weightKg, reps: last.reps, previous: last.label)
             }
@@ -1305,9 +1346,43 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
 
     // MARK: - Adding a movement mid-session (W3)
 
-    /// The local exercise list, for the add picker. Empty for a storeless
-    /// preview, where the picker still offers to create.
-    func catalogue() -> [Exercise] { (try? store?.exercises()) ?? [] }
+    /// What the Muscle Shelf opens on (Precision A1): the catalogue minus the
+    /// archived rows, the two pinned shelves, and every row's last time.
+    ///
+    /// Two reads when the sheet opens and none per row — the catalogue, and
+    /// ONE pass over the ledger for Recent and every row's last set. The fifteen
+    /// starter movements are created here first, once, so a new account's
+    /// library has them without the SQL (`StarterMovements`).
+    ///
+    /// Empty for a storeless preview, where the picker still offers to create.
+    func library() -> ExerciseLibrary {
+        let span = Perf.begin("library.open")
+        defer { Perf.end(span) }
+        guard let store else { return ExerciseLibrary(catalogue: []) }
+        var catalogue = (try? store.libraryExercises()) ?? []
+        // Only over a catalogue that has arrived: an empty one is a store the
+        // first pull has not filled yet, and creating "Dips" there would push a
+        // second Dips beside the one the server already holds.
+        if !catalogue.isEmpty, !userId.isEmpty,
+           StarterMovements.ensure(in: store, userId: userId, catalogue: catalogue) > 0 {
+            catalogue = (try? store.libraryExercises()) ?? catalogue
+        }
+        // The deck is excluded from both pinned shelves: a movement already
+        // on it is one tap away, and picking it only scrolls to its card.
+        let onDeck = Set(exercises.map { canonicalKey($0.name) })
+        let onThisDay = day.exercises.map(\.name).filter { !onDeck.contains(canonicalKey($0)) }
+        // ONE ledger read for both. nil when it failed: the rows then say
+        // nothing rather than "New".
+        let history = try? store.libraryHistory(
+            names: catalogue.map(\.name) + onThisDay, userId: userId,
+            recentLimit: 10 + onDeck.count, excludingSession: sessionId
+        )
+        let recent = (history?.recent ?? []).filter { !onDeck.contains(canonicalKey($0)) }.prefix(10)
+        let lastSets = history?.lastSets
+        return ExerciseLibrary(
+            catalogue: catalogue, recent: Array(recent), onThisDay: onThisDay, lastSets: lastSets
+        )
+    }
 
     /// Put a movement on the deck that today's program does not name.
     ///
@@ -1358,11 +1433,13 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
             plan = starting.programExercise
             day.exercises.append(plan)
         }
-        // The narrow lookup, and only where the day's seed has nothing to say.
+        // The narrow lookup, and only where the day's seed has no HISTORY to
+        // say. A program- or template-tier entry is a plan, not a memory, and
+        // it no longer suppresses the athlete's own last set (Precision A1).
         // Never on an edit deck: `lastWorkingSet` has no date bound, so on a
         // three-week-old session it would answer with a workout that happened
         // AFTER it — the reason `restoreLoggedSets` blanks every Previous there.
-        if !isEditing, !seed.exercises.contains(where: { canonicalKey($0.name) == key }),
+        if !isEditing, !seed.exercises.contains(where: { canonicalKey($0.name) == key && $0.source == .history }),
            let last = try? store?.lastWorkingSet(named: plan.name, userId: userId, excludingSession: sessionId) {
             lastTimes[key] = last
         }
@@ -1824,8 +1901,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// A movement the day's seed does not name at all — added mid-session —
     /// answers with its one narrow "last time" on every set (see `lastTimes`).
     private func seededPrevious(_ plan: ProgramExercise, workingIndex: Int) -> String? {
+        // `seedRows`' own gate: anything but a HISTORY entry defers to the
+        // narrow lookup when it has an answer (Precision A1).
         guard let entry = seed.exercises
-            .first(where: { ExerciseAliases.canonicalName($0.name) == ExerciseAliases.canonicalName(plan.name) })
+            .first(where: { ExerciseAliases.canonicalName($0.name) == ExerciseAliases.canonicalName(plan.name) }),
+              entry.source == .history || lastTimes[canonicalKey(plan.name)] == nil
         else { return lastTimes[canonicalKey(plan.name)]?.label }
         let working = entry.rows.filter { $0.kind == .normal }
         guard workingIndex >= 0, workingIndex < working.count else { return nil }
@@ -2105,6 +2185,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
                 .plan.restSec
                 .map(Double.init)
             try store.closeSession(id: sessionId, sessionRpe: sessionRpe, restTargetSec: restTarget)
+            // The deck's treadmill becomes next session's opener only once it
+            // is in `cardio_logs` (Precision A2). `try?`: the workout is
+            // closed and safe either way, and a bout that failed to file is a
+            // warm-up card one session stale, not a lost set.
+            _ = try? store.recordSessionCardio(sessionId: sessionId, userId: userId)
             // The workout is history; the durable start belongs to nothing now.
             // Left standing it would be adopted by the NEXT deck opened on this
             // split today — a two-a-day starting its evening session on the

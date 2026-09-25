@@ -64,14 +64,22 @@ struct SetOptionsSheet: View {
 
     private var accent: Color { Color.onyx.accent(.train) }
 
-    /// The four types a set can be MARKED as. `normal` is not one of them: see
-    /// the note above.
-    private static let kinds: [LoggerModel.SetKind] = [.warmup, .failure, .dropset, .ghost]
+    /// The types a set can be MARKED as. `normal` is not one of them: see the
+    /// note above.
+    ///
+    /// ── AND `ghost` IS NOT ONE ANY MORE (Precision A6, Q9) ─────────────────
+    /// A ghost was a set you ticked to say you had NOT done it — stored, and
+    /// then excluded from everything by a dozen separate rules. An unticked
+    /// set already says that and is never stored, and the routine keeps it
+    /// (`RoutineOrder`), so the manual mark was a second, heavier way to say
+    /// the same nothing. The enum case stays: history holds ghost rows, and
+    /// they must still read back.
+    private static let kinds: [LoggerModel.SetKind] = [.warmup, .failure, .dropset]
 
-    /// Four across, until the type size says otherwise. At an accessibility size
-    /// four 74 pt chips is four truncated words, which is four chips that say
-    /// nothing in the space of four that said something.
-    private var kindColumns: Int { typeSize.isAccessibilitySize ? 2 : 4 }
+    /// Three across, until the type size says otherwise. At an accessibility
+    /// size three chips across is three truncated words, so they take two
+    /// columns, as the four did.
+    private var kindColumns: Int { typeSize.isAccessibilitySize ? 2 : 3 }
     private var qualityColumns: Int { typeSize.isAccessibilitySize ? 1 : 3 }
 
     var body: some View {

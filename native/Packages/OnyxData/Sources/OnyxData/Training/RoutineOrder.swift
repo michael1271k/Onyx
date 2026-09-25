@@ -49,10 +49,18 @@ enum RoutineOrder {
     /// Ghosted rows are skipped, matching `payloadToTemplate`. A ghost is a
     /// deliberate record of work NOT done, and the template is what you intend
     /// to do next time.
+    ///
+    /// ── AND THE LOADS NOW, NOT ONLY THE ORDER (Precision A6, Q9) ────────────
+    /// An unticked set is never stored, so a session that did two of four
+    /// working sets holds two rows. The template is the ROUTINE's memory and it
+    /// must not learn "two" from that: the patch merges the logged rows into
+    /// the stored ones by set index and keeps every planned row past them at
+    /// its last known load — see `merge`.
     static func save(_ db: Database, session: WorkoutSession) throws {
         guard let dayKey = session.dayKey else { return }
         let rows = try WorkoutSet
             .filter(Column("session_id") == session.id)
+            .order(Column("fold_order"), Column("set_index"))
             .fetchAll(db)
             .filter { $0.setType != "ghost" }
         guard !rows.isEmpty else { return }
@@ -80,8 +88,13 @@ enum RoutineOrder {
         let existing = try RoutineTemplateRow.fetchOne(
             db, key: ["user_id": session.userId, "day_key": dayKey]
         )
+        var logged: [String: [WorkoutSet]] = [:]
+        for row in rows {
+            guard let name = byId[row.exerciseId] else { continue }
+            logged[canon(name), default: []].append(row)
+        }
         let payload: String
-        if let existing, let patched = patch(existing.payload.raw, order: names) {
+        if let existing, let patched = patch(existing.payload.raw, order: names, sets: logged) {
             payload = patched
         } else {
             guard let minted = mint(rows, names: names, byId: byId) else { return }
@@ -121,7 +134,11 @@ enum RoutineOrder {
     /// Returns nil when the payload is not a template this can reorder, which
     /// leaves the row alone — a garbled payload is treated as absent, never
     /// thrown, the same rule `parseTemplate` follows on the web.
-    static func patch(_ raw: String, order names: [String]) -> String? {
+    ///
+    /// `sets` — the session's own rows by canonical name — are merged into the
+    /// matching entry's `sets` (`merge`). Empty leaves every entry's sets as
+    /// they were, which is all this did before Precision A6.
+    static func patch(_ raw: String, order names: [String], sets logged: [String: [WorkoutSet]] = [:]) -> String? {
         guard
             let object = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
             var exercises = object["exercises"] as? [[String: Any]],
@@ -146,6 +163,10 @@ enum RoutineOrder {
                 // removed from the session leaves a hole in `exercise_order`,
                 // and the web re-indexes for exactly this reason.
                 exercise["order"] = position
+                if let rows = (exercise["name"] as? String).flatMap({ logged[canon($0)] }),
+                   let stored = exercise["sets"] as? [[String: Any]] {
+                    exercise["sets"] = merge(stored, rows)
+                }
                 return exercise
             }
 
@@ -153,6 +174,48 @@ enum RoutineOrder {
         next["exercises"] = exercises
         next["version"] = object["version"] ?? version
         return canonicalJSON(next)
+    }
+
+    /// A session's rows folded into a template entry's sets.
+    ///
+    /// Warm-ups against warm-ups and working rows against working rows, each
+    /// by index: logged row `i` rewrites stored set `i`'s load, reps, type,
+    /// rating and side; a stored set with no logged row at its index — an
+    /// UNTICKED set — stays exactly as it was, at its last known load; a logged
+    /// row past the stored count is appended. So the entry can grow and can
+    /// never shrink, and every key the phone does not model survives on the
+    /// sets it touches.
+    ///
+    /// A bout is left alone (its sets carry duration, not load — the entry is
+    /// the web's shape and nothing here can write it back correctly).
+    static func merge(_ stored: [[String: Any]], _ logged: [WorkoutSet]) -> [[String: Any]] {
+        guard !logged.contains(where: {
+            WarmupCardio.isCardio(durationSec: $0.durationSec, distanceKm: $0.distanceKm, inclinePct: $0.incline)
+        }) else { return stored }
+        func isWarmup(_ set: [String: Any]) -> Bool { set["setType"] as? String == "warmup" }
+        func fold(_ sets: [[String: Any]], _ rows: [WorkoutSet]) -> [[String: Any]] {
+            var out = sets
+            for (i, row) in rows.enumerated() {
+                var set = i < out.count ? out[i] : [:]
+                set["weightKg"] = row.weightKg
+                set["reps"] = row.reps
+                // The web's rules, as `mint` writes them: 'normal' is the
+                // absence of a modifier, and a warm-up is never rated.
+                set["setType"] = ["warmup", "failure", "dropset"].contains(row.setType) ? row.setType : nil
+                if let rpe = row.rpe, rpe.isFinite, row.setType != "warmup" { set["rpe"] = rpe } else { set["rpe"] = nil }
+                if let pairId = row.pairId, !pairId.isEmpty, let side = row.side {
+                    set["side"] = side.hasPrefix("l") || side.hasPrefix("L") ? "L" : "R"
+                    set["pairId"] = pairId
+                } else {
+                    set["side"] = nil
+                    set["pairId"] = nil
+                }
+                if i < out.count { out[i] = set } else { out.append(set) }
+            }
+            return out
+        }
+        return fold(stored.filter(isWarmup), logged.filter { $0.setType == "warmup" })
+            + fold(stored.filter { !isWarmup($0) }, logged.filter { $0.setType != "warmup" })
     }
 
     /// The first template for a day, from the session that just finished — the

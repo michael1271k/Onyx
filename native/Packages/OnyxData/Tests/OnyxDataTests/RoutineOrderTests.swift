@@ -153,4 +153,56 @@ struct RoutineOrderTests {
         try db.closeSession(id: session.id)
         #expect(try db.deckOrder(dayKey: "arms", userId: user) == ["Cable Curl"])
     }
+
+    // MARK: - Unticked sets stay planned (Precision A6, Q9)
+
+    @Test("finishing 2 of 4 leaves a 4-row template with the two ticked loads updated")
+    func untickedSetsStayPlanned() throws {
+        let db = try AppDatabase.inMemory(deviceId: "device-a")
+        let stored = """
+        {"version":1,"exercises":[
+          {"name":"Cable Curl","order":0,"note":"elbows pinned","sets":[
+            {"weightKg":10,"reps":12,"setType":"warmup"},
+            {"weightKg":20,"reps":10,"rpe":8},{"weightKg":20,"reps":10},
+            {"weightKg":20,"reps":9},{"weightKg":20,"reps":8}]},
+          {"name":"Treadmill","order":1,"kind":"cardio","sets":[],"durationSec":300}
+        ]}
+        """
+        try db.writer.write { db in
+            try Exercise(id: "onyx-cable-curl", name: "Cable Curl").insert(db)
+            try RoutineTemplateRow(
+                userId: user, dayKey: "arms", payload: JSONText(raw: stored),
+                sourceSessionId: nil, updatedAt: AppDatabase.localWriteTimestamp
+            ).insert(db)
+        }
+        let session = try db.openSession(userId: user, dayKey: "arms", date: "2026-09-25")
+        // Two of the four working sets ticked, heavier; the other two never
+        // stored — and the warm-up done at a new load.
+        try db.appendSet(sessionId: session.id, setId: "w", SetSnapshot(
+            exerciseId: "onyx-cable-curl", setIndex: 1, weightKg: 12.5, reps: 12, setType: "warmup", exerciseOrder: 0))
+        try db.appendSet(sessionId: session.id, setId: "a", SetSnapshot(
+            exerciseId: "onyx-cable-curl", setIndex: 2, weightKg: 22.5, reps: 10, exerciseOrder: 0))
+        try db.appendSet(sessionId: session.id, setId: "b", SetSnapshot(
+            exerciseId: "onyx-cable-curl", setIndex: 3, weightKg: 22.5, reps: 9, exerciseOrder: 0))
+        try db.closeSession(id: session.id)
+
+        let template = try #require(try db.seedTemplate(dayKey: "arms", userId: user))
+        let curl = try #require(template.exercises.first { $0.name == "Cable Curl" })
+        #expect(curl.sets.filter { $0.setType != "warmup" }.map { [$0.weightKg, Double($0.reps)] }
+                == [[22.5, 10], [22.5, 9], [20, 9], [20, 8]],
+                "four planned rows: the two ticked updated, the two unticked kept at their last load")
+        #expect(curl.sets.first { $0.setType == "warmup" }.map { [$0.weightKg, Double($0.reps)] } == [12.5, 12])
+        #expect(curl.sets.count == 5)
+        #expect(curl.sets[1].rpe == nil, "a rating the new set did not carry is not inherited")
+
+        // Every key the phone does not model survives, and the cardio block
+        // the session did not touch is exactly what it was.
+        let raw = try #require(try db.writer.read { db in
+            try RoutineTemplateRow.fetchOne(db, key: ["user_id": user, "day_key": "arms"])
+        }).payload.raw
+        let object = try #require(try JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any])
+        let exercises = try #require(object["exercises"] as? [[String: Any]])
+        #expect(exercises.first { $0["name"] as? String == "Cable Curl" }?["note"] as? String == "elbows pinned")
+        #expect(exercises.first { $0["name"] as? String == "Treadmill" }?["durationSec"] as? Int == 300)
+    }
 }

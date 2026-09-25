@@ -432,22 +432,116 @@ public extension AppDatabase {
         }
     }
 
-    /// This user's most recent bout, by date then insertion, or nil when they
-    /// have never logged one.
+    /// This user's most recent bout, by date then start, or nil when they
+    /// have never logged one — of one `kind` when a kind is named.
     ///
     /// Date-ordered and not `created_at`-ordered: an import backfills a bout
     /// that happened days ago with a `created_at` of NOW, and "the last cardio
     /// I did" is a question about when it was DONE. `created_at` breaks the tie
-    /// inside a day, which is the same order `cardioRows` hands a day back in.
+    /// inside a day — on an imported row and on a deck's filed bout it IS the
+    /// bout's start (`recordSessionCardio`).
     ///
-    /// The one reader is the logger's opener (`WarmupCardio.seed(from:)`).
-    func lastCardioBout(userId: String) throws -> CardioLogRow? {
+    /// The one reader is the logger's opener, which asks for `treadmill` only
+    /// (Precision A2, Q5): the any-kind answer handed it the founder's outdoor
+    /// walk, cut to ten minutes, as a treadmill warm-up.
+    func lastCardioBout(userId: String, kind: String? = nil) throws -> CardioLogRow? {
         try writer.read { db in
-            try CardioLogRow
-                .filter(Column("user_id") == userId)
+            var request = CardioLogRow.filter(Column("user_id") == userId)
+            if let kind { request = request.filter(Column("kind") == kind) }
+            return try request
                 .order(Column("date").desc, Column("created_at").desc)
                 .fetchOne(db)
         }
+    }
+
+    /// File a finished session's in-deck bouts in `cardio_logs` (Precision A2,
+    /// the Q5 corollary). Returns how many rows were written.
+    ///
+    /// ── WHY A BOUT LOGGED IN THE DECK HAS TO LEAVE IT ──────────────────────
+    /// The opener repeats the last treadmill bout it can FIND, and a bout typed
+    /// into the deck was a `workout_sets` warm-up row and nothing else — so the
+    /// athlete who only ever walks inside the logger could never become their
+    /// own last time. One row per cardio set, filed against the session:
+    /// `from_healthkit = false`, no `hk_uuid`, `created_at` = the session's
+    /// start (the bout's own start as near as the deck knows it; the warm-up is
+    /// the session's first movement).
+    ///
+    /// Written ONCE: a session that already owns a `cardio_logs` row is left
+    /// alone, so a second close, a re-finish or a sync replay adds nothing. A
+    /// later HealthKit import of the same walk finds this row through
+    /// `CardioImport.matchingRow`'s hand-typed branch (same day, same activity,
+    /// duration within five minutes) and fills it in rather than beside it.
+    /// `SessionEditing.totals` counts the bout from the warm-up row, never from
+    /// here, so nothing is counted twice (plan, seam 8).
+    ///
+    /// A set whose movement names no kind `cardio_logs` knows is skipped — an
+    /// invented kind is a row the server may refuse, and a refused push is an
+    /// outbox item stuck forever.
+    ///
+    /// ── AND A WALK HEALTH ALREADY HAS IS ADOPTED, NOT COPIED ────────────────
+    /// The watch's indoor walk can be imported while the session is still
+    /// open, as a row with no `session_id`. Inserting beside it would put one
+    /// walk on the Day screen twice, and every later import matches the
+    /// Health row by its key, so nothing would ever merge the two. So an
+    /// UNFILED row of the same day and activity whose duration is within the
+    /// import's own window (`CardioImport.duplicateWindow`) is taken instead:
+    /// it gains the session and keeps Health's figures and key.
+    @discardableResult
+    func recordSessionCardio(sessionId: String, userId: String) throws -> Int {
+        try writer.write { db in
+            guard let session = try WorkoutSession
+                .filter(Column("id") == sessionId && Column("user_id") == userId)
+                .fetchOne(db),
+                try CardioLogRow.filter(Column("session_id") == sessionId).fetchCount(db) == 0
+            else { return 0 }
+            let name = try PrRecorder.nameResolver(db)
+            let bouts = try WorkoutSet
+                .filter(Column("session_id") == sessionId && Column("duration_sec") > 0 && Column("set_type") != "ghost")
+                .order(Column("fold_order"), Column("set_index"))
+                .fetchAll(db)
+            var unfiled = try CardioLogRow
+                .filter(Column("user_id") == userId && Column("date") == session.date && Column("session_id") == nil)
+                .fetchAll(db)
+            var written = 0
+            for set in bouts {
+                guard let seconds = set.durationSec, let kind = Self.cardioKind(named: name(set.exerciseId)) else { continue }
+                let minutes = Double(seconds) / 60
+                if let i = unfiled.indices
+                    .filter({ CardioImport.sameActivity(unfiled[$0].kind, kind) && unfiled[$0].durationMin != nil
+                        && abs(unfiled[$0].durationMin! - minutes) <= CardioImport.duplicateWindow / 60 })
+                    .min(by: { abs(unfiled[$0].durationMin! - minutes) < abs(unfiled[$1].durationMin! - minutes) }) {
+                    var adopted = unfiled.remove(at: i)
+                    adopted.sessionId = sessionId
+                    try adopted.update(db)
+                    try Self.enqueueRowUpsert(table: CardioLogRow.databaseTableName, id: adopted.id, in: db)
+                    written += 1
+                    continue
+                }
+                let row = CardioLogRow(
+                    id: newOnyxID(), userId: userId, date: session.date, kind: kind,
+                    distanceM: set.distanceKm.map { ($0 * 1000).rounded() },
+                    // A tenth of a minute, as the Health import rounds it.
+                    durationMin: (Double(seconds) / 6).rounded() / 10,
+                    fromHealthkit: false, createdAt: session.startedAt,
+                    sessionId: sessionId, inclinePct: set.incline, elevationM: set.elevationM
+                )
+                try row.insert(db)
+                try Self.enqueueRowUpsert(table: CardioLogRow.databaseTableName, id: row.id, in: db)
+                written += 1
+            }
+            return written
+        }
+    }
+
+    /// The `cardio_logs.kind` a deck movement files under, or nil.
+    static func cardioKind(named name: String) -> String? {
+        let tokens = Set(name.lowercased().split { !$0.isLetter }.map(String.init))
+        // Before the list: "Incline Treadmill Walk" is a treadmill.
+        if tokens.contains(CardioImport.treadmill) { return CardioImport.treadmill }
+        if let kind = CardioImport.offered.first(where: tokens.contains) { return kind }
+        if tokens.contains("bike") { return CardioImport.cycling }
+        if tokens.contains("rower") { return CardioImport.rowing }
+        return nil
     }
 
     /// Log a cardio bout. `kcal` is written alongside `active_kcal` on purpose:

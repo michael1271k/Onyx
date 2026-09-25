@@ -229,13 +229,18 @@ public enum WarmupCardio {
     /// repeated, so a person who cycles gets a card that says so.
     public static let name = "Treadmill"
 
-    /// How long an opener may be: ten minutes.
+    /// How long an opener may be: three hours — a SANITY ceiling, not a
+    /// warm-up length (Precision A2, Q5).
     ///
-    /// The opener is a WARM-UP. Repeating last Sunday's forty-minute run at the
-    /// top of a lifting session would be proposing a different workout, so a
-    /// longer bout is cut to this and its distance cut with it — the pace the
-    /// card prints stays the pace that was actually run.
-    public static let maxSeconds = 600
+    /// It was ten minutes, on the argument that the opener is a warm-up and a
+    /// forty-minute run is a different workout. What it actually did was
+    /// pro-rate the founder's last OUTDOOR walk — 24 min, 2.69 km — into a
+    /// "1 km / 10 min" treadmill bout nobody had ever done. The source is now
+    /// the last TREADMILL bout (`LoggerModel.lastBout`), and a treadmill bout
+    /// is proposed back exactly as it was performed. Only a duration no
+    /// warm-up could have — a watch left recording — is cut, its distance with
+    /// it, so the pace the card prints stays the pace that was actually walked.
+    public static let maxSeconds = 10_800
 
     /// One bout, in the units a deck prescribes in.
     public struct Bout: Sendable, Equatable {
