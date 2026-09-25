@@ -47,8 +47,8 @@ packages:
 # $(CURRENT_PROJECT_VERSION) rather than restating them.
 settings:
   base:
-    MARKETING_VERSION: "9.2.0"
-    CURRENT_PROJECT_VERSION: "90200"
+    MARKETING_VERSION: "9.3.0"
+    CURRENT_PROJECT_VERSION: "90300"
 
 targets:
   Onyx:

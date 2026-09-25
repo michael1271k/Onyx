@@ -44,6 +44,64 @@ _Nothing yet._
 
 ---
 
+## [9.3.0] — 2026-09-25 · The wrist: six petals, a heart between workouts, details one tap away
+
+Precision sprint, Lane D (Watch). Plan and wave record: `docs/Plan-Onyx-Precision.md`.
+
+### Apple Watch
+- **The Glance has six petals.** Sleep, Water and Food above the readiness
+  ring; Heart, Steps and Stress below it — the Body tab's flower, on the
+  wrist. The centre is the readiness score with the battery as a thin inner
+  arc. Each petal fills toward its goal in its own fixed colour, is a filled
+  disc when there is a reading but no goal, and a hollow ring when there is
+  nothing to read. The Crown walks the six; the centre shows the one it is on.
+  On a 40 mm watch the petals stay 38 pt and the ring got smaller.
+- **Every petal opens a detail.** Sleep: the night as a half-arc split by
+  stage, the four stages, time in bed and the goal. Heart: the rate now, the
+  last 24 hours as a line that breaks where the watch saw nothing, resting
+  heart rate and HRV. Water: a pitcher filling toward the goal, with the
+  +1 glass button. Food: calories, what is left, and the protein · carbs · fat
+  split of the day's energy. Steps: today against the goal and the last seven
+  days as bars. Stress: the index in its band's colour and when it was last
+  read. Each fits one screen at 40 mm.
+- **The heart rate is fresh between workouts.** The watch now reads the heart
+  rate and HRV that Apple Health records all day, not only the ones a workout
+  takes, and keeps the last 24 hours. While the Heart detail is open it
+  listens for each new reading. (Hourly background refresh is built but off
+  until the paid developer account: Gate 0.)
+- **Food and water reach the wrist in about two seconds.** A glass of water,
+  a meal or a supplement logged on the iPhone now skips the 30-second wait
+  the watch update otherwise has.
+- **The workout's name fits.** One line when it can, a smaller line when it
+  cannot, two lines rather than an ellipsis for a long one — and the Start
+  button is 48 pt, so name, readings and Start share one screen at 40 mm.
+- **Three new complications.** Live Heart (circular: your heart rate and the
+  day's rhythm in six four-hour blocks), Readiness & Sleep (rectangular) and
+  Water & Food (rectangular: a pitcher and the calories left). The six that
+  shipped are unchanged, so placed faces keep theirs.
+- **The watch's black has the stone's light in it** — the phone's ground at
+  half strength. Always-on and Reduce Transparency keep it flat black, and
+  Reduce Transparency now makes the cards solid.
+
+### iPhone app
+- The watch push policy: a food, water or supplement change pushes to the
+  wrist after the usual 2 s debounce instead of the 30 s throttle.
+
+### Engineering
+- `WatchGlance` six-petal geometry (`OnyxCore/Watch/WatchPanel.swift`, sizes
+  measured with `axe` at 40 + 49 mm and pinned in `OnyxWatchLayoutTests`);
+  `HeartTrail` / `WatchHeart` / `LastHRV` (`OnyxCore/Watch/HeartTrail.swift`,
+  6 tests); `WatchVitals` + `VitalsAnchor` (`OnyxData/Watch/WatchVitals.swift`)
+  and `AppDatabase.onFuelCommit` (`OnyxData/Watch/FuelCommits.swift`, 3 tests);
+  `WatchFuelPushTests` (OnyxTests).
+- `WatchTiles` gains six optional-last fields (sleep stages, sleep goal, time
+  in bed, seven days of steps, resting heart rate, last stress day) — under
+  140 B; older payloads still decode.
+- `watch-shot.sh`: `detail-sleep|water|food|heart|steps|stress`,
+  `SHOT_DAY_LABEL`, `SHOT_RT`.
+
+---
+
 ## [9.2.0] — 2026-09-25 · The logger: a shelf of muscles, the real treadmill, one type size, a timer rail
 
 Precision sprint, Lane A. Everything here is the live logger and its Finish
