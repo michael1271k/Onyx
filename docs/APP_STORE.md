@@ -58,7 +58,7 @@ Two standing rules, not defects:
 | Primary category | Health & Fitness |
 | Secondary category | *(leave empty)* |
 | Age rating | 4+ — no user-generated content shared with others, no web view of arbitrary URLs, no ads |
-| App icon | `native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset` — one 1024 × 1024, no alpha |
+| App icon | Since 9.0.0 the black onyx slab with a lavender seam, cropped edge to edge (`resources/icon.png`, 1024 × 1024, no alpha). `npm run icons` writes `native/Onyx/Resources/AppIcon.icon` (Icon Composer, preferred on iOS 26+) and the flat `Assets.xcassets/AppIcon.appiconset` fallback; the watch gets the same pair under `native/OnyxWatch/Resources/`. |
 
 All four targets carry the same version pair; App Store Connect rejects an
 extension whose version differs from its host. The Home Screen name is `Onyx`;
@@ -245,9 +245,25 @@ scripts/store-shots.sh
 Writes `native/__store__/6.9in/` (1320 × 2868, **required**) and
 `native/__store__/6.3in/` — Today, Workout, Nutrition, Pulse, Body trends,
 History. Deterministic: the `--onyx-screen` harness seeds in-memory data, so no
-account and no network. **Its default devices (iPhone 17 Pro Max, 17 Pro) are
-not installed on this machine** — W8 fixes the script or creates the devices.
-The output is gitignored.
+account and no network. The script creates the iPhone 17 Pro Max / 17 Pro
+simulators when they are missing and shoots one at a time — shut every other
+simulator down first (8.0.0: two first-boot phones side by side came back
+black). The output is gitignored.
+
+**The 9.0.0 set (W6, 2026-09-25)** — re-shot after the overhaul (Stone slabs,
+eight stones, bento summary), default theme Slate:
+
+| File | 6.9in (1320 × 2868, required) | 6.3in (1206 × 2622) |
+|---|---|---|
+| Today | `native/__store__/6.9in/today.png` | `native/__store__/6.3in/today.png` |
+| Workout (Train) | `native/__store__/6.9in/train.png` | `native/__store__/6.3in/train.png` |
+| Nutrition | `native/__store__/6.9in/fuel.png` | `native/__store__/6.3in/fuel.png` |
+| Pulse (day) | `native/__store__/6.9in/day.png` | `native/__store__/6.3in/day.png` |
+| Body trends | `native/__store__/6.9in/body-trends.png` | `native/__store__/6.3in/body-trends.png` |
+| History | **do not upload** — still titles every week "Week 0" (baseline defect, spun off) | **do not upload** |
+
+Upload five per size until History is fixed.
+
 
 ---
 
