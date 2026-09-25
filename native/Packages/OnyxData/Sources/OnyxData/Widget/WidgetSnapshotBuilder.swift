@@ -608,9 +608,15 @@ public struct WidgetSnapshotBuilder: Sendable {
             for r in ledger { if let s = r.sessionId { prsBySession[s, default: 0] += 1 } }
             var setsBySession: [String: [WorkoutSet]] = [:]
             for s in sets { setsBySession[s.sessionId, default: []].append(s) }
-            let totals = sessions.map { s in
+            // The Hevy basis (Q13) and "Sets" (Q10), through the one door the
+            // close path and the recount use.
+            let isBodyweight = try SessionEditing.bodyweightResolver(db)
+            let totals = try sessions.map { s in
                 let own = setsBySession[s.id] ?? []
-                return SessionTotals(session: s, volumeKg: Self.volume(own), sets: Self.committedSets(own), prs: prsBySession[s.id] ?? 0)
+                let t = SessionEditing.totals(
+                    own, bodyWeightKg: try SessionEditing.bodyWeightKg(db, userId: userId, on: s.date),
+                    isBodyweight: isBodyweight)
+                return SessionTotals(session: s, volumeKg: t.volumeKg, sets: t.count, prs: prsBySession[s.id] ?? 0)
             }
 
             let vitalsFrom = ISODate.addDays(date, -(Self.vitalsBaselineDays - 1)) ?? date
@@ -1107,19 +1113,20 @@ public struct WidgetSnapshotBuilder: Sendable {
         )
     }
 
-    /// `sessionVolumeKg` over the local rows — a unilateral pair is one set.
-    static func volume(_ sets: [WorkoutSet]) -> Double { AppDatabase.volume(sets) }
+    /// `sessionVolumeKg` over the local rows on the Hevy basis (Q13). The
+    /// defaults credit no body weight — `TodayFeedBuilder` and
+    /// `TrainingTrendsStore` still read through here that way (W-final wires
+    /// the weigh-in there); the snapshot itself passes both.
+    static func volume(
+        _ sets: [WorkoutSet], bodyWeightKg: Double? = nil, isBodyweight: (String) -> Bool = { _ in false }
+    ) -> Double {
+        SessionEditing.totals(sets, bodyWeightKg: bodyWeightKg, isBodyweight: isBodyweight).volumeKg
+    }
 
-
-    /// `countCommittedSets`: solo sets plus distinct pairs. A ghost is a pencil
-    /// mark, not a set.
+    /// "Sets" — `SessionCounts.total` over the local rows (Q10). Kept as a
+    /// name because the tests read it; the rule lives in OnyxCore.
     static func committedSets(_ sets: [WorkoutSet]) -> Int {
-        var pairs = Set<String>()
-        var solo = 0
-        for s in sets where s.setType != "ghost" {
-            if let p = s.pairId, !p.isEmpty { pairs.insert(p) } else { solo += 1 }
-        }
-        return solo + pairs.count
+        SessionCounts.total(SessionEditing.volumeSets(sets))
     }
 
     /// A day's FOOD micronutrients, summed the way `NutritionModel.nutrients`

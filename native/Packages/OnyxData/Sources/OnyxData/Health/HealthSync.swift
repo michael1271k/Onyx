@@ -77,44 +77,24 @@ public actor HealthSync {
             : (calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86_400))
 
         var payload = HealthPayload(date: dateISO)
-        /// Re-filed entries struck out of a dietary total, named on the way
-        /// out. A number that silently halves is worse than one that is wrong:
-        /// the athlete may have been looking at it.
-        var duplicates: [String] = []
         for metric in HealthCatalogue.metrics {
             // One metric that throws is one metric that is absent. A device
             // without a wrist temperature sensor must not cost the day its
             // steps, and `quantity` already treats "no samples" as `nil` —
             // this catches the rarer case where the store itself refuses.
-            var raw = try? await reader.quantity(
+            /* ── A DIETARY TOTAL IS THE STATISTIC, FULL STOP (Q15) ───────────
+               `HKStatisticsQuery .cumulativeSum` is source-merged by HealthKit
+               — overlapping samples from two apps are counted once, by the
+               Health app's own source order. There used to be a second pass
+               here that re-summed the RAW samples of a dietary type and struck
+               out "re-filed" duplicates by a GCD rule; it halved an omelet
+               logged as two identical eggs and could not tell a re-sync from
+               a second helping. Founder decision Q15 (Precision Lane C): trust
+               the statistic. The per-source breakdown below is kept for
+               display, so a doubled figure still names its contributors. */
+            let raw = try? await reader.quantity(
                 metric.identifier, reduce: metric.reduce, start: start, end: end
             )
-            /* ── A DIETARY TOTAL IS RE-SUMMED WITHOUT THE RE-FILED ENTRIES ───
-               `HKStatisticsQuery` adds up every sample it is handed, and a food
-               logger that re-syncs writes the same meal twice — same app, same
-               instant, same amount, a new uuid. Apple's dedupe is between
-               DEVICES and has nothing to say about it, so calcium reached
-               3,142 mg against a 1,000 mg target on three days in seven and the
-               export threw the reading out rather than repairing it.
-
-               DIETARY ONLY. Every other quantity in the catalogue measures the
-               body, where the statistics query's cross-device dedupe is exactly
-               what is wanted and a hand-rolled sum would double-count every
-               minute an iPhone and a Watch both recorded.
-
-               A reader that cannot answer returns nil and the total stands. */
-            if metric.reduce == .sum, HealthCatalogue.isDietary(metric.identifier),
-               let samples = try? await reader.quantitySamples(metric.identifier, start: start, end: end),
-               !samples.isEmpty {
-                let (total, dropped) = QuantitySamples.dedupedSum(samples)
-                if !dropped.isEmpty {
-                    let apps = Set(dropped.map(\.source)).sorted().joined(separator: ", ")
-                    duplicates.append(
-                        "\(metric.key.rawValue) — \(dropped.count) re-filed \(apps) "
-                        + "sample\(dropped.count == 1 ? "" : "s") dropped")
-                    raw = total
-                }
-            }
             if let value = HealthCatalogue.round(
                 raw, reduce: metric.reduce, scale: metric.scale,
                 // A micro keeps two decimals (W6): B6 at 1.4 mg rounded to a
@@ -203,9 +183,24 @@ public actor HealthSync {
         if let offWrist {
             try? database.writeWristCoverage(userId: userId, date: dateISO, offWristMin: offWrist)
         }
-        var report = try database.ingest(payload, userId: userId, now: now)
-        report.declined.append(contentsOf: duplicates)
-        return report
+        return try database.ingest(payload, userId: userId, now: now)
+    }
+
+    /// Re-read the last `days` FINISHED days — yesterday back — through the
+    /// same `sync(day:)` every launch runs, so a total stored under a rule
+    /// that has since changed corrects itself. Today is `syncRecent`'s.
+    /// The `onyx.reingest.micros.v1` door (Q15): the raw-sample re-sum wrote
+    /// dietary totals that HealthKit's own statistic disagrees with.
+    @discardableResult
+    public func reingest(days: Int, now: Date = Date(), calendar: Calendar = .current) async throws -> [IngestReport] {
+        let today = LogicalDayISO.string(now, calendar: calendar)
+        var out: [IngestReport] = []
+        var day = today
+        for _ in 0..<days {
+            day = NightWindow.previousDay(day)
+            out.append(try await sync(day: day, isToday: false, now: now, calendar: calendar))
+        }
+        return out
     }
 
     // MARK: - Editing a night (E2)

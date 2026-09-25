@@ -122,8 +122,14 @@ public struct WorkoutSession: Codable, FetchableRecord, PersistableRecord, Ident
     /// has computed them — a zero tonnage is a claim about a workout, an absent
     /// one is a gap in what is known about it.
     public var totalVolumeKg: Double?
+    /// "Sets" — everything performed, a pair once, ghosts never
+    /// (`SessionCounts.total`, Q10).
     public var setCount: Int?
     public var prCount: Int?
+    /// "Working" — the secondary figure (`SessionCounts.working`). Nullable
+    /// locally and on the server (`v41.precisionRecount`,
+    /// `docs/sql/precision-c-counts.sql`); nil is "not yet recounted".
+    public var workingSetCount: Int?
     /// A human set `duration_min` and it is not the clock's to re-derive.
     ///
     /// LOCAL ONLY — Postgres has no such column and wants none. It is not a
@@ -152,6 +158,7 @@ public struct WorkoutSession: Codable, FetchableRecord, PersistableRecord, Ident
         case totalVolumeKg = "total_volume_kg"
         case setCount = "set_count"
         case prCount = "pr_count"
+        case workingSetCount = "working_set_count"
         case durationEdited = "duration_edited"
         case isPendingSync = "is_pending_sync"
     }
@@ -163,6 +170,7 @@ public struct WorkoutSession: Codable, FetchableRecord, PersistableRecord, Ident
         avgBpm: Int? = nil, caloriesBurned: Int? = nil,
         avgBpmEstimated: Bool = false, caloriesEstimated: Bool = false,
         totalVolumeKg: Double? = nil, setCount: Int? = nil, prCount: Int? = nil,
+        workingSetCount: Int? = nil,
         durationEdited: Bool = false,
         isPendingSync: Bool = false
     ) {
@@ -182,6 +190,7 @@ public struct WorkoutSession: Codable, FetchableRecord, PersistableRecord, Ident
         self.totalVolumeKg = totalVolumeKg
         self.setCount = setCount
         self.prCount = prCount
+        self.workingSetCount = workingSetCount
         self.durationEdited = durationEdited
         self.isPendingSync = isPendingSync
     }

@@ -184,6 +184,7 @@ struct SessionEditingTests {
         let amended = try #require(try db.amendSet(sessionId: "s-old", setId: "s-old-1", reps: 10))
         #expect(amended.totalVolumeKg == 1_350, "100×10 + 70×5")
         #expect(amended.setCount == 2)
+        #expect(amended.workingSetCount == 2)
 
         let deleted = try #require(try db.deleteSet(sessionId: "s-old", setId: "s-old-1"))
         #expect(deleted.totalVolumeKg == 350)
@@ -199,6 +200,7 @@ struct SessionEditingTests {
         // And they reach the row the sync pushes, not just the return value.
         let row = try #require(try db.session(id: "s-old"))
         #expect(row.totalVolumeKg == 550 && row.setCount == 2)
+        #expect(row.workingSetCount == 2)
     }
 
     @Test("a unilateral pair counts once and weighs its weaker side, as the web writes it")

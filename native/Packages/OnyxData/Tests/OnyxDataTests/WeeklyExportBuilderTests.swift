@@ -366,7 +366,7 @@ struct WeeklyExportBuilderTests {
       ],
       "sessions": [
         {"date": "2026-08-24", "startedAt": "2026-08-24T09:02:00Z", "endedAt": "2026-08-24T10:20:00Z", "sessionNumber": 2,
-         "label": "Legs & Core A", "volumeKg": 3150, "setCount": 6, "failureSets": 1, "durationMin": 78,
+         "label": "Legs & Core A", "volumeKg": 4630, "setCount": 6, "workingSetCount": 5, "failureSets": 1, "durationMin": 78,
          "caloriesEstimated": false, "avgBpmEstimated": false, "sessionRpe": 8.5, "orderSource": "logged",
          "exercises": [
            {"name": "Leg Press", "restTargetSec": 135, "restPlanSec": 135, "topKg": 75, "repWindow": "8–12",
@@ -385,7 +385,7 @@ struct WeeklyExportBuilderTests {
            {"name": "Reverse Crunch", "weightKg": 0, "reps": 17, "axes": ["reps"], "volumeKg": 0}
          ]},
         {"date": "2026-08-25", "startedAt": "2026-08-25T18:00:00Z", "sessionNumber": 3,
-         "label": "Delts & Arms", "volumeKg": 145, "setCount": 2, "failureSets": 1, "durationMin": 55,
+         "label": "Delts & Arms", "volumeKg": 145, "setCount": 2, "workingSetCount": 2, "failureSets": 1, "durationMin": 55,
          "caloriesEstimated": false, "avgBpmEstimated": false, "orderSource": "logged",
          "exercises": [
            {"name": "Single Arm Lateral Raise (Cable)", "restTargetSec": 105, "restPlanSec": 105, "topKg": 5, "repWindow": "12–20",
@@ -418,8 +418,9 @@ struct WeeklyExportBuilderTests {
         {"muscle": "Abs/core", "sets": 2, "target": 10, "directSets": 2, "indirectSets": 0}
       ],
       "tonnageByMuscle": [
-        {"muscle": "Quads", "volumeKg": 3150}, {"muscle": "Hamstrings", "volumeKg": 1575},
-        {"muscle": "Glutes", "volumeKg": 1575}, {"muscle": "Side delts", "volumeKg": 145}
+        {"muscle": "Quads", "volumeKg": 2550}, {"muscle": "Abs/core", "volumeKg": 2080},
+        {"muscle": "Hamstrings", "volumeKg": 1275}, {"muscle": "Glutes", "volumeKg": 1275},
+        {"muscle": "Side delts", "volumeKg": 145}
       ],
       "doms": [
         {"date": "2026-08-25", "muscle": "glutes", "severity": 2},
@@ -461,7 +462,7 @@ struct WeeklyExportBuilderTests {
         {"label": "Week 3", "weekStart": "2026-08-02", "totals": {}},
         {"label": "Week 4", "weekStart": "2026-08-09", "totals": {}},
         {"label": "Week 5", "weekStart": "2026-08-16", "totals": {"totalVolumeKg": 840}},
-        {"label": "Week 6", "weekStart": "2026-08-23", "totals": {"avgKcal": 1900, "totalVolumeKg": 3295, "avgSteps": 9000,
+        {"label": "Week 6", "weekStart": "2026-08-23", "totals": {"avgKcal": 1900, "totalVolumeKg": 4775, "avgSteps": 9000,
          "cardioMinutes": 68, "avgWaterMl": 1800, "avgWeightKg": 64.5}}
       ]
     }

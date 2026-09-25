@@ -205,7 +205,8 @@ public actor SyncCoordinator: MirrorRefreshing {
         health: HealthSync? = nil,
         userId: String,
         calendar: Calendar = .current,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        doors: (@Sendable () -> UserDefaults)? = nil
     ) {
         self.database = database
         self.engine = engine
@@ -215,6 +216,7 @@ public actor SyncCoordinator: MirrorRefreshing {
         self.userId = userId
         self.calendar = calendar
         self.now = now
+        self.doors = doors
     }
 
     /// The production wiring, over one Supabase client. `windowDays: nil` —
@@ -227,8 +229,43 @@ public actor SyncCoordinator: MirrorRefreshing {
             puller: MirrorPuller(database: database, remote: mirror, userId: userId, windowDays: nil),
             training: TrainingPuller(database: database, remote: mirror, userId: userId, windowDays: nil),
             health: health,
-            userId: userId
+            userId: userId,
+            doors: { AppDatabase.appGroupDefaults() }
         )
+    }
+
+    // MARK: - One-time doors (Precision Lane C)
+
+    /// Where a door remembers it ran — the App Group defaults in the app, a
+    /// throwaway suite in a test, nil (no doors) for the injected harness. A
+    /// factory, because `UserDefaults` is not `Sendable` and the actor makes
+    /// it on its own side. Each key holds the USER it ran for, so a second
+    /// account on the same phone gets its own pass.
+    private let doors: (@Sendable () -> UserDefaults)?
+    /// Q11: every finished session this device holds the sets for is brought
+    /// onto the Hevy tonnage basis and the two set figures, and pushed.
+    static let recountDoor = "onyx.recount.sets.v1"
+    /// Q15: the last thirty finished days' dietary totals re-read from
+    /// HealthKit's statistic, so a day the raw-sample re-sum halved (or
+    /// left doubled) corrects itself.
+    static let reingestDoor = "onyx.reingest.micros.v1"
+    static let reingestDays = 30
+
+    /// Runs after the pull, once per user per door. A door that throws is
+    /// not marked and tries again next sync; the sync itself is not failed
+    /// over it.
+    private func openDoors(now: Date) async {
+        guard let doors = doors?() else { return }
+        if doors.string(forKey: Self.recountDoor) != userId {
+            if (try? database.recountSessionTotals(userId: userId)) != nil {
+                doors.set(userId, forKey: Self.recountDoor)
+            }
+        }
+        if let health, doors.string(forKey: Self.reingestDoor) != userId {
+            if (try? await health.reingest(days: Self.reingestDays, now: now, calendar: calendar)) != nil {
+                doors.set(userId, forKey: Self.reingestDoor)
+            }
+        }
     }
 
     // MARK: - Running
@@ -367,6 +404,10 @@ public actor SyncCoordinator: MirrorRefreshing {
         // the whole thing again. A normal sync records what it got.
         if !isBackfill || report.isClean { try record(report, reason: reason, at: now) }
         if isBackfill { try await readHealth(reason: reason, now: now) }
+        // After the first pull (Q11, Q15): the recount needs the sets on
+        // disk, the re-ingest needs the Health permission `readHealth` asked
+        // for. The closing drain below pushes whatever they wrote.
+        await openDoors(now: now)
 
         // Session metrics AFTER the pull, on purpose. `applyPulledSessions`
         // overwrites the local row with the server's, so a value written

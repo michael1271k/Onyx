@@ -128,7 +128,8 @@ public enum Draft {
         sets.map { VolumeSet(weightKg: $0.weightKg, reps: $0.reps, side: $0.side, pairId: $0.pairId, setType: $0.setType) }
     }
 
-    /// Σ weight×reps over the committed strength sets (warm-ups included), with
+    /// Σ weight×reps over the committed strength sets (a warm-up is a set here
+    /// and weighs nothing — `SessionVolume`, Q13), with
     /// the unilateral collapse, plus the count.
     public static func totals(_ draft: SessionDraft) -> (volumeKg: Double, sets: Int) {
         let committed = committedSets(draft)

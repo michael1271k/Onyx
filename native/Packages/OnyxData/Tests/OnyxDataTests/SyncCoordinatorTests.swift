@@ -356,6 +356,65 @@ struct SyncCoordinatorTests {
         await #expect(throws: (any Error).self) { try await run.value }
         #expect(try db.lastSync(userId: user)["daily_logs"] == nil, "a cancelled run stamps nothing")
     }
+
+    // MARK: Precision Lane C — the one-time doors
+
+    /// `onyx.recount.sets.v1` (Q11) and `onyx.reingest.micros.v1` (Q15) run
+    /// after the pull, once per user, remembered in the defaults they are
+    /// handed. A harness with no defaults has no doors.
+    @Test("the recount door runs once after the pull, and not again")
+    func recountDoorRunsOnce() async throws {
+        let db = try store()
+        let wire = Wire()
+        try await db.writer.write { conn in
+            try Exercise(id: "ex-press", name: "Leg Press").insert(conn)
+            let start = Date(timeIntervalSince1970: 1_788_000_000)
+            try WorkoutSession(id: "s", userId: user, dayKey: "legs_a", date: "2026-08-29",
+                               startedAt: start, endedAt: start.addingTimeInterval(3600),
+                               totalVolumeKg: 1500, setCount: 2).insert(conn)   // the web's old rule: warm-up in
+            try WorkoutSet(id: "w", sessionId: "s", exerciseId: "ex-press", setIndex: 1, weightKg: 50, reps: 10, setType: "warmup").insert(conn)
+            try WorkoutSet(id: "n", sessionId: "s", exerciseId: "ex-press", setIndex: 2, weightKg: 100, reps: 10).insert(conn)
+        }
+        let suite = "onyx.tests.doors.\(UUID().uuidString)"
+        let doors = UserDefaults(suiteName: suite)!
+        let coordinator = SyncCoordinator(
+            database: db,
+            engine: SyncEngine(database: db, remote: wire, rows: wire),
+            puller: MirrorPuller(database: db, remote: wire, userId: user, windowDays: nil),
+            training: TrainingPuller(database: db, remote: wire, userId: user, windowDays: nil),
+            userId: user, calendar: calendar, now: { [now] in now }, doors: { UserDefaults(suiteName: suite)! }
+        )
+        try await coordinator.syncNow(reason: .launch)
+        let first = try #require(try db.session(id: "s"))
+        let firstRow = first
+        #expect(firstRow.totalVolumeKg == 1000 && firstRow.setCount == 2 && firstRow.workingSetCount == 1)
+        #expect(doors.string(forKey: SyncCoordinator.recountDoor) == user)
+
+        // Tamper, sync again: the door stays shut.
+        try await db.writer.write { conn in
+            try conn.execute(sql: "UPDATE workout_sessions SET total_volume_kg = 1500 WHERE id = 's'")
+        }
+        try await coordinator.syncNow(reason: .foreground)
+        let tampered = try db.session(id: "s")?.totalVolumeKg
+        #expect(tampered == 1500, "a door runs once")
+    }
+
+    @Test("the injected harness has no doors")
+    func noDefaultsNoDoors() async throws {
+        let db = try store()
+        try await db.writer.write { conn in
+            try Exercise(id: "ex-press", name: "Leg Press").insert(conn)
+            let start = Date(timeIntervalSince1970: 1_788_000_000)
+            try WorkoutSession(id: "s", userId: user, dayKey: "legs_a", date: "2026-08-29",
+                               startedAt: start, endedAt: start.addingTimeInterval(3600),
+                               totalVolumeKg: 1500, setCount: 2).insert(conn)
+            try WorkoutSet(id: "w", sessionId: "s", exerciseId: "ex-press", setIndex: 1, weightKg: 50, reps: 10, setType: "warmup").insert(conn)
+            try WorkoutSet(id: "n", sessionId: "s", exerciseId: "ex-press", setIndex: 2, weightKg: 100, reps: 10).insert(conn)
+        }
+        try await coordinator(db, Wire()).syncNow(reason: .launch)
+        let untouched = try db.session(id: "s")?.totalVolumeKg
+        #expect(untouched == 1500)
+    }
 }
 
 // MARK: - Pagination

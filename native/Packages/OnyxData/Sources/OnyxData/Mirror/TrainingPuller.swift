@@ -296,6 +296,9 @@ extension AppDatabase {
                     totalVolumeKg: row.totalVolumeKg ?? existing?.totalVolumeKg,
                     setCount: row.setCount ?? existing?.setCount,
                     prCount: row.prCount ?? existing?.prCount,
+                    // Same rule (Precision Lane C): a whole-row save without
+                    // it would blank the figure on every pull.
+                    workingSetCount: row.workingSetCount ?? existing?.workingSetCount,
                     // Local-only and never on the wire: a pull has no opinion
                     // about who typed the duration, so the flag survives it.
                     // Without this line, one sync would hand a hand-corrected

@@ -42,10 +42,13 @@ public enum SessionEditing {
         /// The session's own date — where the cascade starts.
         public var date: String
         public var totalVolumeKg: Double
+        /// "Sets" — `SessionCounts.total` (Q10).
         public var setCount: Int
         public var prCount: Int
         /// The ledger keys whose records were rebuilt from scratch.
         public var replayed: [String]
+        /// "Working" — `SessionCounts.working`.
+        public var workingSetCount: Int = 0
     }
 
     public enum EditError: Error, Equatable {
@@ -68,35 +71,151 @@ public enum SessionEditing {
     /// mountain stage; the floor is one minute of standing up.
     public static let plausibleCalories = 5...5000
 
-    /// Σ tonnage and the committed-set count for a session's rows.
+    /// The three stored figures for a session's rows.
+    public struct Totals: Sendable, Equatable {
+        /// `SessionVolume.sessionVolumeKg` on the Hevy basis (Q13).
+        public var volumeKg: Double
+        /// "Sets" — `SessionCounts.total` (Q10): everything performed, a
+        /// pair once, ghosts never. What `set_count` holds.
+        public var count: Int
+        /// "Working" — `SessionCounts.working`. What `working_set_count` holds.
+        public var working: Int
+    }
+
+    /// Σ tonnage and the two set counts for a session's rows.
     ///
-    /// Both are the WEB's definitions, because both columns are the web's:
-    /// `sessionVolumeKg` collapses a genuine L/R pair to its weaker side and
-    /// skips a ghost; `countCommittedSets` counts each `pair_id` once and every
-    /// unpaired row once — warm-ups included, in both. The two treat a pair
-    /// differently on purpose, and `save.ts` says so where it calls them.
-    public static func totals(_ sets: [WorkoutSet]) -> (volumeKg: Double, count: Int) {
-        let volume = SessionVolume.sessionVolumeKg(
-            sets.map {
-                VolumeSet(
-                    weightKg: $0.weightKg, reps: Double($0.reps),
-                    // ── `left` HERE, `L` THERE ──────────────────────────────
-                    // The store spells a side out; every OnyxCore rule that
-                    // folds a pair tests for the one letter. Handed over
-                    // unmapped, a pair is scored as two lone sides — silently,
-                    // and the tonnage comes out nearly double. Same door
-                    // `ScoringInputsBuilder` goes through.
-                    side: (try? SyncTranslation.side($0.side)) ?? nil,
-                    pairId: $0.pairId, setType: $0.setType
-                )
-            }
+    /// `sessionVolumeKg` collapses a genuine L/R pair to its weaker side,
+    /// skips ghosts AND warm-ups, and credits the athlete's body weight on an
+    /// unloaded bodyweight row when `bodyWeightKg` is known (Precision Lane C,
+    /// founder decision Q13 — the Hevy basis; `SessionVolume`'s header has the
+    /// proof). `SessionCounts` counts a warm-up and a cardio bout as sets
+    /// performed and a pair once. The two treat a warm-up differently on
+    /// purpose: it happened, and it weighs nothing.
+    ///
+    /// - Parameter isBodyweight: the catalogue's answer for an `exercise_id`
+    ///   (`bodyweightResolver`). The default says no movement is, which is
+    ///   what every caller meant before the parameter existed.
+    public static func totals(
+        _ sets: [WorkoutSet], bodyWeightKg: Double? = nil, isBodyweight: (String) -> Bool = { _ in false }
+    ) -> Totals {
+        let rows = volumeSets(sets, isBodyweight: isBodyweight)
+        return Totals(
+            volumeKg: SessionVolume.sessionVolumeKg(rows, bodyWeightKg: bodyWeightKg),
+            count: SessionCounts.total(rows),
+            working: SessionCounts.working(rows)
         )
-        var paired = Set<String>()
-        var solo = 0
-        for set in sets {
-            if let pairId = set.pairId, !pairId.isEmpty { paired.insert(pairId) } else { solo += 1 }
+    }
+
+    /// The same three figures, with the body weight and the bodyweight flags
+    /// read from the store: the latest `daily_logs.weight_kg` on or before the
+    /// session's day, and the catalogue's `is_bodyweight`.
+    public static func totals(_ db: Database, session: WorkoutSession, sets: [WorkoutSet]) throws -> Totals {
+        totals(
+            sets,
+            bodyWeightKg: try bodyWeightKg(db, userId: session.userId, on: session.date),
+            isBodyweight: try bodyweightResolver(db)
+        )
+    }
+
+    /// Local rows as the OnyxCore rules take them.
+    ///
+    /// ── `left` HERE, `L` THERE ──────────────────────────────────────────────
+    /// The store spells a side out; every OnyxCore rule that folds a pair
+    /// tests for the one letter. Handed over unmapped, a pair is scored as two
+    /// lone sides — silently, and the tonnage comes out nearly double. Same
+    /// door `ScoringInputsBuilder` goes through.
+    public static func volumeSets(_ sets: [WorkoutSet], isBodyweight: (String) -> Bool = { _ in false }) -> [VolumeSet] {
+        sets.map {
+            VolumeSet(
+                weightKg: $0.weightKg, reps: Double($0.reps),
+                side: (try? SyncTranslation.side($0.side)) ?? nil,
+                pairId: $0.pairId, setType: $0.setType,
+                bodyweight: isBodyweight($0.exerciseId)
+            )
         }
-        return (volume, solo + paired.count)
+    }
+
+    /// `exercise_id` → is this a 100 % bodyweight movement. The catalogue's
+    /// stored flag first (the deck wrote it from the name at creation, and it
+    /// is what the deck shows a load field for), the name rule for a row the
+    /// flag was never written on, and the slug map for a set logged here
+    /// before its catalogue row was pulled — the same three doors
+    /// `PrRecorder.nameResolver` opens.
+    public static func bodyweightResolver(_ db: Database) throws -> (String) -> Bool {
+        let exercises = try Exercise.fetchAll(db)
+        let byId = Dictionary(exercises.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let nameBySlug = ExerciseSlug.nameBySlug(exercises)
+        return { id in
+            if let row = byId[id] { return row.isBodyweight ?? Bodyweight.isBodyweight(row.name) }
+            return Bodyweight.isBodyweight(nameBySlug[id])
+        }
+    }
+
+    /// The athlete's latest weigh-in on or before `date` — the load a
+    /// bodyweight row carries (Q13: "the latest `daily_logs.weight_kg` on or
+    /// before the session day"). Nil when there has never been one.
+    public static func bodyWeightKg(_ db: Database, userId: String, on date: String) throws -> Double? {
+        try Double.fetchOne(
+            db,
+            sql: """
+                SELECT weight_kg FROM daily_logs
+                WHERE user_id = ? AND date <= ? AND weight_kg IS NOT NULL
+                ORDER BY date DESC LIMIT 1
+                """,
+            arguments: [userId, date]
+        )
+    }
+
+    /// Bring every finished session this device holds the sets for onto the
+    /// current rules — `total_volume_kg` on the Hevy basis, `set_count` as
+    /// "Sets", `working_set_count` as "Working" — and queue the ones that
+    /// moved for the server. The `onyx.recount.sets.v1` door (Q11).
+    ///
+    /// A session with no local sets is not this device's to restate
+    /// (`holdsSets`); it keeps whatever the client that held them wrote.
+    /// Idempotent: the figures are a pure function of the rows, so a second
+    /// pass finds nothing to change and queues nothing.
+    ///
+    /// Returns the sessions whose stored figures changed.
+    public static func recountAll(_ db: Database, userId: String) throws -> Int {
+        let sessions = try WorkoutSession
+            .filter(Column("user_id") == userId && Column("ended_at") != nil)
+            .fetchAll(db)
+        let isBodyweight = try bodyweightResolver(db)
+        var changed = 0
+        for var session in sessions {
+            let sets = try WorkoutSet.filter(Column("session_id") == session.id).fetchAll(db)
+            guard !sets.isEmpty else { continue }
+            let t = totals(sets, bodyWeightKg: try bodyWeightKg(db, userId: userId, on: session.date), isBodyweight: isBodyweight)
+            guard session.totalVolumeKg != t.volumeKg || session.setCount != t.count || session.workingSetCount != t.working
+            else { continue }
+            session.totalVolumeKg = t.volumeKg
+            session.setCount = t.count
+            session.workingSetCount = t.working
+            try session.update(db)
+            try AppDatabase.enqueueSessionUpsert(sessionId: session.id, in: db)
+            changed += 1
+        }
+        return changed
+    }
+}
+
+public extension AppDatabase {
+    /// `SessionEditing.recountAll` in one write. See the door in `SyncCoordinator`.
+    @discardableResult
+    func recountSessionTotals(userId: String) throws -> Int {
+        try writer.write { db in try SessionEditing.recountAll(db, userId: userId) }
+    }
+
+    /// Every weigh-in, date-ascending — for a reader that resolves many
+    /// sessions' body weight at once (`SessionAnalysis.Context`).
+    func weighIns(userId: String) throws -> [(date: String, kg: Double)] {
+        try writer.read { db in
+            try Row.fetchAll(
+                db, sql: "SELECT date, weight_kg FROM daily_logs WHERE user_id = ? AND weight_kg IS NOT NULL ORDER BY date",
+                arguments: [userId]
+            ).map { ($0["date"] as String, $0["weight_kg"] as Double) }
+        }
     }
 }
 
@@ -596,7 +715,7 @@ public extension AppDatabase {
             .filter(Column("session_id") == session.id)
             .order(Column("set_index"), Column("fold_order"))
             .fetchAll(db)
-        let totals = SessionEditing.totals(sets)
+        let totals = try SessionEditing.totals(db, session: session, sets: sets)
         let prCount = try PrRecorder.prCount(
             db, sets: sets, dayKey: session.dayKey, date: session.date
         )
@@ -606,12 +725,13 @@ public extension AppDatabase {
         if authoritative {
             session.totalVolumeKg = totals.volumeKg
             session.setCount = totals.count
+            session.workingSetCount = totals.working
             session.prCount = prCount
         }
         return SessionEditing.Outcome(
             sessionId: session.id, date: session.date,
             totalVolumeKg: totals.volumeKg, setCount: totals.count,
-            prCount: prCount, replayed: replayed
+            prCount: prCount, replayed: replayed, workingSetCount: totals.working
         )
     }
 }

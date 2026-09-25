@@ -292,7 +292,7 @@ enum SessionAnalysis {
                 // see `report`'s `volumeKg`. A history row and the session page
                 // it opens disagreeing about the same workout's weight is the
                 // same divergence, one screen earlier.
-                tonnageKg: SessionVolume.sessionVolumeKg(rows.map(volumeSet)),
+                tonnageKg: SessionVolume.sessionVolumeKg(rows.map(volumeSet), bodyWeightKg: ctx.bodyWeightKg(on: session.date)),
                 prCount: pr.prCount,
                 sessionRpe: session.sessionRpe,
                 avgBpm: session.avgBpm.map(Double.init),
@@ -372,7 +372,7 @@ enum SessionAnalysis {
                 // `topKg`, `bestEst1rm` and `workingSets` stay on `working`:
                 // "Top" is a claim about the working sets and a warm-up must
                 // not be allowed to win it.
-                volumeKg: SessionVolume.sessionVolumeKg(sets.map { VolumeSet(weightKg: $0.weightKg, reps: $0.reps, side: $0.side, pairId: $0.pairId, setType: $0.setType) }),
+                volumeKg: SessionVolume.sessionVolumeKg(sets.map { VolumeSet(weightKg: $0.weightKg, reps: $0.reps, side: $0.side, pairId: $0.pairId, setType: $0.setType, bodyweight: Bodyweight.isBodyweight(g.name)) }, bodyWeightKg: ctx.bodyWeightKg(on: session.date)),
                 bestEst1rm: working.compactMap(\.est1rmKg).max(),
                 prAxes: pr.axesByKey.first { $0.key == g.exerciseId }?.axes.map(\.rawValue)
             )
@@ -444,7 +444,7 @@ enum SessionAnalysis {
         // actually logged: the working sets it was the point of, and the
         // tonnage behind them. See `Report.primaryOrder` for why the count is
         // raw and why the tie-break is load.
-        let primaryOrder = primaryLandmarks(groups)
+        let primaryOrder = primaryLandmarks(groups, bodyWeightKg: ctx.bodyWeightKg(on: session.date))
 
         // ── NO MULTI-SERIES TRAIL, AND NO HIGHLIGHTS LIST ───────────────────
         // Wave 7 drew a six-series est-1RM chart at the bottom of this report
@@ -603,11 +603,17 @@ enum SessionAnalysis {
     struct Context: Sendable {
         var schedule: ScheduleContext
         var floors: [String: PrFloor]
+        /// Every weigh-in, date-ascending — the load of an unloaded bodyweight
+        /// row on the Hevy basis (Q13). Empty in a preview: no credit.
+        var weighIns: [(date: String, kg: Double)] = []
 
         static let empty = Context(schedule: ScheduleContext(programId: "", phase: .cut), floors: [:])
 
         /// The deck for a date — the plan that owned it, not the one selected.
         func program(on date: String) -> Program { Schedule.programForContext(schedule, date).program }
+
+        /// The latest weigh-in on or before `date` — `SessionEditing.bodyWeightKg`'s rule.
+        func bodyWeightKg(on date: String) -> Double? { weighIns.last { $0.date <= date }?.kg }
     }
 
     /// The context off the store. Nothing filters on `user_id` beyond the goals
@@ -616,7 +622,8 @@ enum SessionAnalysis {
         let userId = database.localUserId()
         return Context(
             schedule: (try? database.scheduleContext(userId: userId)) ?? Context.empty.schedule,
-            floors: (try? database.prFloors(userId: userId)) ?? [:]
+            floors: (try? database.prFloors(userId: userId)) ?? [:],
+            weighIns: (try? database.weighIns(userId: userId)) ?? []
         )
     }
 
@@ -694,7 +701,7 @@ enum SessionAnalysis {
     /// One implementation, two callers: the session page's report and the
     /// batched `headers` loader. A second fold is how the Train card and the
     /// session page would come to rank the same workout differently.
-    static func primaryLandmarks(_ groups: [Group]) -> [LandmarkMuscle] {
+    static func primaryLandmarks(_ groups: [Group], bodyWeightKg: Double? = nil) -> [LandmarkMuscle] {
         var rawSets: [LandmarkMuscle: Double] = [:]
         var rawLoad: [LandmarkMuscle: Double] = [:]
         for g in groups {
@@ -702,10 +709,9 @@ enum SessionAnalysis {
             let working = g.sets.filter { SetTags.isWorkingSet($0.setType) }
             // Both figures exactly as `report` builds them: the set count folds
             // a unilateral pair once (`SessionDetail.toRows`), and the tonnage
-            // is every non-ghost row including warm-ups (`SessionVolume`'s own
-            // rule — "a ghost weighs nothing; a warm-up still counts").
+            // is `SessionVolume`'s Hevy basis (Q13) with the session's weigh-in.
             let sets = Double(SessionDetail.toRows(working.map(detailSet)).count)
-            let load = SessionVolume.sessionVolumeKg(g.sets.map(volumeSet))
+            let load = SessionVolume.sessionVolumeKg(g.sets.map(volumeSet), bodyWeightKg: bodyWeightKg)
             for muscle in MuscleMap.landmarks(MuscleMap.resolveMovers(canonical).primary) {
                 rawSets[muscle, default: 0] += sets
                 rawLoad[muscle, default: 0] += load
@@ -746,7 +752,8 @@ enum SessionAnalysis {
     }
 
     static func volumeSet(_ r: HistorySetRow) -> VolumeSet {
-        VolumeSet(weightKg: r.weightKg, reps: Double(r.reps), side: r.lr, pairId: r.pairId, setType: r.setType)
+        VolumeSet(weightKg: r.weightKg, reps: Double(r.reps), side: r.lr, pairId: r.pairId, setType: r.setType,
+                  bodyweight: Bodyweight.isBodyweight(r.exerciseName))
     }
 
     /// "Legs A" for a day key, the key itself tidied when the program does not

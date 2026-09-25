@@ -238,6 +238,10 @@ public struct RemoteSessionRow: Codable, Sendable, Equatable {
     public var totalVolumeKg: Double?
     public var setCount: Int?
     public var prCount: Int?
+    /// Precision Lane C (Q10). `encodeIfPresent`, like the three above, so a
+    /// row this device has not recounted sends no key — and a server that has
+    /// not had `precision-c-counts.sql` pasted refuses a body that names it.
+    public var workingSetCount: Int?
 
     public enum CodingKeys: String, CodingKey {
         case id
@@ -257,6 +261,7 @@ public struct RemoteSessionRow: Codable, Sendable, Equatable {
         case totalVolumeKg = "total_volume_kg"
         case setCount = "set_count"
         case prCount = "pr_count"
+        case workingSetCount = "working_set_count"
     }
 
     public init(
@@ -264,7 +269,8 @@ public struct RemoteSessionRow: Codable, Sendable, Equatable {
         dayKey: String? = nil, notes: String? = nil, durationMin: Int? = nil, sessionRpe: Double? = nil,
         updatedAt: Date? = nil, avgBpm: Int? = nil, caloriesBurned: Int? = nil,
         avgBpmEstimated: Bool = false, caloriesEstimated: Bool = false,
-        totalVolumeKg: Double? = nil, setCount: Int? = nil, prCount: Int? = nil
+        totalVolumeKg: Double? = nil, setCount: Int? = nil, prCount: Int? = nil,
+        workingSetCount: Int? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -283,6 +289,7 @@ public struct RemoteSessionRow: Codable, Sendable, Equatable {
         self.totalVolumeKg = totalVolumeKg
         self.setCount = setCount
         self.prCount = prCount
+        self.workingSetCount = workingSetCount
     }
 
     public init(from decoder: any Decoder) throws {
@@ -304,6 +311,7 @@ public struct RemoteSessionRow: Codable, Sendable, Equatable {
         totalVolumeKg = try c.decodeIfPresent(Double.self, forKey: .totalVolumeKg)
         setCount = try c.decodeIfPresent(Int.self, forKey: .setCount)
         prCount = try c.decodeIfPresent(Int.self, forKey: .prCount)
+        workingSetCount = try c.decodeIfPresent(Int.self, forKey: .workingSetCount)
     }
 
     /// ── EVERY KEY, EVERY TIME, INCLUDING THE NULLS ──────────────────────────
@@ -344,6 +352,7 @@ public struct RemoteSessionRow: Codable, Sendable, Equatable {
         try c.encodeIfPresent(totalVolumeKg, forKey: .totalVolumeKg)
         try c.encodeIfPresent(setCount, forKey: .setCount)
         try c.encodeIfPresent(prCount, forKey: .prCount)
+        try c.encodeIfPresent(workingSetCount, forKey: .workingSetCount)
         // `updated_at` is NOT encoded — see the field. The server owns it.
     }
 }
@@ -588,7 +597,8 @@ public extension SyncTranslation {
             caloriesEstimated: session.caloriesEstimated,
             totalVolumeKg: session.totalVolumeKg,
             setCount: session.setCount,
-            prCount: session.prCount
+            prCount: session.prCount,
+            workingSetCount: session.workingSetCount
         )
     }
 

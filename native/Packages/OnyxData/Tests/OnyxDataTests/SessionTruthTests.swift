@@ -88,21 +88,22 @@ struct SessionTruthTests {
 
     // MARK: - The volume rule
 
-    @Test("a warm-up counts and the cardio bout is a set")
+    @Test("a warm-up is a set that weighs nothing, and the cardio bout is a set")
     func totalsCountEverythingPerformed() throws {
         let db = try seed(try store())
         let totals = SessionEditing.totals(try sets(db))
 
-        // 900 of this is the leg-press warm-up. Filtering it out — which is what
-        // every caller on the summary page used to do — gives 4,832.5, and that
-        // is the exact 12,343-vs-13,242.5 gap the founder reported.
-        #expect(totals.volumeKg == 5732.5, "a warm-up still counts; 4832.5 means somebody filtered it")
+        // 900 kg of leg-press warm-up is OUT since Precision Lane C (founder
+        // decision Q13, the Hevy basis): 5,732.5 was the web's rule and the
+        // 12,343-vs-13,242.5 gap the founder once reported ran the other way.
+        #expect(totals.volumeKg == 4832.5, "a warm-up weighs nothing; 5732.5 means the web's rule is back")
         // The .5 survives: `sessionVolumeKg` ends at two decimals and nothing
         // downstream may round it away.
-        #expect(totals.volumeKg != 5733)
-        // Eight rows performed, of which six are working. The Sets tile
-        // headlines this number, not the six.
+        #expect(totals.volumeKg != 4833)
+        // Eight rows performed, of which six are working. "Sets" headlines the
+        // eight; "Working" is the six (Q10).
         #expect(totals.count == 8, "the treadmill bout and the warm-up are sets that happened")
+        #expect(totals.working == 6, "the bout and the warm-up are not working sets")
     }
 
     // MARK: - What an edit may not destroy
