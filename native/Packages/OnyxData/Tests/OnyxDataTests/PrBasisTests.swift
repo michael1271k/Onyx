@@ -87,6 +87,19 @@ struct PrBasisTests {
         #expect(closed.prCount == 0)
     }
 
+    @Test("a replay over a first-ever two-set session files nothing either (the guard reaches every door)")
+    func replayHonoursTheGuard() throws {
+        let db = try store()
+        try session(db, id: "s1", date: "2026-09-25", key: "onyx-hack-squat", name: "Hack Squat", sets: [(100, 8, nil), (110, 8, nil)])
+        try db.writer.write { conn in
+            try conn.execute(sql: "UPDATE workout_sessions SET ended_at = started_at WHERE id = 's1'")
+            _ = try PrRecorder.replay(conn, userId: user, exerciseKey: "Hack Squat")
+        }
+        #expect(try records(db).isEmpty, "the second set of a first-ever session is a baseline on the replay path too")
+        try db.writer.write { conn in _ = try PrRecorder.recomputeAll(conn, userId: user) }
+        #expect(try records(db).isEmpty)
+    }
+
     @Test("a rebuild starts from the asserted floors and replaces a stale ledger row")
     func recomputeStartsFromFloors() throws {
         let db = try store()

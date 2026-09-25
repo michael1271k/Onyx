@@ -520,7 +520,11 @@ public enum PrRecorder {
             // this loop wanted it, and resolving a schedule context per session
             // for a value nobody reads is a query per session for nothing.
             let baselines = PrEngine.buildBaselines(
-                seen, isTimed: { _ in timed }, floorFor: { _ in floor }
+                seen, isTimed: { _ in timed }, floorFor: { _ in floor },
+                // The guard (Q12) on this door too — `invariant-auditor` found
+                // it missing: with `seen` empty the first session's second
+                // set fell back to "a bar exists" and filed itself.
+                candidateKeys: [exerciseKey]
             )
             let candidates = rows.enumerated().map { i, s in
                 PrCandidateSet(
