@@ -1077,7 +1077,7 @@ private struct SorenessRow: View {
         PulseRow(
             symbol: "figure.arms.open",
             title: "Soreness",
-            detail: sore.isEmpty ? "Nothing sore" : "\(sore.count) sore · \(Soreness.line(sore))",
+            detail: sore.isEmpty ? "Nothing sore" : "\(sore.count) sore\u{00A0}· \(Soreness.line(sore))",
             tint: Color.onyx.accent(.recover),
             spoken: sore.isEmpty ? "nothing sore" : Soreness.spoken(sore),
             action: onOpen

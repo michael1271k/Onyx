@@ -48,7 +48,10 @@ const TARGETS = [
  *
  * One layer, glass OFF, no group shadow, no translucency: the artwork is
  * already a lit 3D render with its own bevel, and Liquid Glass on top of it
- * drew a second rim. The black fill is what the tinted/clear modes key on.
+ * would draw a second rim. The layer is opaque and full-bleed, so the fill is
+ * never seen and the system's tinted/clear renditions work from the whole
+ * slab's luminance. A separate transparent seam layer over the fill would give
+ * them a real foreground — that needs the artwork split, not this script.
  */
 const ICON_JSON = {
   fill: { solid: 'srgb:0.00000,0.00000,0.00000,1.00000' },
