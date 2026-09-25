@@ -538,3 +538,62 @@ Branch `onyx/precision-e` (E1 `917822b7`, E2+E3 `5e6530fb`, review fixes `c0a429
 
 ### Cache purge
 Before: `onyx-swift` 34 G (Lane E: 3.55 + 0.27 + 1.17 + 1.96 G), shots 33 M, DerivedData 4.9 G, SwiftPM 286 M. Removed `lane-e`, `lane-e-core`, `lane-e-data`, `lane-e-watch`, the scratch shots and the lane's simulator (3.29 G). After: `onyx-swift` 27 G. **Freed 10.27 GB** (6.98 G caches + 3.29 G simulator). Deviation: shared `OnyxCore`/`OnyxData`/`OnyxUI-*`/`check-watch`/`ui-test-derived`, DerivedData and the SwiftPM cache were left — Lane C was mid-build (`xcodebuild test … lane-c`) at purge time.
+
+---
+
+## Wave record — Lane F (Écorché atlas) · Opus 5.5 · **9.5.0**
+
+Branch `onyx/precision-f` (feature `6e0ef912`, review round `7d7552c3`), rebased on Lane E's 9.4.0 (conflicts only in `PreviewHarness.swift` / `native-shot.sh`, both LANE blocks kept), merged `af80db40`, version `ce3e9ccd`, graph `465c88e9`. Fifth lane to merge → 9.5.0. Simulator `iPhone 15 (lane F)` (iOS 26.5, deleted at purge). impeccable: `context`, surface brief with direction contract (`.impeccable/surfaces/sources-onyxui-atlas-atlasmaterial-swift-59d5805f.md`), `polish` checklist; dataviz validator on the lit ramp.
+
+### Built
+- **One painter.** `OnyxUI/Atlas/AtlasMaterial.swift`: `AtlasMaterial { ecorche, flat }` + the choice rules (`figure(monochrome:thumbnail:reduceTransparency:)`, `widget(monochrome:fullColor:rectangularAccessory:reduceTransparency:)`), `AtlasInk` (hex-in/hex-out colour arithmetic on OnyxCore's `OKLCHConvert`), `AtlasPainter` (Canvas-level; `isLite`; `Host .app/.widget`; `os_signpost` "Atlas/paint"). `AtlasFigure` (app) and `OnyxAtlasFigure` (widgets) keep their public API and initialisers and both call it; paint order = `OnyxAtlas.muscles` order (hit test unchanged).
+- **Écorché.** Silhouette `141010` + 12 % rim falling to 0 away from the light; each muscle a gradient along its fibre, deep → lit toward the upper-left light, 1 pt darker edge (scaled below 170 pt), an 8 % specular band a quarter of the belly wide; bone `F2EEE6` at 34 %, tendon `E8DCC8` at 30 % (flat fills); lit = `AtlasInk.activeStops` (flesh 45–60 % toward the fixed ink at the ink's HUE, lit stop +0.10 × share L) with a 25 % × share glow (blur 2.5 % of height, clipped outside each lit path); untrained = flesh darkened 35 % (55 % and no ivory below ~78 pt). Rings (Pulse soreness) get a dark underlay on flesh.
+- **Flat** = each host's pre-F1 look (app: 145° alpha figure + one shadow under the body; widget: its own solid alphas). Used for monochrome thumbnails (Train 44 pt, Body soreness square), Reduce Transparency (system or `rt-` harness), widgets in accented/vibrant rendering and rectangular accessories.
+- **Geometry.** `atlas.ts`: `fibre: [dx, dy]` on all 35 muscle paths (→ `OnyxAtlasPath.fibre: CGVector`, default `(0, 1)`), `TENDON_SHAPES` 26 (patellar, quadriceps, distal biceps, deltopectoral seam, wrist flexors/extensors, linea alba + 3 intersections, Achilles, triceps aponeurosis, teres/lat seam, biceps femoris + semitendinosus), `BONE_SHAPES` 15 (clavicles, sternum, patellae, tibial crests, ASIS, ulnae, scapular spines, posterior iliac crests) → `OnyxAtlas.tendons/bones`. `gen-atlas-swift.mjs` parses each array in its own scope, refuses an unparsed entry, a zero fibre, an open filled shape, or an array that runs on. Tokens `OnyxInk.Fixed.fleshDeep/fleshLit/tendon/bone/silhouette` (end of `Fixed`, beside Lane A's vein).
+- `AtlasSheet`: faces are an `Equatable` `AtlasFace` (`.equatable()`), so a drag no longer repaints two 300–380 pt écorché faces per frame; `worked`/`spoken` built once per evaluation.
+- Harness (LANE-F): `atlas-live` (the live-stats 170 pt `.both` figure on the Upper B fixture) and `atlas-distribution` — routed in `view(_:)`, see failures.
+- Tests: `OnyxUITests/AtlasMaterialTests` (9): fibre axes are anatomy; tendons/bones on both views, on the body, mirrored; tokens resolve to the founder's hexes; lit ≥ 3 : 1 vs silhouette for all 16 inks at shares 0.0001/0.15/0.25/1, both stops, hue within 3° of the ink; share monotone and the lit stop rises > 0.1 L; untrained = ×0.65 L; material rules (app, widget incl. RT); paint budget.
+
+### Measured
+- **Paint, 170 pt `.both`, 3×, median of 40, fresh `ImageRenderer` per sample (commands + raster): écorché 0.27–1.17 ms, flat 0.20–0.88 ms** (range = machine load across runs) — brief < 4 ms. The test asserts one frame (16 ms) and prints the number; the signposts cover the Canvas closure only.
+- Contrast of the lit deep stop vs `141010`: min 3.07 : 1 (Calves, share → 0), 3.15 at share 0.25, ≥ 3.41 at full share; untrained flesh 1.2–1.6 : 1 (recedes by design).
+- dataviz validator on the lit ramp (dark, surface `141010`): contrast PASS all 16; chroma ≥ 0.095 (a straight Oklab mix gave 0.021–0.037 on the three back teals); CVD / normal-vision adjacency FAIL within families (Biceps↔Triceps deutan ΔE 0.3, Glutes↔Hamstrings 3.7) — inherited from the fixed palette, which fails the same checks raw.
+
+### Deviations from the brief (and why)
+1. "Flesh mixed 60 % toward the ink" is taken in lightness and chroma at the INK's hue, not as an Oklab chord — the chord greys the cool half (measured above).
+2. Share modulates the mix 0.45 → 0.60 (not 0 → 0.60) and lifts the lit stop +0.10 × share: at mix 0.40 the rear-delt ink falls below 3 : 1; the amount had to ride somewhere visible (review).
+3. Ivory is quiet (34 % / 30 %, flat) rather than full "ivory-white": at 90 % the kneecaps were the brightest thing on the figure (critique). No trapezius diamond (not in the brief's list; read as a chevron with the scapular spines).
+4. Thumbnails (< ~78 pt tall — the Lane A library rows) draw no bone/tendon and darken untrained flesh 55 %; the brief did not cover the 28 pt rows.
+5. The widget's flat is ITS pre-F1 look, not the app's (`Host.widget`); widgets are also flat under Reduce Transparency (the in-app Today tile must agree with `AtlasFigure`).
+6. The app's flat now casts ONE shadow under the body: before F1 the filter sat inside the layer and each of the 12 body shapes shadowed the ones before it (swift-expert probe).
+7. No golden fixture exists for the atlas; the "golden tests" are `AtlasMaterialTests` + `check:atlas` + the unchanged `AtlasHitTests` (all green).
+
+### What failed / workarounds
+- **Harness SIGSEGV.** Adding my two cases to `PreviewHarness.screenView`'s `@ViewBuilder` switch made the app die at launch (runningboard: `SIGSEGV(11)`, no crash report, nothing on the console) — first only on those branches, then, with a type-erased helper still inside the switch, on every screen. The original switch launches. Fix: the switch is untouched; `view(_:)` routes `atlas-*` to `laneFAtlas` behind `AnyView`. **Any lane adding harness screens: route outside the switch.** Repeated crashes made SpringBoard refuse launches until the sim was rebooted; an lldb attach stops first in `dyld_sim` (a first-chance probe — not the cause).
+- The first benchmark read `ImageRenderer.cgImage` twice → cached image, 83 ns. Fresh renderer per sample.
+- Two geometry defects caught by the on-body test: the distal biceps tendon and the ulna sat in the arm/torso gap; moved onto the arm.
+- `npm run check`'s `swift:ui`/`check:watch` and the package gates were run with lane-own derived/scratch paths (the shared ones collide with Lane C).
+
+### Reviews
+- `ui-ux-designer` on round 1 (12 findings): fixed ivory outranking the lit muscles, flat "enamel" lit fills (lit-stop lift, narrower sheen), thumbnail speckle, iliac crests reading as stray marks, tendon blocks, ball-joint patellae, the trapezius chevron, glow-as-outline, rim-as-line-drawing; left the same-family merge (Lats/Upper back) and the tibial crest line (open calls).
+- `code-reviewer` (0 high, 4 med, 8 low): fixed share invisibility, the flaky wall-clock assertion, the widget's flat drift, widget RT, the contrast floor's share range, generator scoping holes, signpost privacy, the ring-on-flesh contrast, stale docs; left the achromatic-tint pink (no caller).
+- `swift-expert` (9): fixed the union-winding glow leak (Lower back × Glute, 22 u²), per-draw filters, the glow's ink opacity, the signpost claim; confirmed `nonisolated ==` / SE-0434 soundness, `Color.Resolved` gamma, that `.equatable()` stops the sheet repaint and no other call site needs it; per-paint costs < 3 % of the budget.
+- `invariant-auditor`: not run — no OnyxCore math was edited (OKLCH is read, not changed).
+
+### Requests for other lanes / W-final
+- **DESIGN.md (Lane B's file):** record the atlas material — the five `OnyxInk.Fixed` écorché inks, "lit = own ink at its hue, glow by share", flat for monochrome thumbnails / RT / colourless widgets; DESIGN.md still lists the flat figure's shadow as a drift.
+- **Harness owners:** new screens go outside `screenView`'s switch (above).
+- **W-final seam:** none of the six seams touch the atlas; `ExercisePickerSheet` (Lane A) rows draw the écorché-lite automatically.
+
+### Open calls
+- Same-family neighbours lit together (Lats + Upper back, the three delts, the legs) merge into one tone at 260 pt — the fixed palette's family ramp; a darker shared edge helps little.
+- An achromatic `monochromeTint` in écorché would paint bright pink flesh; today every white/grey caller is a flat thumbnail.
+- The tibial crest runs down the lit calf's middle (it follows the pre-existing tibia hairline).
+
+### Gates (rebased tree)
+- `npm run check` parts ✔ (version, types, body, atlas, mirror, doms, report; `swift:ui` **60/60** incl. `AtlasMaterialTests`; `check:watch` BUILD SUCCEEDED) · `check:swift` iOS + watchOS ✔ · `swift:core` **798/798** ✔ · `swift:data` **843/843** ✔ (SeamBenchmark flake once, green on the rerun).
+- OnyxTests on `iPhone 15 (lane F)`: **243 tests**, failing names = 9, all ⊆ the 10-name baseline: `A capsule counts its week and marks the days that were missed`, `Week 0 is the week the block opened on`, `a credible previous session still gets its delta`, `a previous session's impossible clock produces no delta, not a wrong one`, `a treadmill logged on this phone is titled Treadmill, not its slug`, `finishing a session leaves the tab on .done, with the week and the ledger carrying it`, `ready to progress fires only after the ceiling is cleared twice`, `the ledger rows are this session's sets and only this session's`, `the seeded previous session reaches TopLifts.previousBests`. `AtlasHitTests` pass.
+- Shots: round 1 (Slate, default + AX5: session-atlas, logger-stats/lifts, train, trends, today-sheet-muscle, pulse-squares, doms, logger-library, RT), round 2 after the critique (+ atlas-live/distribution, widgets 12/17/18/19; Slate + AX5, Clay, Iris), confirm after the reviews (same set), harness-fix probe, post-rebase sanity (atlas-live, programs, session-atlas, train). The widget pages were not shot under accented/vibrant rendering (the sim harness cannot set it).
+
+### Cache purge
+Before: `onyx-swift` 28.9 G (Lane F: 10.7 G across `lane-f-*`), shots 213 M, DerivedData 4.9 G, SwiftPM 287 M, lane simulator 3.0 G. Removed every `onyx-swift` directory except `lane-c*` (Lane C's worktree is open; no build was running), the scratch shots, the SwiftPM cache and `iPhone 15 (lane F)`. After: `onyx-swift` 11 G (all `lane-c*`). **Freed 21.61 GB** (18.60 G caches + shots + SwiftPM, 3.00 G simulator). DerivedData (4.9 G) was not in the purge list and was left.
