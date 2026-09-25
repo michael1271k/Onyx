@@ -54,6 +54,14 @@ enum LoggerPreviews {
         }
     }
 
+    /// A `wrist_coverage` row for the session's day — the watch's own
+    /// evidence it was worn (Precision A5).
+    @MainActor
+    static func seedCoverage(_ model: LoggerModel, _ store: AppDatabase) {
+        guard let session = model.sessionRow else { return }
+        try? store.writeWristCoverage(userId: session.userId, date: session.date, offWristMin: 0)
+    }
+
     @MainActor @ViewBuilder
     static func view(_ screen: String) -> some View {
         switch screen {
@@ -447,6 +455,18 @@ enum LoggerPreviews {
                 query: screen == "logger-library-search" ? "back" : ""
             ) { _, _ in }
             .environment(LoggerPreviews.environment(over: adding.store))
+        // ── PRECISION A5: Cut the Stone, with and without a watch ──────────
+        // The sheet as the ROOT, not presented, so `--onyx-measure` reads the
+        // sheet's own scroll view (the "≤ 0.8 screens" claim needs a number).
+        // `finish` has no wrist evidence: the heart-rate and calorie cells are
+        // absent and the "Add from last time" door shows. `finish-coverage`
+        // files a `wrist_coverage` row for the session's day.
+        case "finish", "finish-coverage":
+            let finishing = LoggerModel.previewUpperBWithHistory()
+            let _ = screen == "finish-coverage" ? LoggerPreviews.seedCoverage(finishing.model, finishing.store) : ()
+            FinishSheet(model: finishing.model, onFinish: { _ in true })
+                .environment(LoggerPreviews.environment(over: finishing.store))
+                .preferredColorScheme(.dark)
         // ── PRECISION A4: the rail with the stopwatch unfolded ──────────────
         case "logger-stopwatch":
             NavigationStack {

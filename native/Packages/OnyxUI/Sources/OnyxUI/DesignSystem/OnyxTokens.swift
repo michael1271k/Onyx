@@ -657,6 +657,12 @@ public enum OnyxInk {
         public static let effortHard = Color(hex: 0xFBB359)
         /// RPE "very hard" — clay: the same walk, 60 % of the way.
         public static let effortVeryHard = Color(hex: 0xF38554)
+        /// The icon's light vein, for the Finish sheet's Cut-the-Stone rating
+        /// (Precision A5): a pearl core inside a lavender edge, the two colours
+        /// the app icon's slab is cut with. FIXED — the rating is the icon's
+        /// gesture, and the icon does not follow the theme.
+        public static let veinCore = Color(hex: 0xEDEBF5)
+        public static let veinEdge = Color(hex: 0xA79FD6)
         /// A landmark's anatomical colour (decision Q18).
         public static func muscle(_ muscle: LandmarkMuscle) -> Color {
             Color(hex: Color.onyx.defaultMuscleHex[muscle]!)

@@ -712,6 +712,26 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     // MARK: - Derived
 
     var totalVolumeKg: Double { exercises.reduce(0) { $0 + $1.volumeKg } }
+    /// Working sets still unticked — never stored, and kept in the plan
+    /// (`RoutineOrder.merge`). The finish sheet says so (Precision A6). A bout
+    /// and a warm-up are not planned working sets and are not counted.
+    var untickedSets: Int {
+        exercises.reduce(0) { total, exercise in
+            total + Self.physical(exercise.rows.filter {
+                !$0.isDone && $0.kind != .warmup && $0.kind != .ghost && !$0.isCardio
+            })
+        }
+    }
+    /// A live bpm reached the phone during this session — one of the three
+    /// signals that a watch was on the wrist (`FinishSheet`, Precision A5).
+    /// In memory, and latched: a watch that went quiet at the end still saw it.
+    var wristBpmSeen = false
+    /// Whether the store holds wrist evidence for this session — see
+    /// `AppDatabase.hasWristEvidence`.
+    func wristEvidence() -> Bool {
+        guard let store, let session = sessionRow else { return false }
+        return (try? store.hasWristEvidence(sessionId: session.id, userId: userId, date: session.date)) ?? false
+    }
     var completedSets: Int { exercises.reduce(0) { $0 + $1.workingSets } }
     var plannedSets: Int { day.plannedSets(for: phase) }
     /// Records claimed so far — AXES, not rows.

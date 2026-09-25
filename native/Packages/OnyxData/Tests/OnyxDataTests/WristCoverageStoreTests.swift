@@ -182,3 +182,28 @@ struct WristCoverageStoreTests {
         #expect(WatchTiles(snap).offWrist == note)
     }
 }
+
+/// Precision A5 — the finish sheet's wrist evidence, from the store.
+@Suite("Wrist evidence")
+struct WristEvidenceTests {
+    @Test("a coverage row for the day, or a cached sample for the session; nothing else")
+    func evidenceTable() throws {
+        let db = try AppDatabase.inMemory(deviceId: "d")
+        try db.writer.write { conn in
+            for id in ["none", "covered", "sampled", "empty"] {
+                try WorkoutSession(id: id, userId: "u1", dayKey: "cb_b",
+                                   date: id == "covered" ? "2026-09-21" : "2026-09-20", startedAt: Date()).insert(conn)
+            }
+            try conn.execute(sql: "INSERT INTO session_telemetry (session_id, samples_json, segments_json, source, fetched_at) VALUES (?, ?, ?, 'health', ?)",
+                             arguments: ["sampled", Data(#"[{"at":1,"bpm":120}]"#.utf8), Data("[]".utf8), Date()])
+            try conn.execute(sql: "INSERT INTO session_telemetry (session_id, samples_json, segments_json, source, fetched_at) VALUES (?, ?, ?, 'health', ?)",
+                             arguments: ["empty", Data("[]".utf8), Data("[]".utf8), Date()])
+        }
+        try db.writeWristCoverage(userId: "u1", date: "2026-09-21", offWristMin: 12)
+        #expect(try db.hasWristEvidence(sessionId: "none", userId: "u1", date: "2026-09-20") == false)
+        #expect(try db.hasWristEvidence(sessionId: "covered", userId: "u1", date: "2026-09-21") == true)
+        #expect(try db.hasWristEvidence(sessionId: "sampled", userId: "u1", date: "2026-09-20") == true)
+        #expect(try db.hasWristEvidence(sessionId: "empty", userId: "u1", date: "2026-09-20") == false, "an empty series is not a watch")
+        #expect(try db.hasWristEvidence(sessionId: "covered", userId: "u2", date: "2026-09-21") == false, "another account's coverage")
+    }
+}

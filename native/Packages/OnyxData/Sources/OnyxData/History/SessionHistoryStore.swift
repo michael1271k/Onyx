@@ -502,6 +502,24 @@ public extension AppDatabase {
         }
     }
 
+    /// Whether anything on a WRIST saw this session (Precision A5): a
+    /// `wrist_coverage` row for its day, or at least one heart-rate sample in
+    /// its telemetry cache.
+    ///
+    /// The finish sheet's heart-rate and calorie cells are asked only when
+    /// this — or a live bpm, or a measured figure already on the row — says a
+    /// watch was there. Without one they used to open on the LAST session's
+    /// numbers, which is a watch reading for a workout no watch recorded.
+    func hasWristEvidence(sessionId: String, userId: String, date: String) throws -> Bool {
+        try read { db in
+            try Bool.fetchOne(db, sql: """
+                SELECT EXISTS(SELECT 1 FROM wrist_coverage WHERE user_id = ? AND date = ?)
+                    OR EXISTS(SELECT 1 FROM session_telemetry
+                              WHERE session_id = ? AND samples_json IS NOT NULL AND length(samples_json) > 2)
+                """, arguments: [userId, date, sessionId]) ?? false
+        }
+    }
+
     /// The catalogue as the library lists it: archived movements gone
     /// (Precision A1). A row whose `archived_at` never reached this device
     /// reads as live, which is what it was the last time anything said.

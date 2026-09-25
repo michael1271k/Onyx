@@ -418,6 +418,10 @@ struct LiveLoggerView: View {
         // face-down on a bench when it happens.
         .sensoryFeedback(.success, trigger: restExpiries)
         .onChange(of: model.phase) { _, next in storedPhase = next.rawValue }
+        // Latched for the finish sheet's heart-rate guard (Precision A5).
+        .onChange(of: environment?.watchBridge.liveBpm) { _, bpm in
+            if bpm != nil { model.wristBpmSeen = true }
+        }
     }
 
     private func stack(page: CGFloat) -> some View {

@@ -58,7 +58,12 @@ extension LoggerModel {
         // live record through `toggleDone`, which is the real engine.
         model.fill("Seated Cable Row (Wide Grip)", [(42.5, 12, 9), (42.5, 10, 10)])
         model.fill("Single Arm Cable Crossover", [(7.5, 15, 8)])
-        if resting, let next = model.currentSet?.exercise { model.startRest(for: next) }
+        // On the next LIFT: since the treadmill opener joined the deck,
+        // `currentSet` is the unticked bout, whose rest is 0 s — so this
+        // "resting" fixture had not rested since W2 (Precision A4 shot review).
+        if resting, let next = model.exercises.first(where: { card in
+            !card.rows.contains(where: \.isCardio) && card.rows.contains { !$0.isDone }
+        }) { model.startRest(for: next) }
         return model
     }
 
