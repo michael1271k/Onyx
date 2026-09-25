@@ -44,6 +44,45 @@ _Nothing yet._
 
 ---
 
+## [9.4.0] — 2026-09-25 · Programs you write on the phone, and goals that set your targets
+
+Precision sprint, Lane E. Train can now hold more than one program, and a
+program can carry a goal whose numbers become your daily targets. **Server:
+paste `docs/sql/precision-e-programs.sql` BEFORE installing** — it adds
+`plans.goal_kind`, `plans.goal_target` and `routines.notes`; a goal set on a
+build installed before the paste is lost on the next sync.
+
+### iPhone app
+- **Programs in Train.** A new card under today's plan names the program you
+  are running and the next day it deals ("Next · Upper B · Thu"), and opens
+  **Programs**: every program you have, the running one checked, a goal chip
+  on each. Start one from the Onyx-5, Onyx-4 or Push/Pull/Legs template, or a
+  blank one; swipe to **Run** it or delete it. Deleting is refused for the
+  running program and for one whose weeks hold logged sessions, with the
+  reason shown. Settings → Routines opens the same screen.
+- **The program editor.** Name, goal, "Run this program", then its days —
+  add, duplicate, reorder, delete, weekday — and each day's movements with
+  sets, sets on a cut, rest (now m:ss in 15-second steps), reps and starting
+  load, plus a note per day. A new program starts from the running program's
+  targets and weekly volume, so running it never zeroes your calories.
+- **Goal setup, three screens.** From a program or Settings → Goal: pick Bulk,
+  Cut, Recomp, Muscle mass or Body fat %; your latest weigh-in is filled in
+  (weight, body fat, muscle mass, BMR) and a target plus a number of weeks
+  gives the weekly pace, drawn against a safe band ("Inside the safe pace",
+  or faster/slower and what to change); then the daily calories and macros —
+  from your bodyweight (27/33/37 kcal per kg; recomp at maintenance with high
+  protein), or the program's own numbers when it has them — editable before
+  you save. It suggests a template for the goal (Onyx-5 to build, Onyx-4 to
+  cut, Push/Pull/Legs to recomp) that can fill an empty program or become a
+  new one. Saving on the running program applies the targets at once. No sex
+  or age is asked.
+
+### Data
+- `plans.goal_kind` / `goal_target`, `routines.notes` (nullable; local
+  migration `v40.programGoals`); one plan-creation path shared with onboarding.
+
+---
+
 ## [9.3.0] — 2026-09-25 · The wrist: six petals, a heart between workouts, details one tap away
 
 Precision sprint, Lane D (Watch). Plan and wave record: `docs/Plan-Onyx-Precision.md`.
