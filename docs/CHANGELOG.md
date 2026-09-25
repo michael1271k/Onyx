@@ -44,6 +44,53 @@ _Nothing yet._
 
 ---
 
+## [9.2.0] — 2026-09-25 · The logger: a shelf of muscles, the real treadmill, one type size, a timer rail
+
+Precision sprint, Lane A. Everything here is the live logger and its Finish
+sheet. Server: paste `docs/sql/precision-a-exercises.sql` (optional — the app
+creates the same fifteen movements under the same ids on its own).
+
+### iPhone app
+- **Add a movement is a Muscle Shelf.** The picker files every movement under
+  the atlas muscle it trains first (Chest, Front/Side/Rear delts, Lats, Upper
+  and Lower back, Biceps, Triceps, Forearms, Abs/core, Obliques, Quads,
+  Hamstrings, Glutes, Adductors, Calves) plus Cardio and Other, with a sticky
+  muscle bar that jumps to a shelf. **Recent** and **On this day** are pinned
+  on top; each row shows a small body with its muscle lit, primary and
+  assisting muscle chips, and what you last lifted (or "New"). Search matches
+  muscles as well as names. It opens in 64 ms over 200 movements.
+- **Fifteen movements the library lacked** — squat, deadlift, pull-up,
+  chin-up, bent-over row, dumbbell row, dips, Bulgarian split squat, walking
+  lunge, reverse fly, push-up, shrug, front squat, skull crusher, Arnold press
+  — now exist and credit the right muscles.
+- **The treadmill card repeats your last treadmill walk**, at its real length,
+  distance and incline — never a pro-rated outdoor walk ("1 km / 10 min" is
+  gone). A walk logged inside a workout is saved as cardio when you finish, so
+  it becomes next time's warm-up; if the watch already imported that walk, the
+  workout adopts it instead of adding a copy.
+- **One number size per column.** Loads never shrink on their own (18.75 and
+  20 are the same size), reps use the same face, and when an effort word does
+  not fit the whole column shows numbers instead.
+- **Timer Rail.** A 44 pt bar under the workout holds the elapsed time, the
+  rest countdown with −15/+15 and its progress bar, and pause. Hold the
+  elapsed time for a set stopwatch with laps. Tapping the big clock now only
+  corrects when the session started.
+- **Cut the Stone.** Rating the session is a stone slab with a vein of light
+  that cuts further in from Easy to Everything — tap or slide.
+- **Heart rate and calories are only asked when a watch was there.** No more
+  last session's numbers pre-filled on a phone-only workout; "Add from last
+  time" is one tap if you want them.
+- **Unticked sets stay in your plan.** Finishing with 2 of 4 sets ticked keeps
+  all four in the routine, with the two you did at their new loads; the Finish
+  sheet says how many were left. The manual "Ghost" set type is gone.
+
+### Fixed
+- The Finish button's label is dark on its light gradient (it was ~2:1).
+- At the largest non-accessibility text size on a 375 pt phone the exercise
+  card's header no longer pushes the card off the screen.
+
+---
+
 ## [9.1.0] — 2026-09-25 · The first screen is the answer: summary, tickets, Body, the stone's light, a share that opens
 
 Precision sprint, Lane B (Faces). Plan and wave record: `docs/Plan-Onyx-Precision.md`.
