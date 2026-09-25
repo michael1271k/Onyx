@@ -46,31 +46,85 @@ export const TARGETS = [
 /**
  * Pull the literal arrays out of the TypeScript without importing it.
  *
- * Three shapes, and they are distinguished by their KEYS, not by their order in
- * the file:
+ * Five arrays, and each regex runs over ITS OWN array only:
  *
  *   · BASE_SHAPES   — bare string literals, one per line
- *   · MUSCLE_PATHS  — `{ muscle: …, view: …, d: … }`
- *   · DETAIL_SHAPES — `{ view: …, d: … }`, no muscle
+ *   · MUSCLE_PATHS  — `{ muscle: …, view: …, d: …, fibre: [dx, dy] }`
+ *   · DETAIL_SHAPES — `{ view: …, d: … }`, stroked
+ *   · TENDON_SHAPES — `{ view: …, d: … }`, filled, closed (Precision F1)
+ *   · BONE_SHAPES   — `{ view: …, d: … }`, filled, closed (Precision F1)
  *
- * The detail regex cannot match a muscle path (a muscle path opens with
- * `muscle:`), and the base regex cannot match either object form (both open
- * with `{`). That is what keeps the face out of the silhouette: swept into
- * `base`, the eyes and the linea alba would be FILLED as body mass on the
- * widget, which is a body with a hole in it rather than a body with a face.
+ * ── WHY BY ARRAY AND NOT BY KEY (Precision F1) ──────────────────────────────
+ * This used to tell the arrays apart by their keys over the whole file, which
+ * held while `{ view, d }` meant only DETAIL. Three arrays share that shape
+ * now, and a whole-file match would stroke every tendon as a hairline and fill
+ * none — or, worse, fill the linea alba's open DETAIL line as a wedge. Scoping
+ * is also what keeps the face out of the silhouette: swept into `base`, the
+ * eyes would be FILLED as body mass.
+ *
+ * Every array must parse ENTIRELY: an entry the regex skips (a typo, a missing
+ * `fibre`) throws rather than emitting a body with a hole in it.
  */
 export function readAtlas(ts) {
-  const base = [...ts.matchAll(/^\s*'(M[^']+)',\s*$/gm)].map((m) => m[1])
-  const paths = [...ts.matchAll(/\{\s*muscle:\s*'([^']+)',\s*view:\s*'(front|back)',\s*d:\s*'([^']+)'\s*\}/g)]
-    .map((m) => ({ muscle: m[1], view: m[2], d: m[3] }))
-  const detail = [...ts.matchAll(/\{\s*view:\s*'(front|back)',\s*d:\s*'([^']+)'\s*\}/g)]
-    .map((m) => ({ view: m[1], d: m[2] }))
+  const baseSrc = section(ts, 'BASE_SHAPES')
+  const base = [...baseSrc.matchAll(/^\s*'(M[^']+)',\s*$/gm)].map((m) => m[1])
+  if (base.length !== (baseSrc.match(/^\s*'/gm) ?? []).length) {
+    throw new Error('atlas.ts: a BASE_SHAPES entry did not parse')
+  }
+  const musclesSrc = section(ts, 'MUSCLE_PATHS')
+  const paths = [...musclesSrc.matchAll(
+    /\{\s*muscle:\s*'([^']+)',\s*view:\s*'(front|back)',\s*d:\s*'([^']+)',\s*fibre:\s*\[\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*\]\s*\}/g,
+  )].map((m) => ({ muscle: m[1], view: m[2], d: m[3], fibre: [Number(m[4]), Number(m[5])] }))
   if (!paths.length) throw new Error('atlas.ts: no MUSCLE_PATHS found — did the shape change?')
-  if (!detail.length) throw new Error('atlas.ts: no DETAIL_SHAPES found — did the shape change?')
-  // BASE_SHAPES are the bare string literals; the muscle paths are matched
-  // above and must not be counted twice.
-  const muscleDs = new Set(paths.map((p) => p.d))
-  return { base: base.filter((d) => !muscleDs.has(d)), paths: withSides(paths, readMidline(ts)), detail }
+  const declared = (musclesSrc.match(/\{\s*muscle:/g) ?? []).length
+  if (paths.length !== declared) {
+    throw new Error(`atlas.ts: ${declared - paths.length} MUSCLE_PATHS entr(ies) did not parse — every path needs a fibre: [dx, dy]`)
+  }
+  for (const p of paths) {
+    if (p.fibre[0] === 0 && p.fibre[1] === 0) throw new Error(`atlas.ts: ${p.muscle} (${p.view}) has a zero fibre`)
+  }
+  const tendons = shapes(ts, 'TENDON_SHAPES', { closed: true })
+  const bones = shapes(ts, 'BONE_SHAPES', { closed: true })
+  return {
+    base,
+    paths: withSides(paths, readMidline(ts)),
+    detail: shapes(ts, 'DETAIL_SHAPES', { closed: false }),
+    tendons,
+    bones,
+  }
+}
+
+/**
+ * The source of one exported array literal: from the `[` after
+ * `export const NAME … =` to the `]` that closes it at column 0.
+ */
+export function section(ts, name) {
+  const start = ts.indexOf(`export const ${name}`)
+  if (start < 0) throw new Error(`atlas.ts: no ${name} found — did the shape change?`)
+  const open = ts.indexOf('[', ts.indexOf('=', start))
+  const close = ts.indexOf('\n]', open)
+  if (open < 0 || close < 0) throw new Error(`atlas.ts: ${name} is not an array literal`)
+  return ts.slice(open, close)
+}
+
+/**
+ * A `{ view, d }` array. `closed` shapes are FILLED by the renderer, so each
+ * must end in `Z`: SwiftUI closes an open path when it fills one, and an
+ * unclosed tendon would come out as a wedge across the muscle under it.
+ */
+export function shapes(ts, name, { closed }) {
+  const src = section(ts, name)
+  const out = [...src.matchAll(/\{\s*view:\s*'(front|back)',\s*d:\s*'([^']+)'\s*\}/g)]
+    .map((m) => ({ view: m[1], d: m[2] }))
+  if (!out.length) throw new Error(`atlas.ts: no ${name} found — did the shape change?`)
+  const declared = (src.match(/\{\s*view:/g) ?? []).length
+  if (out.length !== declared) throw new Error(`atlas.ts: ${declared - out.length} ${name} entr(ies) did not parse`)
+  if (closed) {
+    for (const s of out) {
+      if (!/Z\s*$/.test(s.d)) throw new Error(`atlas.ts: ${name} entry "${s.d}" is not closed — a filled shape must end in Z`)
+    }
+  }
+  return out
 }
 
 /**
@@ -189,9 +243,10 @@ export function swiftPath(d) {
 }
 
 export function generate(ts) {
-  const { base, paths, detail } = readAtlas(ts)
+  const { base, paths, detail, tendons, bones } = readAtlas(ts)
   const entry = (p) => [
-    '  OnyxAtlasPath(muscle: "' + p.muscle + '", view: .' + p.view + ', side: .' + p.side + ') { rect, p in',
+    '  OnyxAtlasPath(muscle: "' + p.muscle + '", view: .' + p.view + ', side: .' + p.side +
+      ', fibre: CGVector(dx: ' + p.fibre[0] + ', dy: ' + p.fibre[1] + ')) { rect, p in',
     swiftPath(p.d).split('\n').map((l) => '  ' + l).join('\n'),
     '  },',
   ].join('\n')
@@ -221,7 +276,11 @@ public enum OnyxAtlasView: String, Sendable {
   case front, back
 }
 
-/// A definition line — stroked, never filled, never tinted, never a hit target.
+/// A shape outside the muscle layer — never tinted, never a hit target.
+///
+/// Three lists carry it: \`detail\` (definition lines, STROKED only) and, for
+/// the écorché material (Precision F1), \`tendons\` and \`bones\` (closed,
+/// FILLED — the generator refuses an open one).
 ///
 /// Sendable, and so are the closures. These are pure geometry: they capture
 /// nothing and mutate nothing outside the Path handed to them. The native app
@@ -232,7 +291,7 @@ public enum OnyxAtlasView: String, Sendable {
 ///
 /// Several of these are OPEN paths (a brow, the linea alba). SwiftUI closes an
 /// open path implicitly when it fills one, so filling this layer would turn
-/// every line into a wedge. \`OnyxAtlasFigure\` strokes it and only strokes it.
+/// every line into a wedge. The painters stroke \`detail\` and only stroke it.
 public struct OnyxAtlasDetail: Sendable {
   public let view: OnyxAtlasView
   public let build: @Sendable (CGRect, inout Path) -> Void
@@ -256,14 +315,20 @@ public struct OnyxAtlasPath: Identifiable, Sendable {
   /// of a muscle a view does not draw as a mirrored pair, so a muscle is never
   /// half lateralised.
   public let side: BodySide
+  /// The fibre AXIS in viewBox units (x right, y down) — \`fibre\` in
+  /// atlas.ts. The écorché material shades along it; the sign carries
+  /// nothing, the painter lights whichever end faces its light. Defaulted so
+  /// a path built by hand (a test's) needs none.
+  public let fibre: CGVector
   public let build: @Sendable (CGRect, inout Path) -> Void
 
   public var id: String { "\\(muscle)-\\(view.rawValue)-\\(String(describing: build))" }
 
-  public init(muscle: String, view: OnyxAtlasView, side: BodySide = .both, _ build: @escaping @Sendable (CGRect, inout Path) -> Void) {
+  public init(muscle: String, view: OnyxAtlasView, side: BodySide = .both, fibre: CGVector = CGVector(dx: 0, dy: 1), _ build: @escaping @Sendable (CGRect, inout Path) -> Void) {
     self.muscle = muscle
     self.view = view
     self.side = side
+    self.fibre = fibre
     self.build = build
   }
 }
@@ -284,6 +349,16 @@ ${paths.map(entry).join('\n')}
   /// Definition: the face, the six-pack seams, the erector groove, the kneecaps.
   public static let detail: [OnyxAtlasDetail] = [
 ${detail.map(detailEntry).join('\n')}
+  ]
+
+  /// Tendon — the ivory cords of the écorché (Precision F1). Closed, filled.
+  public static let tendons: [OnyxAtlasDetail] = [
+${tendons.map(detailEntry).join('\n')}
+  ]
+
+  /// Bone — the subcutaneous landmarks of the écorché (Precision F1). Closed, filled.
+  public static let bones: [OnyxAtlasDetail] = [
+${bones.map(detailEntry).join('\n')}
   ]
 
   /// One viewBox point, scaled into \`rect\` with the aspect ratio preserved.

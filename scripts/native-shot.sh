@@ -172,7 +172,9 @@ if [ "$SCREEN" = "all" ]; then
     # LANE-A
     logger-library logger-library-search logger-stopwatch finish finish-coverage
     # LANE-E
-    programs programs-editor programs-day goal-1 goal-2 goal-3)
+    programs programs-editor programs-day goal-1 goal-2 goal-3
+    # LANE-F
+    atlas-live atlas-distribution)
 fi
 
 # `widgets` is a contact sheet of every tile; the harness pages it because a
