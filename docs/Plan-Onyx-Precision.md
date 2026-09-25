@@ -399,3 +399,41 @@ Branch `onyx/precision-b` (5 feature commits, 2 fix commits, DESIGN.md), merged 
 
 ### Cache purge
 `du` before: `onyx-swift` 78 G, shots 115 M, DerivedData 4.9 G, `org.swift.swiftpm` 294 M. Removed `lane-b*` and the closed Overhaul sprint's `lane-w0*`/`lane-w5*`/`lane-w6*`, the scratch shots and share files, the SwiftPM cache. After: `onyx-swift` 24 G. **Freed 54.72 GB**, plus the lane's simulator (`iPhone 15 (lane B)`, 4.5 GB) — **59.2 GB in all**. Deviation: `lane-a*`, `lane-c*` and the shared `OnyxCore`/`OnyxData`/`OnyxUI-*`/`check-watch`/`ui-test-derived` caches were NOT wiped — Lanes A and C are building in them right now, and a wiped derived-data directory mid-build installs a stale app (memory `concurrent-waves-shared-checkout`).
+
+---
+
+## Wave record — Lane A (Logger) · Opus 5.5 · **9.2.0**
+
+Merged `bf9d2dc9` (branch `onyx/precision-a`, 4 commits, rebased over Lane B's 9.1.0), version `b050ccef`, graph `9733de63`. Branch and worktree deleted.
+
+### Built
+- **A1 Muscle Shelf.** `ExercisePickerSheet` rewritten: shelves = `LandmarkMuscle` in the founder's order + Obliques + Cardio + Other (a movement sits once, on its first primary mover; stored `primary_muscle` places what the name cannot), sticky capsule bar (`scrollTo` a header, 32 pt capsule in a 44 pt target, AX-capped), pinned **Recent** (last 10 distinct, newest first, minus the deck) and **On this day** (day plan minus the deck; plan names with no catalogue row still listed). Row = 28×52 app `AtlasFigure` (thumbnail, muscle lit in its fixed ink, back view for back muscles) · name (2 lines) · primary filled / secondary outlined chips (AX1 cap) · last-time line (`SetFormat` + date, "New", none for bouts, none when not looked up). Search matches names and muscle words; the create row sits under matches. `LoggerModel.library()` = catalogue (archived filtered) + ONE ledger read (`libraryHistory`) — **64 ms** over 200 movements × 3,000 sets (was 92–120 ms with two reads). `appendCard`/`seedRows`/`seededPrevious` gate on a HISTORY seed entry. **MuscleMap +15** (goldens `muscle-map-dict`, `muscle-dict` hand-extended; 2 lookup + 17 flag vectors that were unknown now resolve; `reverse+fly` sits above the flies, `arnold+press` above `shoulder+press` to win their ties) — invariant auditor: clean. `docs/sql/precision-a-exercises.sql` + `StarterMovements` share `md5(lower(user_id)||':'||name)::uuid` ids, so SQL-first and app-first land on one row; the app creates them only over a pulled catalogue.
+- **A2 Treadmill truth.** `lastCardioBout(userId:kind:)`; `LoggerModel.lastBout` = newest of the last `treadmill` `cardio_logs` row and the last in-deck bout (`lastLoggedBout(named: "Treadmill")`), because the live account has **zero** treadmill rows (all HK outdoor walks — the "1 km / 10 min" was a 24-min walk cut to 600 s). `WarmupCardio.maxSeconds` 600 → 10,800 (sanity ceiling). `recordSessionCardio` files the session's bouts in `cardio_logs` once after `closeSession`, and **adopts** an unfiled same-day same-activity row within the 5-min window instead of inserting (a watch walk imported before Finish).
+- **A3 Set-row type.** `NumericField` has no `minimumScaleFactor`; load and reps share body/semibold/rounded; `SetColumn.weightFloor(_:)` = measured width of `188.75` in that face per Dynamic Type size (cached, `UIFont`), reps floor from `20` (never under 32). Last line, rest chip, effort word: `ViewThatFits`; the effort column chooses words or numbers for the whole card at once. Card header falls back line → line without tags → two-line stack (xxxLarge @375 pushed the card off-screen).
+- **A4 Timer Rail.** `TimerRail.swift` in the deck's bottom `safeAreaInset` (live decks only): elapsed (`Text(style: .timer)`), rest −15 / countdown / +15 with the progress bar moved off the card (the resting card keeps its own control, per brief), pause; long-press elapsed → inline stopwatch with lap capsules (state stays `LiveLoggerView`'s). `TimerSheet` = one "Started" compact picker, 220 pt detent (`.large` at AX). New **`OnyxAppUITests`** target (in the Onyx scheme): elapsed advances by the wall time ±1.5 s across a 10 s wait — passes.
+- **A5 Cut the Stone.** `EffortSlab.swift` replaces the dial: Stone slab, tapering vein (`OnyxInk.Fixed.veinCore` EDEBF5 / `veinEdge` A79FD6, added beside `effortVeryHard` — Lane F: adopt, don't duplicate) 12 % → 100 %, tap or sideways drag over equal fifths, selection haptic, no growth animation under Reduce Motion; slab ≥ 76 pt, grows with its text. HR/kcal cells only with wrist evidence (`hasWristEvidence`: `wrist_coverage` row for the day or a cached HR sample; or a live bpm latched during the session; or a measured/stored figure) or the explicit "Add heart rate and calories from last time"; no more silent prefill. **Finish content 689 pt at default = 0.81 of the 852 pt screen** (target ≤ 0.8; the slab took ~130 pt off; the rest is the trail/intensity/heaviest sections). Finish button text → dark ink (was ~2:1).
+- **A6 Ghost-UI.** Ghost left `SetOptionsSheet` (enum kept). `RoutineOrder.patch` merges logged rows into the template's sets by index (warm-ups and working separately), keeps unticked planned rows at their last load, never shrinks, leaves cardio entries alone. Finish: "N sets left unticked · kept in your plan" = `plannedSets − completedSets`. Seam comment on `physicalSets/workingSets` → `SessionCounts`.
+
+### Verification
+- Gates on the rebased tree: `npm run check` ✓ (incl. `swift:ui`, `check:watch`), `swift:core` 769 ✓, `swift:data` 817 ✓ (SeamBenchmark flake failed once, passed on rerun), `check:swift` ✓. OnyxTests 230: failing names = the 9 app-side baseline names exactly (`A capsule counts its week…`, `Week 0 is the week the block opened on`, `a credible previous session still gets its delta`, `a previous session's impossible clock…`, `a treadmill logged on this phone is titled Treadmill…`, `finishing a session leaves the tab on .done…`, `ready to progress fires only after the ceiling is cleared twice`, `the ledger rows are this session's sets…`, `the seeded previous session reaches TopLifts.previousBests`); UI test ✓.
+- Agents: invariant-auditor (OnyxCore) clean; code-reviewer 1 high / 4 medium / 7 low — high + all mediums in-lane fixed, lows fixed where cheap; ui-ux-designer top 10 — 6 fixed.
+- Shots: A1 two rounds (Slate/Clay/Iris, AX5, 375 pt), A3 (393 + 375 pt at default, xxxLarge, AX5), A4/A5 two rounds + one review-confirm round.
+
+### Requests for other lanes / W-final
+1. Seam 1: point `physicalSets/workingSets` at `SessionCounts`.
+2. Move `recordSessionCardio` into `AppDatabase.closeSession` (Lane C's file): a watch-closed session never files its bout, and later edits never refresh the filed row.
+3. `PostgRESTRemote.exerciseCatalogue` selects only `id,name,slug` — add `archived_at` so the library's archived filter bites.
+4. Lane F: `AtlasFigure(side:worked:isThumbnail:)` now also draws the 28 pt shelf rows; vein tokens above.
+5. Founder: paste `docs/sql/precision-a-exercises.sql` (optional); confirm `cardio_logs.kind` accepts `treadmill` (no SQL access here to read the CHECK).
+
+### Open calls
+- xxxLarge on a 375 pt phone: the set row's fixed minimums still exceed the card (pre-existing; default and AX fit) — needs width-based stacking.
+- AX5 rail: elapsed ellipsises (the hero shows it at full size); rest never truncates.
+- The effort column reads numbers on a 375 pt phone at default size (words from 393 pt).
+- Two rest controls while resting (rail + resting card), as briefed; the UX critique would delete the card's.
+- `RoutineOrder.merge` matches pairs by flat index (a one-sided tick shifts later sides) — ponytail; the mint path does not pad to the planned count.
+- `recordSessionCardio.cardioKind` is a word match ("Farmer's Walk" would file as a walk if it ever carried a duration).
+- `@ScaledMetric` fallback for the floor skipped — the `UIFont` measurement is always available.
+
+### Cache purge
+Before: `onyx-swift` 30 G (Lane A: 8.38 G), shots 5.4 M, SE sim 2.93 G. Removed `lane-a*`, the shots, the lane's `iPhone SE (lane A)` simulator. **Freed 11.31 GB.** Deviation: shared `OnyxCore`/`OnyxData`/`OnyxUI-*`/`check-watch`/`ui-test-derived`, DerivedData and the SwiftPM cache were left — Lanes C and D are building in them.
