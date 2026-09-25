@@ -855,7 +855,9 @@ struct SessionDetailView: View {
         }
         let entries = SetTags.composition(counts)
         guard !entries.isEmpty else { return nil }
-        return Sub(entries.map { "\($0.count) \($0.full.lowercased())" }.joined(separator: " · "), Color.onyx.textTertiary)
+        // "Working" leads (Q10): the secondary figure, then what the rest were.
+        let parts = ["\(report.sets) working"] + entries.map { "\($0.count) \($0.full.lowercased())" }
+        return Sub(parts.joined(separator: " · "), Color.onyx.textTertiary)
     }
 
     /// Where the calorie figure came from — and it is the sub-line, not a

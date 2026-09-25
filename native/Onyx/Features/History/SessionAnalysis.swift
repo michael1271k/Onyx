@@ -676,17 +676,10 @@ enum SessionAnalysis {
         return units.filter { $0.allSatisfy { $0 >= ceiling } }.count
     }
 
-    /// Ghosts excluded, a pair once.
+    /// Ghosts excluded, a pair once — `SessionCounts.total`, the "Sets" rule
+    /// `set_count` is written by (Q10).
     static func physicalSets(_ sets: [HistorySetRow]) -> Int {
-        var seen = Set<String>()
-        var n = 0
-        for s in sets where s.setType != "ghost" {
-            if let p = s.pairId, !p.isEmpty {
-                if !seen.insert(p).inserted { continue }
-            }
-            n += 1
-        }
-        return n
+        SessionCounts.total(sets.map(volumeSet))
     }
 
     /// The landmarks a session was FOR, ranked — raw working sets, tonnage
@@ -757,6 +750,17 @@ enum SessionAnalysis {
     static func volumeSet(_ r: HistorySetRow) -> VolumeSet {
         VolumeSet(weightKg: r.weightKg, reps: Double(r.reps), side: r.lr, pairId: r.pairId, setType: r.setType,
                   bodyweight: Bodyweight.isBodyweight(r.exerciseName))
+    }
+
+    /// One session's tonnage the way `closeSession` stores it (Q13): warm-ups
+    /// out, an unloaded bodyweight set weighing the athlete's latest weigh-in
+    /// on or before `date` (`SessionEditing.bodyWeightKg`). The Train and Body
+    /// readers go through here so a ticket never weighs a session lighter than
+    /// its own summary.
+    nonisolated static func tonnageKg(_ rows: [HistorySetRow], database: AppDatabase, on date: String) -> Double {
+        let userId = database.localUserId()
+        let bodyWeightKg = try? database.read { try SessionEditing.bodyWeightKg($0, userId: userId, on: date) }
+        return SessionVolume.sessionVolumeKg(rows.map(volumeSet), bodyWeightKg: bodyWeightKg ?? nil)
     }
 
     /// "Legs A" for a day key, the key itself tidied when the program does not

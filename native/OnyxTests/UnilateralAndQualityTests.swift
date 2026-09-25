@@ -124,7 +124,7 @@ struct UnilateralAndQualityTests {
         row.weightKg = 60
         row.reps = 10
         model.toggleDone(row, in: exercise)
-        let before = exercise.volumeKg
+        let before = exercise.volumeKg()
 
         model.splitSet(row, in: exercise)
 
@@ -139,7 +139,7 @@ struct UnilateralAndQualityTests {
         // The two sides are one set at the weaker side, so a set that was
         // 600 kg whole is 600 kg split. If this ever reads 1200 the pair has
         // stopped collapsing and every chart downstream is wrong.
-        #expect(exercise.volumeKg == before)
+        #expect(exercise.volumeKg() == before)
         #expect(exercise.workingSets == 1)
     }
 
@@ -165,7 +165,7 @@ struct UnilateralAndQualityTests {
         sides[0].rpe = 9.5
         sides[1].rpe = 8
         for side in sides { model.toggleDone(side, in: exercise) }
-        let split = exercise.volumeKg
+        let split = exercise.volumeKg()
 
         model.mergeSet(pairId: pairId, in: exercise)
 
@@ -176,7 +176,7 @@ struct UnilateralAndQualityTests {
         #expect(merged?.side == nil)
         // 18 × 9 either way: the pair was already scored at its weaker side, so
         // un-splitting cannot change what the session weighed.
-        #expect(exercise.volumeKg == split)
+        #expect(exercise.volumeKg() == split)
     }
 
     @Test("a set already split is not split again")

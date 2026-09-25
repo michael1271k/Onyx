@@ -17,9 +17,10 @@ import OnyxCore
 // number nobody asked for (the same rule `sleepDebt` states).
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// The ring's geometry, local to the phone (seam 5): W-final may swap it for
-/// Lane D's six-petal `WatchGlance` if the two agree; a phone and a wrist have
-/// different room, so both may stay.
+/// The ring's geometry on the phone (seam 5). The petal ANGLES are the wrist's
+/// (`WatchGlance.angles`) — one flower, read in one order on both devices; the
+/// SIZES stay the phone's, because a 393 pt screen and a 40 mm case have
+/// different room and the wrist fits its own to the page.
 enum BodyRingLayout {
     /// The readiness ring's diameter.
     static let ring: CGFloat = 200
@@ -40,7 +41,7 @@ enum BodyRingLayout {
     /// Six petals evenly spaced, 60° apart, none on the horizontal axis —
     /// three over the ring, three under it. Degrees, screen space (y down):
     /// top-left, top, top-right, then bottom-left, bottom, bottom-right.
-    static let angles: [Double] = [-150, -90, -30, 150, 90, 30]
+    static let angles: [Double] = WatchGlance.angles
 
     /// A petal's centre as an offset from the ring's centre.
     nonisolated static func offset(_ index: Int) -> CGSize {

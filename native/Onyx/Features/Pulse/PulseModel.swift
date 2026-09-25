@@ -322,7 +322,7 @@ final class DayModel {
         let dayKey: String?
         /// "Legs & Core A", or nil for a session logged without a day key.
         let label: String?
-        /// Working sets, a unilateral pair counted once.
+        /// "Sets" — `SessionCounts.total`: warm-ups and bouts in, a pair once.
         let sets: Int
         let tonnageKg: Double
         let durationMin: Double?
@@ -476,16 +476,14 @@ final class DayModel {
             .filter { $0.date == to && $0.endedAt != nil }
             .map { session -> WorkoutSummary in
                 let rows = (try? database.historySets(sessionId: session.id, userId: userId)) ?? []
-                // WORKING sets for the COUNT, every non-ghost row for the
-                // TONNAGE — `SessionTonnage.kg` states why, and it is the same
-                // split `SessionAnalysis.summaries` and `closeSession` make.
-                let working = rows.filter { SetTags.isWorkingSet($0.setType) }
+                // "Sets" and tonnage by the rules `closeSession` stores them by
+                // (Q10, Q13) — the same two the Train ticket reads.
                 return WorkoutSummary(
                     id: session.id,
                     dayKey: session.dayKey,
                     label: SessionAnalysis.dayLabel(session.dayKey, in: program),
-                    sets: SessionDetail.toRows(working.map(SessionAnalysis.detailSet)).filter { $0.num != nil }.count,
-                    tonnageKg: SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet)),
+                    sets: SessionCounts.total(rows.map(SessionAnalysis.volumeSet)),
+                    tonnageKg: SessionAnalysis.tonnageKg(rows, database: database, on: session.date),
                     durationMin: session.durationMin,
                     muscles: Self.focus(rows)
                 )
