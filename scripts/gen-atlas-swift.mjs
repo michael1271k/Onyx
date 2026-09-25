@@ -76,7 +76,7 @@ export function readAtlas(ts) {
     /\{\s*muscle:\s*'([^']+)',\s*view:\s*'(front|back)',\s*d:\s*'([^']+)',\s*fibre:\s*\[\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*\]\s*\}/g,
   )].map((m) => ({ muscle: m[1], view: m[2], d: m[3], fibre: [Number(m[4]), Number(m[5])] }))
   if (!paths.length) throw new Error('atlas.ts: no MUSCLE_PATHS found — did the shape change?')
-  const declared = (musclesSrc.match(/\{\s*muscle:/g) ?? []).length
+  const declared = (musclesSrc.match(/^\s*\{/gm) ?? []).length
   if (paths.length !== declared) {
     throw new Error(`atlas.ts: ${declared - paths.length} MUSCLE_PATHS entr(ies) did not parse — every path needs a fibre: [dx, dy]`)
   }
@@ -104,7 +104,11 @@ export function section(ts, name) {
   const open = ts.indexOf('[', ts.indexOf('=', start))
   const close = ts.indexOf('\n]', open)
   if (open < 0 || close < 0) throw new Error(`atlas.ts: ${name} is not an array literal`)
-  return ts.slice(open, close)
+  const body = ts.slice(open, close)
+  // An indented closing bracket would let this run on into the next array
+  // and swallow its entries with every count still agreeing.
+  if (body.includes('export const')) throw new Error(`atlas.ts: ${name} does not close with a column-0 ]`)
+  return body
 }
 
 /**
@@ -117,7 +121,7 @@ export function shapes(ts, name, { closed }) {
   const out = [...src.matchAll(/\{\s*view:\s*'(front|back)',\s*d:\s*'([^']+)'\s*\}/g)]
     .map((m) => ({ view: m[1], d: m[2] }))
   if (!out.length) throw new Error(`atlas.ts: no ${name} found — did the shape change?`)
-  const declared = (src.match(/\{\s*view:/g) ?? []).length
+  const declared = (src.match(/^\s*\{/gm) ?? []).length
   if (out.length !== declared) throw new Error(`atlas.ts: ${declared - out.length} ${name} entr(ies) did not parse`)
   if (closed) {
     for (const s of out) {
@@ -267,8 +271,9 @@ export function generate(ts) {
 // whatever rect the shape is given, preserving aspect ratio and centring.
 //
 // Public: this lives in OnyxUI and is drawn by the app's \`AtlasFigure\` and
-// the tiles' \`OnyxAtlasFigure\` alike. Geometry only — how a body is TINTED
-// is each figure's own decision.
+// the tiles' \`OnyxAtlasFigure\` alike, both through \`AtlasPainter\`
+// (AtlasMaterial.swift). Geometry only — how a body is LIT is the painter's
+// decision, and WHAT is lit is each figure's.
 import SwiftUI
 import OnyxCore
 

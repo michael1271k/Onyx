@@ -31,8 +31,10 @@ struct AtlasFigure: View {
     /// silently deleted the §6.7 shadow from a 170 pt figure. They are separate
     /// questions now — `isThumbnail` asks the second one.
     var monochromeTint: Color?
-    /// A 44 pt figure in a tile: no drop shadow, because a 10 pt blur is
-    /// invisible at that size and costs an offscreen pass per tile.
+    /// A 44 pt figure in a tile: LITE — no drop shadow (flat) and no glow or
+    /// sheen (écorché), because a 10 pt blur is invisible at that size and
+    /// costs an offscreen pass per tile. With `monochromeTint` it also picks
+    /// the flat material (`AtlasMaterial.figure`).
     var isThumbnail = false
     /// An explicit colour per muscle AND SIDE, overriding both the family hue
     /// and the monochrome tint. The DOMS body needs this: soreness is a

@@ -9,8 +9,9 @@
 // whatever rect the shape is given, preserving aspect ratio and centring.
 //
 // Public: this lives in OnyxUI and is drawn by the app's `AtlasFigure` and
-// the tiles' `OnyxAtlasFigure` alike. Geometry only — how a body is TINTED
-// is each figure's own decision.
+// the tiles' `OnyxAtlasFigure` alike, both through `AtlasPainter`
+// (AtlasMaterial.swift). Geometry only — how a body is LIT is the painter's
+// decision, and WHAT is lit is each figure's.
 import SwiftUI
 import OnyxCore
 

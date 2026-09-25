@@ -237,10 +237,13 @@ struct AtlasSheet: View {
     /// gesture, and the drop shows. Both are drawn all the way through and the
     /// hidden one costs a composite.
     private var stage: some View {
-        ZStack {
+        // Built once per body evaluation, not once per face: a drag
+        // re-evaluates this on every frame.
+        let worked = worked, spoken = spoken
+        return ZStack {
             ground
-            face(.front, at: angle)
-            face(.back, at: angle + 180)
+            face(.front, at: angle, worked: worked, spoken: spoken)
+            face(.back, at: angle + 180, worked: worked, spoken: spoken)
         }
         .frame(height: figureHeight)
         .frame(maxWidth: .infinity)
@@ -296,7 +299,7 @@ struct AtlasSheet: View {
     @ScaledMetric(relativeTo: .title) private var figureSize: CGFloat = 300
     private var figureHeight: CGFloat { min(figureSize, 380) }
 
-    private func face(_ side: AtlasFigure.Side, at degrees: Double) -> some View {
+    private func face(_ side: AtlasFigure.Side, at degrees: Double, worked: [LandmarkMuscle: Double], spoken: [MuscleSide: String]) -> some View {
         AtlasFace(
             side: side,
             worked: worked,
@@ -530,7 +533,9 @@ struct AtlasSheet: View {
 /// the turn is `rotation3DEffect`, a transform. The écorché made that paint a
 /// glow layer and a sheen per muscle, so the sheet now compares what the face
 /// draws and skips the repaint. `onPick` is left out of the comparison: it
-/// only reaches the sheet's `@State`, which a kept closure reaches too.
+/// writes the sheet's `@State` (whose storage a kept closure shares) and reads
+/// `sets` — and `spoken` carries each muscle's set text, so a change to
+/// `sets` changes equality and the closure is replaced with it.
 private struct AtlasFace: View, Equatable {
     let side: AtlasFigure.Side
     let worked: [LandmarkMuscle: Double]

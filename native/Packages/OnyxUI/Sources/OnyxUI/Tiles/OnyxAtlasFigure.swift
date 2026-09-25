@@ -21,7 +21,9 @@ import OnyxCore
 // offscreen pass per muscle, and the extension's memory ceiling is the one
 // budget a widget cannot overrun. Flat (the old alpha figure) when the tile
 // cannot show colour — `monochrome`, an accented or vibrant rendering mode —
-// and in a rectangular Lock Screen accessory (`AtlasMaterial.widget`).
+// in a rectangular Lock Screen accessory, and under Reduce Transparency
+// (`AtlasMaterial.widget`); that flat is the widget's own pre-F1 figure,
+// not the app's (`AtlasPainter.Host.widget`).
 
 struct OnyxAtlasFigure: View {
   /// Which side of the body. `both` draws them side by side, sharing a scale.
@@ -35,6 +37,8 @@ struct OnyxAtlasFigure: View {
 
   @Environment(\.widgetFamily) private var family
   @Environment(\.widgetRenderingMode) private var renderingMode
+  @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
+  @Environment(\.onyxForcesReducedTransparency) private var forcedReduceTransparency
 
   var body: some View {
     switch side {
@@ -53,8 +57,10 @@ struct OnyxAtlasFigure: View {
       material: .widget(
         monochrome: monochrome,
         fullColor: renderingMode == .fullColor,
-        rectangularAccessory: family == .accessoryRectangular),
-      isLite: true)
+        rectangularAccessory: family == .accessoryRectangular,
+        reduceTransparency: systemReduceTransparency || forcedReduceTransparency),
+      isLite: true,
+      host: .widget)
     // Alpha (flat) or the flesh taken toward it (écorché) — one hue at several
     // strengths either way. A green-to-red ramp would read as a verdict, and
     // this figure passes no verdicts.

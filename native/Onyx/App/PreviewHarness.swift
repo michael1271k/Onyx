@@ -315,7 +315,13 @@ enum PreviewHarness {
         // LANE-B (Precision B3): `rt-<screen>` draws <screen> under a forced
         // Reduce Transparency — the system flag cannot be set per launch.
         let reduced = screen.hasPrefix("rt-")
-        return screenView(reduced ? String(screen.dropFirst(3)) : screen)
+        let name = reduced ? String(screen.dropFirst(3)) : screen
+        // LANE-F (Precision F1): `atlas-*` is routed HERE, not as a case of
+        // `screenView` — two more cases in that switch made its result type
+        // deep enough that the app died at launch with SIGSEGV (first only on
+        // the new branches, then on every screen). The switch stays exactly
+        // as it was; its type is erased once, at the top.
+        return (name.hasPrefix("atlas-") ? laneFAtlas(name) : AnyView(screenView(name)))
             .environment(\.onyxForcesReducedTransparency, reduced)
             .task {
             guard ProcessInfo.processInfo.arguments.contains("--onyx-measure") else { return }
@@ -339,6 +345,31 @@ enum PreviewHarness {
                 print("ONYXMEASURE content=\(s.contentSize.height) container=\(visible)")
             }
         }
+    }
+
+    /// LANE-F's two atlas screens (routed in `view(_:)`): the two atlas call
+    /// sites no other screen frames. `atlas-distribution` is the Muscle
+    /// distribution sheet; `atlas-live` is the live-stats muscle card's
+    /// figure — 170 pt, `.both`, the Upper B fixture `logger-stats` uses —
+    /// which sits between the two places the `logger-*` shots scroll to.
+    @MainActor
+    static func laneFAtlas(_ screen: String) -> AnyView {
+        applyRequestedTheme()
+        let session = LoggerModel.previewUpperBWithHistory()
+        let content: AnyView = screen == "atlas-distribution"
+            ? AnyView(MuscleDistributionSheet(model: session.model))
+            : AnyView(ScrollView {
+                AtlasFigure(worked: MuscleCredit.worked(from: session.model.muscleSets))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 170)
+                    .padding(OnyxSpace.m)
+                    .onyxGlass(.tile)
+                    .padding(OnyxSpace.l)
+            }
+            .onyxScreen(.train))
+        return AnyView(content
+            .environment(LoggerPreviews.environment(over: session.store))
+            .preferredColorScheme(.dark))
     }
 
     @MainActor @ViewBuilder

@@ -15,9 +15,10 @@ import os
 /// drawing of a body where "this muscle, lit" is the natural state rather than
 /// a sticker on top of it.
 ///
-/// `flat` is the look that shipped before, kept for the two places the flesh
-/// cannot help: a 44 pt monochrome thumbnail (one hue at an alpha is all it can
-/// carry) and Reduce Transparency (no glow, no sheen, no layered light).
+/// `flat` is the alpha look each host shipped before (`AtlasPainter.Host`),
+/// kept where the flesh cannot help: a 44 pt monochrome thumbnail (one hue at
+/// an alpha is all it can carry), Reduce Transparency (no glow, no sheen, no
+/// layered light), and a widget the system renders without colour.
 public enum AtlasMaterial: Sendable, Equatable {
     case ecorche
     case flat
@@ -30,11 +31,16 @@ public enum AtlasMaterial: Sendable, Equatable {
     }
 
     /// A widget's `OnyxAtlasFigure`: flat when the Home Screen cannot show
-    /// colour (accented / vibrant rendering, or the caller's `monochrome`) and
-    /// in a rectangular Lock Screen accessory, where the system desaturates
-    /// everything and flesh would come out as a grey smear.
-    public static func widget(monochrome: Bool, fullColor: Bool, rectangularAccessory: Bool) -> AtlasMaterial {
-        monochrome || !fullColor || rectangularAccessory ? .flat : .ecorche
+    /// colour (accented / vibrant rendering, or the caller's `monochrome`), in
+    /// a rectangular Lock Screen accessory, and under Reduce Transparency — the
+    /// same tile is drawn inside the app (Today), where it must agree with
+    /// every `AtlasFigure` on the screen.
+    ///
+    /// `rectangularAccessory` is a guard, not a live branch today: on iOS an
+    /// accessory already renders `.vibrant`, which `fullColor` catches. It
+    /// stays so a host that ever draws one in full colour still gets flat.
+    public static func widget(monochrome: Bool, fullColor: Bool, rectangularAccessory: Bool, reduceTransparency: Bool = false) -> AtlasMaterial {
+        monochrome || !fullColor || rectangularAccessory || reduceTransparency ? .flat : .ecorche
     }
 }
 
@@ -54,8 +60,10 @@ public enum AtlasMaterial: Sendable, Equatable {
 public enum AtlasInk {
 
     /// How far toward its ink a lit muscle goes: 0.6 at full share (the
-    /// brief), 0.4875 at the 0.25 floor `setsToWorked` hands the least-worked
-    /// muscle. Share also drives the glow; the hue never moves with it.
+    /// brief), 0.45 as share → 0 (Pulse's fatigue runs continuously to 0; the
+    /// weekly focus floors at 0.15, a session at 0.25). Never lower: at 0.40
+    /// the rear-delt ink falls under 3 : 1 against the silhouette. The AMOUNT
+    /// therefore rides mostly on the lit stop and the glow, not on this.
     public static func weight(share: Double) -> Double {
         0.45 + 0.15 * min(max(share, 0), 1)
     }
@@ -74,14 +82,17 @@ public enum AtlasInk {
     }
 
     /// A lit muscle's two gradient stops. The deep stop is `active` as it
-    /// is; the lit stop is lifted a further 0.06 OKLCH L toward the light,
-    /// because 60 % of the way to the ink leaves only 40 % of the flesh's
-    /// lightness span along the fibre — a lit belly read as a flat enamel
-    /// decal beside the sculpted untrained ones (round-1 critique). Lifting
-    /// the LIT end, not darkening the deep one, keeps the ≥ 3 : 1 floor
-    /// against the silhouette where it was measured.
+    /// is; the lit stop is lifted a further 0.10 × share OKLCH L toward the
+    /// light. Two reasons, both measured: 60 % of the way to the ink leaves
+    /// only 40 % of the flesh's lightness span along the fibre, so a lit belly
+    /// read as a flat enamel decal beside the sculpted untrained ones (round-1
+    /// critique); and `weight` alone moves the deep stop only ~0.06 L across
+    /// the whole share range (review), so a hammered muscle and a touched one
+    /// looked alike. Lifting the LIT end, never darkening the deep one, keeps
+    /// the ≥ 3 : 1 floor where it was measured.
     public static func activeStops(deep: UInt32, lit: UInt32, ink: UInt32, share: Double) -> (deep: UInt32, lit: UInt32) {
-        (active(deep, ink: ink, share: share), lighter(active(lit, ink: ink, share: share), by: 0.06))
+        let amount = min(max(share, 0), 1)
+        return (active(deep, ink: ink, share: amount), lighter(active(lit, ink: ink, share: amount), by: 0.10 * amount))
     }
 
     /// An untrained muscle: the flesh darkened 35 % (brief).
@@ -163,20 +174,29 @@ public struct AtlasPainter: Sendable {
         }
     }
 
+    /// Whose `flat` look to reproduce. The app's and the widget's alpha
+    /// figures were tuned apart before the écorché (a 40 pt Home Screen body
+    /// takes a solid fill and a slightly heavier ink; the app's takes the
+    /// 145° light), and each host keeps exactly the one it shipped.
+    public enum Host: Sendable { case app, widget }
+
     public var material: AtlasMaterial
     /// The budget cut: no specular band and no glow (écorché), no drop shadow
     /// (flat). A widget's memory ceiling and a thumbnail's size both mean the
     /// offscreen passes buy nothing anyone can see.
     public var isLite: Bool
+    public var host: Host
 
-    public init(material: AtlasMaterial, isLite: Bool = false) {
+    public init(material: AtlasMaterial, isLite: Bool = false, host: Host = .app) {
         self.material = material
         self.isLite = isLite
+        self.host = host
     }
 
     /// `os_signpost` intervals around every paint ("Atlas" category, name
-    /// "paint") — the brief's < 4 ms budget for the logger's 170 pt `.both`
-    /// figure is read off these in Instruments.
+    /// "paint"). They cover the Canvas closure — the drawing COMMANDS — and
+    /// not the rasterisation SwiftUI does after it; the brief's < 4 ms budget
+    /// is held end to end by `AtlasMaterialTests.paintBudget` (ImageRenderer).
     static let signposter = OSSignposter(subsystem: "app.onyx.health", category: "Atlas")
 
     public func paint(
@@ -186,7 +206,8 @@ public struct AtlasPainter: Sendable {
         mark: (OnyxAtlasPath) -> Mark?,
         ring: (OnyxAtlasPath) -> Color? = { _ in nil }
     ) {
-        let interval = Self.signposter.beginInterval("paint", "\(material == .ecorche ? "ecorche" : "flat") h\(Int(rect.height))")
+        let label = "\(material == .ecorche ? "ecorche" : "flat") h\(Int(rect.height))"
+        let interval = Self.signposter.beginInterval("paint", "\(label, privacy: .public)")
         defer { Self.signposter.endInterval("paint", interval) }
         switch material {
         case .flat: paintFlat(&context, rect, view, mark)
@@ -199,7 +220,7 @@ public struct AtlasPainter: Sendable {
         // the forehead.
         // Fainter on flesh: the face and fibre lines at 18 % turned the rim
         // into a line drawing (round-1 critique).
-        let definition = Color.white.opacity(material == .ecorche ? 0.10 : 0.18)
+        let definition = Color.white.opacity(material == .ecorche ? 0.10 : host == .widget ? 0.20 : 0.18)
         for entry in OnyxAtlas.detail where entry.view == view {
             var path = Path()
             entry.build(rect, &path)
@@ -207,18 +228,23 @@ public struct AtlasPainter: Sendable {
         }
     }
 
-    // MARK: Flat — the look that shipped before 9.x
+    // MARK: Flat — the look each host shipped before Precision F1
 
     private func paintFlat(_ context: inout GraphicsContext, _ rect: CGRect, _ view: OnyxAtlasView, _ mark: (OnyxAtlasPath) -> Mark?) {
+        if host == .widget { return paintWidgetFlat(&context, rect, view, mark) }
         let light = Self.light(across: rect)
         func shade(_ top: Color, _ bottom: Color) -> GraphicsContext.Shading {
             .linearGradient(Gradient(colors: [top, bottom]), startPoint: light.start, endPoint: light.end)
         }
         // The silhouette first, and never tinted: it carries no data, and a
-        // glowing head would read as a muscle nobody can train. In its own
-        // layer when it casts the shadow, so the shadow falls under the BODY
-        // and not under every muscle on it (§6.7); a lite figure skips the
-        // offscreen pass — a 10 pt blur under a thumbnail is invisible.
+        // glowing head would read as a muscle nobody can train. ONE layer
+        // under ONE shadow, so the shadow falls under the BODY and not under
+        // every muscle on it (§6.7). The filter goes on a copy of the context
+        // and the layer is drawn through it: a filter added INSIDE a layer
+        // applies to each draw in it, so before F1 the twelve body shapes
+        // each cast a shadow on the ones drawn before them (swift-expert
+        // probe). A lite figure skips the pass — a 10 pt blur under a
+        // thumbnail is invisible.
         func silhouette(_ layer: inout GraphicsContext) {
             for build in OnyxAtlas.base {
                 var path = Path()
@@ -230,10 +256,9 @@ public struct AtlasPainter: Sendable {
         if isLite {
             silhouette(&context)
         } else {
-            context.drawLayer { layer in
-                layer.addFilter(.shadow(color: .black.opacity(0.45), radius: 10, y: 6))
-                silhouette(&layer)
-            }
+            var shadowed = context
+            shadowed.addFilter(.shadow(color: .black.opacity(0.45), radius: 10, y: 6))
+            shadowed.drawLayer { silhouette(&$0) }
         }
 
         for entry in OnyxAtlas.muscles where entry.view == view {
@@ -252,6 +277,35 @@ public struct AtlasPainter: Sendable {
             } else {
                 context.fill(path, with: shade(.white.opacity(0.07), .white.opacity(0.035)))
                 context.stroke(path, with: .color(.white.opacity(0.10)), lineWidth: Self.hairline)
+            }
+        }
+    }
+
+    /// The widget's own flat figure, as `OnyxAtlasFigure` drew it before F1:
+    /// a corner-to-corner silhouette gradient, a solid fill whose alpha is the
+    /// amount, heavier strokes than the app's. Kept exact — accented and
+    /// vibrant rendering reduce the tile to alpha, and the app's lighter
+    /// untrained bellies (3.5–7 %) could vanish there.
+    private func paintWidgetFlat(_ context: inout GraphicsContext, _ rect: CGRect, _ view: OnyxAtlasView, _ mark: (OnyxAtlasPath) -> Mark?) {
+        for build in OnyxAtlas.base {
+            var path = Path()
+            build(rect, &path)
+            context.fill(path, with: .linearGradient(
+                Gradient(colors: [Color.onyx.ink(0.13), Color.onyx.ink(0.05)]),
+                startPoint: CGPoint(x: rect.minX, y: rect.minY),
+                endPoint: CGPoint(x: rect.maxX, y: rect.maxY)))
+            context.stroke(path, with: .color(Color.onyx.ink(0.12)), lineWidth: 0.5)
+        }
+        for entry in OnyxAtlas.muscles where entry.view == view {
+            var path = Path()
+            entry.build(rect, &path)
+            if let lit = mark(entry), lit.share > 0 {
+                let intensity = min(max(lit.share, 0), 1)
+                context.fill(path, with: .color(lit.ink.opacity(0.18 + intensity * 0.55)))
+                context.stroke(path, with: .color(lit.ink.opacity(0.9)), lineWidth: 0.6)
+            } else {
+                context.fill(path, with: .color(Color.onyx.ink(0.09)))
+                context.stroke(path, with: .color(Color.onyx.ink(0.13)), lineWidth: 0.4)
             }
         }
     }
@@ -294,7 +348,7 @@ public struct AtlasPainter: Sendable {
             ? (AtlasInk.darker(deep, by: 0.55), AtlasInk.darker(lit, by: 0.55))
             : (AtlasInk.inactive(deep), AtlasInk.inactive(lit))
         let restColors = (AtlasInk.color(rest.0), AtlasInk.color(rest.1), AtlasInk.color(AtlasInk.darker(rest.0, by: 0.4)))
-        var glowing: [(path: Path, ink: Color, share: Double)] = []
+        var glowing: [(path: Path, ink: UInt32, share: Double)] = []
         for entry in OnyxAtlas.muscles where entry.view == view {
             var path = Path()
             entry.build(rect, &path)
@@ -307,7 +361,7 @@ public struct AtlasPainter: Sendable {
                 let pair = AtlasInk.activeStops(deep: deep, lit: lit, ink: ink, share: share)
                 stops = (AtlasInk.color(pair.deep), AtlasInk.color(pair.lit),
                          AtlasInk.color(AtlasInk.darker(pair.deep, by: 0.4)))
-                glowing.append((path, marked.ink, share))
+                glowing.append((path, ink, share))
             } else {
                 stops = restColors
             }
@@ -335,17 +389,22 @@ public struct AtlasPainter: Sendable {
         // body, never over the muscle it belongs to. The radius is 2.5 % of
         // the figure's height: at 1.3 % (round 1) it read as a coloured
         // outline, and ten lit muscles became a neon edge rather than bloom.
+        //
+        // One inverse clip PER PATH, not one clip to their union: mirroring a
+        // path about the midline reverses its winding, so where a lit Lower
+        // back overlaps a lit Glute (and Rear delts the Upper back) the union
+        // counts zero under the non-zero rule and the glow leaked onto both
+        // (swift-expert, 22 viewBox units²). And the blur goes on the context
+        // the layer is drawn through, so the glow is blurred ONCE as a whole.
         if !isLite, !glowing.isEmpty {
-            var union = Path()
-            for g in glowing { union.addPath(g.path) }
-            context.drawLayer { outside in
-                outside.clip(to: union, options: .inverse)
-                outside.drawLayer { glow in
-                    glow.addFilter(.blur(radius: 6.5 * scale))
-                    for g in glowing {
-                        glow.fill(g.path, with: .color(g.ink.opacity(0.25 * g.share)))
-                        glow.stroke(g.path, with: .color(g.ink.opacity(0.25 * g.share)), lineWidth: 4 * scale)
-                    }
+            var outside = context
+            for g in glowing { outside.clip(to: g.path, options: .inverse) }
+            outside.addFilter(.blur(radius: 6.5 * scale))
+            outside.drawLayer { glow in
+                for g in glowing {
+                    let ink = AtlasInk.color(g.ink, opacity: 0.25 * g.share)
+                    glow.fill(g.path, with: .color(ink))
+                    glow.stroke(g.path, with: .color(ink), lineWidth: 4 * scale)
                 }
             }
         }
@@ -375,11 +434,18 @@ public struct AtlasPainter: Sendable {
     /// along exactly the boundary the ring exists to mark. Two strokes: a soft
     /// halo under a crisp hairline, so it reads as a mark ON a muscle rather
     /// than a thicker one.
+    ///
+    /// On flesh a dark underlay first: a "severe" red ring on an untrained
+    /// oxblood belly is red on red, and the ring is the only thing the athlete
+    /// reported.
     private func paintRings(_ context: inout GraphicsContext, _ rect: CGRect, _ view: OnyxAtlasView, _ ring: (OnyxAtlasPath) -> Color?) {
         for entry in OnyxAtlas.muscles where entry.view == view {
             guard let color = ring(entry) else { continue }
             var path = Path()
             entry.build(rect, &path)
+            if material == .ecorche {
+                context.stroke(path, with: .color(OnyxInk.Fixed.silhouette.opacity(0.7)), lineWidth: Self.hairline * 6)
+            }
             context.stroke(path, with: .color(color.opacity(0.35)), lineWidth: Self.hairline * 5)
             context.stroke(path, with: .color(color), lineWidth: Self.hairline * 1.6)
         }
