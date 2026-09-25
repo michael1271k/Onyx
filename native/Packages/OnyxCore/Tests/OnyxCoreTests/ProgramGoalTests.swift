@@ -222,4 +222,13 @@ struct ImpliedRateTests {
         #expect(GoalPace.plan(goal: .cut, now: BodyNow(weightKg: 80),
                               target: ProgramGoalTarget(targetWeightKg: 74, horizonWeeks: 0)) == nil)
     }
+
+    /// A mistyped 700 kg must not be graded against the band `weeklyRate`
+    /// clamps to 300 kg — two weight bases on one line (invariant audit).
+    @Test func aWeightOutsideTheRangeImpliesNothing() {
+        #expect(GoalPace.plan(goal: .cut, now: BodyNow(weightKg: 700),
+                              target: ProgramGoalTarget(targetWeightKg: 650, horizonWeeks: 12)) == nil)
+        #expect(GoalPace.plan(goal: .bulk, now: BodyNow(weightKg: 12),
+                              target: ProgramGoalTarget(targetWeightKg: 14, horizonWeeks: 12)) == nil)
+    }
 }

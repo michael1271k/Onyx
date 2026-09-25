@@ -31,7 +31,11 @@ final class RoutinesModel {
     private let userId: String
 
     let programId: String
-    let programLabel: String
+    /// A `var` since Precision E2: the program editor renames the plan above
+    /// this list, and the title reads it.
+    var programLabel: String
+
+    static let weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
     private(set) var days: [RoutineDay] = []
     private(set) var catalogue: [Exercise] = []
@@ -186,7 +190,11 @@ final class RoutinesModel {
         // The KEY never changes on a rename. It is what `workout_sessions.day_key`
         // stamped on every session already logged against this day, and changing
         // it would orphan every one of them.
-        mutate(dayKey) { $0.label = label.trimmingCharacters(in: .whitespaces) }
+        // A blank label is not a name — it is an edit buffer that never
+        // filled — and is never written over the day's real one.
+        let trimmed = label.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        mutate(dayKey) { $0.label = trimmed }
     }
 
     func setWeekday(_ dayKey: String, _ weekday: Int) {
@@ -196,6 +204,18 @@ final class RoutinesModel {
     func setSub(_ dayKey: String, _ sub: String) {
         let trimmed = sub.trimmingCharacters(in: .whitespaces)
         mutate(dayKey) { $0.sub = trimmed.isEmpty ? nil : trimmed }
+    }
+
+    /// The day's note (`routines.notes`, Precision E1).
+    ///
+    /// Written only when it CHANGED, and an emptied note is stored as "" — not
+    /// nil. A nil stays out of the push body, which is what keeps every day
+    /// saving before the founder's DDL lands; but it would also leave the
+    /// server's old note in place, so clearing one sends an empty string.
+    func setNotes(_ dayKey: String, _ notes: String) {
+        let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let current = day(dayKey), (current.notes ?? "") != trimmed else { return }
+        mutate(dayKey) { $0.notes = trimmed }
     }
 
     // MARK: - Exercises inside a day

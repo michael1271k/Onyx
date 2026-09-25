@@ -71,6 +71,9 @@ private struct SettingsForm: View {
     @AppStorage(OnyxReminders.supplementsKey) private var supplementRemindersEnabled = false
 
     @State private var isSigningOut = false
+    /// The goal sheet for the running program (Precision E3) — built on the
+    /// tap, since its init reads the weigh-in.
+    @State private var goalSheet: GoalSetupModel?
     @State private var isDeleting = false
     /// Held while the RPC is in flight, so the row cannot be tapped twice.
     @State private var isDeletingNow = false
@@ -111,20 +114,30 @@ private struct SettingsForm: View {
                 } label: {
                     row("Training plan", "Your block and phase", value: "\(model.plan.label)\u{00A0}· \(model.phase.label)")
                 }
-                // ── THE ROUTINE BUILDER (W5) ────────────────────────────────
-                // Beside the plan, because a routine IS the plan's deck — the
-                // `routines` rows `PlanView` already lists read-only. That
-                // screen shows what the deck is; this one writes it.
+                // ── THE ROUTINE BUILDER (W5) → PROGRAMS (Precision E2) ──────
+                // Beside the plan, because a routine IS the plan's deck. The
+                // row is kept where people learned it, and opens Programs:
+                // every plan, the running one marked, each one's days one
+                // push further in — the same rows the builder always wrote.
                 NavigationLink {
-                    RoutineBuilderView(model: RoutinesModel(
-                        database: environment.database,
-                        userId: userId,
-                        programId: model.planId,
-                        programLabel: model.plan.label
-                    ))
+                    ProgramsView(model: ProgramsModel(database: environment.database, userId: userId))
                 } label: {
                     row("Routines", "What each day holds", value: routineSummary)
                 }
+                // ── THE GOAL (Precision E3) ─────────────────────────────────
+                // The running program's goal, and the three-screen sheet that
+                // sets it and the daily targets it produces.
+                Button {
+                    goalSheet = GoalSetupModel(
+                        database: environment.database, userId: userId, programId: model.planId,
+                        programLabel: model.plan.label, running: true,
+                        hasDays: !(model.deck(for: model.planId)?.days.isEmpty ?? true), current: model.plan
+                    )
+                } label: {
+                    row("Goal", "What this program is for", value: GoalSetupModel.summary(model.plan))
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
                 NavigationLink {
                     VolumeTargetsView(model: model)
                 } label: {
@@ -329,6 +342,7 @@ private struct SettingsForm: View {
             if phase == .active { model.refreshToday() }
         }
         .onChange(of: environment.today) { _, _ in model.refreshToday() }
+        .sheet(item: $goalSheet) { GoalSetupSheet(model: $0) }
         .confirmationDialog("Sign out of Onyx?", isPresented: $isSigningOut, titleVisibility: .visible) {
             Button("Sign out", role: .destructive) {
                 Task { await environment.signOut() }

@@ -106,6 +106,19 @@ struct PlanCreateTests {
         #expect(info.goalTarget?.targetWeightKg == 74)
     }
 
+    /// The goal sheet's "use the recommended template" on an EMPTY program:
+    /// the template's days are re-homed under this program, resolved, queued.
+    @Test("an empty program can be filled with a template's days")
+    func fillsAnEmptyProgram() throws {
+        let db = try seeded()
+        let id = try db.createPlan(userId: user, name: "Empty")
+        try db.writeDays(userId: user, programId: id, days: days("onyx4"))
+        let program = try #require(try db.planCatalogue(userId: user).programs.first { $0.id == id })
+        #expect(program.days.map(\.key) == ["push", "pull"])
+        #expect(program.days[0].exercises[0].exerciseId?.isEmpty == false)
+        #expect(try db.routineDays(userId: user, programId: "onyx4").isEmpty, "nothing written under the template's id")
+    }
+
     @Test("renaming changes the label, never the id, and queues")
     func rename() throws {
         let db = try seeded()

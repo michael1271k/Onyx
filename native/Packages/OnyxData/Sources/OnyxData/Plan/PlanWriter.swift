@@ -100,21 +100,33 @@ public extension AppDatabase {
         try row.save(db)
         try Self.enqueueRowUpsert(table: PlanRow.databaseTableName, id: row.id, in: db)
 
-        // The deck, resolved against the catalogue as the builder resolves it
-        // (D3), so the logger stamps a uuid rather than the legacy slug.
+        return (id, try Self.writeDays(db, userId: userId, programId: id, days: days))
+    }
+
+    /// Days into a program that exists — the goal sheet's "fill this program
+    /// with the recommended template". Re-homed under `programId` whatever id
+    /// they arrived with. Returns the movements the catalogue could not name.
+    @discardableResult
+    func writeDays(userId: String, programId: String, days: [RoutineDay]) throws -> [String] {
+        try writer.write { db in try Self.writeDays(db, userId: userId, programId: programId, days: days) }
+    }
+
+    /// The deck, resolved against the catalogue as the builder resolves it
+    /// (D3), so the logger stamps a uuid rather than the legacy slug.
+    static func writeDays(_ db: Database, userId: String, programId: String, days: [RoutineDay]) throws -> [String] {
         let index = ExerciseIndex(
             try Exercise.fetchAll(db).map { RemoteExercise(id: $0.id, name: $0.name, slug: $0.slug) }
         )
         var unresolved: [String] = []
         for day in days {
             var homed = day
-            homed.programId = id
+            homed.programId = programId
             let (payload, missing) = day.payload.resolving(index)
             homed.payload = payload
             unresolved.append(contentsOf: missing)
             try Self.saveRoutineDay(db, userId: userId, homed)
         }
-        return (id, unresolved)
+        return unresolved
     }
 
     /// A program id nothing of this user's already answers to.

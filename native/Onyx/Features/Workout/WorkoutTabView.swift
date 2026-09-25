@@ -167,6 +167,7 @@ struct WorkoutTabView: View {
                 // section below them is the reader's to hide.
                 weekPanel
                 if let day = today { sessionCard(day) } else { restCard }
+                TrainProgramsDoor()  // Precision seam 6 (Lane E): the one line.
                 if shows(.doors) { doorsRow }
                 if shows(.cardio) { cardioCard }
                 if shows(.progression) { progressionCard }

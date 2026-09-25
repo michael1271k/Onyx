@@ -282,7 +282,9 @@ public enum GoalPace {
     /// everything else held still — a LOWER bound on the scale's move, since a
     /// lean bulk carries some fat and water with it; the sheet says so.
     public static func plan(goal: ProgramGoal, now: BodyNow, target: ProgramGoalTarget) -> GoalPlan? {
-        guard let weight = now.weightKg, weight > 0,
+        // Outside `weightRange` is a typo, not a body: `weeklyRate` would clamp
+        // it to the range and the rate would be graded on a second weight.
+        guard let weight = now.weightKg, StartingTargetsBuilder.weightRange.contains(weight),
               let weeks = target.horizonWeeks, weeks > 0 else { return nil }
         let destination: Double
         switch goal {

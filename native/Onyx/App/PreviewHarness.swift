@@ -623,6 +623,23 @@ enum PreviewHarness {
         // LANE-A
         case "logger-library", "logger-library-search", "logger-stopwatch", "finish", "finish-coverage":
             LoggerPreviews.view(screen)
+        // LANE-E (Precision E2/E3): Programs, one program, one of its days,
+        // and the goal sheet's three steps — over the preview catalogue with
+        // a goal on Onyx-5 and yesterday's weigh-in, so every figure is real.
+        case "programs":
+            NavigationStack { ProgramsView(model: ProgramsPreviews.programsModel()) }
+                .environment(AppEnvironment.preview)
+        case "programs-editor":
+            NavigationStack { ProgramEditorView(programs: ProgramsPreviews.programsModel(), programId: "onyx5") }
+                .environment(AppEnvironment.preview)
+        case "programs-day":
+            NavigationStack {
+                RoutineDayEditor(model: { let m = ProgramsPreviews.programsModel().routines("onyx5"); m.load(); return m }(), dayKey: "cb_a")
+            }
+            .environment(AppEnvironment.preview)
+        case "goal-1", "goal-2", "goal-3":
+            GoalSetupSheet(model: ProgramsPreviews.goalModel(step: Int(screen.dropFirst("goal-".count)) ?? 1))
+                .environment(AppEnvironment.preview)
         default:
             // Visible rather than silent: a typo in the shot script should
             // produce a photograph of the mistake, not of the last screen.
