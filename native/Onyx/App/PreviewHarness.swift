@@ -621,7 +621,7 @@ enum PreviewHarness {
         case "body-tab":
             PulsePreviews.view("day")
         // LANE-A
-        case "logger-library", "logger-library-search":
+        case "logger-library", "logger-library-search", "logger-stopwatch":
             LoggerPreviews.view(screen)
         default:
             // Visible rather than silent: a typo in the shot script should

@@ -70,6 +70,8 @@ struct LiveLoggerView: View {
     @State private var watchStart: Date?
     @State private var watchAccumulated: TimeInterval = 0
     @State private var watchLaps: [TimeInterval] = []
+    /// Whether the stopwatch is unfolded above the rail (Precision A4).
+    @State private var stopwatchOpen = false
     @State private var confirmCancel = false
 
     /// Which face, and how it got here — the animation travels with it.
@@ -151,7 +153,8 @@ struct LiveLoggerView: View {
         model: LoggerModel,
         activity: LiveActivityController? = nil,
         face: LoggerFace = .workout,
-        paused: Bool = false
+        paused: Bool = false,
+        stopwatchLaps: [TimeInterval]? = nil
     ) {
         _model = State(initialValue: model)
         _activity = State(initialValue: activity ?? LiveActivityController())
@@ -167,6 +170,13 @@ struct LiveLoggerView: View {
             : (model.currentSet?.exercise.id ?? model.exercises.first?.id))
         _selection = State(initialValue: LoggerFaceSelection(face: face))
         if paused { model.pause() }
+        // The harness's way to photograph the stopwatch unfolded, stopped on
+        // these laps — a long press a shot script cannot make.
+        if let stopwatchLaps {
+            _stopwatchOpen = State(initialValue: true)
+            _watchLaps = State(initialValue: stopwatchLaps)
+            _watchAccumulated = State(initialValue: stopwatchLaps.reduce(0, +))
+        }
     }
 
     private var accent: Color { Color.onyx.day(model.day.key) }
@@ -210,10 +220,7 @@ struct LiveLoggerView: View {
             guard !model.isEditing else { return }
             activity.update(model: model, clock: clock)
         } content: {
-            TimerSheet(
-                clock: clock, accent: accent,
-                watchStart: $watchStart, accumulated: $watchAccumulated, laps: $watchLaps
-            )
+            TimerSheet(clock: clock, accent: accent)
         }
         .sheet(isPresented: $showDistribution) { MuscleDistributionSheet(model: model) }
         .sheet(isPresented: $showPhase) {
@@ -735,6 +742,21 @@ struct LiveLoggerView: View {
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
+            // The session's clocks, under the deck and never scrolled away
+            // (Precision A4). Not on an edit deck: a finished session has no
+            // running clock, no rest and nothing to pause.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !model.isEditing {
+                    TimerRail(
+                        clock: clock, accent: accent,
+                        rest: restCountdown(model.restEndsAt, total: Int(model.restDuration)),
+                        onSkipRest: { withAnimation(OnyxMotion.drawer) { model.stopRest() } },
+                        onAdjustRest: { model.adjustRest(by: $0) },
+                        watchStart: $watchStart, watchAccumulated: $watchAccumulated,
+                        watchLaps: $watchLaps, stopwatchOpen: $stopwatchOpen
+                    )
+                }
+            }
             .onChange(of: scrollTick) {
                 guard let focus else { return }
                 withAnimation(OnyxMotion.move) { proxy.scrollTo(focus, anchor: .top) }

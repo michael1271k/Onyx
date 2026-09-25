@@ -447,6 +447,13 @@ enum LoggerPreviews {
                 query: screen == "logger-library-search" ? "back" : ""
             ) { _, _ in }
             .environment(LoggerPreviews.environment(over: adding.store))
+        // ── PRECISION A4: the rail with the stopwatch unfolded ──────────────
+        case "logger-stopwatch":
+            NavigationStack {
+                LiveLoggerView(model: .previewUpperB(logged: true, resting: true), stopwatchLaps: [48, 52, 61])
+            }
+            .environment(AppEnvironment.preview)
+            .preferredColorScheme(.dark)
         case "hevy-card":
             let compared = LoggerModel.previewUpperBWithHistory()
             NavigationStack {

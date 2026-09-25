@@ -39,10 +39,10 @@ struct ExerciseCardView: View {
     let position: (index: Int, total: Int)
 
     @Environment(\.dynamicTypeSize) private var typeSize
-    /// The load column's floor, at the reader's text size. Declared identically
+    /// The load column's floor, at the reader's text size. Read identically
     /// in `SetRowView`, which is what keeps this table a table — see
-    /// `SetColumn.weightFloor` for why it cannot be a constant.
-    @ScaledMetric(relativeTo: .body) private var loadFloor: CGFloat = SetColumn.weightFloor
+    /// `SetColumn.weightFloor(_:)` for why it is measured.
+    private var loadFloor: CGFloat { SetColumn.weightFloor(typeSize) }
 
     /// Whether the warm-up ladder is shown at all (Settings ▸ Training).
     ///
@@ -357,60 +357,12 @@ struct ExerciseCardView: View {
         }
         .padding(.horizontal, OnyxSpace.m)
         .padding(.vertical, OnyxSpace.s)
-        // ── THE REST, AS A LENGTH (W10) ────────────────────────────────────
-        // An OVERLAY on the band's own bottom edge, which is why it costs the
-        // header no height at all: the band is already the tallest thing on the
-        // card and the one place a 4 pt bar can land without pushing a set row
-        // down. It sits exactly where the header meets the table, so it reads
-        // as the card's own progress rather than as a control in the row above.
-        .overlay(alignment: .bottom) { restBar }
     }
 
-    /// The rest, drawn rather than counted — how much of THIS movement's
-    /// prescription is left, against the whole of it.
-    ///
-    /// ── WHY A BAR WHEN THE DIGITS ARE ALREADY THERE ─────────────────────────
-    /// `restControl` prints `1:23`, and a number is the wrong instrument for
-    /// the question you actually ask mid-rest, which is "am I nearly up" — a
-    /// fraction you read at arm's length with a bar in your hands. Reading it
-    /// off `1:23` needs the prescription in your head to divide by.
-    ///
-    /// ── AND WHY IT IS ACTUAL AGAINST PLANNED, NOT AGAINST A CONSTANT ────────
-    /// The denominator is `model.restDuration`, which is what the PLAN
-    /// prescribed for this movement and what `adjustRest` moves when you take
-    /// 15 seconds off or add them. So a nudged rest redraws against its new
-    /// total rather than overflowing its old one — the same fix the Lock
-    /// Screen's bar and the watch's ring took (`RestPulse.duration`,
-    /// `WatchModel.adjustRest`), and the reason `restCountdown` takes `total:`
-    /// at all.
-    ///
-    /// ── AND WHY IT COSTS NO REDRAWS ─────────────────────────────────────────
-    /// `ProgressView(timerInterval:)` is ticked by the SYSTEM, off this view
-    /// tree — the same trade `Text(timerInterval:)` two points above it makes,
-    /// and the reason a bar that moves every second is affordable on the screen
-    /// you are also typing into. A hand-rolled fraction would need a
-    /// `TimelineView` per card.
-    ///
-    /// Nothing is drawn when nothing is resting. Not an empty track: the deck
-    /// is a list of cards and a hairline under every header would read as a
-    /// separator, and `LiveStatsView`'s empty `OnyxProgressBar` exists because
-    /// THAT row must not change height — this one is an overlay and cannot.
-    @ViewBuilder
-    private var restBar: some View {
-        if let countdown = liveRest {
-            ProgressView(timerInterval: countdown, countsDown: true) {
-                EmptyView()
-            } currentValueLabel: {
-                EmptyView()
-            }
-            .progressViewStyle(.linear)
-            .tint(Color.onyx.day(model.day.key))
-            // The countdown beside it is already spoken, and a bar that
-            // announced itself would say the same thing twice.
-            .accessibilityHidden(true)
-            .transition(.opacity)
-        }
-    }
+    // The rest BAR left this card for the `TimerRail` under the deck
+    // (Precision A4): a length you read at arm's length belongs where it is on
+    // screen however far the deck is scrolled. The digits and ±15 s stay here,
+    // on the resting card only (`liveRest`).
 
     private var title: some View {
         Text(exercise.name)
@@ -456,26 +408,29 @@ struct ExerciseCardView: View {
     /// part only this line carries, and without it 52.5 kg from March reads
     /// exactly like 52.5 kg from Tuesday.
     ///
-    /// At an accessibility size the date takes its own line: on one line at
-    /// AX5 it and the figure truncated each other to `25kg… · Sat 1…`.
+    /// When the date does not fit beside the figure it takes its own line: on
+    /// one line at AX5 the two truncated each other to `25kg… · Sat 1…`. The
+    /// choice is `ViewThatFits`, not a type-size threshold and not a shrink —
+    /// a shrink is how one card came to print two sizes (Precision A3).
     private func lastTime(_ last: LastWorkingSet) -> some View {
-        let stacked = typeSize.isAccessibilitySize
-        let layout = stacked
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
-            : AnyLayout(HStackLayout(spacing: OnyxSpace.xs))
-        return layout {
+        let figure = HStack(spacing: OnyxSpace.xs) {
+            Text("last").onyxMicro()
+            Text(last.label)
+                .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
+                .foregroundStyle(Color.onyx.textSecondary)
+        }
+        let day = Swap.shortDayLabel(last.date)
+        return ViewThatFits(in: .horizontal) {
             HStack(spacing: OnyxSpace.xs) {
-                Text("last").onyxMicro()
-                Text(last.label)
-                    .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
-                    .foregroundStyle(Color.onyx.textSecondary)
+                figure
+                Text("· \(day)").onyxType(.caption).foregroundStyle(Color.onyx.textTertiary)
             }
-            Text(stacked ? Swap.shortDayLabel(last.date) : "· \(Swap.shortDayLabel(last.date))")
-                .onyxType(.caption)
-                .foregroundStyle(Color.onyx.textTertiary)
+            VStack(alignment: .leading, spacing: 2) {
+                figure
+                Text(day).onyxType(.caption).foregroundStyle(Color.onyx.textTertiary)
+            }
         }
         .lineLimit(1)
-        .minimumScaleFactor(0.8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Last time, \(last.label), on \(Swap.shortDayLabel(last.date))")
@@ -541,92 +496,111 @@ struct ExerciseCardView: View {
     /// below it becomes three. The metadata chips leave rather than wrap: they
     /// are the least load-bearing thing here, and "Compound" is not worth a
     /// third line of a header on a phone that has room for two sets.
+    ///
+    /// ── AND SHORT OF AX, WHEN THE LINE STILL DOES NOT FIT (Precision A3) ────
+    /// At xxxLarge on a 375 pt phone the one line — muscle, "Compound", the
+    /// window, the `fixedSize` progression chip, the fraction — was wider than
+    /// the card, and a line that cannot shrink widened the CARD: the whole
+    /// set table slid off the right edge. `ViewThatFits` tries the line, then
+    /// the line without its tags, then the two-line stack.
     @ViewBuilder
     private var prescription: some View {
         if typeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                HStack(spacing: OnyxSpace.xs) {
-                    // ── THE WINDOW LEAVES WHILE THE CLOCK RUNS, AT AX5 ─────
-                    // The non-AX branch below already drops the tags and the
-                    // progression chip for the rest control and says why. This
-                    // branch kept the rep window, and at AX5 `@ 10–12` is
-                    // ~200 pt of a ~327 pt line — so the countdown between the
-                    // two nudge buttons was squeezed past its own scale floor
-                    // and rendered as `…`. A control showing an ellipsis where
-                    // its value goes is a control that has stopped working.
-                    //
-                    // The window is a prescription you read BEFORE the set and
-                    // it is back the instant the clock stops; the countdown is
-                    // the one thing on this card that is only true right now.
-                    if !isCardio, liveRest == nil { repWindow }
-                    if let pace { tag(pace, Color.onyx.cardio) }
-                    Spacer(minLength: 0)
-                    progress
-                }
-                progression
-            }
-            .lineLimit(1)
+            stackedPrescription
         } else {
+            ViewThatFits(in: .horizontal) {
+                inlinePrescription(tags: true)
+                inlinePrescription(tags: false)
+                stackedPrescription
+            }
+        }
+    }
+
+    private var stackedPrescription: some View {
+        VStack(alignment: .leading, spacing: OnyxSpace.xs) {
             HStack(spacing: OnyxSpace.xs) {
-                // ── THE TAGS LEAVE WHILE THE CLOCK IS RUNNING ───────────────
-                // The rest control is about 130 pt and this line is already
-                // full at 375 pt. The tags are the least load-bearing thing on
-                // it — the same call this file already makes at an
-                // accessibility size, and for the same reason: "Compound" is
-                // not worth pushing a countdown off the screen.
-                if liveRest == nil {
-                    // ── ONE TAG SLOT, AND A BOUT SPENDS IT SAYING SO ────────
-                    // `family` is nil on a bout: `ProgramExercise` resolves
-                    // movers from `MuscleMap.dict` only, and `dict` does not
-                    // name a treadmill (it must not — it is the input to the
-                    // weekly muscle accumulator). So this branch is what draws
-                    // the card's one tag, and "Cardio" is the useful word: the
-                    // line is already full at 375 pt, and a muscle name on a
-                    // walk would be a claim the deck does not pay credit for.
-                    if isCardio {
-                        tag("Cardio", Color.onyx.cardio)
-                    } else if let family {
-                        tag(family.displayName, Color.onyx.muscle(family))
-                    }
-                    // ── NOT ON A BOUT ───────────────────────────────────────
-                    // `ExerciseTags` classifies LIFTS — compound, isolation,
-                    // the equipment that carries the load — and a treadmill has
-                    // none of those. It was being labelled "Isolation", which
-                    // is a claim about a movement pattern that does not exist
-                    // here, next to a rep window reading `@ 5–5` because the
-                    // prescription "5 min" parses as a number.
-                    //
-                    // ── AND NOT BESIDE THE CUE EITHER (W10) ─────────────────
-                    // Same trade the rest control makes one branch up, one
-                    // chip smaller: `1 more @ 12` is ~135 pt and this line is
-                    // already full at 375 pt, so on a COMPLETE movement the
-                    // five items squeezed `Done` down to its seal with the
-                    // word cut off — a status that has stopped saying what it
-                    // is. "Compound" is the least load-bearing thing on the
-                    // row, it is what leaves at an accessibility size for the
-                    // same reason, and the cue is an instruction where it is a
-                    // classification.
-                    if !isCardio, oneMore == nil, let first = tags.first {
-                        tag(first.label, Color.onyx.textSecondary)
-                    }
-                }
-                // Same call, same reason: minutes and kilometres are the
-                // prescription, and the row underneath prints both.
-                if !isCardio { repWindow }
-                // The bout's own figure, in the slot a lift spends on its
-                // progression chip — a treadmill has no load to progress.
+                // ── THE WINDOW LEAVES WHILE THE CLOCK RUNS, AT AX5 ─────
+                // The non-AX branch below already drops the tags and the
+                // progression chip for the rest control and says why. This
+                // branch kept the rep window, and at AX5 `@ 10–12` is
+                // ~200 pt of a ~327 pt line — so the countdown between the
+                // two nudge buttons was squeezed past its own scale floor
+                // and rendered as `…`. A control showing an ellipsis where
+                // its value goes is a control that has stopped working.
+                //
+                // The window is a prescription you read BEFORE the set and
+                // it is back the instant the clock stops; the countdown is
+                // the one thing on this card that is only true right now.
+                if !isCardio, liveRest == nil { repWindow }
                 if let pace { tag(pace, Color.onyx.cardio) }
-                // The progression chip is `fixedSize` — a bumped load that
-                // truncates is a number you cannot read — so it cannot share
-                // this line with the rest control either. At 375 pt the card's
-                // inner width is about 327: a rep window and the clock's three
-                // targets take ~214 of it, and the chip is ~150.
-                if liveRest == nil { progression }
                 Spacer(minLength: 0)
                 progress
             }
-            .lineLimit(1)
+            progression
         }
+        .lineLimit(1)
+    }
+
+    private func inlinePrescription(tags showsTags: Bool) -> some View {
+        HStack(spacing: OnyxSpace.xs) {
+            // ── THE TAGS LEAVE WHILE THE CLOCK IS RUNNING ───────────────
+            // The rest control is about 130 pt and this line is already
+            // full at 375 pt. The tags are the least load-bearing thing on
+            // it — the same call this file already makes at an
+            // accessibility size, and for the same reason: "Compound" is
+            // not worth pushing a countdown off the screen.
+            if liveRest == nil, showsTags {
+                // ── ONE TAG SLOT, AND A BOUT SPENDS IT SAYING SO ────────
+                // `family` is nil on a bout: `ProgramExercise` resolves
+                // movers from `MuscleMap.dict` only, and `dict` does not
+                // name a treadmill (it must not — it is the input to the
+                // weekly muscle accumulator). So this branch is what draws
+                // the card's one tag, and "Cardio" is the useful word: the
+                // line is already full at 375 pt, and a muscle name on a
+                // walk would be a claim the deck does not pay credit for.
+                if isCardio {
+                    tag("Cardio", Color.onyx.cardio)
+                } else if let family {
+                    tag(family.displayName, Color.onyx.muscle(family))
+                }
+                // ── NOT ON A BOUT ───────────────────────────────────────
+                // `ExerciseTags` classifies LIFTS — compound, isolation,
+                // the equipment that carries the load — and a treadmill has
+                // none of those. It was being labelled "Isolation", which
+                // is a claim about a movement pattern that does not exist
+                // here, next to a rep window reading `@ 5–5` because the
+                // prescription "5 min" parses as a number.
+                //
+                // ── AND NOT BESIDE THE CUE EITHER (W10) ─────────────────
+                // Same trade the rest control makes one branch up, one
+                // chip smaller: `1 more @ 12` is ~135 pt and this line is
+                // already full at 375 pt, so on a COMPLETE movement the
+                // five items squeezed `Done` down to its seal with the
+                // word cut off — a status that has stopped saying what it
+                // is. "Compound" is the least load-bearing thing on the
+                // row, it is what leaves at an accessibility size for the
+                // same reason, and the cue is an instruction where it is a
+                // classification.
+                if !isCardio, oneMore == nil, let first = tags.first {
+                    tag(first.label, Color.onyx.textSecondary)
+                }
+            }
+            // Same call, same reason: minutes and kilometres are the
+            // prescription, and the row underneath prints both.
+            if !isCardio { repWindow }
+            // The bout's own figure, in the slot a lift spends on its
+            // progression chip — a treadmill has no load to progress.
+            if let pace { tag(pace, Color.onyx.cardio) }
+            // The progression chip is `fixedSize` — a bumped load that
+            // truncates is a number you cannot read — so it cannot share
+            // this line with the rest control either. At 375 pt the card's
+            // inner width is about 327: a rep window and the clock's three
+            // targets take ~214 of it, and the chip is ~150.
+            if liveRest == nil { progression }
+            Spacer(minLength: 0)
+            progress
+        }
+        .lineLimit(1)
     }
 
     /// Minutes and kilometres, as one figure. Nil until the bout has both.
@@ -708,23 +682,31 @@ struct ExerciseCardView: View {
     /// plan again — a longer breather after set 3 is a fact about set 3, not a
     /// standing amendment to the programme. The plan is edited where plans are
     /// edited, and never as a side effect of being tired.
+    private func restDigits(_ countdown: ClosedRange<Date>) -> some View {
+        Text(timerInterval: countdown, countsDown: true)
+            .onyxNumeral()
+            // Reserved, or the two buttons walk inwards as the digits fall
+            // from 1:00 to 59 — under the thumb that is reaching for one.
+            .frame(minWidth: 40, alignment: .leading)
+    }
+
     private func restControl(_ countdown: ClosedRange<Date>) -> some View {
         HStack(spacing: 0) {
             nudge("minus", -15, "Take 15 seconds off the rest")
             Button { model.stopRest() } label: {
-                HStack(spacing: 3) {
-                    Image(systemName: "timer").imageScale(.small)
-                    Text(timerInterval: countdown, countsDown: true)
-                        .onyxNumeral()
-                        // Reserved, or the two buttons walk inwards as the
-                        // digits fall from 1:00 to 59 — under the thumb that is
-                        // reaching for one of them.
-                        .frame(minWidth: 40, alignment: .leading)
+                // The glyph goes before the digits shrink: a countdown read at
+                // a smaller size than the card's other figures is the two-sizes
+                // defect again (Precision A3).
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "timer").imageScale(.small)
+                        restDigits(countdown)
+                    }
+                    restDigits(countdown)
                 }
                 .onyxType(.caption).fontWeight(.semibold)
                 .foregroundStyle(Color.onyx.day(model.day.key))
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
                 .padding(.horizontal, 2)
                 .frame(minHeight: 44)
                 .contentShape(.rect)
@@ -1217,7 +1199,7 @@ struct ExerciseCardView: View {
 /// pass, and the header — being the same shape — gets the identical split for
 /// free. 375 pt now leaves 59 pt a side and 402 pt leaves 73, and neither is a
 /// number anybody has to maintain.
-private enum SetColumn {
+enum SetColumn {
     /// The badge: the platform's minimum target, and the row's identity.
     static let badge: CGFloat = 44
     /// A stepper end. 32 rather than 44 because a badge, four of these, a rep
@@ -1239,10 +1221,8 @@ private enum SetColumn {
     /// `11.25` and `13.75` — five glyphs of semibold body monospaced numerals,
     /// which is about 45 pt before the field's own insets — so the number the
     /// half-plate progression exists to produce was the one number the row
-    /// could not show, and it rendered `11…`. 56 fits six (`123.75`), which is
-    /// every load this app can propose. Past that `minimumScaleFactor` on the
-    /// field takes over, because a load that scales down is legible and a load
-    /// that ellipsises is not a load.
+    /// could not show, and it rendered `11…`. 56 fit six (`123.75`) at the
+    /// default size, which is every load this app can propose.
     ///
     /// It costs the row 12 pt out of the effort track: 375 pt still leaves it
     /// 95 and 402 leaves 122, against the 68 that column needs for a word.
@@ -1258,14 +1238,56 @@ private enum SetColumn {
     /// out visibly smaller than `17.5` and `20` on the same row, which is the
     /// defect this constant now exists to explain.
     ///
-    /// So it is a BASE, and the two structs that lay the table out hold it in a
-    /// `@ScaledMetric(relativeTo: .body)` — the same base, the same text style,
-    /// therefore the same number on both sides, which is the rule
-    /// `columnHeaders` already depends on. The scale factor stays where it is:
-    /// with the floor tracking the type it can no longer fire on a load this
-    /// app can propose, and it is still the right backstop for a value typed
-    /// past six glyphs.
-    static let weightFloor: CGFloat = 56
+    /// ── AND WHY IT IS MEASURED NOW (Precision A3, Q6) ───────────────────────
+    /// A `@ScaledMetric` of 56 was an estimate of the string scaled like the
+    /// type, and `minimumScaleFactor(0.6)` on the field caught whatever the
+    /// estimate missed — so the moment a load crossed the floor it shrank on
+    /// its own, and `18.75` sat visibly smaller than `20` two rows up: the
+    /// founder's "two sizes" report. The field no longer shrinks at all; the
+    /// floor is the MEASURED width of `188.75` — five digits, the widest load
+    /// the fine step produces — in the field's own face at the reader's type
+    /// size, so every load this app proposes fits at one size.
+    ///
+    /// One measurement per type size, cached; both structs that lay the table
+    /// out read it, so the header and the row still name the same number.
+    @MainActor static func weightFloor(_ size: DynamicTypeSize) -> CGFloat {
+        if let cached = floors[size] { return cached }
+        let floor = width("188.75", size)
+        floors[size] = floor
+        return floor
+    }
+
+    /// The rep field's floor: `20` measured in the same face, never under the
+    /// 32 pt the header's rep group is built from. At every size short of the
+    /// accessibility range this IS 32 — two glyphs never need more — and past
+    /// it the row is stacked and the header is gone.
+    @MainActor static func repsFloor(_ size: DynamicTypeSize) -> CGFloat {
+        max(repsField, width("20", size))
+    }
+
+    /// The face every value cell is set in: body, semibold, rounded,
+    /// monospaced digits — `NumericField`'s `.onyxType(.body)` +
+    /// `.fontWeight(.semibold)` + `.onyxNumeral()`, spelled in UIKit so it can
+    /// be measured.
+    @MainActor static func numeralFont(_ size: DynamicTypeSize) -> UIFont {
+        let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(size))
+        let points = UIFont.preferredFont(forTextStyle: .body, compatibleWith: traits).pointSize
+        var descriptor = UIFont.systemFont(ofSize: points, weight: .semibold).fontDescriptor
+        descriptor = descriptor.withDesign(.rounded) ?? descriptor
+        descriptor = descriptor.addingAttributes([.featureSettings: [[
+            UIFontDescriptor.FeatureKey.type: kNumberSpacingType,
+            UIFontDescriptor.FeatureKey.selector: kMonospacedNumbersSelector,
+        ]]])
+        return UIFont(descriptor: descriptor, size: points)
+    }
+
+    /// A string's width in the value face, rounded up, plus the caret's
+    /// 2 pt — a field one hair too narrow truncates the last glyph.
+    @MainActor private static func width(_ text: String, _ size: DynamicTypeSize) -> CGFloat {
+        (text as NSString).size(withAttributes: [.font: numeralFont(size)]).width.rounded(.up) + 2
+    }
+
+    @MainActor private static var floors: [DynamicTypeSize: CGFloat] = [:]
     /// The whole rep group — the field and its two ends. The header names the
     /// GROUP, so it needs the group's width and not the field's. A FLOOR on
     /// both sides rather than a fixed width: three digits, or a non-accessibility
@@ -1403,11 +1425,11 @@ struct SetRowView: View {
     @State private var commitTicks = 0
     @State private var recordTicks = 0
     @Environment(\.dynamicTypeSize) private var typeSize
-    /// The load column's floor, at the reader's text size. The same declaration
-    /// as `ExerciseCardView`'s, deliberately: one base and one text style give
-    /// both stacks the same number, which is the only reason the header sits
-    /// over the number it names.
-    @ScaledMetric(relativeTo: .body) private var loadFloor: CGFloat = SetColumn.weightFloor
+    /// The load column's floor, at the reader's text size. The same read as
+    /// `ExerciseCardView`'s, deliberately: one measurement at one type size
+    /// gives both stacks the same number, which is the only reason the header
+    /// sits over the number it names.
+    private var loadFloor: CGFloat { SetColumn.weightFloor(typeSize) }
 
     /// The row every one-sided fact is read off, and the one a sheet displays.
     /// Never optional in practice — `LoggerModel.groups` yields no empty group
@@ -1844,7 +1866,6 @@ struct SetRowView: View {
                 ),
                 unit: "kilograms", decimals: true,
                 minWidth: loadFloor, fills: !typeSize.isAccessibilitySize,
-                prominent: true,
                 // The one number on the card that CHANGED today, in the same
                 // green as the header chip that explains why. The chip is four
                 // rows and 180 pt away from the load it is about; without this
@@ -1887,8 +1908,8 @@ struct SetRowView: View {
                     set: { next in write(targets) { $0.reps = next.map { Int($0.rounded()) } } }
                 ),
                 unit: "reps", decimals: false,
-                minWidth: SetColumn.repsField, fills: false,
-                prominent: false, tint: nil, onCommit: { commit(targets) }
+                minWidth: SetColumn.repsFloor(typeSize), fills: false,
+                tint: nil, onCommit: { commit(targets) }
             )
         }
     }
@@ -1926,7 +1947,7 @@ struct SetRowView: View {
                 ),
                 unit: "minutes", decimals: true,
                 minWidth: loadFloor, fills: !typeSize.isAccessibilitySize,
-                prominent: true, tint: nil, onCommit: { commit(targets) }
+                tint: nil, onCommit: { commit(targets) }
             )
         }
         .frame(maxWidth: typeSize.isAccessibilitySize ? nil : .infinity)
@@ -1958,7 +1979,7 @@ struct SetRowView: View {
                 ),
                 unit: "kilometres", decimals: true,
                 minWidth: loadFloor, fills: !typeSize.isAccessibilitySize,
-                prominent: true, tint: nil, onCommit: { commit(targets) }
+                tint: nil, onCommit: { commit(targets) }
             )
         }
         .frame(maxWidth: typeSize.isAccessibilitySize ? nil : .infinity)
@@ -2145,10 +2166,14 @@ struct SetRowView: View {
             HStack(spacing: 3) {
                 Image(systemName: "applewatch")
                     .onyxType(.micro).fontWeight(.bold)
-                Text(RpeLadder.label(p.rpe) ?? OnyxFormat.kg(p.rpe))
-                    .onyxType(.caption).fontWeight(.bold)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                // The column's one face, and the number when the word
+                // cannot fit — the plain word's rule (Precision A3).
+                ViewThatFits(in: .horizontal) {
+                    Text(RpeLadder.label(p.rpe) ?? OnyxFormat.kg(p.rpe))
+                    Text(OnyxFormat.kg(p.rpe))
+                }
+                .onyxType(.secondary).fontWeight(.bold)
+                .lineLimit(1)
             }
             .foregroundStyle(p.band.ink)
             .padding(.horizontal, OnyxSpace.s)
@@ -2177,6 +2202,22 @@ struct SetRowView: View {
         }
     }
 
+    /// The effort column's one face: `.secondary`, bold, one line.
+    private func effortWord(_ text: String) -> some View {
+        Text(text)
+            .onyxType(.secondary).fontWeight(.bold)
+            .foregroundStyle(row.rpe.map(Color.onyx.effort) ?? Color.onyx.textTertiary)
+            .padding(.horizontal, row.rpe == nil ? OnyxSpace.s : 0)
+            .padding(.vertical, row.rpe == nil ? 3 : 0)
+            .overlay {
+                if row.rpe == nil {
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color.onyx.textTertiary.opacity(0.5), lineWidth: 1)
+                }
+            }
+            .lineLimit(1)
+    }
+
     private func plainWordEffort(_ targets: [LoggerModel.SetRow]) -> some View {
         Button { onEffort(targets) } label: {
             // ── WHY "RATE" WEARS AN OUTLINE ─────────────────────────────────
@@ -2186,24 +2227,16 @@ struct SetRowView: View {
             // scanning the column to decide whether the next set moves up. An
             // empty slot is a stroked capsule; a reading is bare text. Shape,
             // not hue, and the ink rule survives.
-            Text(RpeLadder.label(row.rpe) ?? "Rate")
-                .onyxType(.caption).fontWeight(.bold)
-                .foregroundStyle(row.rpe.map(Color.onyx.effort) ?? Color.onyx.textTertiary)
-                .padding(.horizontal, row.rpe == nil ? OnyxSpace.s : 0)
-                .padding(.vertical, row.rpe == nil ? 3 : 0)
-                .overlay {
-                    if row.rpe == nil {
-                        Capsule(style: .continuous)
-                            .strokeBorder(Color.onyx.textTertiary.opacity(0.5), lineWidth: 1)
-                    }
-                }
-                // One line, always. "Challenging" is the longest rung and the
-                // flexible track is sized by the phone rather than by the word;
-                // a rating that wraps takes the row's height with it, and forty
-                // of those is a card you scroll past the set you are standing in
-                // front of.
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+            // One line, always. "Challenging" is the longest rung and the
+            // flexible track is sized by the phone rather than by the word; a
+            // rating that wraps takes the row's height with it, and forty of
+            // those is a card you scroll past the set you are standing in
+            // front of. When the word does not fit, the NUMBER stands in for
+            // it at the same size — never the word shrunk (Precision A3).
+            ViewThatFits(in: .horizontal) {
+                effortWord(RpeLadder.label(row.rpe) ?? "Rate")
+                effortWord(row.rpe.map(OnyxFormat.kg) ?? "Rate")
+            }
                 .multilineTextAlignment(typeSize.isAccessibilitySize ? .leading : .trailing)
                 .frame(
                     maxWidth: .infinity,
@@ -2654,17 +2687,6 @@ private struct NumericField: View {
     /// Take the track the row offers (a column), or the field's own intrinsic
     /// width (a stacked row, and the rep count).
     let fills: Bool
-    /// The load is the number you decide; the rep count is the number you
-    /// achieve.
-    ///
-    /// ── AND WHY THIS IS A SIZE AND NOT JUST A WEIGHT ────────────────────────
-    /// It was one weight step apart, so the only cues telling `40` from `12`
-    /// were column position and a header 30 pt above that does not exist at an
-    /// accessibility size — and the third cue, a decimal point, fails on
-    /// exactly the common case: `40 / 12`, `40 / 10`. Two type ROLES apart, the
-    /// two cells have different silhouettes at any glance angle, which is what
-    /// a number read for under a second from an arm's length actually needs.
-    let prominent: Bool
     /// Overrides the ink. Used for the one load a progression bumped today.
     let tint: Color?
     let onCommit: () -> Void
@@ -2676,33 +2698,19 @@ private struct NumericField: View {
         TextField("—", text: $text)
             .keyboardType(decimals ? .decimalPad : .numberPad)
             .multilineTextAlignment(.center)
-            .onyxType(prominent ? .body : .secondary)
-            .fontWeight(prominent ? .semibold : .regular)
+            // ── ONE SIZE PER COLUMN, AND NO FIELD SHRINKS (Precision A3) ────
+            // The load and the rep count are one face now — body, semibold,
+            // rounded — where they were two roles apart, and neither carries a
+            // `minimumScaleFactor`: a per-field shrink is what printed `18.75`
+            // smaller than `20` on the same card (Q6). The load cannot ellipsise
+            // instead, because its floor is the measured width of `188.75` in
+            // exactly this face (`SetColumn.weightFloor(_:)`); the rows still
+            // differ in silhouette, which is what the size gap was bought for —
+            // a load is three to five glyphs with a point, a rep count two.
+            .onyxType(.body)
+            .fontWeight(.semibold)
             .onyxNumeral()
-            // ── A LOAD MUST NEVER ELLIPSISE ─────────────────────────────────
-            // A `TextField` truncates by default, and the field is inside a
-            // FLEXIBLE track — so at 375 pt `11.25` and `13.75`, the two loads
-            // the fine step exists to produce, both rendered `11…`. Half a
-            // number is worse than a small one: `11…` and `13…` are the same
-            // glyph count and read as `11` and `13`, which are real loads two
-            // plates away from the truth.
-            //
-            // The floor is `SetColumn.weightFloor` SCALED to the reader's text
-            // size by the two structs that lay the row out, so it fits six
-            // glyphs at every setting rather than only at 17 pt. This catches
-            // what is past six (a 1074 kg leg press), and 0.6 keeps body-size
-            // numerals above the 11 pt the token discipline calls the smallest
-            // legible role.
-            //
-            // ── AND WHY IT IS STILL 0.6 AND NOT 1 ───────────────────────────
-            // A scale factor was never the bug. It fired because the floor was
-            // a constant under a font that scales, so the field ran out of room
-            // mid-string and `18.75` came out smaller than `20`. With the floor
-            // tracking the type it cannot fire on a load this app proposes, and
-            // raising it to 1 would buy nothing but bring the ellipsis back for
-            // the one case above.
             .lineLimit(1)
-            .minimumScaleFactor(0.6)
             .foregroundStyle(
                 value == nil ? Color.onyx.textTertiary : (tint ?? Color.onyx.textPrimary)
             )

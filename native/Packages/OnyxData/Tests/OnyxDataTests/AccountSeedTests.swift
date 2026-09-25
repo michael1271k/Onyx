@@ -151,12 +151,13 @@ struct ExerciseCatalogueWriterTests {
     }
 
     /// An imported movement the dictionary has never seen still names its
-    /// muscles, through the stored fallback.
+    /// muscles, through the stored fallback. (The Zercher squat until
+    /// Precision A1 taught the dictionary a bare `squat`.)
     @Test("an unknown name falls back to the tags the import gave it")
     func unknownNamesKeepTheirTags() throws {
         let db = try store()
         let id = try db.createExercise(
-            userId: user, name: "Zercher Squat", primaryMuscle: "Quads",
+            userId: user, name: "Sled Push", primaryMuscle: "Quads",
             secondaryMuscles: ["Glutes"]
         )
         let wire = ExerciseWire(try #require(try db.exercise(id: id)), userId: user)
