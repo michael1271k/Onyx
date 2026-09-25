@@ -132,6 +132,31 @@ public struct WatchTiles: Codable, Sendable, Equatable {
     /// tiles for its complications — the phone leaves it nil on the wire.
     public var finished: SessionMasthead?
 
+    // ── ADDED BY PRECISION D3, OPTIONAL AND LAST ────────────────────────────
+    //
+    // The six petals open six detail screens, and four of them ask what the
+    // wire never carried: what the night was made of, the week of steps, the
+    // resting heart and when stress was last read. All are projections of
+    // fields the snapshot already fills; `var` so a test (and the optimistic
+    // glass) can copy them without the twenty-eight-argument init.
+
+    /// Deep · core · REM · awake minutes — `OnyxSleepStage` order. A stage
+    /// with no reading is nil, never 0. Nil when the night had no stages.
+    public var sleepStages: [Int?]?
+    /// The user's sleep target, minutes — the arc's full sweep.
+    public var sleepGoalMin: Int?
+    /// Bed to rise, minutes (`sleep.startTime` → `endTime`). "Asleep" is
+    /// `sleepMin`; the two together are the night's efficiency.
+    public var inBedMin: Int?
+    /// Seven days of steps ending today, oldest first; nil where no day was
+    /// recorded (a gap in the bars, never a zero bar).
+    public var stepsWeek: [Int?]?
+    /// Tonight's resting heart rate, rounded — the phone's
+    /// `vitals.restingBpm`, the same figure the Body tab's Heart petal reads.
+    public var restingBpm: Int?
+    /// `YYYY-MM-DD` of the last day the stress index had a reading.
+    public var stressLast: String?
+
     /// The next supplement slot today — its first item's name (and how many
     /// ride with it) and when. Nil when nothing is left today.
     public struct NextDose: Codable, Sendable, Equatable {
@@ -175,7 +200,9 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         weekSets: Int? = nil, weekVolumeKg: Double? = nil,
         proteinG: Int? = nil, proteinGoalG: Int? = nil,
         offWrist: OffWristNote? = nil,
-        carbsG: Int? = nil, fatG: Int? = nil, nextDose: NextDose? = nil, finished: SessionMasthead? = nil
+        carbsG: Int? = nil, fatG: Int? = nil, nextDose: NextDose? = nil, finished: SessionMasthead? = nil,
+        sleepStages: [Int?]? = nil, sleepGoalMin: Int? = nil, inBedMin: Int? = nil,
+        stepsWeek: [Int?]? = nil, restingBpm: Int? = nil, stressLast: String? = nil
     ) {
         self.date = date
         self.battery = battery
@@ -205,6 +232,12 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         self.fatG = fatG
         self.nextDose = nextDose
         self.finished = finished
+        self.sleepStages = sleepStages
+        self.sleepGoalMin = sleepGoalMin
+        self.inBedMin = inBedMin
+        self.stepsWeek = stepsWeek
+        self.restingBpm = restingBpm
+        self.stressLast = stressLast
     }
 
     enum CodingKeys: String, CodingKey {
@@ -222,6 +255,8 @@ public struct WatchTiles: Codable, Sendable, Equatable {
         case proteinG = "p", proteinGoalG = "pg"
         case offWrist = "ow"
         case carbsG = "cg", fatG = "fg", nextDose = "nd", finished = "fs"
+        case sleepStages = "sst", sleepGoalMin = "sgm", inBedMin = "ib"
+        case stepsWeek = "stw", restingBpm = "rb", stressLast = "xl"
     }
 
     /// The projection. ONE place cuts the snapshot down, so the phone's
@@ -257,8 +292,32 @@ public struct WatchTiles: Codable, Sendable, Equatable {
             proteinGoalG: s.macros.proteinGoalG.map { Int($0.rounded()) },
             offWrist: s.readiness?.offWrist,
             carbsG: s.macros.carbsG.map { Int($0.rounded()) },
-            fatG: s.macros.fatG.map { Int($0.rounded()) }
+            fatG: s.macros.fatG.map { Int($0.rounded()) },
+            sleepStages: Self.stages(s.sleep),
+            sleepGoalMin: s.sleep.goalMin,
+            inBedMin: Self.minutes(from: s.sleep.startTime, to: s.sleep.endTime),
+            stepsWeek: Self.week(s.steps.trend, endingOn: s.date),
+            restingBpm: s.vitals?.restingBpm?.value.map { Int($0.rounded()) },
+            stressLast: s.stress?.series14.last { $0.index != nil }?.d
         )
+    }
+
+    private static func stages(_ n: OnyxSnapshot.Sleep) -> [Int?]? {
+        let four = [n.deepMin, n.coreMin, n.remMin, n.awakeMin]
+        return four.allSatisfy { $0 == nil } ? nil : four
+    }
+
+    private static func minutes(from start: String?, to end: String?) -> Int? {
+        guard let a = OnyxSnapshot.timestamp(start), let b = OnyxSnapshot.timestamp(end), b > a else { return nil }
+        return Int((b.timeIntervalSince(a) / 60).rounded())
+    }
+
+    /// Seven slots ending on `date`, looked up by DATE — the trend lists only
+    /// the days it has, so an index would slide a missing Tuesday onto Monday.
+    private static func week(_ trend: [OnyxSnapshot.Point]?, endingOn date: String) -> [Int?]? {
+        guard let trend, !trend.isEmpty else { return nil }
+        let byDay = Dictionary(trend.map { ($0.d, Int($0.v.rounded())) }, uniquingKeysWith: { _, last in last })
+        return (-6...0).map { ISODate.addDays(date, $0).flatMap { byDay[$0] } }
     }
 
     // MARK: Derived readings the faces share
@@ -308,7 +367,9 @@ public struct WatchTiles: Codable, Sendable, Equatable {
             week: week, medianBedtime: medianBedtime, lastBedtime: lastBedtime,
             weekSets: weekSets, weekVolumeKg: weekVolumeKg,
             proteinG: proteinG, proteinGoalG: proteinGoalG, offWrist: offWrist,
-            carbsG: carbsG, fatG: fatG, nextDose: nextDose, finished: finished
+            carbsG: carbsG, fatG: fatG, nextDose: nextDose, finished: finished,
+            sleepStages: sleepStages, sleepGoalMin: sleepGoalMin, inBedMin: inBedMin,
+            stepsWeek: stepsWeek, restingBpm: restingBpm, stressLast: stressLast
         )
     }
 

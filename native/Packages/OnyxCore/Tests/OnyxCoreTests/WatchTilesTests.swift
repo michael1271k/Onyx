@@ -236,4 +236,81 @@ struct WatchTilesTests {
                 "nothing left today is nil, never tomorrow's first dose")
         #expect(WatchTiles.NextDose.next(in: slots, date: "not a date", nowMinutes: 0) == nil)
     }
+
+    // MARK: - Precision D3: what the petal details draw
+
+    private func day(_ d: String, _ index: Double?) -> StressDay {
+        StressDay(d: d, index: index, band: index.map(Stress.band), terms: [:], empty: index == nil)
+    }
+
+    @Test("the detail fields project off the snapshot: stages, in-bed, goal, seven days of steps, resting, last stress")
+    func detailFieldsProject() throws {
+        let snapshot = OnyxSnapshot(
+            date: "2026-09-25", generatedAt: "2026-09-25T06:00:00.000Z",
+            sleep: .init(minutes: 432, deepMin: 71, remMin: 98, coreMin: 240, awakeMin: nil,
+                         startTime: "2026-09-24T21:40:00.000Z", endTime: "2026-09-25T05:30:00.000Z", goalMin: 480),
+            weight: .init(), macros: .init(), water: .init(),
+            // Five days on the trend, two missing — the bars keep their gaps.
+            steps: .init(count: 8_412, trend: [
+                .init(d: "2026-09-19", v: 6_010), .init(d: "2026-09-20", v: 11_240.6),
+                .init(d: "2026-09-22", v: 4_300), .init(d: "2026-09-24", v: 9_875), .init(d: "2026-09-25", v: 8_412),
+            ]),
+            workout: .init(label: "Rest", dayKey: nil, logged: false, isRestDay: true),
+            week: .init(sessions: 0, volumeKg: nil, prs: 0, sets: 0),
+            vitals: .init(restingBpm: .init(value: 53.6, baseline: 55)),
+            stress: .init(index: nil, series14: [day("2026-09-22", 38), day("2026-09-23", 47.2), day("2026-09-24", nil), day("2026-09-25", nil)])
+        )
+        let tiles = WatchTiles(snapshot)
+        // Deep · core · REM · awake — the ramp's order; a stage with no
+        // reading stays absent (nil), never zero.
+        #expect(tiles.sleepStages == [71, 240, 98, nil])
+        #expect(tiles.sleepGoalMin == 480)
+        #expect(tiles.inBedMin == 470, "21:40 → 05:30 is 7 h 50 in bed")
+        #expect(tiles.stepsWeek == [6_010, 11_241, nil, 4_300, nil, 9_875, 8_412])
+        #expect(tiles.restingBpm == 54)
+        // The last day that HAS a reading, not today's empty one.
+        #expect(tiles.stressLast == "2026-09-23")
+    }
+
+    @Test("a snapshot without those fields projects nil, not zeros")
+    func detailFieldsAbsent() {
+        let snapshot = OnyxSnapshot(
+            date: "2026-09-25", generatedAt: "2026-09-25T06:00:00.000Z",
+            sleep: .init(), weight: .init(), macros: .init(), water: .init(), steps: .init(),
+            workout: .init(label: "Rest", dayKey: nil, logged: false, isRestDay: true),
+            week: .init(sessions: 0, volumeKg: nil, prs: 0, sets: 0)
+        )
+        let tiles = WatchTiles(snapshot)
+        #expect(tiles.sleepStages == nil)
+        #expect(tiles.inBedMin == nil)
+        #expect(tiles.stepsWeek == nil)
+        #expect(tiles.restingBpm == nil)
+        #expect(tiles.stressLast == nil)
+    }
+
+    @Test("D3's six fields cost the wire under 140 bytes and a pre-D3 payload decodes without them")
+    func detailFieldsAreCheapAndOptional() throws {
+        let bare = WatchTiles(date: full.date, todayLabel: full.todayLabel, todayLogged: false, restDay: false)
+        var with = bare
+        with.sleepStages = [71, 240, 98, 22]
+        with.sleepGoalMin = 480
+        with.inBedMin = 470
+        with.stepsWeek = [6_010, 11_241, nil, 4_300, 12_004, 9_875, 8_412]
+        with.restingBpm = 54
+        with.stressLast = "2026-09-23"
+        let grew = try JSONEncoder().encode(with).count - (try JSONEncoder().encode(bare).count)
+        #expect(grew > 0 && grew < 140, "D3 added \(grew) B to the wire")
+        #expect(try JSONDecoder().decode(WatchTiles.self, from: try JSONEncoder().encode(with)) == with)
+        // Everything at once still fits the 2 KB budget.
+        var all = full
+        all.sleepStages = with.sleepStages; all.sleepGoalMin = 480; all.inBedMin = 470
+        all.stepsWeek = with.stepsWeek; all.restingBpm = 54; all.stressLast = "2026-09-23"
+        #expect(try JSONEncoder().encode(all).count <= 2_048)
+        // The optimistic glass carries them through.
+        #expect(with.addingWater(250).stepsWeek == with.stepsWeek)
+        #expect(with.addingWater(250).sleepStages == with.sleepStages)
+        let legacy = #"{"d":"2026-09-18","tl":"Rest","td":false,"r":true}"#
+        let old = try JSONDecoder().decode(WatchTiles.self, from: Data(legacy.utf8))
+        #expect(old.sleepStages == nil && old.stepsWeek == nil && old.restingBpm == nil && old.stressLast == nil)
+    }
 }
