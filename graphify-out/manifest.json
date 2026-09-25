@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/App/PreviewHarness.swift": {
-    "mtime": 1790347044.6046753,
-    "ast_hash": "3aa4d179557e2fcc2eaf47d577db0eec",
+    "mtime": 1790350106.7721536,
+    "ast_hash": "0b8dbec68c31fd3955682b2540f3f964",
     "semantic_hash": ""
   },
   "native/Onyx/App/SyncCoordinating.swift": {
@@ -95,8 +95,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/History/AtlasSheet.swift": {
-    "mtime": 1789575867.6082654,
-    "ast_hash": "f0f8293e26375fa4eafc72510aac192f",
+    "mtime": 1790350106.7735696,
+    "ast_hash": "c2dcfa4700e1ce1c203ac7e28757a289",
     "semantic_hash": ""
   },
   "native/Onyx/Features/History/CalendarJumpSheet.swift": {
@@ -150,8 +150,8 @@
     "semantic_hash": ""
   },
   "native/Onyx/Features/Logger/AtlasFigure.swift": {
-    "mtime": 1789575867.6084538,
-    "ast_hash": "ad4cc25ccc50f3c91a5c856feecd457a",
+    "mtime": 1790350106.7749236,
+    "ast_hash": "3caa0a0bdbc867840e54fc812416f4a2",
     "semantic_hash": ""
   },
   "native/Onyx/Features/Logger/Effort.swift": {
@@ -3225,8 +3225,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxUI/Sources/OnyxUI/Atlas/OnyxAtlas.swift": {
-    "mtime": 1789575867.6112795,
-    "ast_hash": "f7504f243a9653ee4b3d9ed3a2647d56",
+    "mtime": 1790350106.7756443,
+    "ast_hash": "e1f7e8a250d871faf50c3b82f8a28668",
     "semantic_hash": ""
   },
   "native/Packages/OnyxUI/Sources/OnyxUI/Atlas/OnyxAtlasHit.swift": {
@@ -3280,8 +3280,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxUI/Sources/OnyxUI/DesignSystem/OnyxTokens.swift": {
-    "mtime": 1790335626.368028,
-    "ast_hash": "a883a2c676db39dea2e1846426bf09ea",
+    "mtime": 1790350106.7762537,
+    "ast_hash": "b90337ae2507489b6d7b0c68579daa95",
     "semantic_hash": ""
   },
   "native/Packages/OnyxUI/Sources/OnyxUI/DesignSystem/OnyxType.swift": {
@@ -3300,8 +3300,8 @@
     "semantic_hash": ""
   },
   "native/Packages/OnyxUI/Sources/OnyxUI/Tiles/OnyxAtlasFigure.swift": {
-    "mtime": 1789563937.3949518,
-    "ast_hash": "05e90fca3b9a151c3867eb0b1e345e9d",
+    "mtime": 1790350106.7767425,
+    "ast_hash": "3221e1097cd626ff5a2823e8c3f6225d",
     "semantic_hash": ""
   },
   "native/Packages/OnyxUI/Sources/OnyxUI/Tiles/OnyxCardio.swift": {
@@ -3390,8 +3390,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790347051.9669423,
-    "ast_hash": "487de4c40e747122980c852d5dbbcb4d",
+    "mtime": 1790350112.0065188,
+    "ast_hash": "51829a7bb43b69684a0edc95e151c713",
     "semantic_hash": ""
   },
   "scripts/check-swift.sh": {
@@ -3400,8 +3400,8 @@
     "semantic_hash": ""
   },
   "scripts/gen-atlas-swift.mjs": {
-    "mtime": 1789575867.612009,
-    "ast_hash": "7beeff73393acff9db1d5a3633d28030",
+    "mtime": 1790350106.7773173,
+    "ast_hash": "a647be5931202173b1fab463b5ed82cf",
     "semantic_hash": ""
   },
   "scripts/gen-doms-swift.mjs": {
@@ -3425,8 +3425,8 @@
     "semantic_hash": ""
   },
   "scripts/native-shot.sh": {
-    "mtime": 1790347044.633317,
-    "ast_hash": "2b1f193be608c09f572219450466c7ed",
+    "mtime": 1790350106.777783,
+    "ast_hash": "2aaf055dcb7294bd67ef48c843e0ee27",
     "semantic_hash": ""
   },
   "scripts/store-shots.sh": {
@@ -3455,8 +3455,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1790347059.4155607,
-    "ast_hash": "fe8a380ba28c50b228166fd9a1ba1791",
+    "mtime": 1790350141.6032588,
+    "ast_hash": "885b57a7b37bf952b39583a9fd50527a",
     "semantic_hash": ""
   },
   "docs/GIT.md": {
@@ -3485,8 +3485,8 @@
     "semantic_hash": ""
   },
   "native/project.yml": {
-    "mtime": 1790347052.2316506,
-    "ast_hash": "10e579afbfa539212249c2e24967364a",
+    "mtime": 1790350112.1310878,
+    "ast_hash": "48e4045128679115680958eeb251d497",
     "semantic_hash": ""
   },
   "native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png": {
@@ -3510,8 +3510,8 @@
     "semantic_hash": ""
   },
   "scripts/src/atlas.ts": {
-    "mtime": 1789575867.612191,
-    "ast_hash": "b4913d7bd2f93f50681e19ca38a791fc",
+    "mtime": 1790350106.779072,
+    "ast_hash": "668c9d9a3f91455c91236fb5930da2fa",
     "semantic_hash": ""
   },
   "scripts/src/report/fmtV2.ts": {
@@ -4695,8 +4695,8 @@
     "semantic_hash": ""
   },
   "docs/Plan-Onyx-Precision.md": {
-    "mtime": 1790342148.9755125,
-    "ast_hash": "55e0538cf1cb2f4fbb6c619d0327ffd1",
+    "mtime": 1790347359.7432625,
+    "ast_hash": "a7b1157cd1b6d2899f211f1b38fbb547",
     "semantic_hash": ""
   },
   ".impeccable/design.json": {
@@ -4887,6 +4887,21 @@
   ".impeccable/surfaces/native-onyx-features-programs-programsview-swift.md": {
     "mtime": 1790347044.6030104,
     "ast_hash": "1fdd15ac6ba60c4607106d7be5b335ff",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxUI/Sources/OnyxUI/Atlas/AtlasMaterial.swift": {
+    "mtime": 1790350106.7751443,
+    "ast_hash": "165ce013d0caaa2ad68881b3405bf703",
+    "semantic_hash": ""
+  },
+  "native/Packages/OnyxUI/Tests/OnyxUITests/AtlasMaterialTests.swift": {
+    "mtime": 1790350106.7769241,
+    "ast_hash": "97fb87ee3a35f86df700782d3c7420ba",
+    "semantic_hash": ""
+  },
+  ".impeccable/surfaces/sources-onyxui-atlas-atlasmaterial-swift-59d5805f.md": {
+    "mtime": 1790350106.7716925,
+    "ast_hash": "643bf67c408518fa44d8ef0c378f08f2",
     "semantic_hash": ""
   }
 }
