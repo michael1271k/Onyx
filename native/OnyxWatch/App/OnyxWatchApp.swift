@@ -1,4 +1,5 @@
 import HealthKit
+import OnyxUI
 import SwiftUI
 import WatchKit
 
@@ -59,6 +60,13 @@ struct OnyxWatchApp: App {
                 // and the deck all live on the model.
                 .id(model.themeKey)
                 .environment(model)
+                #if DEBUG
+                // `ONYX_WATCH_RT=1` (Precision D4): Reduce Transparency, forced
+                // — the system flag is read-only, so the ground and the slab
+                // OR this with it, exactly as the phone harness's `rt-` screens.
+                .environment(\.onyxForcesReducedTransparency,
+                             ProcessInfo.processInfo.environment["ONYX_WATCH_RT"] == "1")
+                #endif
                 // `.task` rather than `.onAppear`: opening the store, activating
                 // WatchConnectivity and asking HealthKit for authorization are
                 // all things that should be cancelled if the view goes away
@@ -195,7 +203,10 @@ struct OnyxWatchApp: App {
                             // `seedDebugContext(restDay:)`. It falls through to
                             // page one, which is where the rest-day hero is.
                             model.seedDebugContext(restDay: true)
-                        case .start, .dashboard, .train, .fuel, .glance, .pulse:
+                        case .start, .dashboard, .train, .fuel, .glance, .pulse,
+                             // Precision D3: the context (and the heart seed inside
+                             // it) is all a detail reads; `RootView` pushes it.
+                             .detailSleep, .detailWater, .detailFood, .detailHeart, .detailSteps, .detailStress:
                             // ── THE CONTEXT, WHICH AUTOSTART USUALLY SEEDS ──
                             // These three are the only screens reached with
                             // `ONYX_WATCH_AUTOSTART` OFF, and the seed above

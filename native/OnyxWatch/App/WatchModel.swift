@@ -149,6 +149,10 @@ final class WatchModel {
     /// runtime, not a heart-rate feature.
     let workout = WorkoutSessionController()
 
+    /// Heart rate and HRV OUTSIDE a workout (Precision D2) — the Heart petal,
+    /// its detail and the two heart complications between sessions.
+    let vitals = WatchVitals()
+
     /// `.notice`, so `log show` returns it: which session the wrist followed
     /// and why it did not, answered from the device (App Store W4).
     private let log = Logger(subsystem: "app.onyx.watch", category: "session")
@@ -208,7 +212,25 @@ final class WatchModel {
     /// `dashboard` is W4's, and it is the last name `watch-shot.sh` refused
     /// (W1 left it named as unreachable and said so by name rather than
     /// photographing `StartView` under its filename).
-    enum DebugScreen: String { case start, restday, rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget, banner, join, glance, pulse, restband, replay }
+    enum DebugScreen: String {
+        case start, restday, rest, deck, quality, pause, cancel, finish, dashboard, fuel, train, widget, banner, join, glance, pulse, restband, replay
+        // Precision D3: the six petal details, pushed onto the root stack.
+        case detailSleep = "detail-sleep", detailWater = "detail-water", detailFood = "detail-food"
+        case detailHeart = "detail-heart", detailSteps = "detail-steps", detailStress = "detail-stress"
+
+        /// The petal whose detail this screen is, if it is one.
+        var petal: PetalDetail? {
+            switch self {
+            case .detailSleep: .sleep
+            case .detailWater: .water
+            case .detailFood: .food
+            case .detailHeart: .heart
+            case .detailSteps: .steps
+            case .detailStress: .stress
+            default: nil
+            }
+        }
+    }
     var debugScreen: DebugScreen?
     #endif
 
@@ -566,7 +588,15 @@ final class WatchModel {
         // rejoin below can find it live and restart its workout.
         applyLifecycle()
         rejoinLiveSession()
-        Task { try? await workout.requestAuthorization() }
+        // A new rate reloads the two faces that draw one — never all eleven.
+        vitals.onHeart = { _ in
+            WidgetCenter.shared.reloadTimelines(ofKind: LastHeartRate.widgetKind)
+            WidgetCenter.shared.reloadTimelines(ofKind: HeartTrail.widgetKind)
+        }
+        Task {
+            try? await workout.requestAuthorization()
+            vitals.start()
+        }
         startMidnightClock()
     }
 
@@ -1496,8 +1526,11 @@ final class WatchModel {
         // de-duped beat as the card — never per sample, which would spend the
         // reload budget the card needs.
         if let bpm = next.bpm, bpm != lastPublished?.bpm {
-            LastHeartRate(bpm: bpm, at: Date()).save()
+            let reading = LastHeartRate(bpm: bpm, at: Date())
+            reading.save()
+            vitals.noteWorkout(reading)
             WidgetCenter.shared.reloadTimelines(ofKind: LastHeartRate.widgetKind)
+            WidgetCenter.shared.reloadTimelines(ofKind: HeartTrail.widgetKind)
         }
         lastPublished = next
         next.save()
@@ -1994,7 +2027,11 @@ extension WatchModel {
                 programs: [
                     Program(id: "onyx5", label: "Onyx 5", days: restDay ? [] : [
                         ProgramDay(
-                            key: "cb_b", label: "Upper B", accent: 0, weekday: 2,
+                            // `ONYX_WATCH_DAY_LABEL` (Precision D4): a long split
+                            // name, so the title's `ViewThatFits` tiers can be
+                            // proved at 40 mm rather than assumed.
+                            key: "cb_b", label: ProcessInfo.processInfo.environment["ONYX_WATCH_DAY_LABEL"] ?? "Upper B",
+                            accent: 0, weekday: 2,
                             exercises: [
                                 ProgramExercise("Chest Press", sets: 3, wk1Kg: 40, reps: "8-12", restSec: 150),
                                 ProgramExercise("Neutral-Grip Lat Pulldown", sets: 3, wk1Kg: 47, reps: "8-12", restSec: 150),
@@ -2027,7 +2064,12 @@ extension WatchModel {
                 // Lane A's macro bar and Next Dose — without them the Fuel
                 // page photographs the no-bar fallback.
                 carbsG: 176, fatG: 52,
-                nextDose: WatchTiles.NextDose(name: "Magnesium +2", at: Date().addingTimeInterval(3 * 3600))
+                nextDose: WatchTiles.NextDose(name: "Magnesium +2", at: Date().addingTimeInterval(3 * 3600)),
+                // Precision D3's six — without them every detail
+                // photographs its empty state.
+                sleepStages: [71, 238, 104, 32], sleepGoalMin: 480, inBedMin: 482,
+                stepsWeek: [6_010, 11_241, nil, 4_300, 12_004, 9_875, 8_412], restingBpm: 54,
+                stressLast: today
             ),
             // The phone's lifecycle word (overhaul A1) — the `banner` and
             // `join` shots seed one; every other screen has none.
@@ -2041,6 +2083,30 @@ extension WatchModel {
         WidgetCenter.shared.reloadAllTimelines()
         context = next
         resolveDay()
+        seedDebugHeart()
+    }
+
+    /// A day of heart rate for the Glance's Heart petal, its detail and the
+    /// Live Heart face — a simulator has no sensor, so without it every one
+    /// of them is an honest empty state. A resting day with a gap before
+    /// dawn (the trail must break there, not bridge it) and an afternoon
+    /// session's climb.
+    func seedDebugHeart() {
+        let now = Date()
+        var samples: [HeartTrail.Sample] = []
+        for minute in stride(from: 24 * 60 - 5, through: 0, by: -10) {
+            let hour = Double(minute) / 60
+            if (17...19).contains(hour) { continue }            // off the wrist before dawn
+            let base = 58 + 8 * sin(hour / 24 * 2 * .pi)
+            let workout = (3.0...4.2).contains(hour) ? 62.0 : 0
+            samples.append(HeartTrail.Sample(at: now.addingTimeInterval(-Double(minute) * 60),
+                                             bpm: Int((base + workout).rounded())))
+        }
+        var trail = HeartTrail()
+        trail.merge(samples, now: now)
+        vitals.seedDebug(trail, heart: LastHeartRate(bpm: 61, at: now.addingTimeInterval(-4 * 60)),
+                         hrv: LastHRV(ms: 48, at: now.addingTimeInterval(-6 * 3600)))
+        WidgetCenter.shared.reloadTimelines(ofKind: HeartTrail.widgetKind)
     }
 
     /// The preset named by `ONYX_WATCH_THEME`, or nil (the default palette).

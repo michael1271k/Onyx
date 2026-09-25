@@ -105,11 +105,13 @@ public final class WorkoutSessionController: NSObject {
     public func requestAuthorization() async throws {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         let share: Set<HKSampleType> = [HKObjectType.workoutType()]
-        let read: Set<HKObjectType> = [
+        // HRV since Precision D2: `WatchVitals` reads heart rate and HRV
+        // outside a workout, and one prompt is kinder than two.
+        let read = Set<HKObjectType>([
             HKObjectType.workoutType(),
             HKQuantityType(.heartRate),
             HKQuantityType(.activeEnergyBurned),
-        ]
+        ]).union(WatchVitals.readTypes)
         try await store.requestAuthorization(toShare: share, read: read)
     }
 
