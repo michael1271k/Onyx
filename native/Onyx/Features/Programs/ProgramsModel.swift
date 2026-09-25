@@ -27,12 +27,14 @@ final class ProgramsModel {
     /// The last write that failed or was refused, in words.
     var failure: String?
 
+    /// No read here: a `NavigationLink`'s destination is built on every
+    /// redraw of the screen holding it (the Train door, the Settings form),
+    /// and a snapshot read per redraw is a main-thread query nobody asked for
+    /// (review). The list's `.task` observes, and GRDB's first yield is
+    /// immediate.
     init(database: AppDatabase, userId: String) {
         self.database = database
         self.userId = userId
-        // The first read is synchronous so the list never draws empty for a
-        // frame before the stream's first yield (`TargetResolver.start`).
-        if let first = try? database.targetSnapshot(userId: userId) { schedule = first.schedule }
     }
 
     func observe() async {

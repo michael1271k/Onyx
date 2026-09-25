@@ -74,9 +74,13 @@ struct GoalSetupModelTests {
 
     @Test("changing the goal re-derives the macros and the target until they are touched")
     func goalChangeRederives() throws {
-        let m = try model(try store())
+        let db = try store()
+        let m = try model(db)
         m.goal = .bulk
-        #expect(m.kcal == Double(StartingTargetsBuilder.build(weightKg: 82.3, programGoal: .bulk).kcal))
+        // The seed wrote a bulk row, so the bulk goal opens on it — not on a
+        // formula run at today's weight.
+        let bulkRow = try #require(try db.phaseGoals(userId: Self.user, planId: "mine", phase: .bulk))
+        #expect(m.kcal == bulkRow.calorieGoal)
         #expect(m.targetWeightKg != nil)
         m.markTargetsTouched()
         m.proteinG = 250
@@ -117,6 +121,77 @@ struct GoalSetupModelTests {
         let days = try db.routineDays(userId: Self.user, programId: "mine")
         #expect(days.count == (PlanTemplates.plans.first { $0.id == "onyx4" }?.days.count ?? -1))
         #expect(days.count > 0)
+    }
+
+    /// Review HIGH: `horizonWeeks`' didSet re-proposed the target while the
+    /// init was still restoring it, so reopening a 16-week goal replaced the
+    /// user's 74 kg with the band's middle.
+    @Test("reopening a saved goal keeps its target at any horizon")
+    func reopenKeepsTheTarget() throws {
+        let db = try store()
+        try db.applyProgramGoal(
+            userId: Self.user, programId: "mine", goal: .cut,
+            target: ProgramGoalTarget(targetWeightKg: 74, horizonWeeks: 16),
+            targets: StartingTargetsBuilder.build(weightKg: 82, programGoal: .cut), weightKg: 82
+        )
+        let m = try model(db)
+        #expect(m.goal == .cut)
+        #expect(m.targetWeightKg == 74)
+        #expect(m.horizonWeeks == 16)
+    }
+
+    /// Review MEDIUM: the phase's own row — hand-tuned, maybe — is what the
+    /// targets step opens on, benched or running, and its steps are kept.
+    @Test("the targets step opens on the phase's own row, steps included")
+    func prefillsFromThePhaseRow() throws {
+        let db = try store()
+        _ = try db.editPlanPhaseGoals(userId: Self.user, planId: "mine", phase: "cut") { row in
+            row.kcal = 1_935
+            row.proteinG = 190
+            row.carbsG = 180
+            row.fatG = 60
+            row.stepsGoal = 11_000
+        }
+        let m = try model(db, running: false)
+        m.goal = .bodyFat
+        #expect(m.kcal == 1_935)
+        #expect(m.proteinG == 190)
+        #expect(m.targets.stepsGoal == 11_000)
+        m.goal = .bulk  // a phase with the seed's bulk row: its numbers, not the cut's
+        #expect(m.kcal != 1_935)
+    }
+
+    /// Review MEDIUM: a cleared macro saved as 0 g.
+    @Test("the targets step cannot be saved with no calories or no protein")
+    func blanksBlockSave() throws {
+        let m = try model(try store())
+        m.step = .targets
+        #expect(m.canAdvance)
+        m.proteinG = nil
+        #expect(!m.canAdvance)
+        m.proteinG = 150
+        m.kcal = 0
+        #expect(!m.canAdvance)
+    }
+
+    /// Review MEDIUM: a two-year body-fat horizon proposed a negative %.
+    @Test("a long horizon never proposes an impossible target")
+    func proposalIsClamped() throws {
+        let m = try model(try store())
+        m.goal = .bodyFat
+        m.horizonWeeks = 104
+        #expect((m.targetBodyFatPct ?? 0) >= 3)
+        m.goal = .cut
+        #expect(StartingTargetsBuilder.weightRange.contains(m.targetWeightKg ?? 0))
+    }
+
+    /// Review LOW: a running program with no goal opens on the direction the
+    /// account is already in, not on "Cut".
+    @Test("with no goal yet, the sheet opens on the account's phase")
+    func defaultsToTheCurrentPhase() throws {
+        let db = try store()
+        _ = try db.editUserGoals(userId: Self.user) { $0.activePhase = "bulk" }
+        #expect(try model(db).goal == .bulk)
     }
 
     @Test("the goal row's words")

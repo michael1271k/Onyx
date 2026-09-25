@@ -53,7 +53,15 @@ struct ProgramEditorView: View {
         // routine builder commits — a name typed and swiped away from is kept.
         .onChange(of: nameFocused) { _, focused in if !focused { commitName() } }
         .onDisappear { commitName() }
-        .sheet(item: $goalSheet) { GoalSetupSheet(model: $0) }
+        // A goal sheet can fill an empty program with a template's days.
+        .sheet(item: $goalSheet, onDismiss: { routines.load() }) { GoalSetupSheet(model: $0) }
+        // A program just created is pushed before the observation delivers
+        // it; the name fills when it lands, never over a field being typed.
+        .onChange(of: plan?.label) { _, label in
+            guard let label, !nameFocused, name.isEmpty else { return }
+            name = label
+            routines.programLabel = label
+        }
         // No alert of its own: this screen is always pushed over
         // `ProgramsView`, whose alert reads the same `failure` — two bound to
         // one value would both try to present.

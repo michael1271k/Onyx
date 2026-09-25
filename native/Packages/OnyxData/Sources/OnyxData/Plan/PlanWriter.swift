@@ -53,16 +53,61 @@ public extension AppDatabase {
     ///
     /// `days` may carry any `programId` — a template's, a copy's — and are
     /// re-homed under the new id.
+    ///
+    /// ── IT STARTS FROM THE RUNNING PROGRAM'S NUMBERS ────────────────────────
+    /// A program with no `plan_phase_goals` rows has no targets, and running
+    /// it would write `.empty` — 0 kcal — over the user's own numbers
+    /// (review, Precision E). So a new program copies the running program's
+    /// phase goals and weekly volume, both phases, as its starting point; a
+    /// goal set on it later replaces its own phase's row.
     @discardableResult
     func createPlan(
         userId: String, name: String, blurb: String = "",
         goal: ProgramGoal? = nil, goalTarget: ProgramGoalTarget? = nil, days: [RoutineDay] = []
     ) throws -> String {
         try writer.write { db in
-            try Self.createPlan(
+            let running = try Self.runningProgramId(db, userId: userId)
+            let id = try Self.createPlan(
                 db, userId: userId, programId: nil, name: name, blurb: blurb, isLegacy: false,
                 sort: nil, goal: goal, goalTarget: goalTarget, days: days
             ).programId
+            if !running.isEmpty, running != id {
+                try Self.copyTargets(db, userId: userId, from: running, to: id)
+            }
+            return id
+        }
+    }
+
+    /// The program the app runs — the stored selection resolved against the
+    /// rows, the rule `scheduleContext` and `deletePlan` share.
+    static func runningProgramId(_ db: Database, userId: String) throws -> String {
+        let rows = try PlanRow.filter(Column("user_id") == userId).fetchAll(db)
+        let goals = try UserGoalRow.filter(Column("user_id") == userId).fetchOne(db)
+        return Programs.resolvePlanId(
+            stored: goals?.activePlan ?? goals?.activeProgram,
+            in: rows.compactMap(PlanInfo.init),
+            activeFallback: rows.first { $0.active == true }?.programId
+        )
+    }
+
+    /// Both phases' goals and weekly volume from one program onto another.
+    static func copyTargets(_ db: Database, userId: String, from source: String, to target: String) throws {
+        let owner = Column("user_id") == userId
+        for var row in try PlanPhaseGoalRow.filter(owner && Column("plan_id") == source).fetchAll(db) {
+            row.planId = target
+            row.updatedAt = Self.localWriteTimestamp
+            try row.save(db)
+            try Self.enqueueRowUpsert(
+                table: PlanPhaseGoalRow.databaseTableName, id: Self.rowID([userId, target, row.phase]), in: db
+            )
+        }
+        for var row in try PlanPhaseVolumeRow.filter(owner && Column("plan_id") == source).fetchAll(db) {
+            row.planId = target
+            row.updatedAt = Self.localWriteTimestamp
+            try row.save(db)
+            try Self.enqueueRowUpsert(
+                table: PlanPhaseVolumeRow.databaseTableName, id: Self.rowID([userId, target, row.phase, row.muscle]), in: db
+            )
         }
     }
 
@@ -153,6 +198,11 @@ public extension AppDatabase {
                 arguments: [userId]
             ))
         }
+        // The stored selection too: an id `user_goals` still names (a plan
+        // deleted on another device, not yet pulled away) must not be reborn.
+        if let goals = try UserGoalRow.filter(Column("user_id") == userId).fetchOne(db) {
+            taken.formUnion([goals.activePlan, goals.activeProgram].compactMap { $0 })
+        }
         func free(_ candidate: String) -> Bool {
             !taken.contains(candidate) && Programs.normalizePlanId(candidate) == candidate
         }
@@ -192,14 +242,23 @@ public extension AppDatabase {
             guard let row = rows.first(where: { $0.programId == programId }) else {
                 throw PlanWriteError.unknownPlan
             }
-            let goals = try UserGoalRow.filter(Column("user_id") == userId).fetchOne(db)
-            let running = Programs.resolvePlanId(
-                stored: goals?.activePlan ?? goals?.activeProgram,
-                in: rows.compactMap(PlanInfo.init),
-                activeFallback: rows.first { $0.active == true }?.programId
-            )
+            let running = try Self.runningProgramId(db, userId: userId)
             if running == programId || row.active == true { throw PlanWriteError.activePlan }
-            if let since = row.startedOn { throw PlanWriteError.hasRun(since: since) }
+            // ── HISTORY IS A SESSION IT OWNS, NOT A START DATE ──────────────
+            // `started_on` is set on the first run and never moves, so a
+            // program run for a minute by mistake would be undeletable. What
+            // deleting would actually damage is a logged session whose week
+            // is labelled with this program (`Schedule.planId(owning:)`), or
+            // a dated block that names it.
+            if let since = row.startedOn {
+                let context = try Self.scheduleContext(db, userId: userId)
+                let dates = try String.fetchAll(
+                    db, sql: "SELECT DISTINCT date FROM workout_sessions WHERE user_id = ?", arguments: [userId]
+                )
+                let owns = dates.contains { Schedule.planId(owning: $0, in: context) == programId }
+                let blocks = try PlanPhaseRow.filter(Column("user_id") == userId && Column("plan_id") == programId).fetchCount(db)
+                if owns || blocks > 0 { throw PlanWriteError.hasRun(since: since) }
+            }
 
             try row.delete(db)
             try Self.enqueueRowDelete(table: PlanRow.databaseTableName, key: ["id": row.id], in: db)
@@ -331,24 +390,45 @@ public extension AppDatabase {
     /// the SAME five writes: the phase's goals into `user_goals`, the plan and
     /// phase themselves, the date the phase started, and the dated registry
     /// the charts label eras from.
+    ///
+    /// ── NO ROW, NO NUMBERS WRITTEN ──────────────────────────────────────────
+    /// A phase the program has no `plan_phase_goals` row for moves the plan
+    /// and the phase and leaves the user's numbers alone. `SettingsModel`
+    /// used to write `.empty` there — 0 kcal over the user's own figures —
+    /// which no plan could reach until programs could be made on the phone.
+    ///
+    /// ── A CLEARED TARGET IS SENT AS A CLEAR ─────────────────────────────────
+    /// A nil stays out of a push body (`encodeIfPresent`), so a body target
+    /// the phase no longer has would survive on the server and come back on
+    /// the next pull. The three target columns are live, so a nil one is
+    /// named in the upsert's `nulls`.
     func activateProgram(userId: String, programId: String, phase: ProgramPhase, startedOn: String) throws {
-        // The phase's own row, if the plan has one; an empty goal set
-        // otherwise, which writes zeros the screens already read as unset.
-        let goals = try phaseGoals(userId: userId, planId: programId, phase: phase) ?? .empty(phase)
-        try editUserGoals(userId: userId) { row in
-            row.calorieGoal = Int(goals.calorieGoal)
-            row.proteinGoalG = goals.proteinGoalG.map { Int($0) }
-            row.carbsGoalG = goals.carbsGoalG.map { Int($0) }
-            row.fatGoalG = goals.fatGoalG.map { Int($0) }
-            row.stepsGoal = Int(goals.stepsGoal)
-            row.targetWeightKg = goals.targetWeightKg
-            row.targetBodyFatPct = goals.targetBodyFatPct
-            row.targetMuscleMassKg = goals.targetMuscleMassKg
+        let goals = try phaseGoals(userId: userId, planId: programId, phase: phase)
+        let row = try editUserGoals(userId: userId) { row in
+            if let goals {
+                row.calorieGoal = Int(goals.calorieGoal)
+                row.proteinGoalG = goals.proteinGoalG.map { Int($0) }
+                row.carbsGoalG = goals.carbsGoalG.map { Int($0) }
+                row.fatGoalG = goals.fatGoalG.map { Int($0) }
+                row.stepsGoal = Int(goals.stepsGoal)
+                row.targetWeightKg = goals.targetWeightKg
+                row.targetBodyFatPct = goals.targetBodyFatPct
+                row.targetMuscleMassKg = goals.targetMuscleMassKg
+            }
             row.activePlan = programId
             row.activeProgram = programId
             row.activePhase = phase.rawValue
             row.goalPreset = phase.rawValue
             row.phaseStartedOn = startedOn
+        }
+        if goals != nil {
+            let cleared = [
+                ("target_weight_kg", row.targetWeightKg), ("target_body_fat_pct", row.targetBodyFatPct),
+                ("target_muscle_mass_kg", row.targetMuscleMassKg),
+            ].filter { $0.1 == nil }.map(\.0)
+            if !cleared.isEmpty {
+                try enqueueRowUpsert(table: UserGoalRow.databaseTableName, id: row.id, nulls: cleared)
+            }
         }
         try activatePlanRow(userId: userId, programId: programId, startedOn: startedOn)
     }

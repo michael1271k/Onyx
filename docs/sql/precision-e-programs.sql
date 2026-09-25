@@ -11,9 +11,13 @@
 --
 -- All three are NULLABLE with no default, and the phone keeps them out of every
 -- push body while they are nil (`encodeIfPresent`), so a build installed before
--- this paste still syncs every plan that has no goal. A plan GIVEN a goal on
--- such a build fails its push (PGRST204) and stays in the outbox until this
--- runs — nothing is lost.
+-- this paste still syncs every plan that has no goal.
+--
+-- A goal set BEFORE this paste is NOT safe: its `plans` push fails (PGRST204),
+-- the next pull (`select=*` on the old schema) rewrites the local row without
+-- the goal, and the following drain then pushes that goal-less row and
+-- succeeds — the goal is gone, silently. Paste this first (the sprint plan's
+-- order), then install.
 
 -- What the program is for. Read by `PlanInfo.goal` (OnyxCore/Training/Programs.swift),
 -- written by `AppDatabase.applyProgramGoal` (OnyxData/Plan/PlanWriter.swift).

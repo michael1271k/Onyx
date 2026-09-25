@@ -150,6 +150,67 @@ struct PlanActivateDeleteTests {
         #expect(catalogue.plans.first { $0.id == "onyx5" }?.startedOn == "2026-07-15", "the old era keeps its date")
     }
 
+    /// Review HIGH: a new program had no `plan_phase_goals` rows, and running
+    /// it wrote `.empty` — 0 kcal — into the user's own numbers.
+    @Test("a new program starts from the running program's targets and volume")
+    func newProgramInheritsTheRunningTargets() throws {
+        let db = try seeded()
+        let before = try #require(try db.userGoals(userId: user))
+        let id = try db.createPlan(userId: user, name: "Next block", days: days("x"))
+        for phase in ProgramPhase.allCases {
+            #expect(try db.phaseGoals(userId: user, planId: id, phase: phase)
+                    == db.phaseGoals(userId: user, planId: "onyx5", phase: phase))
+            #expect(try db.volumeTargets(userId: user, planId: id, phase: phase)
+                    == db.volumeTargets(userId: user, planId: "onyx5", phase: phase))
+        }
+        try db.activateProgram(userId: user, programId: id, phase: .cut, startedOn: "2026-09-25")
+        let after = try #require(try db.userGoals(userId: user))
+        #expect(after.calorieGoal == before.calorieGoal)
+        #expect(after.proteinGoalG == before.proteinGoalG)
+        #expect(after.stepsGoal == before.stepsGoal)
+    }
+
+    /// And when a program has no row for the phase at all, running it leaves
+    /// the user's numbers exactly where they were.
+    @Test("running a program with no row for the phase keeps the user's numbers")
+    func activationWithoutRowsKeepsNumbers() throws {
+        let db = try store()
+        let id = try db.createPlan(userId: user, name: "Bare")
+        _ = try db.editUserGoals(userId: user) { row in
+            row.calorieGoal = 2_000
+            row.proteinGoalG = 150
+            row.targetWeightKg = 70
+        }
+        try db.activateProgram(userId: user, programId: id, phase: .bulk, startedOn: "2026-09-25")
+        let goals = try #require(try db.userGoals(userId: user))
+        #expect(goals.calorieGoal == 2_000)
+        #expect(goals.proteinGoalG == 150)
+        #expect(goals.targetWeightKg == 70)
+        #expect(goals.activePlan == id)
+        #expect(goals.activePhase == "bulk")
+    }
+
+    /// Review MEDIUM: a goal changed from a weight to a percentage must clear
+    /// the old weight on the server's `user_goals` too, not only locally.
+    @Test("running a phase with no target weight sends the clear")
+    func activationSendsTargetNulls() throws {
+        let db = try seeded()
+        try db.applyProgramGoal(
+            userId: user, programId: "onyx5", goal: .bodyFat,
+            target: ProgramGoalTarget(targetBodyFatPct: 14, horizonWeeks: 12),
+            targets: StartingTargetsBuilder.build(weightKg: 80, programGoal: .bodyFat), weightKg: 80
+        )
+        try db.activateProgram(userId: user, programId: "onyx5", phase: .cut, startedOn: "2026-09-25")
+        let refs = try db.pendingOutbox(limit: 500).compactMap { item -> RowRef? in
+            guard item.kind == SyncKind.rowUpsert else { return nil }
+            return try? OnyxJSON.decoder.decode(RowRef.self, from: item.payload)
+        }
+        let goalsRef = try #require(refs.first { $0.table == "user_goals" })
+        #expect(goalsRef.nulls.contains("target_weight_kg"))
+        #expect(goalsRef.nulls.contains("target_muscle_mass_kg"))
+        #expect(!goalsRef.nulls.contains("target_body_fat_pct"))
+    }
+
     @Test("deleting the running program is refused")
     func refusesTheActivePlan() throws {
         let db = try seeded()
@@ -160,16 +221,32 @@ struct PlanActivateDeleteTests {
     }
 
     /// A program that ran owns dated weeks — `Schedule.planId(owning:)` reads
-    /// its `started_on` — and deleting it would relabel its history.
-    @Test("deleting a program that has run is refused")
+    /// its `started_on` — and deleting it would relabel the sessions in them.
+    @Test("deleting a program that owns logged sessions is refused")
     func refusesAPlanWithHistory() throws {
         let db = try seeded()
         let id = try db.createPlan(userId: user, name: "Old", days: days("x"))
-        try db.activateProgram(userId: user, programId: id, phase: .cut, startedOn: "2026-09-20")
+        // Ran from March, before Onyx-5's July start: it owns the spring.
+        try db.activateProgram(userId: user, programId: id, phase: .cut, startedOn: "2026-03-01")
         try db.activateProgram(userId: user, programId: "onyx5", phase: .cut, startedOn: "2026-09-25")
-        #expect(throws: PlanWriteError.hasRun(since: "2026-09-20")) {
+        try db.writer.write { conn in
+            try WorkoutSession(id: "s-spring", userId: user, dayKey: "push", date: "2026-04-01").insert(conn)
+        }
+        #expect(throws: PlanWriteError.hasRun(since: "2026-03-01")) {
             try db.deletePlan(userId: user, programId: id)
         }
+    }
+
+    /// Run for a minute by mistake, switched back, nothing logged under it:
+    /// it owns no session, so it is not history and can go.
+    @Test("a program run by mistake with no sessions under it can be deleted")
+    func deletesAMistakenRun() throws {
+        let db = try seeded()
+        let id = try db.createPlan(userId: user, name: "Oops", days: days("x"))
+        try db.activateProgram(userId: user, programId: id, phase: .cut, startedOn: "2026-09-25")
+        try db.activateProgram(userId: user, programId: "onyx5", phase: .cut, startedOn: "2026-09-25")
+        try db.deletePlan(userId: user, programId: id)
+        #expect(!(try db.planCatalogue(userId: user).plans.contains { $0.id == id }))
     }
 
     @Test("a benched, never-run program deletes with everything it owns, and queues it")

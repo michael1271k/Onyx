@@ -39,9 +39,15 @@ final class GoalSetupModel: Identifiable {
             // Each kind aims at a different reading — a new kind starts its
             // target over rather than carrying a weight into a percentage.
             if !targetTouched { proposeTarget() }
-            if !targetsTouched { recomputeTargets() }
+            if !targetsTouched { loadTargets() }
         }
     }
+
+    /// The program's own `plan_phase_goals` rows, read once at open: what
+    /// the targets step starts from when the goal's phase has one — the
+    /// founder's cut row is 1,935 / 190, tuned by hand, and a formula must
+    /// not replace it unasked (review, Precision E).
+    private let phaseRows: [ProgramPhase: PhaseGoals]
 
     // ── Step 2 ──────────────────────────────────────────────────────────────
     var weightKg: Double? { didSet { if weightKg != oldValue { weightChanged() } } }
@@ -83,7 +89,15 @@ final class GoalSetupModel: Identifiable {
         self.programLabel = programLabel
         self.running = running
         self.hasDays = hasDays
-        self.goal = current?.goal ?? .cut
+        // No goal yet: the direction the account is already training in, not
+        // a cut by default — "Save and apply" must not flip a bulk unasked.
+        let phase = ProgramPhase.stored((try? database.userGoals(userId: userId))?.activePhase)
+        self.goal = current?.goal ?? (phase == .bulk ? .bulk : .cut)
+        var rows: [ProgramPhase: PhaseGoals] = [:]
+        for p in ProgramPhase.allCases {
+            if let row = try? database.phaseGoals(userId: userId, planId: programId, phase: p) { rows[p] = row }
+        }
+        self.phaseRows = rows
 
         // The latest weigh-in, TODAY INCLUDED — `latestBodyReading` is
         // strictly before its date, so it is asked about tomorrow.
@@ -97,26 +111,20 @@ final class GoalSetupModel: Identifiable {
             readingDate = reading.date
         }
 
-        // A goal already set is reopened as it was, not re-proposed.
+        // A goal already set is reopened as it was, not re-proposed. Marked
+        // touched FIRST: `horizonWeeks`' didSet re-proposes an untouched
+        // target, and `@Observable` runs it inside this init — restoring a
+        // 16-week goal replaced its 74 kg with the band's middle (review).
         if let target = current?.goalTarget, current?.goal != nil {
+            targetTouched = true
             targetWeightKg = target.targetWeightKg
             targetBodyFatPct = target.targetBodyFatPct
             targetMuscleMassKg = target.targetMuscleMassKg
             horizonWeeks = target.horizonWeeks.map { min(max($0, Self.horizonRange.lowerBound), Self.horizonRange.upperBound) } ?? 12
-            targetTouched = true
         } else {
             proposeTarget()
         }
-        recomputeTargets()
-        if running, let existing = try? database.phaseGoals(userId: userId, planId: programId, phase: goal.phase),
-           existing.calorieGoal > 0, current?.goal == goal {
-            // The running program's own numbers, when the goal is unchanged:
-            // reopening the sheet must not quietly re-derive tuned macros.
-            kcal = existing.calorieGoal
-            proteinG = existing.proteinGoalG
-            carbsG = existing.carbsGoalG
-            fatG = existing.fatGoalG
-        }
+        loadTargets()
     }
 
     // MARK: - Derived
@@ -145,12 +153,23 @@ final class GoalSetupModel: Identifiable {
 
     var targets: StartingTargets {
         let k = Int(kcal ?? 0)
+        // The phase's own step goal when it has one — the builder's 8,000 is
+        // one number for everyone, and a save must not reset a tuned one.
+        let steps = phaseRows[goal.phase].map { Int($0.stepsGoal) }.flatMap { $0 > 0 ? $0 : nil }
         return StartingTargets(
             kcal: k, proteinG: Int(proteinG ?? 0), carbsG: Int(carbsG ?? 0), fatG: Int(fatG ?? 0),
             // Fibre tracks the kcal the user ends up with, as onboarding does.
             fiberG: Int((Double(k) / 1000 * StartingTargetsBuilder.fiberPerThousandKcal).rounded()),
-            stepsGoal: StartingTargetsBuilder.build(weightKg: weightKg ?? 75, programGoal: goal).stepsGoal
+            stepsGoal: steps ?? StartingTargetsBuilder.build(weightKg: weightKg ?? 75, programGoal: goal).stepsGoal
         )
+    }
+
+    /// The four figures are the bodyweight arithmetic's — what "Recalculate"
+    /// would produce. When they are not, the sheet offers it.
+    var matchesFormula: Bool {
+        let t = StartingTargetsBuilder.build(weightKg: weightKg ?? 75, programGoal: goal)
+        return kcal == Double(t.kcal) && proteinG == Double(t.proteinG)
+            && carbsG == Double(t.carbsG) && fatG == Double(t.fatG)
     }
 
     var atwaterGap: Int { targets.atwaterKcal - Int(kcal ?? 0) }
@@ -165,7 +184,10 @@ final class GoalSetupModel: Identifiable {
     var canAdvance: Bool {
         switch step {
         case .now: weightKg.map(StartingTargetsBuilder.weightRange.contains) ?? false
-        default: true
+        // A cleared field is not a target of zero (review): calories and
+        // protein are what every screen grades against.
+        case .targets: (kcal ?? 0) > 0 && (proteinG ?? 0) > 0
+        case .goal: true
         }
     }
 
@@ -173,6 +195,17 @@ final class GoalSetupModel: Identifiable {
 
     func markTargetTouched() { targetTouched = true }
     func markTargetsTouched() { targetsTouched = true }
+
+    /// What the targets step shows: the goal phase's own row when the
+    /// program has one with calories in it, the arithmetic otherwise.
+    func loadTargets() {
+        guard let row = phaseRows[goal.phase], row.calorieGoal > 0 else { return recomputeTargets() }
+        kcal = row.calorieGoal
+        proteinG = row.proteinGoalG
+        carbsG = row.carbsGoalG
+        fatG = row.fatGoalG
+        targetsTouched = false
+    }
 
     func recomputeTargets() {
         let t = StartingTargetsBuilder.build(weightKg: weightKg ?? 75, programGoal: goal)
@@ -191,22 +224,28 @@ final class GoalSetupModel: Identifiable {
         targetWeightKg = nil; targetBodyFatPct = nil; targetMuscleMassKg = nil
         guard let w = weightKg, StartingTargetsBuilder.weightRange.contains(w) else { return }
         let band = StartingTargetsBuilder.weeklyRate(weightKg: w, programGoal: goal)
-        let destination = w + (band.min + band.max) / 2 * Double(horizonWeeks)
+        // Clamped: two years of the band's middle is 30 kg off a cut, and a
+        // body-fat target past zero (review) — a proposal must be a body.
+        let range = StartingTargetsBuilder.weightRange
+        let destination = min(max(w + (band.min + band.max) / 2 * Double(horizonWeeks), range.lowerBound), range.upperBound)
         switch goal {
         case .bulk, .cut, .recomp:
             targetWeightKg = Self.round1(destination)
         case .bodyFat:
             // The weight the band arrives at, read back as a percentage at
             // constant lean mass — `GoalPace`'s conversion, inverted.
-            targetBodyFatPct = bodyFatPct.map { bf in Self.round1((1 - w * (1 - bf / 100) / destination) * 100) }
+            targetBodyFatPct = bodyFatPct.map { bf in
+                Self.round1(min(max((1 - w * (1 - bf / 100) / destination) * 100, 3), 70))
+            }
         case .muscleMass:
-            targetMuscleMassKg = muscleMassKg.map { Self.round1($0 + (destination - w)) }
+            targetMuscleMassKg = muscleMassKg.map { Self.round1(min(max($0 + (destination - w), 5), 120)) }
         }
     }
 
     private func weightChanged() {
         if !targetTouched { proposeTarget() }
-        if !targetsTouched { recomputeTargets() }
+        // A phase row is the user's; only the arithmetic follows the scale.
+        if !targetsTouched, phaseRows[goal.phase] == nil { recomputeTargets() }
     }
 
     // MARK: - Navigation

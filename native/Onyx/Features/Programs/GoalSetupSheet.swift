@@ -335,7 +335,7 @@ struct GoalSetupSheet: View {
                     .foregroundStyle(Color.onyx.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if model.targetsTouched {
+            if !model.matchesFormula {
                 Button("Recalculate from my bodyweight") { model.recomputeTargets() }
                     .buttonStyle(.bordered)
                     .tint(Color.onyx.textPrimary)
