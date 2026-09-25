@@ -119,7 +119,7 @@ struct RestView: View {
             }
             skip
         }
-        .containerBackground(WatchInk.ground, for: .navigation)
+        .containerBackground(for: .navigation) { WatchInk.ground }
         .dimmedWhenLuminanceReduced()
         // The session clock, in the same corner `SetView` puts it — see
         // `WatchSessionTimer`. This is what the cover's own `NavigationStack`
@@ -648,7 +648,7 @@ private struct EditLastSetSheet: View {
             .tint(WatchInk.commit)
             .foregroundStyle(WatchInk.onCommit)
         }
-        .containerBackground(WatchInk.ground, for: .navigation)
+        .containerBackground(for: .navigation) { WatchInk.ground }
         .onAppear {
             // Seeded from the LOG, not from the pulse: the pulse is a message
             // that may predate an amend, and this sheet writes over whatever

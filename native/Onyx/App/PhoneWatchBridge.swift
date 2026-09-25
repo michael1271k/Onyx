@@ -38,6 +38,10 @@ final class PhoneWatchBridge {
     private let database: AppDatabase
     private var link: WatchLink?
     private var commitObserver: AnyDatabaseCancellable?
+    /// The fuel tables' own observer (Precision D4) — see `takeFuelCommit`.
+    private var fuelObserver: AnyDatabaseCancellable?
+    /// A water, food or supplement commit landed since the last push.
+    @ObservationIgnored private var fuelDirty = false
 
     /// The highest `seq` of our own events the watch has been sent.
     ///
@@ -214,8 +218,26 @@ final class PhoneWatchBridge {
         commitObserver = database.onCommit { [weak self] in
             Task { @MainActor in self?.flush() }
         }
+        // Fuel, told apart from every other commit, so the push policy can
+        // let a glass of water skip the tiles' 30 s throttle (Precision D4).
+        fuelObserver = database.onFuelCommit { [weak self] in
+            Task { @MainActor in self?.fuelDirty = true }
+        }
         flush()
     }
+
+    /// True once per fuel commit since the last call, then false — read by
+    /// `AppEnvironment.scheduleWatchPush` after the 2 s widget debounce, which
+    /// the fuel observer has always beaten (it fires on the writer's queue at
+    /// commit; the debounce starts from the same commit).
+    func takeFuelCommit() -> Bool {
+        defer { fuelDirty = false }
+        return fuelDirty
+    }
+
+    /// Whether a take would answer true — for a test to wait on without
+    /// consuming it.
+    var fuelCommitPending: Bool { fuelDirty }
 
     /// Hand the watch every event of ours it has not seen.
     func flush() {

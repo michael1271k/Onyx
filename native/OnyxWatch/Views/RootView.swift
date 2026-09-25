@@ -55,7 +55,10 @@ struct RootView: View {
     /// ever writes it, and the deck is still reached by its toolbar link. A
     /// path is the only way to present a pushed screen without a tap, and the
     /// alternative was photographing `DeckView` outside the stack it lives in.
-    @State private var path: [WatchRoute] = []
+    ///
+    /// A `NavigationPath` since Precision D3, not `[WatchRoute]`: the Glance's
+    /// petals push a `PetalDetail`, and a typed array can hold one type.
+    @State private var path = NavigationPath()
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -79,6 +82,12 @@ struct RootView: View {
                 #endif
                 }
             }
+            // The six petal details (D3). On the ROOT stack, so a petal pushes
+            // the same screen whether the dashboard is the idle root or the
+            // one `DeckView` pushed mid-session.
+            .navigationDestination(for: PetalDetail.self) { petal in
+                PetalDetailView(petal: petal)
+            }
         }
         #if DEBUG
         // ── `onChange`, NOT `onAppear` ──────────────────────────────────────
@@ -88,13 +97,15 @@ struct RootView: View {
         // the set screen: a real screen, under the wrong filename, which is
         // the one failure `watch-shot.sh` exists to refuse.
         .onChange(of: model.debugScreen, initial: true) { _, screen in
-            if screen == .deck, path.isEmpty { path = [.deck] }
+            if screen == .deck, path.isEmpty { path.append(WatchRoute.deck) }
+            // A petal's detail, pushed the way its tap pushes it (D3).
+            if let petal = screen?.petal, path.isEmpty { path.append(petal) }
             // W4's `dashboard`/`train`/`fuel` used to push `.dashboard` here.
             // They do not any more: the dashboard IS this root, so a push
             // would photograph a second copy of it ON TOP of itself, complete
             // with a back chevron no shipping state has. `DashboardView`
             // reads the same value and moves its own `TabView`.
-            if screen == .widget, path.isEmpty { path = [.widgetPreview] }
+            if screen == .widget, path.isEmpty { path.append(WatchRoute.widgetPreview) }
         }
         #endif
         // ── REST IS A STATE, NOT A PAGE ─────────────────────────────────────
@@ -232,15 +243,7 @@ struct StartView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: OnyxSpace.xs) {
                 if let day = model.day {
-                    Text(day.label)
-                        .font(WatchType.figure)
-                        .foregroundStyle(WatchInk.day(day.key))
-                        .lineLimit(2)
-                        // The longest split this plan has ever named is
-                        // "Delts & Arms"; `minimumScaleFactor` is for the one
-                        // a later block invents, because a truncated split is
-                        // a split you cannot identify.
-                        .minimumScaleFactor(0.8)
+                    SplitTitle(day.label, ink: WatchInk.day(day.key))
                     if let joining {
                         // Where the session is, and how long it has run —
                         // ticked by the system, one redraw a minute, the
@@ -326,15 +329,56 @@ struct StartView: View {
                 } label: {
                     Label(joining == nil ? "Start" : "Join", systemImage: joining == nil ? "play.fill" : "arrow.right.circle.fill")
                         .font(WatchType.value)
-                        .frame(maxWidth: .infinity)
+                        .foregroundStyle(WatchInk.onCommit)
+                        // ── 48 pt, DRAWN, BECAUSE THE SYSTEM'S WILL NOT GO UNDER 54 ──
+                        // Precision D4 caps Start at 52 pt. `.borderedProminent`
+                        // is 54 at 49 mm and 45 at 40 mm, and neither
+                        // `frame(maxHeight:)` nor `controlSize(.small)` moved
+                        // it by a point (axe, round 3). The capsule is the same
+                        // commit green; 48 keeps the 44 pt target.
+                        .frame(maxWidth: .infinity, minHeight: 48, maxHeight: 48)
+                        .background(Capsule().fill(WatchInk.commit))
+                        .contentShape(Capsule())
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(WatchInk.commit)
-                .foregroundStyle(WatchInk.onCommit)
+                .buttonStyle(.plain)
+                .padding(.horizontal, OnyxSpace.xs)
                 .handGestureShortcut(.primaryAction)
             }
         }
         .dimmedWhenLuminanceReduced()
+    }
+}
+
+/// The split's name, whole, in the space a 40 mm case leaves beside the
+/// Start button (Precision D4).
+///
+/// ── THREE TIERS, NEVER AN ELLIPSIS ──────────────────────────────────────────
+/// It was `WatchType.figure` (`.title`) over two lines at 80 %, which put
+/// "Neutral-Grip Push & Pull" on two lines of display type and the Start
+/// capsule under the fold at 40 mm. Now: one line of `.title3`; if that does
+/// not fit, one line of `.headline`; if that does not either, two lines of
+/// `.headline` that may shrink to 70 %. The last tier is the fallback
+/// `ViewThatFits` takes when nothing fits, so a long name wraps rather than
+/// truncates. No `fixedSize` in any tier — in a fallback it widens the page
+/// (memory `precision-b`).
+struct SplitTitle: View {
+    let text: String
+    let ink: Color
+
+    init(_ text: String, ink: Color) {
+        self.text = text
+        self.ink = ink
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            Text(text).font(WatchType.value).lineLimit(1)
+            Text(text).font(.system(.headline, design: .rounded)).lineLimit(1)
+            Text(text).font(.system(.headline, design: .rounded)).lineLimit(2).minimumScaleFactor(0.7)
+        }
+        .foregroundStyle(ink)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 

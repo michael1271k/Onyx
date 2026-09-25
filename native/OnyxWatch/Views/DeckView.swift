@@ -67,7 +67,7 @@ struct DeckView: View {
                 row(movement)
             }
         }
-        .containerBackground(WatchInk.ground, for: .navigation)
+        .containerBackground(for: .navigation) { WatchInk.ground }
         .navigationTitle("Deck")
         .navigationBarTitleDisplayMode(.inline)
         // ── THE DASHBOARD, DURING A SESSION (W4) ────────────────────────────
@@ -286,7 +286,7 @@ private struct SwapList: View {
                     .fill(WatchInk.fill)
             )
         }
-        .containerBackground(WatchInk.ground, for: .navigation)
+        .containerBackground(for: .navigation) { WatchInk.ground }
         .navigationTitle("Swap")
         .navigationBarTitleDisplayMode(.inline)
     }

@@ -107,6 +107,12 @@ screen_env() {
     # not is exactly the wrong-screen shot this file refuses. See
     # `LiveWidgetPreview`.
     widget)  echo "ONYX_WATCH_AUTOSTART=1 ONYX_WATCH_SCREEN=widget" ;;
+    # ── Precision D3: the six petal details ─────────────────────────────────
+    # Pushed onto the root stack exactly as a petal tap pushes them, over the
+    # seeded context and a seeded day of heart rate (`seedDebugHeart` — a
+    # simulator has no sensor, and an empty sparkline reviews nothing).
+    detail-sleep|detail-water|detail-food|detail-heart|detail-steps|detail-stress)
+             echo "ONYX_WATCH_SCREEN=$1" ;;
     *) echo "UNKNOWN" ;;
   esac
 }
@@ -210,7 +216,7 @@ shoot() {
 
   case "$env" in
     UNKNOWN)
-      echo "  unknown screen '$screen' — known: start restday banner replay join glance pulse nophone set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget" >&2; return 1 ;;
+      echo "  unknown screen '$screen' — known: start restday banner replay join glance pulse nophone set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget detail-sleep detail-water detail-food detail-heart detail-steps detail-stress" >&2; return 1 ;;
     NOT_REACHABLE)
       echo "  '$screen' has no launch hook yet: it is presented by navigation" >&2
       echo "  inside a live session. Add a case to WatchModel.DebugScreen and a" >&2
@@ -236,7 +242,17 @@ shoot() {
   # `SHOT_THEME=<preset>` (overhaul A2): the palette rides the seeded
   # context, as the phone's does, and the PNG carries the name.
   [ -n "${SHOT_THEME:-}" ] && env="$env ONYX_WATCH_THEME=$SHOT_THEME"
-  local file="$OUT/$screen${SHOT_THEME:+-$SHOT_THEME}.png"
+  # `SHOT_RT=1` (Precision D4): Reduce Transparency forced; PNG suffixed `-rt`.
+  [ "${SHOT_RT:-}" = "1" ] && env="$env ONYX_WATCH_RT=1"
+  local file="$OUT/$screen${SHOT_THEME:+-$SHOT_THEME}${SHOT_RT:+-rt}.png"
+  # `SHOT_DAY_LABEL=<name>` (Precision D4): the seeded split's name, for the
+  # title tiers. Passed through `simctl`'s environment rather than the word
+  # list, because a name has spaces; the PNG is suffixed `-long`.
+  local label_env=()
+  if [ -n "${SHOT_DAY_LABEL:-}" ]; then
+    label_env=("SIMCTL_CHILD_ONYX_WATCH_DAY_LABEL=$SHOT_DAY_LABEL")
+    file="${file%.png}-long.png"
+  fi
 
   local prefixed=()
   for pair in $env; do prefixed+=("SIMCTL_CHILD_${pair}"); done
@@ -247,7 +263,7 @@ shoot() {
   # fall through to the sleep, screenshot whatever is on the display, and
   # print the success line. That is the "plausible photograph of the wrong
   # screen" this file refuses to produce twenty lines above.
-  if ! env ${prefixed[@]+"${prefixed[@]}"} xcrun simctl launch "$UDID" "$BUNDLE_ID" >/dev/null; then
+  if ! env ${prefixed[@]+"${prefixed[@]}"} ${label_env[@]+"${label_env[@]}"} xcrun simctl launch "$UDID" "$BUNDLE_ID" >/dev/null; then
     echo "  launch failed — is OnyxWatch installed on $DEVICE?" >&2
     return 1
   fi
@@ -293,7 +309,7 @@ shoot() {
 }
 
 read -ra SCREENS <<< "$SCREEN"
-[ "$SCREEN" = "all" ] && SCREENS=(glance start restday banner join pulse set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget)
+[ "$SCREEN" = "all" ] && SCREENS=(glance start restday banner join pulse set quality qualitytags rest deck deckswipe pause cancel finish dashboard train fuel widget detail-sleep detail-water detail-food detail-heart detail-steps detail-stress)
 
 status=0
 for s in ${SCREENS[@]+"${SCREENS[@]}"}; do

@@ -75,7 +75,7 @@ struct SetView: View {
                 FinishView()
             }
         }
-        .containerBackground(WatchInk.ground, for: .navigation)
+        .containerBackground(for: .navigation) { WatchInk.ground }
         // ── THE TITLE IS THE SET POSITION, NOT THE SPLIT ────────────────────
         // "Legs & Core A" truncates to "Legs & Co" at 40 mm and tells you
         // nothing you did not know — you started the workout. "Set 1 of 4" is
@@ -616,7 +616,7 @@ struct DiscardSheet: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal, OnyxSpace.xs)
         }
-        .containerBackground(WatchInk.ground, for: .navigation)
+        .containerBackground(for: .navigation) { WatchInk.ground }
     }
 }
 

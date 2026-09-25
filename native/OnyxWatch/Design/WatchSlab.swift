@@ -29,6 +29,8 @@ struct WatchSlab<Content: View>: View {
     @ViewBuilder var content: Content
 
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
+    @Environment(\.onyxForcesReducedTransparency) private var forcedReduceTransparency
 
     static var radius: CGFloat { 16 }
 
@@ -44,7 +46,14 @@ struct WatchSlab<Content: View>: View {
             .foregroundStyle(tint ?? WatchInk.primary, WatchInk.secondary)
             .background {
                 ZStack {
-                    shape.fill(.thinMaterial)
+                    // Reduce Transparency: the solid slab, as on the phone
+                    // (DESIGN.md, Elevation) — the frost is the thing the
+                    // setting exists to switch off.
+                    if systemReduceTransparency || forcedReduceTransparency {
+                        shape.fill(Color.onyx.slab)
+                    } else {
+                        shape.fill(.thinMaterial)
+                    }
                     shape.fill((tint ?? .white).opacity(0.08))
                 }
             }
