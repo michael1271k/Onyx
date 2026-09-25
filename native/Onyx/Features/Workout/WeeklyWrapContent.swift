@@ -249,8 +249,7 @@ struct WeeklyWrapContent: View {
         if !movements.isEmpty {
             VStack(alignment: .leading, spacing: OnyxSpace.s) {
                 Label(title.uppercased(), systemImage: symbol)
-                    .onyxMicro()
-                    .foregroundStyle(tone.color)
+                    .onyxMicro(tone.color)
                 ForEach(movements) { movement in
                     HStack(spacing: OnyxSpace.s) {
                         VStack(alignment: .leading, spacing: 1) {

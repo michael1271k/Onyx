@@ -1180,10 +1180,12 @@ struct ExerciseCardView: View {
     /// is the only property that mattered.
     private func head(_ text: String) -> some View {
         Text(text)
+            // Secondary, like every register label since 9.0.0. The trailing
+            // tertiary `.foregroundStyle` that sat here never drew — the ink
+            // `onyxMicro` sets inside wins (W6 review).
             .onyxMicro()
             .fontWeight(.semibold)
             .tracking(0.6)
-            .foregroundStyle(Color.onyx.textTertiary)
             .lineLimit(1)
             .fixedSize()
             .multilineTextAlignment(.center)

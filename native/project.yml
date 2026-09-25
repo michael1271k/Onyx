@@ -47,8 +47,8 @@ packages:
 # $(CURRENT_PROJECT_VERSION) rather than restating them.
 settings:
   base:
-    MARKETING_VERSION: "8.5.0"
-    CURRENT_PROJECT_VERSION: "80500"
+    MARKETING_VERSION: "9.0.0"
+    CURRENT_PROJECT_VERSION: "90000"
 
 targets:
   Onyx:
@@ -228,6 +228,9 @@ targets:
         # `npm run icons` from `resources/icon.png`. Without this the
         # target has no icon at all: a blank Home Screen tile, and an upload the
         # validator rejects for a missing marketing icon.
+        # Since 9.0.0 the same name also resolves `Resources/AppIcon.icon`
+        # (Icon Composer, same script); actool prefers the `.icon` on iOS 26+
+        # and falls back to the appiconset's flat PNG below it.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Automatic signing with the free personal team. The 7-day provisioning
         # expiry is a property of that team, not of this setting.
@@ -388,6 +391,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.onyx.health.michael.native.watchkitapp
+        # `Resources/AppIcon.icon` (watchOS 26 circle) over the appiconset.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: W9UMPV973P

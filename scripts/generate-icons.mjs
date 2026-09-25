@@ -12,7 +12,7 @@
  * resources/ did nothing, and running the script would quietly overwrite it.
  */
 import sharp from 'sharp'
-import { mkdirSync, existsSync } from 'node:fs'
+import { mkdirSync, existsSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
 const SOURCE = resolve(process.argv[2] ?? 'resources/icon.png')
@@ -21,9 +21,13 @@ const SOURCE = resolve(process.argv[2] ?? 'resources/icon.png')
  * The flat behind the artwork.
  *
  * Apple REJECTS an app icon with an alpha channel, so transparency has to be
- * composited away rather than carried. Sampled from the source corners.
+ * composited away rather than carried. Since 9.0.0 the source is the onyx slab
+ * cropped edge-to-edge (the founder's render sat inset on a #000000 canvas;
+ * the crop was measured once, max channel > 12 → 257…1790 of 2048, margin 0),
+ * so the only pixels the matte ever shows are the slab's four corners — which
+ * the OS mask covers.
  */
-const MATTE = '#000309'
+const MATTE = '#000000'
 
 const TARGETS = [
   // The app and watch appiconsets each declare exactly one universal 1024
@@ -31,7 +35,35 @@ const TARGETS = [
   // bytes change.
   { file: 'native/Onyx/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png', size: 1024 },
   { file: 'native/OnyxWatch/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png', size: 1024 },
+  // The Icon Composer (Xcode 26+) documents. Each is a folder: icon.json + the
+  // one layer. actool compiles it beside the asset catalog and prefers it over
+  // the appiconset of the same name, so iOS 26 / watchOS 26 get the system's
+  // dark / tinted / clear renditions and older systems still get the flat PNG.
+  { file: 'native/Onyx/Resources/AppIcon.icon/Assets/onyx.png', size: 1024 },
+  { file: 'native/OnyxWatch/Resources/AppIcon.icon/Assets/onyx.png', size: 1024 },
 ]
+
+/**
+ * The Icon Composer document around the layer.
+ *
+ * One layer, glass OFF, no group shadow, no translucency: the artwork is
+ * already a lit 3D render with its own bevel, and Liquid Glass on top of it
+ * would draw a second rim. The layer is opaque and full-bleed, so the fill is
+ * never seen and the system's tinted/clear renditions work from the whole
+ * slab's luminance. A separate transparent seam layer over the fill would give
+ * them a real foreground — that needs the artwork split, not this script.
+ */
+const ICON_JSON = {
+  fill: { solid: 'srgb:0.00000,0.00000,0.00000,1.00000' },
+  groups: [
+    {
+      layers: [{ glass: false, 'image-name': 'onyx.png', name: 'onyx' }],
+      shadow: { kind: 'none', opacity: 0 },
+      translucency: { enabled: false, value: 0 },
+    },
+  ],
+  'supported-platforms': { circles: ['watchOS'], squares: 'shared' },
+}
 
 /**
  * NO ROUNDED CORNERS, and no circular mask for the watch.
@@ -60,6 +92,9 @@ async function render({ file, size, crop, sharpen, greyscale }) {
   if (sharpen) img = img.sharpen({ sigma: sharpen })
 
   await img.png({ compressionLevel: 9, palette: false }).toFile(out)
+  if (out.includes('.icon/Assets/')) {
+    writeFileSync(resolve(dirname(out), '..', 'icon.json'), `${JSON.stringify(ICON_JSON, null, 2)}\n`)
+  }
   return out
 }
 
@@ -92,7 +127,7 @@ async function main() {
     console.log(`  ${String(t.size).padStart(4)}px  ${out.replace(`${process.cwd()}/`, '')}${tag}`)
   }
 
-  console.log('\n✓ icons written. Now run: npx cap sync ios')
+  console.log('\n✓ icons written. Now run: cd native && xcodegen generate')
 }
 
 main().catch((err) => {

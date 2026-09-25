@@ -3,7 +3,7 @@
 ## Context
 Onyx 8.0.0 just closed the App Store sprint. The founder reports: the watch offers "Start" after the phone finished the workout; the app opens on Train with a "Leave" button; the session summary scrolls forever with childish ±deltas; treadmill logs as "Walk"; widgets lost the sleep half-ring; scrolling opens tiles; stacks flip in unison; settings are too big; the 9-theme appearance system is dated. Goal: one coordinated overhaul — real phone↔watch lifecycle sync, a watch dashboard, an 8-colour "Stone" appearance system with fixed semantic inks, redesigned tiles/widgets, a bento session summary, a compact Settings, DSLD supplement import, a Session Replay share card, and a new icon — executed by 3 parallel Opus 5.5 lanes in git worktrees, merged B → C → A, then two sequential waves. Fable authors prompts and reviews; Opus builds and self-verifies with the shot scripts.
 
-Status: **PLAN — founder answered Q1–Q20 and approved all concepts/features (decisions table below). Wave plan + Opus prompts at the end of this file.**
+Status: **CLOSED at 9.0.0 (2026-09-25)** — every wave shipped (W0 8.1.0 → B 8.2.0 → C 8.3.0 → A 8.4.0 → W5 8.5.0 → W6 9.0.0). Wave records and the sprint close-out are at the end of this file. (Was: PLAN — founder answered Q1–Q20 and approved all concepts/features.)
 Role: Fable 5.1 = CPO/architect + prompt author. Opus 5.5 agents = builders.
 Path classification: **architectural** (7 subsystems). Skills loaded: brainstorming, ui-ux-pro-max, apple-design, frontend-design, impeccable (context ran: no PRODUCT.md, incumbent visual system is authority), senior-architect. `ux-researcher-desginer` is not installed; `ui-ux-designer` agent covers it.
 
@@ -728,3 +728,77 @@ Branch `onyx/w5-replay` (Opus 5.5, worktree `.claude/worktrees/agent-afb553bb013
 4. **startWatchApp keep-alive** — if watchOS suspends a launched app before the queued open arrives, the wrist adopts on next wake. Starting the HK session from `handle(_:)` before the row exists would need a born-open row on the wrist; not done.
 5. **Video frame rate of the renderer** — measured 2.7–4 s on a sim; on an older device it may be ~10 s behind the share sheet's spinner. A timeline-hash cache (ponytail note in `ReplayExporter.video`) is the next step if people share the same session twice.
 6. The two warm effort inks now have names, but the phone's older `Color.onyx.effort` still exists beside them (Lane A open call 4) — W6.
+
+---
+
+## Wave record — W6
+
+Branch `onyx/w6-closeout` (Opus 5.5, worktree `.claude/worktrees/agent-a775601a5739d3bb5`) on `1774b0c9` (8.5.0). Commits: `833a8340` W6.1 icon, `ef2d2fcc` W6.2 polish, `332a2224` review fixes, and the docs commit carrying this record. `package.json` NOT bumped (the merger takes **9.0.0**); the 9.0.0 CHANGELOG section IS written (it is the sprint read).
+
+### W6.1 — Icon
+- **Source.** `resources/icon.png` as delivered was a 2048 JPEG named `.png`, the slab inset on #000000. Slab box by a sharp probe (max channel > 12): **257…1790 on both axes (1534 px), centred** — cropped square at **margin 0**, Lanczos to 1024, flattened on #000000, no alpha, saved as a real PNG. The seam reads at 60 px (downsampled and read).
+- **Icon Composer: YES.** `actool` compiles a hand-written `AppIcon.icon` (`icon.json` + `Assets/onyx.png`) from the command line, and XcodeGen 2.46 files the folder as `wrapper.icon` in the target's resources. `scripts/generate-icons.mjs` now writes the 1024 into both appiconsets AND an `AppIcon.icon` for the phone (`native/Onyx/Resources/`) and the watch (`native/OnyxWatch/Resources/`): one layer, `glass: false`, no shadow, no translucency, black fill, `circles: [watchOS]` / `squares: shared`. `ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon` resolves both; actool prefers the `.icon` and keeps the appiconset's flat PNG as the fallback. Matte `#000309` → `#000000`; the stale `npx cap sync` hint is gone.
+- **Verified:** iPhone 15 sim (App Library, "Other") and Ultra 2 49 mm sim (app grid) — the slab draws edge to edge, the watch circle keeps the seam.
+- **Known and left (review MED):** the render carries its own rounded corners (~150 px of 1024) and a grey bevel rim. The iOS mask (~229 px) is rounder, so the rim shows on the four straight edges and is cut at the corners; on the watch circle four short rim arcs survive. The founder's call was "edge-to-edge, ≤ 1 % margin"; cropping inside the rim (~3 %) is the alternative if the rim reads as a double edge on device.
+
+### W6.2 — Polish (impeccable `polish`, one round + one confirm)
+Screens: `today pulse-squares train session you appearance` × Slate/Clay/Iris × default/AX5 (36 PNGs), watch `glance banner` × 49/40 mm × 3 themes (12). `impeccable context`: no PRODUCT.md/DESIGN.md — narrow refinement on the incumbent system (no init, per the no-questions brief). One `ui-ux-designer` critique over all 36 phone shots (15 items, P0 none).
+
+Taken (one batch, `ef2d2fcc` + review fixes):
+1. **`onyxMicro()` draws secondary, not tertiary** — the uppercase register label (75 call sites: "SCORE", "THIS WEEK", "RECOVERY"…) is the only copy of what its figure means, and 40 % white is ~3.8:1 on the slab (the token's own doc allows tertiary for units only). Root fix in `OnyxType.swift`. **Found on the way:** a `.foregroundStyle` chained AFTER `.onyxMicro()` never drew (the inner style wins) — ten accent/record/tone labels (Week wrapped, Hevy "ONYX", PR sheet, week sections, wrap tones) had rendered tertiary. `onyxMicro(_ ink:)` takes the ink now; those sites pass it. `ExerciseCardView.head` had a dead tertiary override (review) — removed.
+2. **Today:** the summary strip's score is capped at `accessibility1` — at AX5 it grew to ~100 pt over the Recovery ring's 81 (two heroes).
+3. **Train:** weekday letters secondary; the Trends caption secondary (it carries "on pace 13.0 t"); the Start button drops its decorative `.display` glyph at accessibility sizes (it hyphenated "work-/out").
+4. **`OnyxMasthead`:** the name's accent bar is `@ScaledMetric(relativeTo: .headline)` (a 14 pt tick on the baseline at AX5); the last tier prints the bpm without "avg" instead of "122 a…".
+5. **Settings:** a row value wraps at accessibility sizes ("5 days · 37 m…").
+6. **Pulse:** fatigue legend labels secondary; `\u{00A0}` before " · " in the stress stamp and both row lines, and before "+N" in the soreness line (a separator led a line; "+2" sat alone).
+
+Not taken (with the reason): Library/History door padding 8 → 12 (the 64 pt cell is a recorded W9 decision); "21d ago" inset (the widget face's corner-mark inset, Lane B); Iris Settings headers at "4.1:1" (pixel estimate of 11 pt antialiased text — the domain accents are asserted ≥ 4.5:1 on black by the W0 test); Pulse figures at different heights (the squares pin readings to the floor on purpose — `SquareShell` header); replay markers overlapping at the track's tail (W5's phases; the shot was mid-animation); eyebrow ink Train vs Pulse (different components); toolbar capsule widths (system glass); Settings grey Form (founder Q20, system Form); Appearance top gap; the Start band's hard edge.
+
+**Share frame hero (W5 open call 2): declined.** The tonnage is already the masthead's figure on the frame; a 52 pt copy above it would be the frame's only duplicated fact, and the single-hero rule reads "one hero" — on the frame that is the replay chart. Forking `OnyxMasthead` to hide its tonnage there would break the one-face rule.
+
+Confirm round (all 36 + watch banner 40 mm): every taken item verified. **Found and left (the confirm round is the stop):** Train AX5, the Upper A exercise rows truncate "Inclin…  Last: 42…" (the row was under the Start band in round 1). The watch shots were clean in round 1 (glance ring/petals, banner "131 avg" at 40 mm — the masthead's first two tiers still fit there). PNGs deleted.
+
+### W6.3 — App Store set
+`scripts/store-shots.sh` with every other simulator shut down (load 3.5): 12/12 drew real screens, 1320 × 2868 and 1206 × 2622. Paths (gitignored, in this worktree): `native/__store__/6.9in/{today,train,fuel,day,body-trends,history}.png`, `native/__store__/6.3in/{…same}.png`. **History still titles every week "Week 0" → `history.png` is not to be uploaded** (both sizes; `docs/APP_STORE.md` says so).
+
+### W6.4 — Docs, memory
+- `docs/CHANGELOG.md` 9.0.0 section (sprint read: Why MAJOR, iPhone, Apple Watch, widgets/complications/Live Activity, export, server, Changed, Still needs the founder, Notes); `[Unreleased]` stays `_Nothing yet._`; plan references repointed to `docs/Done/`.
+- `docs/APP_STORE.md`: icon row (the `.icon` + fallback) and the 9.0.0 screenshot table.
+- Memory: the five `overhaul-*` lane notes folded into `overhaul-sprint.md` (CLOSED at 9.0.0) and deleted; drift retired (the lavender-HR note, the "keep gym mode" line, the nine-preset list, two nine-preset mentions); `MEMORY.md` 24.6 KB → 15.8 KB, one line per memory, 101 lines.
+
+### Code review (`code-reviewer`, before this record)
+0 critical / 0 high / 2 medium / 3 low. Fixed: the missed `onyxMicro` chain in `ExerciseCardView`; the Icon Composer comment that claimed the fill keys the tinted/clear modes; the soreness row's separator. Left (noted): the icon's baked rim (above); the masthead's last tier drops "avg"/"bpm" for the whole tier, not only when it would truncate — a nested `ViewThatFits` would keep the unit where 0.7 scale fits (the 40 mm banner and the Live Activity did not reach that tier in any shot).
+
+### Gates
+- `npm run check` — **exit 0** (version 8.5.0 — the merger bumps, types, body, atlas, mirror, doms, report, `swift:ui` 49/49, `check:watch` BUILD SUCCEEDED).
+- `swift:core` **766/766**; `swift:ui` **49/49** (re-run after the review fixes); `swift:data` **803/803** on the third run — the first two tripped the known `SeamBenchmarkTests` "the nutrition day is one read" timing flake (`after <= before`, pre-existing, no OnyxData file touched by W6); the simulator OnyxDataTests run passed it.
+- **OnyxTests** on iPhone 15 `B5C31206…` (tree with the review fixes): 215 tests; failing names are **exactly the 10-name baseline** — `A capsule counts its week and marks the days that were missed`, `Week 0 is the week the block opened on`, `a credible previous session still gets its delta`, `a previous session's impossible clock produces no delta, not a wrong one`, `a treadmill logged on this phone is titled Treadmill, not its slug`, `finishing a session leaves the tab on .done, with the week and the ledger carrying it`, `ready to progress fires only after the ceiling is cleared twice`, `the ledger rows are this session's sets and only this session's`, `the seeded previous session reaches TopLifts.previousBests`, and OnyxDataTests' Keychain `stores, retrieves and removes a session blob` (-34018, Gate 0). **No new names.**
+- App (iPhone 15 sim) and watch (Ultra 2 49 mm sim) builds green; both installed and their Home Screens read.
+- `graphify update .` run; `graphify-out/` left uncommitted for the merger.
+
+---
+
+## Sprint close-out
+
+**Final version 9.0.0** (the merger bumps `package.json`). Merges: W0 `492b427b` (8.1.0) · Lane B `d041b84b` (8.2.0) · Lane C `32284778` (8.3.0) · Lane A `473de229` (8.4.0) · W5 `5cd90ebe` (8.5.0) · W6 `onyx/w6-closeout` (9.0.0, merge pending).
+
+**What shipped** (the CHANGELOG's 9.0.0 section is the read): eight stones with fixed semantic inks and weighted nutrition; gym mode deleted; Stone material; tiles as buttons, sideways stacks, the half-ring, vitals sparklines, the pitcher, key micros; the shared `OnyxMasthead` on widgets, Live Activity, Dynamic Island, summary, Train, Pulse and the watch; the bento summary with tinted deltas and SF glyphs; treadmill kind; compact Settings; DSLD label import; phone-owned watch lifecycle with Join/banner; the Glance dashboard, WatchSlab and six complications; Crown RPE; Session Replay and its share export; `startWatchApp`; the new icon.
+
+**Open calls that survive the sprint**
+1. Markdown export: re-add a supplement/stack section (it has had none since v5; `otherIngredients` reaches the JSON/AI export only).
+2. Medium finished-workout widget: the HR spark fills the band; whether it should carry more (RPE, kcal).
+3. ΔE floor between presets (≥ 3 unreachable at weight 0.35 / C ≤ 0.12) and whether nutrition inks should react to cut/bulk/deload.
+4. Glance petals are 35 pt at 40 mm (under the 44 pt target; the centre and Crown reach the same pages).
+5. Watch replay of a phone-only session draws the trace alone (set clocks are not on the wire).
+6. `Color.onyx.effort` (the phone's older RPE ink) still sits beside `OnyxInk.Fixed.effortHard/effortVeryHard`.
+7. The icon's baked rim (W6.1) — crop ~3 % inside it if it reads as a double edge on device.
+8. Train AX5 exercise rows truncate (W6 confirm round); QuickLogSheet's spoke detail is a value in tertiary ink.
+9. History "Week 0" (baseline defect, spun off) — blocks `history.png`.
+
+**Hardware checklist (the simulators cannot prove these)**
+- [ ] Phone finish → messaged finish → the watch's queued sets land in the born-closed row → banner within ~2 s; "Start" never reappears.
+- [ ] A context push reaching a RUNNING watch app (sims deliver it only at relaunch).
+- [ ] `startWatchApp` launches a closed watch app on the phone's Start; watchOS keeps it alive until the queued open lands.
+- [ ] Crown RPE band appears live on the phone's deck card; tap commits; next tick commits.
+- [ ] Complications populated with real data after Gate 0 (App Group signing); midnight reload shows "—", not yesterday.
+- [ ] The Icon Composer icon on a real iOS 26 Home Screen in dark, tinted and clear modes; the watch icon on a real face.

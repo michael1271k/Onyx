@@ -541,7 +541,7 @@ enum Soreness {
     static func line(_ sore: [(group: String, level: Int)]) -> String {
         let shown = sore.prefix(2).map(\.group).joined(separator: ", ")
         let hidden = sore.count - min(2, sore.count)
-        return hidden > 0 ? "\(shown) +\(hidden)" : shown
+        return hidden > 0 ? "\(shown)\u{00A0}+\(hidden)" : shown
     }
 
     static func spoken(_ sore: [(group: String, level: Int)]) -> String {
@@ -707,7 +707,8 @@ private struct FatigueSquare: View {
                         .frame(width: 7, height: 7)
                     Text(slot.short)
                         .onyxType(.micro)
-                        .foregroundStyle(Color.onyx.textTertiary)
+                        // A legend label, not a unit: secondary (W6 polish).
+                        .foregroundStyle(Color.onyx.textSecondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
@@ -1050,7 +1051,7 @@ private struct StressLogRow: View {
         PulseRow(
             symbol: "plus.circle.fill",
             title: "Stress log",
-            detail: readings.last.map { "\(readings.count) \(model.isToday ? "today" : "logged") · \(StressStamp.label($0))" } ?? "Not reported",
+            detail: readings.last.map { "\(readings.count) \(model.isToday ? "today" : "logged")\u{00A0}· \(StressStamp.label($0))" } ?? "Not reported",
             tint: Color.onyx.accent(.recover),
             spoken: (readings.last.map { "\(readings.count) logged, latest \(StressStamp.spoken($0))" } ?? "not reported") + ". Log stress",
             action: onLog
@@ -1076,7 +1077,7 @@ private struct SorenessRow: View {
         PulseRow(
             symbol: "figure.arms.open",
             title: "Soreness",
-            detail: sore.isEmpty ? "Nothing sore" : "\(sore.count) sore · \(Soreness.line(sore))",
+            detail: sore.isEmpty ? "Nothing sore" : "\(sore.count) sore\u{00A0}· \(Soreness.line(sore))",
             tint: Color.onyx.accent(.recover),
             spoken: sore.isEmpty ? "nothing sore" : Soreness.spoken(sore),
             action: onOpen

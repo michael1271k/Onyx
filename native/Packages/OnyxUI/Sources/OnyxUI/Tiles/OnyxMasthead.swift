@@ -45,6 +45,9 @@ public struct OnyxMasthead: View {
   let accent: Color
   /// "avg" under a finished session, the live reading under a running one.
   let bpmIsAverage: Bool
+  /// The name's leading bar follows the name's size. A fixed 14 pt sat as a
+  /// tick on the baseline under an AX5 headline (W6 polish).
+  @ScaledMetric(relativeTo: .headline) private var barHeight: CGFloat = 14
 
   public init(
     name: String, clock: Clock?, tonnage: String?, bpm: Int?, prCount: Int,
@@ -90,7 +93,7 @@ public struct OnyxMasthead: View {
     HStack(alignment: .firstTextBaseline, spacing: 6) {
       RoundedRectangle(cornerRadius: 1.5, style: .continuous)
         .fill(accent)
-        .frame(width: 3, height: 14)
+        .frame(width: 3, height: barHeight)
         .accessibilityHidden(true)
       Text(name.isEmpty ? "Session" : name)
         .font(.headline)
@@ -135,7 +138,14 @@ public struct OnyxMasthead: View {
     }
     if let bpm {
       out.append(AnyView(Figure(symbol: "heart.fill", tint: OnyxInk.Fixed.heart, style: style, shrinks: shrinks) {
-        Text("\(bpm)") + Text(bpmIsAverage ? " avg" : " bpm").foregroundStyle(Color.onyx.textSecondary)
+        // The last tier drops the unit word rather than ellipsise it:
+        // "122 a…" at AX5 (W6 polish). The red heart still says what the
+        // number is, and VoiceOver speaks "average heart rate" either way.
+        if shrinks {
+          Text("\(bpm)")
+        } else {
+          Text("\(bpm)") + Text(bpmIsAverage ? " avg" : " bpm").foregroundStyle(Color.onyx.textSecondary)
+        }
       }))
     }
     if prCount > 0 {

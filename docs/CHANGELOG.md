@@ -44,9 +44,117 @@ _Nothing yet._
 
 ---
 
+## [9.0.0] — 2026-09-25 · The overhaul: eight stones, a watch that knows, one summary screen
+
+W6, the close-out of the UI/UX Overhaul sprint, and the sprint read surface by
+surface: what Onyx does at 9.0.0 that it did not at 8.0.0. The detail is in
+8.1.0 – 8.5.0 below; the plan and every wave record are in
+`docs/Done/Plan-Onyx-Overhaul-Done.md`. W6 itself adds the new icon and one
+bounded polish round.
+
+**Why MAJOR.** Four changes a user has to be told about:
+- **The theme migrated.** The nine appearance presets are gone; an existing
+  pick moves once to its nearest of eight "stones" (Slate is the new default),
+  and water, heart rate, the sleep stages and the sixteen muscles stopped
+  following the theme at all.
+- **Gym mode is deleted.** The app no longer opens on Train inside a
+  start-time window and the tab bar no longer hides; a cold launch always
+  lands on Today.
+- **Six watch complication kinds were removed** (`OnyxWatch.fuel`, `.steps`,
+  `.bedtime`, `.stress`, `.soreness`, `.weekRings`). A watch face that carried
+  one shows an empty slot until another is picked.
+- **A server column the app now writes:** `custom_supplements.other_ingredients`
+  (applied by the founder 2026-09-24). A build that imports a label before the
+  column exists poisons its outbox.
+
+### iPhone app
+- **New icon:** the black onyx slab with a lavender seam of light, edge to
+  edge, shipped as an Icon Composer document so iOS 26 draws its own dark,
+  tinted and clear versions (9.0.0).
+- **Eight stones, fixed inks.** Slate, Lagoon, Sage, Iris, Clay, Ochre, Moss,
+  Rosewood in a 2×4 Appearance grid with a live preview. Water is always blue,
+  heart rate always red, sleep one fixed ramp, muscles one anatomical palette;
+  protein, carbs, fat, calories and micronutrients follow the theme only
+  slightly (8.1.0, 8.2.0).
+- **Stone material everywhere:** near-black frosted slabs with a lit top edge
+  and no drop shadows (8.2.0).
+- **Today:** scrolling over a tile never opens it; stacks page sideways and
+  turn over one at a time; the sleep half-ring is back; vitals are 7-day
+  sparklines; water is a pitcher; fuel tiles show the day's key
+  micronutrients (8.2.0).
+- **The session summary fits on one screen** — a bento of masthead, heart-rate
+  strip, exercise chips, muscle pills and one Progression button (2,465 pt →
+  511 pt) — and opens with a ten-second **Session Replay** you can share as a
+  square PNG, a Stories PNG or a video (8.3.0, 8.5.0).
+- **Deltas are tinted numerals**, not red/green arrows; heart rate is red on
+  every chart; a treadmill walk is "Treadmill"; editing a finished session can
+  add a movement and Discard closes it (8.3.0).
+- **Settings is compact** (1,689 pt → 1,114 pt), and **Supplements can add
+  from the NIH label database** by product or brand, barcode optional (8.3.0).
+- **Start on the phone wakes a closed watch app** (8.5.0).
+- Polish (9.0.0): at the largest text sizes the Start button no longer
+  hyphenates "workout", the session masthead no longer cuts "avg", its accent
+  bar grows with the name, and Settings values wrap instead of truncating.
+
+### Apple Watch app
+- **"Start" never comes back after the phone finished.** The phone owns the
+  session's state and pushes it the instant it changes; the watch shows
+  Start, Join or today's banner (name, tonnage, average heart rate, PRs and a
+  six-point heart-rate line) (8.4.0).
+- **Opens on the Glance:** a readiness ring with four petals the Crown moves
+  between; the other pages sit on frosted slabs (8.4.0).
+- **Crown RPE during rest**, mirrored live on the phone's deck card and
+  committed on the next tick (8.4.0).
+- Tap the banner for a three-second replay (8.5.0). New icon (9.0.0).
+
+### Widgets, complications and Live Activity
+- The finished-workout widget draws the shared session masthead, and the
+  Medium carries the six-point heart-rate line (8.2.0, 8.5.0).
+- Dynamic Island: compact = elapsed time + heart rate in red; expanded = the
+  masthead (8.2.0).
+- Watch complications: readiness, workout, water, sleep, **heart rate** and
+  **next dose**; six kinds removed (above). No face shows yesterday's figures
+  after midnight (8.4.0).
+
+### Weekly export
+- `restActualSec` is gone from the JSON and AI exports (8.3.0).
+- Unmapped label ingredients ride the supplement line in the JSON and AI
+  export (8.5.0). The Markdown has had no supplement section since v5.
+
+### Server (Supabase) — applied by the founder 2026-09-24
+```sql
+alter table public.custom_supplements add column if not exists other_ingredients jsonb;
+```
+
+### Changed
+- `docs/Plan-Onyx-Overhaul.md` → `docs/Done/Plan-Onyx-Overhaul-Done.md`, with
+  the W6 wave record and the sprint close-out.
+- `scripts/generate-icons.mjs` writes `AppIcon.icon` (phone and watch) beside
+  each appiconset; `resources/icon.png` is the cropped 1024 source.
+
+### Still needs the founder
+- **Hardware proofs** the simulators cannot give: queued watch transfers
+  landing behind a messaged finish; a context reaching a running watch app;
+  `startWatchApp` actually launching the watch app (and whether watchOS keeps
+  it alive until the open arrives); the live Crown band on the phone's deck;
+  complications with real data (Gate 0).
+- **Open calls:** a supplement section in the Markdown export; whether the
+  Medium finished-workout widget should carry more than the heart-rate line.
+- Everything under 8.0.0's "Still needs the founder" (Gate 0, Supabase
+  sign-ups) still stands; its heart-rate colour item is closed — heart rate is
+  red since 8.1.0.
+
+### Notes
+- The share frame did not get a separate hero number: the tonnage is already
+  on the frame's masthead, and a second copy of it would be the frame's only
+  duplicated fact (W6).
+- OnyxTests: the same ten baseline names, none new.
+
+---
+
 ## [8.5.0] — 2026-09-25 · Replay the session, share it, and the phone wakes the watch
 
-W5 of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record
+W5 of the UI/UX Overhaul sprint (`docs/Done/Plan-Onyx-Overhaul-Done.md`, wave record
 "W5").
 
 ### iPhone app
@@ -96,7 +204,7 @@ W5 of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record
 
 ## [8.4.0] — 2026-09-24 · The watch knows the workout is over
 
-Lane A of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record
+Lane A of the UI/UX Overhaul sprint (`docs/Done/Plan-Onyx-Overhaul-Done.md`, wave record
 "Lane A"). Phone↔watch lifecycle, the watch dashboard, complications, Crown RPE.
 
 ### Apple Watch app
@@ -146,7 +254,7 @@ Lane A of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record
 
 ## [8.3.0] — 2026-09-24 · The summary on one screen, the treadmill by its name, labels from the database
 
-Lane C of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record
+Lane C of the UI/UX Overhaul sprint (`docs/Done/Plan-Onyx-Overhaul-Done.md`, wave record
 "Lane C"). Logger, session summary, Settings and Supplements.
 
 ### iPhone app
@@ -200,7 +308,7 @@ alter table public.custom_supplements add column if not exists other_ingredients
 
 ## [8.2.0] — 2026-09-24 · Faces: tiles you can scroll past, the sleep ring returns, stone and glass
 
-Lane B of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`, wave record
+Lane B of the UI/UX Overhaul sprint (`docs/Done/Plan-Onyx-Overhaul-Done.md`, wave record
 "Lane B"). Every surface that draws a tile, a widget, a card or the Appearance
 grid changed; the logger, the summary and the watch land in 8.3.0 and 8.4.0.
 
@@ -251,7 +359,7 @@ grid changed; the logger, the summary and the watch land in 8.3.0 and 8.4.0.
 
 ## [8.1.0] — 2026-09-23 · The contract wave: eight stones, fixed inks, and the watch wire
 
-Wave 0 of the UI/UX Overhaul sprint (`docs/Plan-Onyx-Overhaul.md`). It lays the
+Wave 0 of the UI/UX Overhaul sprint (`docs/Done/Plan-Onyx-Overhaul-Done.md`). It lays the
 token and wire contract the three parallel lanes build on; the faces, the
 watch dashboard and the summary redesign land in 8.2.0–8.4.0.
 

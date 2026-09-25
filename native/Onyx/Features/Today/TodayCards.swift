@@ -56,6 +56,10 @@ struct NowStrip: View {
             Text("SCORE")
                 .onyxMicro()
         }
+        // Capped (W6 polish): uncapped, the strip's 81 grew to ~100 pt at AX5
+        // and out-shouted the Recovery ring's 81 below it — two heroes on one
+        // screen. The ring is Today's hero; this is its one-line summary.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
     }
 
     /// Today's training, in the fewest words that are still true. A rest day is
