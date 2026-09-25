@@ -44,6 +44,38 @@ _Nothing yet._
 
 ---
 
+## [9.5.0] — 2026-09-25 · The body is flesh now: an écorché atlas on every figure
+
+Precision sprint, Lane F. Every muscle figure in the app and on the Home Screen
+is drawn by one painter, in a new material: the anatomist's flayed figure
+instead of white plastic with coloured decals. No data, schema or server change.
+
+### iPhone app
+- **The écorché body.** A warm near-black body with a rim of light; every
+  muscle shaded along its own fibres from deep to lit oxblood, with a darker
+  edge and a sheen toward the light; the kneecaps, clavicles, shins, hips,
+  ulnae and shoulder blades in ivory bone, and the cords — patellar,
+  Achilles, biceps and triceps insertions, the six-pack's tendon lines — in
+  ivory tendon. A muscle the session worked is lit in its own fixed colour
+  (the same one as its legend dot) with a soft glow of that colour around it,
+  brighter the more it took; everything else stays shadowed flesh. On the
+  logger's live stats, Muscle distribution, the turnable "Where it landed"
+  sheet, Trends, Today's weekly muscle focus, the soreness body and the
+  movement library's rows.
+- **Flat where flesh cannot help.** The Train day thumbnail and Body's
+  soreness square (one-colour thumbnails) keep the figure they had, and so
+  does every figure under Reduce Transparency. The library's 28 pt rows draw
+  no bone or tendon, so the lit muscle is the only bright thing in them.
+- **Turning the atlas sheet** no longer repaints both faces on every frame
+  of the drag.
+
+### Widgets
+- Muscle Focus, Soreness and Composition draw the same flesh body, without
+  the sheen and glow; accented and vibrant Home Screens, rectangular Lock
+  Screen accessories and Reduce Transparency keep the widget's own flat figure.
+
+---
+
 ## [9.4.0] — 2026-09-25 · Programs you write on the phone, and goals that set your targets
 
 Precision sprint, Lane E. Train can now hold more than one program, and a
