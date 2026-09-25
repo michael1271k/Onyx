@@ -44,6 +44,68 @@ _Nothing yet._
 
 ---
 
+## [10.0.0] — 2026-09-25 · Precision: one set of numbers, from the deck to the export
+
+The Precision sprint closes. Six lanes (9.1.0–9.6.0) shipped the logger,
+the faces, the engines, the watch, programs and the écorché atlas; this
+release wires them into one set of rules and makes the migration official.
+
+### Why MAJOR
+Five things a returning user will see mean something different from 9.0.0,
+and each needs telling:
+- **Tonnage is on the Hevy basis** — warm-ups weigh nothing, an unloaded
+  bodyweight set weighs your latest weigh-in × reps. Old sessions are
+  re-weighed once on the first sync after install.
+- **"Sets" counts everything you did** — working sets, warm-ups and cardio
+  bouts, a single-arm pair once — and **"Working"** is the second figure.
+  Backfilled on the server (`docs/sql/precision-c-backfill-sets.sql`) and on
+  every phone (`onyx.recount.sets.v1`).
+- **Unticked sets are not logged, and your plan keeps them** (ghost
+  semantics): the routine still shows every planned set next time, at its
+  last load.
+- **Programs carry a goal** (`plans.goal_kind`, `plans.goal_target`,
+  `routines.notes`) — paste `docs/sql/precision-e-programs.sql` before
+  installing.
+- **Pulse is Body** — the readiness ring and six petals; workouts live in
+  Train.
+
+### Changed
+- **The live logger agrees with the summary.** The deck's "Sets" and
+  "Working" are the same rule `set_count` is written by, and its tonnage
+  credits your weigh-in on a pull-up exactly as the saved session does.
+- **Finish sheet:** "Sets" headlines everything performed with
+  "12/14 working" beside it; the Hevy comparison counts the same way.
+- **Session summary:** the Sets cell's sub-line leads with the working count
+  ("19 working · 1 warm-up").
+- **Train, History's day card, the week, past weeks, Today's feed and
+  Training trends** weigh a bodyweight set the same way the summary does, so a
+  ticket never reads lighter than the session it opens.
+- **Body tab** draws its six petals at the watch Glance's angles — one flower
+  on both devices.
+- **History** counts "Sets" the same way — the week capsule, the day row and
+  the session page's delta and trail no longer count only working sets.
+- **Per-movement tonnage arrows** compare against last time weighed the same
+  way (a dip day no longer reads "+2000%").
+
+### Fixed
+- **"Start workout"** reads in dark ink on its gradient (it was white at about
+  2.3 : 1).
+- **At the largest text sizes:** the treadmill card fits the screen, the timer
+  rail no longer overlaps the rest controls, the effort slab's light vein no
+  longer crosses its reading, and the summary's muscle pills stay on one line.
+- **Finish sheet:** the Sets tile no longer wraps its label under the number.
+
+### Added
+- **Baseline mark.** The first time you ever log a movement, its card says
+  "Baseline · records start next time" instead of lighting a trophy.
+
+### Before you install
+Paste, in order: `docs/sql/precision-a-exercises.sql` (optional),
+`precision-e-programs.sql`, `precision-c-counts.sql`,
+`precision-c-backfill-sets.sql`.
+
+---
+
 ## [9.6.0] — 2026-09-25 · The arithmetic of truth: tonnage on the Hevy basis, Sets and Working, a PR guard, cholesterol as Apple counts it
 
 Precision sprint, Lane C. Four engines change what the numbers mean; no new
