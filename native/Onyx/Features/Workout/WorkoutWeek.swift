@@ -507,22 +507,17 @@ final class WorkoutWeek {
             if finished[s.date] == nil { finished[s.date] = s }
         }
 
-        // ── EVERY NON-GHOST ROW, NOT THE WORKING ONES ───────────────────────
-        // `SessionVolume`'s header is the rule and it is one sentence: "A ghost
-        // weighs nothing; a warm-up still counts." Filtering to working sets
-        // before calling it was this file overruling that rule, and the cost
-        // was visible on 2026-09-11 — the Workout tab's card said 8,815 kg for
-        // a session whose own summary page, `closeSession` and
-        // `workout_sessions.total_volume_kg` all said 9,715. The gap was one
-        // 60 × 15 warm-up on the leg press, and a reader has no way to tell
-        // which of the two numbers is the workout.
-        //
-        // Set COUNTS stay on the working rows: a warm-up is not a set of the
-        // prescription, and that is a different question from what was lifted.
+        // ── ONE TONNAGE RULE, NOT THIS FILE'S ───────────────────────────────
+        // `SessionVolume` is the rule and this file never filters before it:
+        // on 2026-09-11 a pre-filter made the Workout tab say 8,815 kg for a
+        // session its summary, `closeSession` and `total_volume_kg` all called
+        // 9,715. Since Precision (Q13) the rule itself drops warm-ups and
+        // weighs an unloaded bodyweight set at the athlete —
+        // `SessionAnalysis.tonnageKg` is that call with the weigh-in read.
         var tonnage = 0.0
         for session in finished.values {
             let rows = (try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? []
-            tonnage += SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet))
+            tonnage += SessionAnalysis.tonnageKg(rows, database: database, on: session.date)
         }
         out.weekTonnageKg = jsRound(tonnage)
         out.sessionsLogged = finished.count
@@ -759,14 +754,14 @@ final class WorkoutWeek {
             } ?? []
             if let live = open, !openWorking.isEmpty || finished[today] == nil {
                 let rows = (try? database.historySets(sessionId: live.id, userId: database.localUserId())) ?? []
-                let working = rows.filter { SetTags.isWorkingSet($0.setType) }
+                // "Sets" is `SessionCounts.total` and tonnage carries the body
+                // weight — the two figures `closeSession` will store (Q10, Q13).
                 out.state = .live(
-                    sets: SessionDetail.toRows(working.map(SessionAnalysis.detailSet)).filter { $0.num != nil }.count,
-                    volumeKg: SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet))
+                    sets: SessionCounts.total(rows.map(SessionAnalysis.volumeSet)),
+                    volumeKg: SessionAnalysis.tonnageKg(rows, database: database, on: live.date)
                 )
             } else if let closed = finished[today], closed.dayKey == key {
                 let rows = (try? database.historySets(sessionId: closed.id, userId: database.localUserId())) ?? []
-                let working = rows.filter { SetTags.isWorkingSet($0.setType) }
                 let groups = SessionAnalysis.grouped(rows)
                 // Records replayed against everything logged before this
                 // session, exactly as the save path asked on the day —
@@ -777,8 +772,8 @@ final class WorkoutWeek {
                 let pr = SessionAnalysis.detect(groups: groups, prior: prior, dayKey: closed.dayKey, date: closed.date, in: analysis)
                 out.state = .done(
                     id: closed.id,
-                    sets: SessionDetail.toRows(working.map(SessionAnalysis.detailSet)).filter { $0.num != nil }.count,
-                    volumeKg: jsRound(SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet))),
+                    sets: SessionCounts.total(rows.map(SessionAnalysis.volumeSet)),
+                    volumeKg: jsRound(SessionAnalysis.tonnageKg(rows, database: database, on: closed.date)),
                     minutes: closed.durationMin,
                     prCount: pr.prCount
                 )
@@ -851,8 +846,8 @@ final class WorkoutWeek {
         return out
     }
 
-    /// Each date's tonnage under `SessionVolume`'s rule — every non-ghost row,
-    /// warm-ups included, which is the rule `build`'s own total is taken by.
+    /// Each date's tonnage under `SessionVolume`'s rule (`SessionAnalysis
+    /// .tonnageKg`), which is the rule `build`'s own total is taken by.
     ///
     /// PER DATE and not a single total, because the day-matched delta needs a
     /// PREFIX of last week and the wrap-up needs all of it, and reading the
@@ -863,7 +858,7 @@ final class WorkoutWeek {
     ) -> [String: Double] {
         finished.mapValues { session in
             let rows = (try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? []
-            return SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet))
+            return SessionAnalysis.tonnageKg(rows, database: database, on: session.date)
         }
     }
 
@@ -916,10 +911,8 @@ final class WorkoutWeek {
             for session in finished.values {
                 let sets = (try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? []
                 rows += sets
-                // The one tonnage rule, the one `tonnageByDate` applies: every
-                // non-ghost row, warm-ups included, a pair scored once at its
-                // weaker side.
-                tonnageKg += SessionVolume.sessionVolumeKg(sets.map(SessionAnalysis.volumeSet))
+                // The one tonnage rule, the one `tonnageByDate` applies.
+                tonnageKg += SessionAnalysis.tonnageKg(sets, database: database, on: session.date)
             }
             out.append(PastWeek(
                 weekStart: start,
@@ -993,12 +986,12 @@ final class WorkoutWeek {
             for session in rows where out[session.date] == nil { out[session.date] = session }
             return out
         }
-        // Every non-ghost row, warm-ups included — `SessionVolume`'s rule, and
-        // the same one `build` takes its own tonnage by.
+        // `SessionVolume`'s rule (`SessionAnalysis.tonnageKg`), the same one
+        // `build` takes its own tonnage by.
         func tonnage(_ sessions: [String: WorkoutSession]) -> Double {
             sessions.values.reduce(0) { total, session in
                 let rows = (try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? []
-                return total + SessionVolume.sessionVolumeKg(rows.map(SessionAnalysis.volumeSet))
+                return total + SessionAnalysis.tonnageKg(rows, database: database, on: session.date)
             }
         }
 
@@ -1067,12 +1060,12 @@ final class WorkoutWeek {
         for session in finished.keys.sorted().compactMap({ finished[$0] }) {
             let all = (try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? []
             // ── THE SAME VOLUME RULE AS THE WEEK'S OWN TONNAGE ──────────────
-            // Every non-ghost row, warm-ups included — `SessionVolume`'s rule.
+            // `SessionVolume`'s rule, through `SessionAnalysis.tonnageKg`.
             // Taken off `all` BEFORE the working-set filter below, because the
             // week's tonnage a few lines up is computed that way and a "biggest
             // session" that disagreed with the total it is part of would be the
             // 8,815-versus-9,715 defect again, at session grain.
-            let volume = SessionVolume.sessionVolumeKg(all.map(SessionAnalysis.volumeSet))
+            let volume = SessionAnalysis.tonnageKg(all, database: database, on: session.date)
             // Compared UNROUNDED and rounded once at the end: comparing a raw
             // volume against a stored rounded one makes two sessions half a
             // kilogram apart swap places depending on which was read first.
@@ -1283,7 +1276,7 @@ final class WorkoutWeek {
             // The tonnage the done card computes for today, from the rows —
             // not the row's stored total, which a session closed on another
             // device or before the close path wrote it may not carry.
-            let tonnage = jsRound(SessionVolume.sessionVolumeKg(all.map(SessionAnalysis.volumeSet)))
+            let tonnage = jsRound(SessionAnalysis.tonnageKg(all, database: database, on: session.date))
             // The ticket above the line already states the records and the
             // tonnage (shot round 2: "5.6 t" twice, 20 pt apart), so the line
             // under it keeps the one thing only it can say — the progress.

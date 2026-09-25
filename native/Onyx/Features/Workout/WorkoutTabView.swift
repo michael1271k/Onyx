@@ -1531,7 +1531,9 @@ struct WorkoutTabView: View {
                     .onyxType(.caption).fontWeight(.bold)
                     .opacity(0.7)
             }
-            .foregroundStyle(Color.onyx.textPrimary)
+            // Dark ink on the ramp, as the Finish button wears it: white sat
+            // near 2.3 : 1 on the ramp's light end (W-final critique).
+            .foregroundStyle(Color.onyx.base)
             .padding(.horizontal, OnyxSpace.l)
             .frame(maxWidth: .infinity, minHeight: 52)
             .background(

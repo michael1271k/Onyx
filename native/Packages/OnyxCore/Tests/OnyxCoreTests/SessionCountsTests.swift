@@ -44,4 +44,14 @@ struct SessionCountsTests {
         ]
         #expect(SessionCounts.total(rows) == 2)
     }
+
+    @Test("a pairId with no sides is still one set — the server's count(distinct coalesce(pair_id, id))")
+    func sidelessPairMatchesTheServer() {
+        let rows = [
+            VolumeSet(weightKg: 15, reps: 12, pairId: "p"),
+            VolumeSet(weightKg: 15, reps: 12, pairId: "p"),
+        ]
+        #expect(SessionCounts.total(rows) == 1)
+        #expect(SessionCounts.working(rows) == 1)
+    }
 }

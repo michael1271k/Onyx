@@ -244,7 +244,7 @@ struct SessionSummaryHotfixTests {
 
         // The gate's own stated fear, measured: the deck must reach the SAME
         // tonnage the save path wrote, not nearly double it.
-        #expect(raise.volumeKg == 75)
+        #expect(raise.volumeKg() == 75)
         #expect(LoggerModel.physical(restored) == 1, "two rows, one set of work")
     }
 }

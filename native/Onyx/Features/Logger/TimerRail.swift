@@ -38,6 +38,7 @@ struct TimerRail: View {
     @Binding var stopwatchOpen: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var ticks = 0
 
     var body: some View {
@@ -96,23 +97,31 @@ struct TimerRail: View {
                 .foregroundStyle(watchStart != nil ? accent : Color.onyx.textSecondary)
                 .contentTransition(.symbolEffect(.replace))
                 .accessibilityHidden(true)
-            Group {
-                if clock.isPaused {
-                    Text(Clock.format(clock.elapsed()))
-                } else {
-                    Text(clock.timerOrigin, style: .timer)
+            // At the accessibility sizes a resting rail has room for the rest
+            // or the elapsed, not both: the digits ellipsised to "22…" and the
+            // rest's nudges touched (W-final AX5 shot). The hero above carries
+            // elapsed at full size, so here it keeps only its glyph — still the
+            // stopwatch's long-press target.
+            if !(typeSize.isAccessibilitySize && rest != nil) {
+                Group {
+                    if clock.isPaused {
+                        Text(Clock.format(clock.elapsed()))
+                    } else {
+                        Text(clock.timerOrigin, style: .timer)
+                    }
                 }
+                .onyxType(.body).fontWeight(.semibold).onyxNumeral()
+                .foregroundStyle(clock.isPaused ? Color.onyx.textTertiary : Color.onyx.textPrimary)
+                .lineLimit(1)
+                // The digits stay their own element — spoken as the reading, and
+                // what the precision UI test reads twice.
+                .accessibilityIdentifier("timer-rail-elapsed")
+                .accessibilityHint(clock.isPaused ? "Session paused. Hold for the set stopwatch." : "Session time. Hold for the set stopwatch.")
+                .accessibilityAction(named: stopwatchOpen ? "Close the stopwatch" : "Open the stopwatch") { toggleStopwatch() }
             }
-            .onyxType(.body).fontWeight(.semibold).onyxNumeral()
-            .foregroundStyle(clock.isPaused ? Color.onyx.textTertiary : Color.onyx.textPrimary)
-            .lineLimit(1)
-            // The digits stay their own element — spoken as the reading, and
-            // what the precision UI test reads twice.
-            .accessibilityIdentifier("timer-rail-elapsed")
-            .accessibilityHint(clock.isPaused ? "Session paused. Hold for the set stopwatch." : "Session time. Hold for the set stopwatch.")
-            .accessibilityAction(named: stopwatchOpen ? "Close the stopwatch" : "Open the stopwatch") { toggleStopwatch() }
         }
-        .frame(minHeight: 44)
+        .frame(minHeight: 44, alignment: .leading)
+        .frame(minWidth: 44, alignment: .leading)
         .contentShape(.rect)
         .onLongPressGesture(minimumDuration: 0.35) { toggleStopwatch() }
     }
@@ -127,7 +136,7 @@ struct TimerRail: View {
     /// The countdown between its two nudges. The digits skip the rest; the
     /// nudges move it by 15 s, which dies with the set (`adjustRest`).
     private func restControl(_ rest: ClosedRange<Date>) -> some View {
-        HStack(spacing: 0) {
+        HStack(spacing: OnyxSpace.xs) {
             nudge(-15)
             Button(action: onSkipRest) {
                 HStack(spacing: 3) {

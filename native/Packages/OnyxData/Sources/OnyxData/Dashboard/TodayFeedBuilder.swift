@@ -125,7 +125,14 @@ public struct TodayFeedBuilder: Sendable {
             let sets = ids.isEmpty ? [] : try WorkoutSet.filter(ids.contains(Column("session_id"))).fetchAll(db)
             var setsBySession: [String: [WorkoutSet]] = [:]
             for s in sets { setsBySession[s.sessionId, default: []].append(s) }
-            let volumes = sessions.map { ($0, WidgetSnapshotBuilder.volume(setsBySession[$0.id] ?? [])) }
+            let isBodyweight = try SessionEditing.bodyweightResolver(db)
+            let volumes = try sessions.map { session in
+                (session, WidgetSnapshotBuilder.volume(
+                    setsBySession[session.id] ?? [],
+                    bodyWeightKg: try SessionEditing.bodyWeightKg(db, userId: session.userId, on: session.date),
+                    isBodyweight: isBodyweight
+                ))
+            }
             let nights = try SleepSessionRow.filter(user).order(Column("start_time").desc).limit(30).fetchAll(db)
             let scores = try DailyScoreRow.filter(user && Column("date") >= lastWeekStart && Column("date") <= today).fetchAll(db)
             func totals(_ from: String, _ to: String) -> WeekTotals {

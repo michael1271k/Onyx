@@ -133,7 +133,7 @@ extension SessionAnalysis {
 
         var setsDelta: Int? {
             guard let previous else { return nil }
-            return report.sets - previous.sets
+            return report.physicalSets - previous.totalSets
         }
 
         /// Minutes against the previous same-split session — and nil rather
@@ -281,7 +281,7 @@ extension SessionAnalysis {
                 SplitPoint(
                     sessionId: $0.id, date: $0.date, tonnageKg: $0.tonnageKg,
                     prCount: $0.prCount, durationMin: $0.credibleDurationMin,
-                    sets: $0.sets, sessionRpe: $0.sessionRpe, avgBpm: $0.avgBpm,
+                    sets: $0.totalSets, sessionRpe: $0.sessionRpe, avgBpm: $0.avgBpm,
                     calories: $0.calories, isMaintenance: lens.callsIt($0.date)
                 )
             },

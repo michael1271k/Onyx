@@ -66,7 +66,7 @@ final class ProgramsModel {
         let count = days(plan.id).count
         var parts = [count == 0 ? "No days yet" : count == 1 ? "1 day" : "\(count) days"]
         if plan.id == runningId, let since = plan.startedOn.flatMap(Self.shortDate) {
-            parts.append("since \(since)")
+            parts.append("since\u{00A0}\(since)")
         }
         return parts
     }

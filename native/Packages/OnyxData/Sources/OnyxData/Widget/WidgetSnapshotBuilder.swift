@@ -1113,10 +1113,9 @@ public struct WidgetSnapshotBuilder: Sendable {
         )
     }
 
-    /// `sessionVolumeKg` over the local rows on the Hevy basis (Q13). The
-    /// defaults credit no body weight — `TodayFeedBuilder` and
-    /// `TrainingTrendsStore` still read through here that way (W-final wires
-    /// the weigh-in there); the snapshot itself passes both.
+    /// `sessionVolumeKg` over the local rows on the Hevy basis (Q13). Every
+    /// caller passes the weigh-in and the bodyweight flags; the defaults
+    /// (no credit) are for tests.
     static func volume(
         _ sets: [WorkoutSet], bodyWeightKg: Double? = nil, isBodyweight: (String) -> Bool = { _ in false }
     ) -> Double {

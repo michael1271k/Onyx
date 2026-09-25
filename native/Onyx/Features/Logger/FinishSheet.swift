@@ -313,11 +313,14 @@ struct FinishSheet: View {
                 // Fixed HERE and not at the day: that appending is deliberate
                 // and the deck needs it. What is wrong is a tile printing a
                 // target at a session that has no target left to hit.
+                //
+                // ── "SETS" IS EVERYTHING PERFORMED, "WORKING" IS SECOND (Q10) ─
+                // The headline is `physicalSets` — `SessionCounts.total`, the
+                // `set_count` this close writes: warm-ups and the bout in, a
+                // pair once. The working count is the secondary figure beside
+                // it; what the plan still holds is the unticked line below.
                 tile("Sets", "square.stack.3d.up",
-                     model.isEditing
-                        ? "\(model.completedSets)"
-                        : "\(model.completedSets)/\(model.plannedSets)",
-                     model.isEditing ? "sets" : nil,
+                     "\(model.physicalSets)", "\(model.completedSets) working",
                      tint: Color.onyx.textPrimary)
                 tile("Records", "trophy", model.recordCount > 0 ? "\(model.recordCount)" : "—", nil,
                      tint: model.recordCount > 0 ? Color.onyx.record : Color.onyx.textTertiary)
@@ -395,7 +398,7 @@ struct FinishSheet: View {
     private func hevy(_ workout: WorkoutSample) -> some View {
         HevyCompareCard(
             onyx: .init(
-                avgBpm: avgBpm, kcal: calories, durationMin: durationMin, sets: model.completedSets,
+                avgBpm: avgBpm, kcal: calories, durationMin: durationMin, sets: model.physicalSets,
                 bpmMeasured: bpmMeasured, kcalMeasured: caloriesMeasured
             ),
             hevy: workout,
@@ -621,9 +624,11 @@ struct FinishSheet: View {
     }
 
     private var topMovement: String {
-        guard let best = model.exercises.max(by: { $0.volumeKg < $1.volumeKg }), best.volumeKg > 0
+        let bodyWeightKg = model.bodyWeightKg
+        let volumes = model.exercises.map { ($0, $0.volumeKg(bodyWeightKg: bodyWeightKg)) }
+        guard let (best, kg) = volumes.max(by: { $0.1 < $1.1 }), kg > 0
         else { return "" }
-        return "\(best.name) · \(OnyxFormat.volume(best.volumeKg)) kg"
+        return "\(best.name) · \(OnyxFormat.volume(kg)) kg"
     }
 
     private func summaryLink(_ sessionId: String) -> some View {
@@ -656,18 +661,26 @@ struct FinishSheet: View {
         _ label: String, _ symbol: String, _ value: String, _ unit: String?, tint: Color
     ) -> some View {
         tileShell(label, symbol, tint: tint) {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .onyxType(.body).fontWeight(.semibold).onyxNumeral()
-                    .foregroundStyle(tint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                if let unit {
-                    Text(unit)
-                        .onyxType(.micro)
-                        .foregroundStyle(Color.onyx.textTertiary)
+            let figure = Text(value)
+                .onyxType(.body).fontWeight(.semibold).onyxNumeral()
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            let caption = unit.map {
+                Text($0).onyxType(.micro).foregroundStyle(Color.onyx.textTertiary).lineLimit(1)
+            }
+            // Beside the figure when it fits, under it when it does not — a
+            // unit that wraps mid-phrase made its tile taller than the row.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    figure
+                    caption
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 0) {
+                    figure
+                    caption
+                }
             }
         }
         .accessibilityElement(children: .ignore)

@@ -148,6 +148,7 @@ struct FocusPills: View {
     let muscles: [(muscle: LandmarkMuscle, sets: Double)]
     var limit = 4
     let onOpen: () -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         Button(action: onOpen) {
@@ -158,9 +159,14 @@ struct FocusPills: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right")
-                    .onyxType(.caption)
-                    .foregroundStyle(Color.onyx.textTertiary)
+                // At the accessibility sizes the chevron's column made
+                // "Upper back 4.5" wrap inside its capsule (W-final AX5 shot);
+                // the row is still a button without it.
+                if !typeSize.isAccessibilitySize {
+                    Image(systemName: "chevron.right")
+                        .onyxType(.caption)
+                        .foregroundStyle(Color.onyx.textTertiary)
+                }
             }
             .frame(minHeight: 44)
             .contentShape(Rectangle())
@@ -184,6 +190,7 @@ struct FocusPills: View {
                 .onyxType(.caption).onyxNumeral()
                 .foregroundStyle(Color.onyx.textSecondary)
         }
+        .lineLimit(1)
         .padding(.horizontal, OnyxSpace.s + 2)
         .padding(.vertical, OnyxSpace.xs + 1)
         .background(ink.opacity(0.14), in: .capsule)

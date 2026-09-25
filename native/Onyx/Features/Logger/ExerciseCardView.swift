@@ -348,6 +348,15 @@ struct ExerciseCardView: View {
             // Founder asked for the line gone; it was restating the table.
             if let last = model.lastTime(for: exercise) { lastTime(last) }
 
+            // The PR guard's quiet mark (Q12, design 11): a first session has
+            // nothing to beat, so it sets the bar instead of a trophy.
+            if exercise.isBaseline {
+                Text("Baseline · records start next time")
+                    .onyxType(.caption)
+                    .foregroundStyle(Color.onyx.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             if !exercise.note.isEmpty {
                 Text(exercise.note)
                     .onyxType(.caption)
@@ -1955,7 +1964,12 @@ struct SetRowView: View {
                     set: { next in write(targets) { $0.durationSec = next.map { Int(($0 * 60).rounded()) } } }
                 ),
                 unit: "minutes", decimals: true,
-                minWidth: loadFloor, fills: !typeSize.isAccessibilitySize,
+                // The load's floor is "188.75"; a bout's figure is "12.5" or
+                // "0.37". At the accessibility sizes that floor alone pushed
+                // the stacked stepper, and the card, past the screen (W-final
+                // AX5 shot) — so the stacked row takes the reps floor.
+                minWidth: typeSize.isAccessibilitySize ? SetColumn.repsFloor(typeSize) : loadFloor,
+                fills: !typeSize.isAccessibilitySize,
                 tint: nil, onCommit: { commit(targets) }
             )
         }
@@ -1987,7 +2001,12 @@ struct SetRowView: View {
                     set: { next in write(targets) { $0.distanceKm = next } }
                 ),
                 unit: "kilometres", decimals: true,
-                minWidth: loadFloor, fills: !typeSize.isAccessibilitySize,
+                // The load's floor is "188.75"; a bout's figure is "12.5" or
+                // "0.37". At the accessibility sizes that floor alone pushed
+                // the stacked stepper, and the card, past the screen (W-final
+                // AX5 shot) — so the stacked row takes the reps floor.
+                minWidth: typeSize.isAccessibilitySize ? SetColumn.repsFloor(typeSize) : loadFloor,
+                fills: !typeSize.isAccessibilitySize,
                 tint: nil, onCommit: { commit(targets) }
             )
         }

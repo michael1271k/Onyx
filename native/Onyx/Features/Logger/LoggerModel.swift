@@ -366,6 +366,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         nonisolated let id = newOnyxID()
         nonisolated var name: String { plan.name }
 
+        /// This movement's first session ever (Q12, design 11): no prior
+        /// session-backed set and no floor, so nothing it does can be a record
+        /// — the card says "Baseline" quietly instead of lighting a trophy.
+        var isBaseline = false
+
         init(plan: ProgramExercise, rows: [SetRow], note: String = "") {
             self.plan = plan
             self.rows = rows
@@ -379,28 +384,38 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         /// press are two sets of leg press as far as the quads are concerned.
         /// It is also the number Hevy prints, and Hevy counts them.
         ///
-        /// Precision seam 1: `SessionCounts.total` (OnyxCore, Lane C) becomes
-        /// the one rule for this figure and for `workingSets` below — warm-ups
-        /// and cardio bouts in, pairs once, ghosts out. The names stay; the
-        /// close-out wave points both bodies at it.
-        var physicalSets: Int {
-            LoggerModel.physical(rows.filter { $0.isDone && $0.kind != .ghost })
-        }
+        /// `SessionCounts.total` — the "Sets" rule `closeSession` writes to
+        /// `set_count` (Precision seam 1, Q10): warm-ups and cardio bouts in,
+        /// a pair once, ghosts out. One rule, so the deck cannot say 22 over a
+        /// session its own row stores as 21.
+        var physicalSets: Int { SessionCounts.total(rows.filter(\.isDone).map(\.volumeSet)) }
 
-        /// WORKING sets — what the program prescribed and what the header counts.
-        var workingSets: Int {
-            LoggerModel.physical(rows.filter { $0.isDone && $0.kind != .ghost && $0.kind != .warmup })
-        }
+        /// WORKING sets — what the program prescribed and what the header
+        /// counts: `SessionCounts.working`, the `working_set_count` rule.
+        var workingSets: Int { SessionCounts.working(rows.filter(\.isDone).map(\.volumeSet)) }
 
         /// Σ tonnage, with a genuine L/R pair scored ONCE at its weaker side.
         ///
         /// Routed through `SessionVolume` rather than summed here: that
-        /// function is the rule, it is vector-equal with the web's
-        /// `sessionVolumeKg`, and it is what `closeSession` writes to
+        /// function is the rule, and it is what `closeSession` writes to
         /// `total_volume_kg`. A second summation in the deck is a header that
-        /// disagrees with the row it wrote.
-        var volumeKg: Double {
-            SessionVolume.sessionVolumeKg(rows.filter(\.isDone).map(\.volumeSet))
+        /// disagrees with the row it wrote. Since Precision (Q13, seam 2) that
+        /// rule drops warm-ups and weighs an unloaded bodyweight set at
+        /// `bodyWeightKg` — the deck passes the same weigh-in the close reads.
+        ///
+        /// ponytail: the bodyweight flag is the NAME rule; the close path
+        /// prefers the catalogue's stored `is_bodyweight`. They differ only for
+        /// a server-created row whose flag contradicts its name.
+        func volumeKg(bodyWeightKg: Double? = nil) -> Double {
+            let bodyweight = Bodyweight.isBodyweight(name)
+            return SessionVolume.sessionVolumeKg(
+                rows.filter(\.isDone).map { row in
+                    var set = row.volumeSet
+                    set.bodyweight = bodyweight
+                    return set
+                },
+                bodyWeightKg: bodyWeightKg
+            )
         }
 
         /// Done when every set the PROGRAM asked for is ticked.
@@ -711,7 +726,27 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
 
     // MARK: - Derived
 
-    var totalVolumeKg: Double { exercises.reduce(0) { $0 + $1.volumeKg } }
+    var totalVolumeKg: Double { exercises.reduce(0) { $0 + $1.volumeKg(bodyWeightKg: bodyWeightKg) } }
+
+    /// The athlete's latest weigh-in on or before the session's day —
+    /// `SessionEditing.bodyWeightKg`, the one `closeSession` credits a
+    /// bodyweight set with. The day is the session's (`startedAt`'s, which is
+    /// the day `attach` opened it on), not today's, so a deck that runs past
+    /// midnight keeps the close path's answer. Cached between ticks — the
+    /// header reads it on every redraw — and dropped on each one
+    /// (`refreshLivePrs`), so a scale reading that lands mid-session is in the
+    /// next figure, as it will be in the saved one.
+    @ObservationIgnored private var weighIn: (date: String, kg: Double?)?
+    var bodyWeightKg: Double? {
+        let date = editing?.date ?? LogicalDay.iso(startedAt)
+        if let weighIn, weighIn.date == date { return weighIn.kg }
+        let userId = userId
+        let kg = store.flatMap { store in
+            try? store.read { try SessionEditing.bodyWeightKg($0, userId: userId, on: date) }
+        } ?? nil
+        weighIn = (date, kg)
+        return kg
+    }
     /// Planned working sets still unticked — never stored, and kept in the
     /// plan (`RoutineOrder.merge`). The finish sheet says so (Precision A6).
     ///
@@ -1929,6 +1964,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// answer and the ledger written by `closeSession` are the same engine over
     /// the same keys against the same bar.
     private func refreshLivePrs() {
+        weighIn = nil
         var candidates: [PrCandidateSet] = []
         var origin: [SetRow] = []
         for exercise in exercises {
@@ -1981,6 +2017,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         guard !candidates.isEmpty else {
             prsThisSession = 0
             livePrs = []
+            markBaselines([])
             return
         }
         // ── THE BAR, AFTER THE EARLY RETURN AND NOT BEFORE IT ───────────────
@@ -2001,8 +2038,10 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         rebuildBaselinesIfDeckMoved()
         let result = PrEngine.detectSessionPrs(candidates, baselines)
         var records: [LivePrRecord] = []
+        var baselineRows = Set<String>()
         for (i, detected) in result.perSet.enumerated() where i < origin.count {
             origin[i].isRecord = !detected.axes.isEmpty
+            if detected.mark == .baseline { baselineRows.insert(origin[i].id) }
             // ONE ENTRY PER AXIS, not per set: a single set can take the weight
             // record and the e1RM record at once, and a card that collapsed
             // them would say "1 PR" where the ledger written at close says two.
@@ -2020,6 +2059,20 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         // Newest first — the deck is walked in session order.
         livePrs = records.reversed()
         prsThisSession = result.prCount
+        // Only against a bar that was actually built for this deck: with no
+        // store, or a read that threw, the engine sees no history for anything
+        // and every card would claim a first session it is not.
+        markBaselines(store != nil && baselineIds() == baselineKeys ? baselineRows : [])
+    }
+
+    /// A card is a Baseline when any of its done rows is (`SetMark.baseline`:
+    /// the engine found no prior session-backed set and no floor). Written only
+    /// on change — an `@Observable` write redraws even when the value is equal.
+    private func markBaselines(_ rows: Set<String>) {
+        for exercise in exercises {
+            let baseline = exercise.rows.contains { rows.contains($0.id) }
+            if exercise.isBaseline != baseline { exercise.isBaseline = baseline }
+        }
     }
 
     // MARK: - Rest

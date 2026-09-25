@@ -34,4 +34,18 @@ struct TrainingTrendsStoreTests {
         // An unknown exercise id is shown as itself, never dropped.
         #expect(all[1].sets.map(\.exerciseName) == ["missing"])
     }
+
+    @Test("a bodyweight set weighs the athlete's weigh-in, as the close path stores it (Q13)")
+    func bodyweightCredit() throws {
+        let db = try AppDatabase.inMemory(deviceId: "device-a")
+        try db.seedRows { db in
+            try Exercise(id: "ex-pull", name: "Pull Up").insert(db)
+            try WorkoutSession(id: "s", userId: user, dayKey: "back", date: "2026-09-10").insert(db)
+            try WorkoutSet(id: "p", sessionId: "s", exerciseId: "ex-pull", setIndex: 0, weightKg: 0, reps: 10).insert(db)
+        }
+        _ = try db.editDailyLog(userId: user, date: "2026-09-08") { $0.weightKg = 80 }
+
+        let rows = try db.trainingTrendSessions(userId: user, from: "2026-09-10", to: "2026-09-10")
+        #expect(rows.first?.volumeKg == 800)
+    }
 }

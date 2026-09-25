@@ -190,7 +190,7 @@ struct LoggerModelTests {
         model.setKind(.ghost, on: press.rows[0], in: press)
 
         #expect(press.physicalSets == 0)
-        #expect(press.volumeKg == 0)
+        #expect(press.volumeKg() == 0)
         #expect(model.muscleSets.isEmpty)
     }
 
