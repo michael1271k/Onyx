@@ -95,13 +95,18 @@ public struct RoutineDay: Codable, Equatable, Sendable {
     public var accent: Int
     public var sort: Int
     public var payload: RoutinePayload
+    /// `routines.notes` — the day's own note (Precision E1). nil until someone
+    /// writes one; an emptied note is `""`, not nil, so the push can clear the
+    /// server's copy without naming a column a pre-DDL server lacks.
+    public var notes: String?
 
     public init(
         programId: String, dayKey: String, label: String, sub: String? = nil,
-        weekday: Int, accent: Int, sort: Int, payload: RoutinePayload
+        weekday: Int, accent: Int, sort: Int, payload: RoutinePayload, notes: String? = nil
     ) {
         self.programId = programId; self.dayKey = dayKey; self.label = label; self.sub = sub
         self.weekday = weekday; self.accent = accent; self.sort = sort; self.payload = payload
+        self.notes = notes
     }
 
     public var programDay: ProgramDay {

@@ -1163,6 +1163,7 @@ public struct RoutineRow: Codable, FetchableRecord, PersistableRecord, Sendable,
     public var sort: Int
     public var payload: JSONText
     public var updatedAt: Date
+    public var notes: String?
 
     public enum CodingKeys: String, CodingKey {
         case userId = "user_id"
@@ -1175,6 +1176,7 @@ public struct RoutineRow: Codable, FetchableRecord, PersistableRecord, Sendable,
         case sort
         case payload
         case updatedAt = "updated_at"
+        case notes
     }
 
     public init(
@@ -1187,7 +1189,8 @@ public struct RoutineRow: Codable, FetchableRecord, PersistableRecord, Sendable,
         accent: Int,
         sort: Int,
         payload: JSONText,
-        updatedAt: Date
+        updatedAt: Date,
+        notes: String? = nil
     ) {
         self.userId = userId
         self.programId = programId
@@ -1199,6 +1202,7 @@ public struct RoutineRow: Codable, FetchableRecord, PersistableRecord, Sendable,
         self.sort = sort
         self.payload = payload
         self.updatedAt = updatedAt
+        self.notes = notes
     }
 }
 
@@ -1420,6 +1424,8 @@ public struct PlanRow: Codable, FetchableRecord, PersistableRecord, Sendable, Eq
     public var blurb: String?
     public var isLegacy: Bool?
     public var sort: Int?
+    public var goalKind: String?
+    public var goalTarget: JSONText?
 
     public enum CodingKeys: String, CodingKey {
         case id
@@ -1432,6 +1438,8 @@ public struct PlanRow: Codable, FetchableRecord, PersistableRecord, Sendable, Eq
         case blurb
         case isLegacy = "is_legacy"
         case sort
+        case goalKind = "goal_kind"
+        case goalTarget = "goal_target"
     }
 
     public init(
@@ -1444,7 +1452,9 @@ public struct PlanRow: Codable, FetchableRecord, PersistableRecord, Sendable, Eq
         createdAt: Date? = nil,
         blurb: String? = nil,
         isLegacy: Bool? = nil,
-        sort: Int? = nil
+        sort: Int? = nil,
+        goalKind: String? = nil,
+        goalTarget: JSONText? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -1456,6 +1466,8 @@ public struct PlanRow: Codable, FetchableRecord, PersistableRecord, Sendable, Eq
         self.blurb = blurb
         self.isLegacy = isLegacy
         self.sort = sort
+        self.goalKind = goalKind
+        self.goalTarget = goalTarget
     }
 }
 
@@ -2259,6 +2271,8 @@ extension AppDatabase {
                 t.column("blurb", .text)
                 t.column("is_legacy", .boolean)
                 t.column("sort", .integer)
+                t.column("goal_kind", .text)
+                t.column("goal_target", .text)
             }
             try db.create(table: "plan_phase_goals") { t in
                 t.column("user_id", .text).notNull()
@@ -2357,6 +2371,7 @@ extension AppDatabase {
                 t.column("sort", .integer).notNull()
                 t.column("payload", .text).notNull()
                 t.column("updated_at", .datetime).notNull()
+                t.column("notes", .text)
                 t.primaryKey(["user_id", "program_id", "day_key"])
             }
             try db.create(table: "plan_phases") { t in

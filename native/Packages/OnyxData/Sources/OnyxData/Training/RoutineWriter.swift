@@ -63,7 +63,8 @@ public extension AppDatabase {
             accent: day.accent,
             sort: day.sort,
             payload: JSONText(raw: day.payload.encoded()),
-            updatedAt: Self.localWriteTimestamp
+            updatedAt: Self.localWriteTimestamp,
+            notes: day.notes
         )
         row.updatedAt = Self.localWriteTimestamp
         try row.save(db)

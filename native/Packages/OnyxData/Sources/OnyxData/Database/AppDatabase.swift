@@ -1476,6 +1476,27 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // ── v40: a program's goal, and a day's notes (Precision E1) ─────────
+        // `plans.goal_kind` (bulk | cut | recomp | muscle_mass | body_fat),
+        // `plans.goal_target` (jsonb: `ProgramGoalTarget`) and
+        // `routines.notes`, all nullable — nil on every row written before
+        // them, so `encodeIfPresent` keeps the keys out of a push until the
+        // founder's `docs/sql/precision-e-programs.sql` lands. A fresh install
+        // gets them from the regenerated V1/V2 creates; this is the guarded
+        // alter for a store that already exists (v38's shape). Numbered 40:
+        // Lane C holds v39 — the NAME is the identity, the number only has to
+        // stay monotonic.
+        migrator.registerMigration("v40.programGoals") { db in
+            let plans = Set(try db.columns(in: "plans").map(\.name))
+            for column in ["goal_kind", "goal_target"] where !plans.contains(column) {
+                try db.alter(table: "plans") { t in t.add(column: column, .text) }
+            }
+            let routines = Set(try db.columns(in: "routines").map(\.name))
+            if !routines.contains("notes") {
+                try db.alter(table: "routines") { t in t.add(column: "notes", .text) }
+            }
+        }
+
         return migrator
     }
 }

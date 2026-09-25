@@ -155,11 +155,33 @@ public enum StartingTargetsBuilder {
     /// that produces a sane target the user can see and correct beats a nil
     /// that produces a blank screen.
     public static func build(weightKg: Double, goal: StartingGoal) -> StartingTargets {
+        build(weightKg: weightKg, kcalPerKg: goal.kcalPerKg, proteinPerKg: goal.proteinPerKg, fatPerKg: goal.fatPerKg)
+    }
+
+    /// The starting four for a PROGRAM goal (Precision E3).
+    ///
+    /// The directional kinds are onboarding's own rows — muscle mass eats like
+    /// a bulk, body fat like a cut. Recomp is the one new row: maintenance
+    /// energy with the CUT's protein, because a recomp is a deficit's muscle
+    /// defence at a surplus's scale — the protein is the whole mechanism.
+    public static func build(weightKg: Double, programGoal goal: ProgramGoal) -> StartingTargets {
+        switch goal {
+        case .bulk, .muscleMass: build(weightKg: weightKg, goal: StartingGoal.bulk)
+        case .cut, .bodyFat:     build(weightKg: weightKg, goal: StartingGoal.cut)
+        case .recomp:
+            build(
+                weightKg: weightKg, kcalPerKg: StartingGoal.maintain.kcalPerKg,
+                proteinPerKg: StartingGoal.cut.proteinPerKg, fatPerKg: StartingGoal.maintain.fatPerKg
+            )
+        }
+    }
+
+    private static func build(weightKg: Double, kcalPerKg: Double, proteinPerKg: Double, fatPerKg: Double) -> StartingTargets {
         let weight = min(max(weightKg, weightRange.lowerBound), weightRange.upperBound)
 
-        let protein = (weight * goal.proteinPerKg).rounded()
-        let fat = (weight * goal.fatPerKg).rounded()
-        let budget = weight * goal.kcalPerKg
+        let protein = (weight * proteinPerKg).rounded()
+        let fat = (weight * fatPerKg).rounded()
+        let budget = weight * kcalPerKg
 
         // Carbohydrate is the remainder, and the remainder can go negative for a
         // very light athlete on a cut once protein and fat are paid for. Zero
@@ -195,4 +217,101 @@ public enum StartingTargetsBuilder {
         case .bulk:     return (min: pct(0.2), max: pct(0.4))
         }
     }
+
+    /// The safe band for a PROGRAM goal. Directional kinds take their
+    /// direction's band. Recomp is ±0.1 % of bodyweight a week — not a
+    /// direction but the scale's own weekly noise: `maintain`'s 0…0 would
+    /// call a 50 g drift a failure.
+    public static func weeklyRate(weightKg: Double, programGoal goal: ProgramGoal) -> (min: Double, max: Double) {
+        switch goal {
+        case .bulk, .muscleMass: return weeklyRate(weightKg: weightKg, goal: StartingGoal.bulk)
+        case .cut, .bodyFat:     return weeklyRate(weightKg: weightKg, goal: StartingGoal.cut)
+        case .recomp:
+            let weight = min(max(weightKg, weightRange.lowerBound), weightRange.upperBound)
+            let band = ((weight * 0.1 / 100) * 100).rounded() / 100
+            return (min: -band, max: band)
+        }
+    }
+}
+
+// MARK: - Pace (Precision E3)
+
+/// The readings a goal is set FROM — the latest weigh-in, prefilled and
+/// editable. No sex, no age (the App Review note at the top of this file).
+public struct BodyNow: Equatable, Sendable {
+    public var weightKg: Double?
+    public var bodyFatPct: Double?
+    public var muscleMassKg: Double?
+
+    public init(weightKg: Double?, bodyFatPct: Double? = nil, muscleMassKg: Double? = nil) {
+        self.weightKg = weightKg; self.bodyFatPct = bodyFatPct; self.muscleMassKg = muscleMassKg
+    }
+}
+
+/// What a target and a horizon imply, judged against the goal's safe band.
+public struct GoalPlan: Equatable, Sendable {
+    public enum Verdict: Equatable, Sendable {
+        /// Within the band.
+        case inside
+        /// Past the band's far end — a cut that strips muscle, a bulk that is
+        /// mostly fat, a recomp that is really a bulk or a cut.
+        case fast
+        /// Short of the band, or the wrong way — slower than the goal can show.
+        case slow
+    }
+
+    /// The scale's destination, two decimals.
+    public var targetWeightKg: Double
+    /// Signed kg a week, two decimals — the figure drawn and the one judged.
+    public var weeklyRateKg: Double
+    public var bandMin: Double
+    public var bandMax: Double
+    public var verdict: Verdict
+}
+
+public enum GoalPace {
+
+    /// The destination weight, the implied weekly rate and its verdict — or
+    /// nil when there is nothing to start from, nothing to convert, or no
+    /// horizon to divide by. Nothing implied is nothing drawn.
+    ///
+    /// ── WHY EVERY KIND LANDS ON A WEIGHT ────────────────────────────────────
+    /// The safe band is a rate of SCALE weight, so each target is converted to
+    /// one. Body fat holds lean mass constant: lean = w·(1 − bf), and the
+    /// target weight is lean / (1 − target bf). Muscle mass adds the muscle to
+    /// everything else held still — a LOWER bound on the scale's move, since a
+    /// lean bulk carries some fat and water with it; the sheet says so.
+    public static func plan(goal: ProgramGoal, now: BodyNow, target: ProgramGoalTarget) -> GoalPlan? {
+        guard let weight = now.weightKg, weight > 0,
+              let weeks = target.horizonWeeks, weeks > 0 else { return nil }
+        let destination: Double
+        switch goal {
+        case .bulk, .cut, .recomp:
+            guard let t = target.targetWeightKg, t > 0 else { return nil }
+            destination = t
+        case .bodyFat:
+            guard let bf = now.bodyFatPct, let tbf = target.targetBodyFatPct,
+                  (0..<100).contains(bf), (0..<100).contains(tbf) else { return nil }
+            destination = weight * (1 - bf / 100) / (1 - tbf / 100)
+        case .muscleMass:
+            guard let mm = now.muscleMassKg, let tmm = target.targetMuscleMassKg else { return nil }
+            destination = weight + (tmm - mm)
+        }
+        let rate = round2((destination - weight) / Double(weeks))
+        let band = StartingTargetsBuilder.weeklyRate(weightKg: weight, programGoal: goal)
+        let verdict: GoalPlan.Verdict
+        if rate < band.min {
+            verdict = band.min < 0 ? .fast : .slow
+        } else if rate > band.max {
+            verdict = band.max > 0 ? .fast : .slow
+        } else {
+            verdict = .inside
+        }
+        return GoalPlan(
+            targetWeightKg: round2(destination), weeklyRateKg: rate,
+            bandMin: band.min, bandMax: band.max, verdict: verdict
+        )
+    }
+
+    private static func round2(_ value: Double) -> Double { (value * 100).rounded() / 100 }
 }
