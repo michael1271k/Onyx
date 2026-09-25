@@ -597,3 +597,77 @@ Branch `onyx/precision-f` (feature `6e0ef912`, review round `7d7552c3`), rebased
 
 ### Cache purge
 Before: `onyx-swift` 28.9 G (Lane F: 10.7 G across `lane-f-*`), shots 213 M, DerivedData 4.9 G, SwiftPM 287 M, lane simulator 3.0 G. Removed every `onyx-swift` directory except `lane-c*` (Lane C's worktree is open; no build was running), the scratch shots, the SwiftPM cache and `iPhone 15 (lane F)`. After: `onyx-swift` 11 G (all `lane-c*`). **Freed 21.61 GB** (18.60 G caches + shots + SwiftPM, 3.00 G simulator). DerivedData (4.9 G) was not in the purge list and was left.
+
+---
+
+## Wave record — Lane C (Engines) · Fable 5.1 · **9.6.0**
+
+Branch `onyx/precision-c` (worktree `../onyx-lane-c`, 5 commits: C1/C3/C4 · C2 · replay guard · review round), rebased over main at Lane F's 9.5.0 by the W-final session (the migration became `v41.precisionRecount`; Lane E holds v40 — the name is the identity), merged `76c31614`, version `cf2d0d46`, graph `da9aefa7`. Branch and worktree deleted. Simulator `iPhone 15 (lane C)` (`83BF87B5…`, iOS 26.5). No UI shipped: the "Sets"/"Working" label sites are Lane A/B views (requests below).
+
+### Proof 1 — the 36.2 kg (Q13, Q14)
+
+The founder's Thursday Upper B is `workout_sessions c6803c0f` (2026-09-24, `cb_b`, `total_volume_kg 4409.00`, `set_count 20`, `pr_count 1`), read over PostgREST. Every row, Onyx today vs the Hevy rules:
+
+| # | Movement | Rows (kg × reps) | Onyx today | Hevy rules |
+|---|---|---|---|---|
+| 0 | Walk (warm-up, 300 s, 0.37 km) | 0 × 0 | 0 | 0 (warm-up out) |
+| 1 | Neutral-Grip Lat Pulldown | 52 × 9, 52 × 8 | 884 | 884 |
+| 2 | Chest Press | 42.5 × 11, 42.5 × 9, 40 × 11 | 1290 | 1290 |
+| 3 | Seated Cable Row (Wide Grip) | 50 × 7, 42.5 × 12 | 860 | 860 |
+| 4 | Single Arm Cable Crossover | 8.75 × 13, 8.75 × 12 | 218.75 | 218.75 |
+| 5 | Single Arm Lateral Raise | 5 × 16 · pair L 5 × 15 / R 5 × 15 · 5 × 15 · 5 × 14 | 300 (pair once at 75) | 300 — or 375 both sides |
+| 6 | Single Arm Triceps Pushdown | 7.5 × 13 · pair 7.5 × 12 / 7.5 × 11 · pair 6.25 × 10 / 6.25 × 10 | 242.5 (pairs 82.5 + 62.5) | 242.5 — or 395 both sides |
+| 7 | Preacher Curl | 20 × 11, 18.75 × 11, 18.75 × 10 | 613.75 | 613.75 |
+| | **Total** | | **4409.00** | **4409.00** (weaker side) · **4636.50** (both sides) |
+
+Decomposition of 4409 − 4372.8 = **36.2**: **0.0 kg** is explained by the rules. This session has no loaded warm-up (the walk is 0 kg) and no bodyweight movement (no catalogue `is_bodyweight`, no `Bodyweight.isBodyweight` name), so "warm-ups out + body weight in" moves it by exactly 0; scoring both sides of the three pairs moves it +227.5 to 4636.5, AWAY from Hevy. **36.2 kg is unexplained, and it cannot be a rule:** every Onyx weight is a multiple of 0.25 kg and every rep count an integer, so no subset of these rows sums to a figure ending in .8 — Hevy holds at least one weight Onyx never logged (8.8 for 8.75, 18.8 for 18.75, 6.3 for 6.25, or a typed number). Without the CSV (Q14) the residual stays a data difference in Hevy's own entry. Consequences taken: warm-ups out and body weight in as decided (Q13); the **pair rule stays the founder's weaker side** — Hevy's both-sides rule would widen the gap. `VolumeBasisTests.upperBIsUnmoved` pins 4409.00 on the new basis (not 4372.8, which no rule produces).
+
+### Proof 2 — the second trophy (Q12)
+
+The founder's "Seated Cable Row (V-Grip) 50 × 7" is logged under **Seated Cable Row (Wide Grip)** (`2c397ee9`) — the V-Grip row (`8bd1aada`) was last trained 2026-09-22 (42.5 × 12, 50 × 8) and holds e1RM 66.52 / weight 50 / volume 595 (floor). Wide Grip before Thursday, Brzycki per set (`w × 36 / (37 − r)`): 35 × 12 = 50.4 (×5 rows, Jul), 42.5 × 10 = 56.67, 42.5 × 11 = 58.85, **42.5 × 12 = 61.2 — first on 2026-08-27, again 09-10 and 09-17**. Thursday: 50 × 7 = **60.0**, 42.5 × 12 = 61.2.
+
+| Axis | Standing bar | 50 × 7 | Verdict |
+|---|---|---|---|
+| Weight | 42.5 | 50 | **record** (filed: `personal_records` weight 50, `c6803c0f`, 2026-09-24) |
+| e1RM | 61.2 | 60.0 | no — **prior ≥ 60** |
+| Volume | 510 | 350 | no |
+| Reps | not eligible at 50 kg | | |
+
+**Which rule blocked it: prior ≥ 60.** Not a tie (60.0 vs 61.2), not an eligibility flag, not live-vs-close (both doors read the same rows). The **ledger's e1RM row reads 59.50** (42.5 × 12, 2026-08-27, `updated_at 2026-09-11`) — Epley `42.5 × (1 + 12/30)`, written by the 09-11 replay before the 09-15 Brzycki switch — which is what made 60.0 look like a trophy. **The engine was right; no repair ships** (no `docs/sql/precision-c-pr-repair.sql`, no `onyx.repair.vgrip.v1`). What was wrong is upstream: `buildBaselines` read the stored `est_1rm_kg` (`||`) over a recomputation, so the bar mixed two formulas — `e1rm` rows store Epley up to 09-10 (42.5 × 12 → 59.5) and Brzycki from 09-17 (61.2). A recompute under that rule would have filed FALSE e1RM records on 09-10 and 09-17 (61.2 > stored 59.5) and dated the 61.2 to 09-17 instead of 08-27. The bar is now Brzycki over (load, reps) only; `recomputeAllPrs` (a backfill sign-in) rewrites the Wide Grip e1RM row to 61.2 / 2026-08-27. Tests: `PrProvenanceTests.wideGripThursday` (20 real rows with their stored Epley values → Weight only, prCount 1), `PrBasisTests.wideGripAtClose` (the recorder: weight row written, e1RM row untouched).
+
+### Built
+- **C1 tonnage.** `SessionVolume.sessionVolumeKg(_:bodyWeightKg:)`: warm-ups weigh nothing; a `VolumeSet.bodyweight` row at 0 kg weighs `bodyWeightKg × reps` (nil → 0); a loaded bodyweight row as logged; pairs once at the weaker side; `jsRound` unchanged. Body weight = latest `daily_logs.weight_kg` on or before the session day (`SessionEditing.bodyWeightKg`), bodyweight flag = catalogue `is_bodyweight` ?? name (`bodyweightResolver`). Wired: `SessionEditing.totals(db:session:sets:)` (close, edit, recount), `WidgetSnapshotBuilder`, `WeeklyExportBuilder` (session `volumeKg`, `tonnageByMuscle`, trend ledger), `SessionAnalysis` (summaries, report, primary landmarks via `Context.weighIns`). Goldens hand-changed with notes: `session-volume` (400 → 0), `draft-totals` (1000/[200,600,1000] → 800/[0,400,800]), export builder fixture (3150 → 4630; Abs/core 2080 appears; ledger 3295 → 4775), `RescoreParityTests` (12 rows ±1–2 workout/battery: the scorer's load follows tonnage). Weekly-export golden: `ONYX_REGOLD` run — **no diff** (the renderer never prints set counts; session volumes are fixture data).
+- **C2 PR guard.** `PrProvenance {sessionBacked, floorOnly, none}` per key from `buildBaselines(candidateKeys:)`; floors fold in for candidate keys (an onboarding floor is a bar); `detectSetPrs → SetMark` (`.baseline` on a first-ever exercise, every set of that session; `.axes` otherwise); `DetectedSet.mark`; `prCount` ignores baselines; lenient `PrBaselines` decode (goldens untouched, 787 pass). **One basis:** `PrRecorder.floors(standingRecords:upTo:excludingSession:)` — standing records achieved on/before the judged day, never the session's own — read by `record`, `prCount`, `livePrBaselines` (signature unchanged) and `replay`; `recomputeAll` retracts session-backed rows (floor hand-back) before replaying finished sessions oldest-first. `SessionAnalysis.detect` passes `candidateKeys`. The e1RM bar ignores `est_1rm_kg`.
+- **C3 counts + backfill.** `SessionCounts.total/working` over `[VolumeSet]`; `workout_sessions.working_set_count` (local `v41.precisionRecount`, guarded; wire `encodeIfPresent`; `TrainingPuller` keeps it on a pull); `set_count` = total; export adds `workingSetCount`; widget `committedSets` = total. Backfill: `docs/sql/precision-c-counts.sql` (DDL, paste FIRST), `docs/sql/precision-c-backfill-sets.sql` (one idempotent UPDATE + VERIFY + the Thursday row 20/19), `scripts/backfill-precision.mjs` (dry-run default, `ONYX_APPLY=1 … --apply`, keyset-paged, per-user before/after), and the in-app door `onyx.recount.sets.v1` (`SessionEditing.recountAll` → outbox) in `SyncCoordinator.openDoors` after the pull.
+- **C4 cholesterol.** `HealthSync`: the raw-sample `dedupedSum` substitution deleted; the day total is the statistic; per-source breakdown kept; `QuantitySample`/`QuantitySamples`/`quantitySamples` removed (−190 lines). `HealthSync.reingest(days:)` + door `onyx.reingest.micros.v1` (30 finished days).
+
+### Measured
+- Server, read-only: 2,579 `workout_sets` (32 warm-up, 54 failure, 0 ghost, 0 dropset), 126 sessions, 1 with `set_count` NULL; `personal_records` 81 rows (16 asserted floors, 0 null `achieved_on`); `working_set_count` ABSENT live (DDL needed); founder's 25 Sep `nutrition_entries` cholesterol **815.3 mg from one source (MyFitnessPal)** — not 610; the after-value needs the device (the door runs on the next sync after install).
+- Thursday on the new rule: Sets 20, Working 19, tonnage 4409.00 (unchanged).
+
+### What failed / workarounds
+- `xcodegen generate` refused the lane worktree (gitignored `Secrets.xcconfig`) — copied from the main checkout.
+- `SyncCoordinator` could not hold a `UserDefaults` (not `Sendable`): the doors take a `@Sendable () -> UserDefaults` factory; the injected test harness has none.
+- The "two eggs" regression could not be red-checked against the old `HealthSync` — the old `QuantitySample` type is gone, so the double's method no longer matched the old protocol; the deleted `aWholeReSync` test documents the halving.
+- `invariant-auditor` found `replay` missing `candidateKeys` (a backfill would have filed a first-ever session's second set) — fixed with a test.
+- The `SeamBenchmarkTests` timing flake fired once; passed on rerun.
+
+### Requests for other lanes / W-final
+1. **Labels (Lane A/B views):** "Sets" = `set_count`/`SessionCounts.total`, "Working" secondary at `FinishSheet` sets tile (:303), `SessionAnalysis.Summary.sets` → `SessionDetailView.metrics` Sets cell, `HevyCompareCard` sets, `WorkoutTabView` done-ticket VoiceOver `"\(sets) sets"`, `PulseWorkout.totals`, week wrapped. Lane C changed only the numbers' sources in the builders.
+2. **Seam 1:** `LoggerModel.physicalSets/workingSets` → `SessionCounts.total/working` (one line each).
+3. **Seam 2:** `ExerciseState.volumeKg` (live deck), `TodayFeedBuilder`, `TrainingTrendsStore`, `ScoringInputsBuilder.volume` pass `bodyWeightKg:` + `isBodyweight:` (defaults credit nothing today; scoring's load already excludes warm-ups).
+4. **Seam 3:** nothing to flip — `livePrBaselines` keeps its signature and the flag is gone. `LoggerModel.refreshLivePrs` may draw `DetectedSet.mark == .baseline` as the quiet "Baseline" mark (design 11).
+5. **Founder:** paste `precision-c-counts.sql` BEFORE installing 9.4.0, then `precision-c-backfill-sets.sql`; optionally `node scripts/backfill-precision.mjs --dry-run` to audit. A backfill sign-in (`recomputeAllPrs`) rewrites Epley-era ledger rows (Wide Grip e1RM 59.5 → 61.2).
+6. **W-final:** `SessionAnalysis.bestEst1rm` and the export's `e1rmKg` still read the stored `est_1rm_kg` (a display cache mixing formulas) — recompute on read, or a one-time re-projection.
+
+### Open calls
+- Hevy's 36.2 kg needs the CSV; nothing in Onyx can produce a .8.
+- The founder's brief names V-Grip; the data says Wide Grip. If the deck's card was labelled V-Grip, that is a library/label question for Lane A.
+- Scoring (readiness load) now excludes loaded warm-ups (12 parity rows moved) but credits no body weight — one basis or two is the scoring owner's call.
+- `recountAll` recomputes `total_volume_kg` too (the Hevy basis), which the SQL backfill deliberately does not (needs weigh-ins and flags the server lacks) — server and phone agree only after each phone's door runs and drains.
+
+### Gates
+On the rebased head `901ca155`, lane simulator `iPhone 15 (lane C)`: `npm run check` exit 0 (version, types, body, atlas, mirror, doms, report ✔; `swift:ui` OnyxUITests **60/60**; `check:watch` BUILD SUCCEEDED) · `swift:core` **816/816** · `swift:data` **855/855** (the `SeamBenchmarkTests` timing flake fired once earlier on the lane head and passed on rerun) · `check:swift` ✔ (iOS + watchOS cross-builds) · app target `xcodebuild generic/platform=iOS` BUILD SUCCEEDED · OnyxTests **243 tests, 9 failing names**, all ⊆ the 10-name baseline: `A capsule counts its week and marks the days that were missed`, `Week 0 is the week the block opened on`, `a credible previous session still gets its delta`, `a previous session's impossible clock produces no delta, not a wrong one`, `a treadmill logged on this phone is titled Treadmill, not its slug`, ``finishing a session leaves the tab on `.done`, with the week and the ledger carrying it``, `ready to progress fires only after the ceiling is cleared twice`, `the ledger rows are this session's sets and only this session's`, `the seeded previous session reaches TopLifts.previousBests` (the Keychain blob test is OnyxDataTests' and passed under `swift test`). Agents: `invariant-auditor` (1 violation — `replay` lacked `candidateKeys` — fixed with a test, `f71b4a22`), `code-reviewer` (2 HIGH + 5 MEDIUM + 6 LOW; both HIGHs and four MEDIUMs fixed in `b079f794`, the rest recorded above as requests/open calls), the live schema introspected over PostgREST before every column claim (`working_set_count` absent; `achieved_on` NOT NULL). Shots: `session` (the summary, whose tonnage/sets/PR figures come from Lane C's builders) at default + AX5 under Slate, Clay and Iris — figures render, no truncation, contrast ≥ 4.5:1, one hero; no fix round needed.
+
+### Cache purge
+`du` before: `onyx-swift` 17 G (lane-c 6.2 G, lane-c-shots 3.2 G, lane-c-data 1.2 G, lane-c-core 291 M, plus the shared `ui-test-derived` 3.4 G, `check-watch` 2.0 G, `OnyxUI-*` 432 M), scratch shots 5.3 M, `org.swift.swiftpm` 280 M, `~/.swiftpm/cache` 0, DerivedData 4.9 G (untouched — other sessions' projects). Wiped `onyx-swift/*` entirely (every other lane has merged; W-final rebuilds), the shots and the SwiftPM caches, and deleted the `iPhone 15 (lane C)` simulator (3.24 GB). After: `onyx-swift` 0 B. **Freed 20.20 GB** (16.96 GB caches + 3.24 GB simulator).
