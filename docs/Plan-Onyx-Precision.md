@@ -489,3 +489,52 @@ Branch `onyx/precision-d` (4 feature commits D1–D4, 2 fix commits), rebased on
 
 ### Cache purge
 Before: `onyx-swift` 27 G (Lane D: 3.6 + 0.28 + 1.2 + 1.9 G), shots 4.9 M, DerivedData 4.9 G, SwiftPM 284 M. Removed `lane-d`, `lane-d-core`, `lane-d-data`, `lane-d-shots` and the scratch shots. After: `onyx-swift` 20 G. **Freed 6.87 GB.** Deviation: shared `OnyxCore`/`OnyxData`/`OnyxUI-*`/`check-watch`/`ui-test-derived`, DerivedData and the SwiftPM cache were left — Lanes C and E are building in them right now (`swift-build … lane-c-data`, `OnyxUI-ios` in flight at purge time).
+
+---
+
+## Wave record — Lane E (Programs + Goals) · Opus 5.5 · **9.4.0**
+
+Branch `onyx/precision-e` (E1 `917822b7`, E2+E3 `5e6530fb`, review fixes `c0a42935`), rebased over Lane D's 9.3.0, merged `a4a65d7d`, version `ebaaa032`, graph `9c71d236`. Branch deleted. Simulator `iPhone 15 (lane E)` (iOS 26.5, created and deleted). impeccable: `context`, `shape` for both flows (surface briefs `.impeccable/surfaces/native-onyx-features-programs-programsview-swift.md` and `…-goalsetupsheet-swift.md`; no interview — the brief forbids questions, assumptions marked), `craft-floor` before UI edits, polish = the critique-driven round below.
+
+### Built
+- **E1 schema.** `docs/sql/precision-e-programs.sql` (idempotent: `plans.goal_kind` with the five-kind CHECK, `plans.goal_target jsonb`, `routines.notes`; verify queries incl. the DELETE policies the in-app delete needs). `supabase.json` columns (nullable, `since` unchanged) → `npm run mirror` → guarded `v40.programGoals`. `schema-truth-checker` confirmed live BEFORE: all three ABSENT; plans 4 rows (founder onyx5 active since 2026-07-15, onyx4 never started, ppl legacy 2026-03-08; test account's `My Plan` placeholder). OnyxCore: `ProgramGoal`, `ProgramGoalTarget` (snake_case jsonb), `PlanInfo.goalKind/goalTarget` (a STRING on the wire so an unknown kind never fails the watch's `ScheduleContext` decode), `RoutineDay.notes`.
+- **E2 Programs in Train.** `Features/Programs/`: `ProgramsView` (Yours · New program: Onyx-5/Onyx-4/PPL templates + Blank · Past programs; running = accent check + goal chip; swipe Run/Delete; refusals shown in words), `ProgramEditorView` (name, goal row → sheet, Run / "Running since", then `RoutineDaySections` — the routine builder's own day sections, shared, not copied), `ProgramsModel`, `TrainProgramsDoor` (running program · "Next · Upper B · Thu" · "Programs ›"), `ProgramsPreviews`. `OnyxData/Plan/PlanWriter.swift`: `createPlan` (mints a unique non-alias id from the name, claims the sign-up placeholder, sort appended, benched; the seed now goes through it + `activatePlanRow`), `writeDays`, `renamePlan`, `deletePlan`, `applyProgramGoal`, `activateProgram` (the body of `SettingsModel.activate`, which now delegates). Day editor: notes, one full-width 44 pt stepper column, "Sets on a cut" / "Same", rest m:ss in 15 s steps, blank renames refused, late-loading day fills its fields. Settings → Routines opens Programs (row kept). `WorkoutTabView` got the one door line (seam 6 — B merged first).
+- **E3 goal setup.** `GoalSetupSheet` + `GoalSetupModel` (onboarding's chrome: rail, heading, one specific primary): (1) five goals with a line each; (2) weigh-in prefilled (weight/BF/muscle/BMR, `OnyxFieldCell`s), target + weeks → the pace hero ("−0.44 kg a week"), a band bar with the rate as a tick, "Inside the safe pace." / faster / slower with what to change, and the safe band as a caption; the proposed target is the band's middle (clamped to a body); (3) kcal hero field + P/C/F cells, BMR ratio, Atwater note, recommended template (Onyx-5 build · Onyx-4 cut · PPL recomp; fills an empty program or becomes a benched "Onyx-4 · Cut"). Save writes `plans.goal_*` + the goal phase's `plan_phase_goals` (the other phase only when absent); on the running program it runs the phase switch and sets "my own numbers". Entry: the program editor and Settings → Goal.
+
+### Measured
+- Pace at the harness weigh-in (80.4 kg, 18.2 % BF), Body fat % over 12 weeks: proposed 12.5 % → about 75.2 kg on the scale → **−0.44 kg/wk inside −0.56…−0.32**. Recomp at 80 kg: 176 P / 322 C / 72 F = **2,640 kcal** (maintenance energy, cut protein).
+- invariant-auditor (OnyxCore): 1 violation — `GoalPace` graded a typo weight (700 kg) against a band clamped at 300 kg → out-of-range weights now imply nothing (test added). Onboarding output byte-identical after the `build` refactor (47/47).
+
+### Deviations from the brief (and why)
+1. Worked in the session's harness worktree on branch `onyx/precision-e`, not `../onyx-lane-e`; the branch is deleted, the harness worktree is the session's.
+2. `StartingTargetsBuilder.build/weeklyRate(weightKg:programGoal:)` — a `goal: ProgramGoal` overload made `.cut` ambiguous at every existing call site.
+3. Recomp's safe band is ±0.1 % bodyweight/wk (the scale's noise); `maintain`'s 0…0 would call 50 g a failure.
+4. **New programs inherit the running program's phase goals + weekly volume**, and activation with no phase row leaves the user's numbers alone — `SettingsModel.activate` wrote `.empty` (0 kcal) there (review HIGH; unreachable before in-app creation).
+5. Delete is refused for the running program AND for one that owns a logged session (`Schedule.planId(owning:)`) or a `plan_phases` block — `started_on` alone made a program run by mistake undeletable.
+6. "Settings → Plan" is a **Goal** row in Settings' Plan & targets section (`PlanView` is not this lane's file).
+7. The goal sheet's targets step opens on the phase's own row (tuned numbers, step goal kept) and falls back to the formula; "Recalculate from my bodyweight" appears when they differ.
+
+### Reviews
+- `ui-ux-designer` on round 1 (10 + 6 extras): applied all 10 (stepper column, contrast of Back/chip/"Running", editable-number affordance via `OnyxFieldCell`, pace copy + zero tick + band caption, check instead of radio ring, meta type/AX stacking/no-break dates, kcal hero, template naming + ink icons, "exercises" + one meta shape, selected-card stroke) and 4 extras (AX text alignment, "Add a day" in its section, gold misuse, AX crowding via capped chrome + hidden subtitle). Not applied: number grouping in `OnyxNumberField` (Settings' file).
+- `code-reviewer` (2 HIGH, 7 MED, 6 LOW → BLOCK): fixed both HIGH (activation zeroing targets; `@Observable` didSet inside init replacing a reopened goal's target), 6 MED (tuned-row overwrite + step reset, cleared target nulls to `user_goals`, undeletable mistaken runs, impossible long-horizon proposals, zero macros on save, per-redraw store read in `ProgramsModel.init`), 3 LOW (editor reload after a template fill, late name, default goal = account phase) + the SQL header's false "nothing is lost". Left: see open calls.
+
+### Requests for other lanes / W-final
+- **Lane C:** your migration takes **v41** (v40.programGoals is on main; the number must stay monotonic).
+- **Founder:** paste `docs/sql/precision-e-programs.sql` BEFORE installing 9.4.0 (a goal set earlier is lost on the next pull); run its verify query 3 — `deletePlan` needs owner DELETE policies on plans/routines/plan_phase_goals/plan_phase_volume/program_day_layout.
+- **OnyxData sync owner:** `saveMirrorRows` could skip a row with a pending `row:<table>:<id>` outbox item — that would make any pre-DDL column write safe, not only this one.
+- **Settings owner:** `OnyxNumberField` formats with `.grouping(.never)` ("2172 kcal" beside "1,742 kcal").
+
+### Open calls
+- `plans.started_on` is first-start-wins: re-running an old program never re-dates it, so its new weeks read as the program started last (W2's open activation-log call).
+- `mintProgramId` checks local tables only; a never-pulled phone could mint an id the server already has. Template movements use the starter md5 ids (same ceiling as Lane A).
+- Save is several transactions: a failure after a template copy leaves the copy (a retry makes a second).
+- The muscle-mass pace counts the muscle alone (a lower bound), and says so.
+
+### Gates
+- On the rebased tree: `npm run check` — version, types, body, atlas, mirror, doms, report ✔, `swift:ui` **51/51** ✔; its `check:watch` lost the shared `check-watch` build DB to another lane's concurrent build ("database is locked") and was re-run with the same command on a lane-local derived path: **BUILD SUCCEEDED**. `check:swift` ✔. `swift:core` **798/798** ✔. `swift:data` **843/843** ✔ on the third run — the first two failed only `SeamBenchmarkTests` "the nutrition day is one read…" at load average 276–440 (Lanes C/F building); alone it passed 3/3.
+- OnyxTests on `iPhone 15 (lane E)`: **243 tests**, failing names = 9, all ⊆ the 10-name baseline: `A capsule counts its week and marks the days that were missed`, `Week 0 is the week the block opened on`, `a credible previous session still gets its delta`, `a previous session's impossible clock produces no delta, not a wrong one`, `a treadmill logged on this phone is titled Treadmill, not its slug`, `finishing a session leaves the tab on .done, with the week and the ledger carrying it`, `ready to progress fires only after the ceiling is cleared twice`, `the ledger rows are this session's sets and only this session's`, `the seeded previous session reaches TopLifts.previousBests`. `GoalSetupModelTests` 12/12.
+- New tests: OnyxCore `ProgramGoalTests` (20), OnyxData `PlanWriterTests` (18) + `ProgramsSchemaTests` (5), OnyxTests `GoalSetupModelTests` (12).
+- Shots: round 1 (Slate, default + AX5: programs, programs-editor, programs-day, goal-1..3, train), round 2 after the critique (same + train-done), confirm (train-done door, goal-2 AX5, Reduce Transparency, Clay + Iris × 7). The review-round fixes after that were logic, not layout, and were not re-shot.
+
+### Cache purge
+Before: `onyx-swift` 34 G (Lane E: 3.55 + 0.27 + 1.17 + 1.96 G), shots 33 M, DerivedData 4.9 G, SwiftPM 286 M. Removed `lane-e`, `lane-e-core`, `lane-e-data`, `lane-e-watch`, the scratch shots and the lane's simulator (3.29 G). After: `onyx-swift` 27 G. **Freed 10.27 GB** (6.98 G caches + 3.29 G simulator). Deviation: shared `OnyxCore`/`OnyxData`/`OnyxUI-*`/`check-watch`/`ui-test-derived`, DerivedData and the SwiftPM cache were left — Lane C was mid-build (`xcodebuild test … lane-c`) at purge time.
