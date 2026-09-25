@@ -437,3 +437,55 @@ Merged `bf9d2dc9` (branch `onyx/precision-a`, 4 commits, rebased over Lane B's 9
 
 ### Cache purge
 Before: `onyx-swift` 30 G (Lane A: 8.38 G), shots 5.4 M, SE sim 2.93 G. Removed `lane-a*`, the shots, the lane's `iPhone SE (lane A)` simulator. **Freed 11.31 GB.** Deviation: shared `OnyxCore`/`OnyxData`/`OnyxUI-*`/`check-watch`/`ui-test-derived`, DerivedData and the SwiftPM cache were left — Lanes C and D are building in them.
+
+## Wave record — Lane D (Watch) · Opus 5.5 · **9.3.0**
+
+Branch `onyx/precision-d` (4 feature commits D1–D4, 2 fix commits), rebased on Lane A's 9.2.0 without conflicts, merged `111cded2`, version `fb3dcec5`, graph `23045a68`. Third lane to merge → 9.3.0. Simulators: the 26.5 WC pair (`2DC9C91C…` + `33ABD301…`, 49 mm) and `Apple Watch SE 3 (40mm)`. impeccable: `context`, `shape` (surface brief `.impeccable/surfaces/native-onyxwatch-views-petaldetailview-swift.md`, direction contract inside), `polish`. Lane B had merged first, so seam 4 adopted its token directly — there is no `WatchGround` helper for W-final to delete.
+
+### Built
+- **D1 six-petal Glance (Q22).** `WatchGlance`: `petalCount = 6`, `angles = [-150, -90, -30, 150, 90, 30]` (the Body tab's, same order: Sleep · Water · Food / Heart · Steps · Stress), `petal = max(38, 0.29·S)`, `orbit = (S − p)/2`, `ring = 2(orbit − p/2 − 4)`; `Layout.offset/clearance/neighbourGap/width/centre`. `GlanceView`: accent readiness ring (4 pt) + inner battery arc (2 pt, `Color.onyx.battery`), centre numeral = readiness or the Crown's petal in its ink; petals hollow / filled (reading, no goal) / arc (goal); Crown −1…5; a petal is a `NavigationLink(value: PetalDetail)`; the centre with nothing lit turns to Pulse. Inks: REM lavender, fixed water, `calories`, fixed heart, `textSecondary`, stress band (`WatchInk.stress`).
+- **D2 `WatchVitals` (Q23 C).** `OnyxData/Watch/WatchVitals.swift`: one-shot `HKAnchoredObjectQuery` per type (HR, HRV SDNN) from a persisted anchor (`VitalsAnchor`, NSKeyedArchiver), 24 h predicate, at launch and on Glance/Heart appear; `HKObserverQuery` + `enableBackgroundDelivery(.hourly)` under `ONYX_ADP` (Gate 0), completion after the fold; streaming anchored query with `updateHandler` only while the Heart detail is on screen. Fold → `HeartTrail` (OnyxCore, 5-min grain, 24 h, gap-aware `runs()`, six 4 h `blocks()`) and `LastHeartRate` only when newer (`WatchHeart.adopt`); `LastHRV`. HRV joins the workout controller's single authorization prompt. `WatchAppDelegate.applicationDidFinishLaunching` starts the model for a background wake.
+- **D3 details (Q24 A).** `PetalDetailView` via `navigationDestination(for: PetalDetail.self)` on the root `NavigationPath` (was `[WatchRoute]`): Sleep `WristDepthArc` + four stages + in bed/goal; Heart bpm + "at 14:47" + 24 h spark + resting/HRV; Water `WristPitcher` + goal + the +1 glass button; Food kcal + left + `EnergyBar` + P/C/F grams; Steps + 7-day bars (gaps, dotted goal); Stress index in band ink + band + last read. `WatchTiles` + `sleepStages`, `sleepGoalMin`, `inBedMin`, `stepsWeek` (by date), `restingBpm`, `stressLast` — optional-last, projected in `WatchTiles.init(_:)`.
+- **D4.** Fuel: `AppDatabase.onFuelCommit` (water_intake, nutrition_entries, supplement_log, custom_supplements) → `PhoneWatchBridge.takeFuelCommit()` → `scheduleWatchPush` pushes after the 2 s debounce, skipping the 30 s throttle; any push clears the flag. Title: `SplitTitle` (`ViewThatFits`: one line `.title3` → one line `.headline` → two lines `.headline` @ 0.7). Start: a drawn 48 pt capsule. Complications `OnyxWatch.liveHeart` (circular, bpm + six 4 h arcs, hourly entries, stale entry, midnight), `OnyxWatch.readinessSleep`, `OnyxWatch.waterFood` (rectangular, `WatchTileProvider` with its midnight entry); six shipped kinds untouched (nine of ten bundle elements). Ground: `WatchInk.ground` = `OnyxGround(domain: nil, strength: 0.5)`, black in always-on; `WatchSlab` solid under Reduce Transparency. `watch-shot.sh`: `detail-*`, `SHOT_DAY_LABEL`, `SHOT_RT`, `SHOT_AX` (the watch sim refuses `simctl ui content_size`).
+
+### Measured
+- Glance (`axe describe-ui`): **40 mm** petals **38 × 38**, ring 46.5, centre 30.5, square y 47.5…178; **49 mm** petals 42.5–43, ring 54, centre 38, square y 64…212 — pinned in `OnyxWatchLayoutTests`.
+- Start: system `.borderedProminent` = **54 pt** at 49 mm / 45 at 40 mm whatever `frame(maxHeight:)` or `controlSize(.small)` says → drawn capsule **48 pt** on both. Long split "Neutral-Grip Push & Pull" at 40 mm: title 2 lines (y 47.5–87.5), stats y 93.5–113, Start y 130–178 — one screen (197).
+- Details at 40 mm default: all one screen (sleep's last line ends y 176). AX5 (forced): they stack and the page scrolls; no ellipsis left.
+- Ground peak at half strength: Slate sRGB (6, 7, 10), Clay (10, 6, 5), Iris (8, 7, 10); forced RT and always-on (0, 0, 0).
+- Heart stream on the sim (real taps via the simulator tool): `heart stream started` on push, `heart stream stopped` on Back; **0 deliveries in 60 s** — no sensor, and the unsigned build has no HealthKit. The sample cadence outside a workout is hardware-only.
+- `WatchTiles`: the six fields add < 140 B; full payload ≤ 2 KB (tests).
+
+### Deviations from the brief (and why)
+1. `DepthArc` and `PitcherFigure` are behind OnyxUI's iOS fence in files no lane owns → wrist copies (`WristDepthArc`, `WristPitcher`, the complication's `WaterJug`) with the same rules.
+2. Start is drawn, not `.borderedProminent` — the system capsule cannot be ≤ 52.
+3. Background delivery is gated on `ONYX_ADP` like `HealthObservers` (the entitlement cannot be signed on a personal team); the ADP block typechecks under `-D ONYX_ADP` (swift-expert).
+4. The fuel signal also fires when a mirror pull re-saves fuel rows; it sends the SAME one push earlier (the pull already scheduled a throttled one) — a pull-proof signal needs a `TransactionObserver` on `markMirrorWrite` (RescoreDoor, not this lane).
+5. At 40 mm the sleep legend drops the ramp's dots (two concatenated lines); names carry the key.
+6. The phone→watch water test on the WC pair was not run: the push needs a signed-in phone (`pushWatchContext` is auth-guarded) and the sim is signed out; proved by `WatchFuelPushTests` (RED with the observer off, GREEN on) + the OnyxData fuel tests.
+7. Complications reviewed by build only — Gate 0 strips the App Group from sim builds (memory `widgets-sprint-w7-complications`).
+
+### Reviews
+- `ui-ux-designer` on round 2 (15 findings): accepted — sleep legend/in-bed truncation, food macro width at 40 mm, Start height, stress's duplicate bar. Rejected with evidence — "ring not trimmed" (zoomed: 81 % with its gap; battery 72 %), "food inks theme" (weighted nutrition inks are the design), dashboard/banner/AccessoryFace items (not this lane's; listed below).
+- `swift-expert`: no concurrency defects (all HK handlers `@Sendable`, nonisolated statics, completion on every path); fixed its anchor-after-fold, lost-trail anchor reset, stale fuel flag.
+- `code-reviewer` (1 HIGH, 4 MED, 4 LOW): fixed the HIGH (heart face reloads per sample mid-session → skipped during a session), the stack surviving a session change (path reset on `sessionId`), background-wake start, Live Heart hourly entries, trail-only reloads, stale heart dimmed with its day, in-view 24 h pruning. Left: the mirror-pull fuel signal (deviation 4).
+
+### Requests for other lanes / W-final
+- **W-final:** lift `DepthArc`, `PitcherFigure` (+ `Glasses`, `PitcherBody`/`PitcherHandle`) and `StressBand.tint` into unfenced OnyxUI; delete `WristDepthArc`, `WristPitcher`, `WaterJug`, `WatchInk.stress`.
+- **W-final (seam 5):** `WatchGlance.angles` equals `BodyRingLayout.angles` in value and order; the sizes differ by device (phone 200/44, wrist 46–54/38–43), so share the angles/offset math and keep the sizes.
+- **Gate 0:** add `com.apple.developer.healthkit.background-delivery` to the watch target and build with `ONYX_ADP` to turn on hourly wakes.
+- **OnyxUI owner:** `AccessoryFace` water reads "1750 ml" where the Glance, the detail and the Body tab read litres; its Today "6 fuelled · 5 sl…" line truncates at 40 mm.
+
+### Open calls
+- The wrist ground at half strength is all but invisible (6, 7, 10) — full strength on the watch is a founder call.
+- Iris's accent sits near REM lavender beside the Sleep petal (palette).
+- Glance gaps: ring↔petal 4 pt vs petal↔petal 8 pt — evening them costs the 40 mm ring 8 pt.
+- The Fuel page's +1 glass hangs at the 40 mm fold (pre-existing).
+
+### Gates
+- `npm run check` ✔ (version, types, body, atlas, mirror, doms, report, `swift:ui` **51/51**, `check:watch` BUILD SUCCEEDED) · `check:swift` ✔ · `swift:core` **778/778** ✔ · `swift:data` **820/820** ✔ (SeamBenchmark flake once, green on the rerun) — all on the rebased tree.
+- OnyxTests on `iPhone 15 (W4 lane A 26.5)`: **231 tests**, failing names = 9, all ⊆ the 10-name baseline: `A capsule counts its week and marks the days that were missed`, `Week 0 is the week the block opened on`, `a credible previous session still gets its delta`, `a previous session's impossible clock produces no delta, not a wrong one`, `a treadmill logged on this phone is titled Treadmill, not its slug`, `finishing a session leaves the tab on .done, with the week and the ledger carrying it`, `ready to progress fires only after the ceiling is cleared twice`, `the ledger rows are this session's sets and only this session's`, `the seeded previous session reaches TopLifts.previousBests` (the Keychain blob test lives in OnyxDataTests and passed). `WatchFuelPushTests` passes.
+- Shots: round 1 (49 + 40 default), round 2 (49 + 40 × Slate/Clay/Iris × glance/start/banner/dashboard/fuel/widget, six details, long title, RT), confirm (the changed details, Start, long title, 40 mm), AX5 pass + one AX5 confirm. More than two rounds on the details: each confirm found a 40 mm or AX5 ellipsis the previous batch had not.
+
+### Cache purge
+Before: `onyx-swift` 27 G (Lane D: 3.6 + 0.28 + 1.2 + 1.9 G), shots 4.9 M, DerivedData 4.9 G, SwiftPM 284 M. Removed `lane-d`, `lane-d-core`, `lane-d-data`, `lane-d-shots` and the scratch shots. After: `onyx-swift` 20 G. **Freed 6.87 GB.** Deviation: shared `OnyxCore`/`OnyxData`/`OnyxUI-*`/`check-watch`/`ui-test-derived`, DerivedData and the SwiftPM cache were left — Lanes C and E are building in them right now (`swift-build … lane-c-data`, `OnyxUI-ios` in flight at purge time).
