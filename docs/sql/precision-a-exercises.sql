@@ -15,6 +15,17 @@
 -- (`ExerciseWire`: the MuscleMap movers, primary first; compound = has an
 -- assisting muscle), so the two paths agree field for field. `split_day` is
 -- 'custom', the phone's value for a catalogue row that belongs to no day.
+--
+-- STEP 0 — THE CHECK THE PHONE HAS FAILED SINCE W5 (2026-09-11). Live
+-- `exercises_split_day_check` allows only push/pull/legs/upper/lower (migration
+-- 005), but `ExerciseWire` has always pushed 'custom'. Every movement the phone
+-- created since then was refused with 23514 and is still in the outbox — never
+-- dropped, retried at most hourly — so it lands on its own once this runs.
+-- Idempotent: re-adding the same list the second time changes nothing.
+
+alter table public.exercises drop constraint if exists exercises_split_day_check;
+alter table public.exercises add constraint exercises_split_day_check
+  check (split_day in ('push', 'pull', 'legs', 'upper', 'lower', 'custom'));
 
 with owner(user_id) as (
   values ('f405d57b-d09f-4a2e-8a33-0c112f2ec34c'::uuid)
