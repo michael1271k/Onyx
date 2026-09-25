@@ -165,20 +165,26 @@ struct PrE1rmTests {
         #expect(result.perSet[0].axes == [.reps], "duration rides in reps, and it is the only axis")
     }
 
-    @Test("a stored estimate still wins over a recomputed one, and a stored 0 is missing")
-    func storedEstimateSemanticsAreUnchanged() {
-        // `||`, not `??` — rows written before the formula returned nil for
-        // unloaded work hold exactly 0, which is not an estimate.
+    /// ── THE BAR IS THE FORMULA, NEVER THE STORED NUMBER (Lane C) ────────────
+    /// `est_1rm_kg` was written by whichever formula the client had on the
+    /// day: Epley until 2026-09-15, Brzycki since. Reading it with `||` built a
+    /// bar from two formulas at once — LOW for reps above ten (a repeat of
+    /// 42.5 × 12 "beat" its own Epley 59.5 with Brzycki 61.2) and HIGH below
+    /// ten (an Epley 63.3 for 50 × 8 hid a Brzycki 62.07). The candidate side
+    /// always computed; now the bar does too, and the stored column is a
+    /// display cache and nothing more.
+    @Test("a stored estimate is ignored; the bar is Brzycki over the row's load and reps")
+    func storedEstimateIsIgnored() {
         let stored = PrEngine.buildBaselines(
             [BaselineSetRow(key: "Press", weightKg: 100, reps: 5, est1rm: 999)],
             isTimed: { _ in false }
         )
-        #expect(stored.bestE1rm.first?.value == 999)
+        #expect(stored.bestE1rm.first?.value == 112.5, "100 × 36/32, not the stored 999")
 
         let zero = PrEngine.buildBaselines(
             [BaselineSetRow(key: "Press", weightKg: 100, reps: 5, est1rm: 0)],
             isTimed: { _ in false }
         )
-        #expect(zero.bestE1rm.first?.value == 112.5, "recomputed: 100 × 36/32")
+        #expect(zero.bestE1rm.first?.value == 112.5)
     }
 }

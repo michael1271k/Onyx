@@ -642,7 +642,10 @@ enum SessionAnalysis {
                 )
             },
             isTimed: { TimedExercise.isTimed(name($0)) },
-            floorFor: { ctx.floors[name($0)] }
+            floorFor: { ctx.floors[name($0)] },
+            // The guard (Q12): the summary's replay marks a first-ever
+            // exercise as a baseline exactly as the close path does.
+            candidateKeys: groups.map(\.exerciseId)
         )
         let candidates = groups.flatMap { g in
             g.sets.map { s in

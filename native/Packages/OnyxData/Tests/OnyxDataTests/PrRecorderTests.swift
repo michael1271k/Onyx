@@ -26,7 +26,10 @@ struct PrRecorderTests {
     ) throws {
         try db.writer.write { conn in
             try Exercise(id: "ex-hack", name: "Hack Squat", slug: "onyx-hack-squat").save(conn)
-            try WorkoutSession(id: id, userId: user, dayKey: dayKey, date: date, startedAt: Date()).insert(conn)
+            // FINISHED: `ended_at` set, the shape of a session pulled from the
+            // web or closed here. `recomputeAll` and `replay` walk finished
+            // sessions only — the live one is the logger's (Lane C).
+            try WorkoutSession(id: id, userId: user, dayKey: dayKey, date: date, startedAt: Date(), endedAt: Date()).insert(conn)
             for (i, w) in weights.enumerated() {
                 try WorkoutSet(
                     id: "\(id)-\(i)", sessionId: id, exerciseId: exercise,
@@ -48,6 +51,10 @@ struct PrRecorderTests {
     @Test("finishing a session files its records under the canonical NAME")
     func writesLedger() throws {
         let db = try store()
+        // A prior session makes the key session-backed (Q12): a first-ever
+        // exercise files nothing, whatever its second set does.
+        try log(db, id: "s0", date: "2026-09-01", weights: [90])
+        _ = try db.closeSession(id: "s0")
         try log(db, id: "s1", date: "2026-09-04", weights: [100, 110])
         _ = try db.closeSession(id: "s1")
 
@@ -69,6 +76,8 @@ struct PrRecorderTests {
     @Test("every filed record is queued for the server under its natural key")
     func queuesForPush() throws {
         let db = try store()
+        try log(db, id: "s0", date: "2026-09-01", weights: [90])
+        _ = try db.closeSession(id: "s0")
         try log(db, id: "s1", date: "2026-09-04", weights: [100, 110])
         _ = try db.closeSession(id: "s1")
 
@@ -310,18 +319,18 @@ struct PrRecorderTests {
                 "617.5 must not read as a record against a ledger that already holds 700")
     }
 
-    /// And the rebuild paths do NOT get that floor.
-    ///
-    /// `recomputeAll` upserts session by session over a table that still holds
-    /// the previous answer. A floor taken from the standing record would judge
-    /// the FIRST session against the all-time best, award nothing, and leave
-    /// every stale row in place — a recompute that silently does nothing. The
-    /// flag defaults off so the three rebuild paths keep the original tiers.
-    @Test("a rebuild does not read standing records as floors")
-    func rebuildIgnoresStandingRecords() throws {
+    /// The rebuild paths read the same standing records — bounded by each
+    /// session's DATE (achieved on or before it) and never its own — and a
+    /// recompute retracts the session-backed rows first, so a history judged
+    /// oldest-first is judged against what stood at the time, not against its
+    /// own future. (Lane C: `PrRecorder.floors(upTo:)`, `recomputeAll`.)
+    @Test("a rebuild lands the same ledger over a populated table")
+    func rebuildLandsTheSameLedger() throws {
         let db = try store()
-        try log(db, id: "s1", date: "2026-09-04", weights: [100, 110])
+        try log(db, id: "s1", date: "2026-09-04", weights: [100])
         _ = try db.closeSession(id: "s1")
+        try log(db, id: "s2", date: "2026-09-05", weights: [110])
+        _ = try db.closeSession(id: "s2")
         let before = try records(db)
         #expect(!before.isEmpty)
 
@@ -329,6 +338,7 @@ struct PrRecorderTests {
         // measuring the history against its own result.
         _ = try db.recomputeAllPrs(userId: user)
         #expect(try records(db).map(\.value) == before.map(\.value))
+        #expect(try records(db).map(\.sessionId) == before.map(\.sessionId))
     }
 
 
