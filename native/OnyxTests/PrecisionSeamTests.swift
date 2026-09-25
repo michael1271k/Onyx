@@ -13,7 +13,7 @@ import OnyxData
 @Suite("Precision seams — the deck agrees with the close")
 struct PrecisionSeamTests {
 
-    static let userId = "00000000-0000-0000-0000-0000000000f1"
+    nonisolated static let userId = "00000000-0000-0000-0000-0000000000f1"
 
     private nonisolated static let bout = WarmupCardio.Bout(
         name: "Treadmill", durationSec: 300, distanceKm: 0.37, inclinePct: 2
@@ -23,6 +23,12 @@ struct PrecisionSeamTests {
         let database = try AppDatabase.inMemory(deviceId: "seam-test")
         try database.seedRows { db in
             try Exercise(id: "ex-pull", name: "Pull Up").insert(db)
+            try Exercise(id: "ex-face", name: "Face Pull").insert(db)
+            try WorkoutSession(
+                id: "s-before", userId: Self.userId, dayKey: "push_a", date: "2026-09-01",
+                startedAt: Date(timeIntervalSince1970: 1_788_000_000), endedAt: Date(timeIntervalSince1970: 1_788_003_600)
+            ).insert(db)
+            try WorkoutSet(id: "fp-1", sessionId: "s-before", exerciseId: "ex-face", setIndex: 1, weightKg: 30, reps: 12).insert(db)
         }
         if let weightKg {
             _ = try database.editDailyLog(userId: Self.userId, date: LogicalDay.today()) { $0.weightKg = weightKg }
@@ -90,5 +96,27 @@ struct PrecisionSeamTests {
         card.rows[0].reps = 10
         #expect(model.toggleDone(card.rows[0], in: card))
         #expect(model.totalVolumeKg == 0)
+    }
+
+    @Test("a first-ever movement's sets carry the quiet Baseline mark and no trophy; a known one does not (seam 3, Q12)")
+    func baselineMark() throws {
+        let model = LoggerModel(
+            day: PlanTemplates.day("onyx5", "arms"), phase: .bulk, store: try store(weightKg: 80),
+            userId: Self.userId, warmupBout: Self.bout
+        )
+        model.attach()
+        let fresh = try #require(model.addExercise(named: "Pull Up"))
+        fresh.rows[0].weightKg = nil
+        fresh.rows[0].reps = 12
+        #expect(model.toggleDone(fresh.rows[0], in: fresh))
+        #expect(fresh.isBaseline)
+        #expect(!fresh.rows[0].isRecord)
+
+        let known = try #require(model.addExercise(named: "Face Pull"))
+        known.rows[0].weightKg = 35
+        known.rows[0].reps = 12
+        #expect(model.toggleDone(known.rows[0], in: known))
+        #expect(!known.isBaseline)
+        #expect(known.rows[0].isRecord, "35 × 12 beats the 30 × 12 on record")
     }
 }

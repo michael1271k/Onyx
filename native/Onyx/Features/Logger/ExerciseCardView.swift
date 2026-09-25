@@ -348,6 +348,15 @@ struct ExerciseCardView: View {
             // Founder asked for the line gone; it was restating the table.
             if let last = model.lastTime(for: exercise) { lastTime(last) }
 
+            // The PR guard's quiet mark (Q12, design 11): a first session has
+            // nothing to beat, so it sets the bar instead of a trophy.
+            if exercise.isBaseline {
+                Text("Baseline · records start next time")
+                    .onyxType(.caption)
+                    .foregroundStyle(Color.onyx.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             if !exercise.note.isEmpty {
                 Text(exercise.note)
                     .onyxType(.caption)

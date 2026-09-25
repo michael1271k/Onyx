@@ -366,6 +366,11 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         nonisolated let id = newOnyxID()
         nonisolated var name: String { plan.name }
 
+        /// This movement's first session ever (Q12, design 11): no prior
+        /// session-backed set and no floor, so nothing it does can be a record
+        /// — the card says "Baseline" quietly instead of lighting a trophy.
+        var isBaseline = false
+
         init(plan: ProgramExercise, rows: [SetRow], note: String = "") {
             self.plan = plan
             self.rows = rows
@@ -2007,6 +2012,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         guard !candidates.isEmpty else {
             prsThisSession = 0
             livePrs = []
+            markBaselines([])
             return
         }
         // ── THE BAR, AFTER THE EARLY RETURN AND NOT BEFORE IT ───────────────
@@ -2027,8 +2033,10 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         rebuildBaselinesIfDeckMoved()
         let result = PrEngine.detectSessionPrs(candidates, baselines)
         var records: [LivePrRecord] = []
+        var baselineRows = Set<String>()
         for (i, detected) in result.perSet.enumerated() where i < origin.count {
             origin[i].isRecord = !detected.axes.isEmpty
+            if detected.mark == .baseline { baselineRows.insert(origin[i].id) }
             // ONE ENTRY PER AXIS, not per set: a single set can take the weight
             // record and the e1RM record at once, and a card that collapsed
             // them would say "1 PR" where the ledger written at close says two.
@@ -2046,6 +2054,17 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         // Newest first — the deck is walked in session order.
         livePrs = records.reversed()
         prsThisSession = result.prCount
+        markBaselines(baselineRows)
+    }
+
+    /// A card is a Baseline when any of its done rows is (`SetMark.baseline`:
+    /// the engine found no prior session-backed set and no floor). Written only
+    /// on change — an `@Observable` write redraws even when the value is equal.
+    private func markBaselines(_ rows: Set<String>) {
+        for exercise in exercises {
+            let baseline = exercise.rows.contains { rows.contains($0.id) }
+            if exercise.isBaseline != baseline { exercise.isBaseline = baseline }
+        }
     }
 
     // MARK: - Rest
