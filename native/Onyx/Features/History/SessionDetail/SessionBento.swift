@@ -34,47 +34,63 @@ extension SessionMasthead {
 }
 
 /// Row 3's cell — one movement: its pattern glyph, its name, its best set and
-/// its trophy. A `Button`, so it answers on touch-down and a scroll cancels it.
+/// a gold dot when it set a record. A `Button`, so it answers on touch-down and
+/// a scroll cancels it.
+///
+/// ── THREE ACROSS SINCE PRECISION B1 (decision Q16) ──────────────────────────
+/// Two columns put six movements over three rows of ~80 pt; three put them over
+/// two. A 115 pt cell cannot hold a glyph BESIDE a name, so the glyph sits on
+/// the cell's first line with the record dot opposite it, the name takes up to
+/// two lines under it and the best set one more. The name drops its parenthetical
+/// ("Seated Cable Row (V-Grip)" → "Seated Cable Row") — the qualifier is the
+/// ledger sheet's title, one tap away, and VoiceOver still reads it whole.
+/// The trophy glyph became a 6 pt dot: at 115 pt a trophy beside the best set
+/// was the one thing on the cell that pushed the figure to shrink.
 struct ExerciseChip: View {
     let exercise: SessionAnalysis.ExerciseReport
     let tint: Color
     let onOpen: () -> Void
 
-    @ScaledMetric(relativeTo: .body) private var glyphTrack: CGFloat = 28
+    @ScaledMetric(relativeTo: .footnote) private var glyphLine: CGFloat = 18
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(alignment: .top, spacing: OnyxSpace.s) {
-                Image(systemName: ExerciseGlyph.symbol(for: exercise.canonical))
-                    .onyxType(.body)
-                    .foregroundStyle(tint)
-                    // A SCALED track: a fixed 24 pt let the glyph print over the
-                    // name at AX5, and a bare floor let each glyph's own width
-                    // move its name, so names in one column did not line up.
-                    .frame(width: glyphTrack)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(exercise.canonical)
-                        .onyxType(.caption).fontWeight(.semibold)
-                        .foregroundStyle(Color.onyx.textPrimary)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                    HStack(spacing: OnyxSpace.xs) {
-                        Text(Self.best(exercise))
-                            .onyxType(.caption).onyxNumeral()
-                            .foregroundStyle(Color.onyx.textSecondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                        if records > 0 {
-                            Image(systemName: "trophy.fill")
-                                .onyxType(.micro)
-                                .foregroundStyle(Color.onyx.record)
-                        }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .center, spacing: OnyxSpace.xs) {
+                    Image(systemName: ExerciseGlyph.symbol(for: exercise.canonical))
+                        .onyxType(.caption)
+                        .foregroundStyle(tint)
+                        // One line height for every glyph: symbols of
+                        // different heights put the names 3–7 pt apart
+                        // across a row (critique, shot round 2).
+                        .frame(height: glyphLine, alignment: .leading)
+                        .accessibilityHidden(true)
+                    Spacer(minLength: 0)
+                    if records > 0 {
+                        Circle()
+                            .fill(Color.onyx.record)
+                            .frame(width: 6, height: 6)
+                            .accessibilityHidden(true)
                     }
                 }
-                Spacer(minLength: 0)
+                Text(Self.shortName(exercise.canonical))
+                    .onyxType(.caption).fontWeight(.semibold)
+                    .foregroundStyle(Color.onyx.textPrimary)
+                    // Two lines, not one: "Single Arm Lateral Raise" in a
+                    // 115 pt cell truncated to "Single Arm Later…" (shot
+                    // round 1). `Grid` gives the row one height either way.
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(Self.best(exercise))
+                    .onyxType(.caption).onyxNumeral()
+                    .foregroundStyle(Color.onyx.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .padding(OnyxSpace.m)
+            .padding(.horizontal, OnyxSpace.s + 2)
+            .padding(.vertical, OnyxSpace.s - 2)
             .frame(maxWidth: .infinity, minHeight: 44, maxHeight: .infinity, alignment: .topLeading)
             .onyxGlass(.tile)
             .contentShape(RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous))
@@ -84,6 +100,12 @@ struct ExerciseChip: View {
         .accessibilityLabel(spoken)
         .accessibilityHint("Opens this movement's sets")
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// "Seated Cable Row (V-Grip)" → "Seated Cable Row": the cell's one line.
+    static func shortName(_ name: String) -> String {
+        let head = name.components(separatedBy: " (").first ?? name
+        return head.isEmpty ? name : head
     }
 
     /// Sets on this card that set a record.
@@ -117,17 +139,21 @@ struct ExerciseChip: View {
     }
 }
 
-/// Row 4 — the top four muscles as capsules in the fixed anatomical palette.
-/// The whole row opens the atlas, which is where the full ranking lives.
+/// The top muscles as capsules in the fixed anatomical palette. The whole row
+/// opens the atlas, which is where the full ranking lives.
+///
+/// Since Precision B1 the masthead's second line (top three), not a row of its
+/// own under the grid.
 struct FocusPills: View {
     let muscles: [(muscle: LandmarkMuscle, sets: Double)]
+    var limit = 4
     let onOpen: () -> Void
 
     var body: some View {
         Button(action: onOpen) {
             HStack(alignment: .center, spacing: OnyxSpace.s) {
                 FlowRow(spacing: OnyxSpace.xs) {
-                    ForEach(Array(muscles.prefix(4)), id: \.muscle) { row in
+                    ForEach(Array(muscles.prefix(limit)), id: \.muscle) { row in
                         pill(row.muscle, row.sets)
                     }
                 }
@@ -141,7 +167,7 @@ struct FocusPills: View {
         }
         .onyxPress()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Focus: " + muscles.prefix(4)
+        .accessibilityLabel("Focus: " + muscles.prefix(limit)
             .map { "\($0.muscle.displayName) \(OnyxFormat.sets($0.sets))" }
             .joined(separator: ", "))
         .accessibilityHint("Opens the body you can turn over")
@@ -164,7 +190,11 @@ struct FocusPills: View {
     }
 }
 
-/// Row 5 — one door to the progression chart and the full metric grid.
+/// The last row — one door to the progression chart and the full metric grid.
+///
+/// ONE line since Precision B1 (the name, then the verdict trailing it) and
+/// two only when the verdict will not fit beside the name: the second line was
+/// 20 pt of the summary's 423 pt budget on every session.
 struct ProgressionButton: View {
     let caption: String
     let onOpen: () -> Void
@@ -176,15 +206,21 @@ struct ProgressionButton: View {
                     .onyxType(.body)
                     .foregroundStyle(OnyxInk.Themed.accent)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Progression")
-                        .onyxType(.body).fontWeight(.semibold)
-                        .foregroundStyle(Color.onyx.textPrimary)
-                    Text(caption)
-                        .onyxType(.caption)
-                        .foregroundStyle(Color.onyx.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .multilineTextAlignment(.leading)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: OnyxSpace.s) {
+                        title.fixedSize()
+                        captionText.lineLimit(1)
+                    }
+                    // No `fixedSize` here: at AX5 "Progression" alone is wider
+                    // than the phone, and a title that refused to wrap widened
+                    // the whole page past the screen (shot round 2).
+                    VStack(alignment: .leading, spacing: 1) {
+                        title
+                            .fixedSize(horizontal: false, vertical: true)
+                        captionText
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.leading)
+                    }
                 }
                 Spacer(minLength: OnyxSpace.s)
                 Image(systemName: "chevron.right")
@@ -192,7 +228,8 @@ struct ProgressionButton: View {
                     .foregroundStyle(Color.onyx.textTertiary)
                     .accessibilityHidden(true)
             }
-            .padding(OnyxSpace.m)
+            .padding(.horizontal, OnyxSpace.m)
+            .padding(.vertical, OnyxSpace.s)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .onyxGlass(.tile)
             .contentShape(RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous))
@@ -200,5 +237,17 @@ struct ProgressionButton: View {
         .onyxPress()
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the split's progression and every figure of this session")
+    }
+
+    private var title: some View {
+        Text("Progression")
+            .onyxType(.body).fontWeight(.semibold)
+            .foregroundStyle(Color.onyx.textPrimary)
+    }
+
+    private var captionText: some View {
+        Text(caption)
+            .onyxType(.caption)
+            .foregroundStyle(Color.onyx.textSecondary)
     }
 }
