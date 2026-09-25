@@ -226,7 +226,7 @@ build installed before the paste is lost on the next sync.
 
 ## [9.3.0] — 2026-09-25 · The wrist: six petals, a heart between workouts, details one tap away
 
-Precision sprint, Lane D (Watch). Plan and wave record: `docs/Plan-Onyx-Precision.md`.
+Precision sprint, Lane D (Watch). Plan and wave record: `docs/Done/Plan-Onyx-Precision-Done.md`.
 
 ### Apple Watch
 - **The Glance has six petals.** Sleep, Water and Food above the readiness
@@ -331,7 +331,7 @@ creates the same fifteen movements under the same ids on its own).
 
 ## [9.1.0] — 2026-09-25 · The first screen is the answer: summary, tickets, Body, the stone's light, a share that opens
 
-Precision sprint, Lane B (Faces). Plan and wave record: `docs/Plan-Onyx-Precision.md`.
+Precision sprint, Lane B (Faces). Plan and wave record: `docs/Done/Plan-Onyx-Precision-Done.md`.
 
 ### iPhone app
 - **The workout summary fits on one screen.** The replay plays inside the

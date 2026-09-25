@@ -3,7 +3,7 @@
 <!-- impeccable:product-schema 1 -->
 
 > Written by `impeccable init` on 2026-09-25 (Precision sprint, Lane B) with a
-> **structured simulated user** built from `docs/Plan-Onyx-Precision.md`
+> **structured simulated user** built from `docs/Done/Plan-Onyx-Precision-Done.md`
 > § FOUNDER DECISIONS — the lane brief forbids a live interview ("founder
 > decisions are binding; do not ask questions"). Facts marked *(inferred)* come
 > from the repository, not from a founder answer; correct them in place.

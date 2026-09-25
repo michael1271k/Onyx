@@ -671,3 +671,152 @@ On the rebased head `901ca155`, lane simulator `iPhone 15 (lane C)`: `npm run ch
 
 ### Cache purge
 `du` before: `onyx-swift` 17 G (lane-c 6.2 G, lane-c-shots 3.2 G, lane-c-data 1.2 G, lane-c-core 291 M, plus the shared `ui-test-derived` 3.4 G, `check-watch` 2.0 G, `OnyxUI-*` 432 M), scratch shots 5.3 M, `org.swift.swiftpm` 280 M, `~/.swiftpm/cache` 0, DerivedData 4.9 G (untouched — other sessions' projects). Wiped `onyx-swift/*` entirely (every other lane has merged; W-final rebuilds), the shots and the SwiftPM caches, and deleted the `iPhone 15 (lane C)` simulator (3.24 GB). After: `onyx-swift` 0 B. **Freed 20.20 GB** (16.96 GB caches + 3.24 GB simulator).
+
+---
+
+## Wave record — W-final (Close-out) · Opus 5.5 · **10.0.0**
+
+Branch `onyx/precision-final` (worktree `../onyx-lane-final`), 5 commits, merged `b0a0bdbc`, version `4f445462`, graph `18a2b509`. Simulator `iPhone 15` (`B5C31206…`), watch shots on `Apple Watch Ultra 2 (49mm)` + `Apple Watch SE 3 (40mm)`. Prompt said Fable 5.1; run by Opus 5.5 (the project CLAUDE.md pins Opus).
+
+**Precondition.** Lane C was not merged when W-final started: its session had stalled in its own gate reruns for about 2 h. W-final rebased `onyx/precision-c` onto `main` (the only conflict: `AppDatabase` v40 vs v39 — Lane C renumbered to `v41.precisionRecount`; the name is the identity). The founder then said "wait for lane c", so W-final handed the merge back. Lane C reran its gates on the rebased head `901ca155` and merged as 9.6.0 (`76c31614`). W-final branched from `2847f7b3`.
+
+### Built — seams
+1. **Seam 1.** `ExerciseState.physicalSets/workingSets` = `SessionCounts.total/working` over the done rows' `volumeSet`. The deck now counts a sideless pair once, as `set_count` does.
+2. **Seam 2.** Live tonnage passes the weigh-in:
+   - `ExerciseState.volumeKg(bodyWeightKg:)` takes the name's bodyweight flag. `LoggerModel.bodyWeightKg` reads `SessionEditing.bodyWeightKg` for the session's day (`editing?.date ?? LogicalDay.iso(startedAt)`), is cached between redraws and is re-read on every tick (`refreshLivePrs`).
+   - `SessionAnalysis.tonnageKg(rows, database:, on:)` is the same call for the Train ticket (live and done), the week total, past weeks, the week wrap, "biggest session", the Last-session ticket and the Body day card (`PulseModel.WorkoutSummary`).
+   - `TodayFeedBuilder` and `TrainingTrendsStore` pass the weigh-in and the catalogue resolver. The "vs seed" chip seeds bodyweight movements at the weigh-in. ExerciseDetail's per-session line is weighed off the main actor by the same rule.
+3. **Seam 3.** Nothing to flip (Lane C unified the basis). W-final added the quiet mark: `SetMark.baseline` → `ExerciseState.isBaseline` → "Baseline · records start next time" under the card's prescription. It is marked only against a bar built for this deck.
+4. **Seam 4.** Already adopted by Lane D. `WatchGround` stays: a private wrapper over Lane B's `OnyxGround(strength: 0.5)` that adds always-on black, so it is not a duplicate helper.
+5. **Seam 5.** `BodyRingLayout.angles = WatchGlance.angles`. The sizes stay per device (phone 200/44; wrist fitted to its page).
+6. **Seam 6.** Already wired by Lane E (`WorkoutTabView:170`).
+7. **Labels (Q10).** "Sets" is `SessionCounts.total` and "Working" is secondary:
+   - Finish tile: "21" with "19 working" beside it, or under it when it does not fit. The unticked line carries the plan.
+   - Hevy compare (Finish and summary).
+   - Summary Sets cell: its sub-line leads with "N working" and counts the rest in sets (a pair once, no ghosts), so the parts sum to the headline. Its trail, `SplitPoint.sets = Summary.totalSets`, now shares the headline's scale.
+   - The session page's Sets delta.
+   - History week capsule and day row (`Summary.totalSets`).
+   - Train/Body VoiceOver "N sets" and ExerciseDetail.
+   - `SessionAnalysis.physicalSets` is now `SessionCounts.total`.
+
+### Built — review and polish
+- `code-reviewer`: 1 HIGH, 3 MED, 8 LOW.
+  - Fixed HIGH 1: History counted working sets.
+  - Fixed MED 2: the previous-volume arrow was uncredited — now `ExerciseReport.previousVolumeKg`, weighed at THAT session's weigh-in.
+  - Fixed MED 3: the weigh-in cache never refreshed and was keyed on today.
+  - Fixed LOW 7 (seed chip), LOW 8 (ExerciseDetail), LOW 9 (composition sum) and LOW 11 (Baseline on a storeless/failed bar — the harness showed it on Chest Press).
+  - Left: MED 4, LOW 5, LOW 6, LOW 10 and LOW 12 (open calls).
+- `invariant-auditor` (OnyxCore, 816 → 817 tests): 1 finding. `SessionCounts` folds a `pairId` with no side, unlike `SetGrouping`/`SessionVolume`.
+  - Kept on purpose, because the server's `set_count` is `count(DISTINCT COALESCE(NULLIF(pair_id,''), id))`. Documented in `SessionCounts` and pinned by `sidelessPairMatchesTheServer`.
+- `ui-ux-designer` on round 1: 8 findings.
+  - Fixed P0-1: at AX5 the Treadmill card was wider than the screen. The bout fields took the load's "188.75" floor; they now take the reps floor at AX sizes.
+  - Fixed P0-2: `Start workout` was white on the ramp at about 2.3:1; it is now dark ink, as Finish wears it.
+  - Fixed P1-3: the AX rail's elapsed ellipsised and the nudges touched. While resting at AX sizes elapsed is glyph-only, and the nudges get 4 pt gaps.
+  - Fixed P1-4: the AX5 focus pill wrapped. The chevron is gone at AX sizes and pills are one line.
+  - Fixed the P2-8 half: "since 15 Jul" now carries a no-break space.
+  - Rejected P1-6 ("40 mm flower touches the edge"): measured 38 px (19 pt) of margin under it.
+  - Left P1-5: the system search glass shows content through it — iOS 26 material.
+  - Left P2-7: Train card padding drift and tracking on lowercase — Lane B's open call.
+  - Left the other P2-8 half: row-leading offsets on Programs.
+- W-final's own shot review also found the AX5 Finish vein crossing "CR-10". At the accessibility sizes the vein now has its own 40 pt band under the words.
+
+### Measured
+- Thursday Upper B (`c6803c0f`) on the new rule: Sets 20, Working 19, tonnage 4409.00. There is no bodyweight movement, so the credit changes nothing (Lane C's proof stands).
+- OnyxTests: 247 tests, failing names = 9 ⊆ baseline (listed under Gates).
+
+### Verification (§ Verification, 17 items)
+| # | Item | Status |
+|---|---|---|
+| 1 | Library: muscle shelves, pinned sections, mini-atlas rows | ✔ Lane A. W-final shots, Slate/Clay/Iris + AX5 |
+| 2 | Treadmill pre-fills the last real bout | ✔ Lane A tests. The founder has 0 treadmill `cardio_logs` rows, so the pre-fill takes the last in-deck bout |
+| 3 | One type size per set-row column | ✔ Lane A. The AX5 bout card now fits (W-final) |
+| 4 | Timer Rail | ✔ Lane A UI test. The AX rail no longer collides (W-final) |
+| 5 | Cut-the-Stone rating + wrist guard | ✔ Lane A. The AX vein band is W-final's |
+| 6 | Unticked sets gone from the numbers, kept in the plan | ✔ Lane A (`RoutineOrder.patch`). Finish shows "10 sets left unticked · kept in your plan" |
+| 7 | "Sets" = `SessionCounts.total` everywhere; "Working" second | ✔ in code (W-final wiring). The server backfill needs the founder's SQL paste |
+| 8 | Upper B 4372.8 | ✘ **by proof, not by defect** — stays 4409.00. Lane C: 36.2 kg is not reachable by any rule (Hevy's .8); needs the CSV |
+| 9 | V-Grip 50 × 7 trophies; Baseline; deck = summary | Premise false: the set is Wide Grip and Weight-only was right. The Baseline mark ships (W-final). One basis (Lane C) |
+| 10 | Cholesterol 25 Sep | Device only: the re-ingest door runs on the next sync. The server reads 815.3 mg from one source |
+| 11 | Summary ≤ 0.6 screens, tickets | ✔ Lane B (0.55) |
+| 12 | Body tab | ✔ Lane B. Angles shared with the wrist (W-final) |
+| 13 | Ground follows the stone; RT flat | ✔ Lanes B/D |
+| 14 | Share | ✔ on the sim (Lane B). Sheet-open time is hardware |
+| 15 | Watch | ✔ on the sim (Lane D). HR freshness and ~2 s fuel are hardware |
+| 16 | Programs + goals | ✔ Lane E |
+| 17 | Gates, 10.0.0, graphify, purge | see below |
+
+### Hardware checklist (what the simulators cannot prove)
+Only a real phone and watch can prove these (Gate 0 = the paid-program entitlements):
+- [ ] Anchored HR/HRV delivery between workouts. Needs `com.apple.developer.healthkit.background-delivery` and an `ONYX_ADP` build (Gate 0). Check that the Heart petal and the Live Heart complication refresh hourly with no workout running.
+- [ ] Heart detail streaming. Samples arrive while the detail is open and stop on Back (the sim delivered 0 in 60 s).
+- [ ] Food/water on a running watch. Tap +250 ml on the signed-in phone; the Fuel page and the Water petal should update within about 2 s.
+- [ ] Complications after Gate 0 (App Group). Live Heart, Readiness+Sleep and Water+Food should render with real data and roll over at midnight.
+- [ ] Share sheet opens in under 300 ms with the real thumbnail. The MP4 lands in Stories.
+- [ ] Founder's store after install:
+  - `onyx.recount.sets.v1` rewrites `set_count`/`working_set_count`/`total_volume_kg` and pushes them.
+  - `onyx.reingest.micros.v1` corrects 25 Sep cholesterol (record the after-value).
+  - A backfill sign-in rewrites the Epley-era Wide Grip e1RM row to 61.2 / 2026-08-27.
+- [ ] Server SQL, in order, BEFORE installing:
+  1. `precision-a-exercises.sql` (optional)
+  2. `precision-e-programs.sql`
+  3. `precision-c-counts.sql`
+  4. `precision-c-backfill-sets.sql`, then its VERIFY query
+
+### Requests / open calls
+- **Scoring owner:** readiness load now drops warm-ups but credits no body weight. One basis or two? (review LOW 12)
+- **OnyxData sync owner:**
+  - A weigh-in written after close does not restate `total_volume_kg` for sessions it covers (review MED 4). Readers of the stored total (`splitTonnage`, `ProgressionQueue`, the watch masthead) disagree with the recomputing readers until a recount.
+  - Watch-closed sessions carry no credit (LOW 5).
+- **One bodyweight door:** the deck, summary and export use the name rule; close, widget, Today and trends use the catalogue flag (LOW 6).
+- **Perf (LOW 10):** `SessionAnalysis.tonnageKg` does two small reads per session. `pastWeeks` can walk far back. `Context.bodyWeightKg(on:)` would be one read.
+- **Lane D request, not done:** lift `DepthArc`/`PitcherFigure`/`StressBand.tint` into unfenced OnyxUI and delete the wrist copies. Out of W-final's seam list; the copies work.
+- **Lane A request, not done:** move `recordSessionCardio` into `closeSession` (watch-closed sessions never file their bout).
+- **Misdirected Lane A request:** `archived_at` was asked of `PostgRESTRemote.exerciseCatalogue`. That select is the outbox's id index, not the library's source (the mirror model already carries `archived_at`).
+- **Design (founder):**
+  - Food and Stress share an ink.
+  - Iris accent near REM lavender.
+  - The wrist ground at half strength is near-invisible.
+  - Today's double score.
+  - Train card padding drift and tracking on lowercase captions (critique P2-7).
+  - Programs row-leading offsets (P2-8).
+  - The iOS 26 search glass shows content through it (P1-5, system).
+- **App Store:** History still titles weeks "Week 0" (the two baseline test names), so do not upload it.
+
+### Gates
+On the final tree (`e38fd159`):
+- `npm run check`: exit 0. That covers version, types, body, atlas, mirror, doms and report, plus `swift:ui` **60/60** and `check:watch` BUILD SUCCEEDED.
+- `check:swift` ✔ (iOS + watchOS).
+- `swift:core` **817/817** ✔ — up from 816; the new test is `sidelessPairMatchesTheServer`.
+- `swift:data` **856/856** ✔ — up from 855; the new test is `bodyweightCredit` in trends. No SeamBenchmark flake this run.
+- OnyxTests on `iPhone 15` (`B5C31206…`): **247 tests**; failing names = 9, all ⊆ the 10-name baseline:
+  - `A capsule counts its week and marks the days that were missed`
+  - `Week 0 is the week the block opened on`
+  - `a credible previous session still gets its delta`
+  - `a previous session's impossible clock produces no delta, not a wrong one`
+  - `a treadmill logged on this phone is titled Treadmill, not its slug`
+  - `finishing a session leaves the tab on .done, with the week and the ledger carrying it`
+  - `ready to progress fires only after the ceiling is cleared twice`
+  - `the ledger rows are this session's sets and only this session's`
+  - `the seeded previous session reaches TopLifts.previousBests`
+- New `PrecisionSeamTests` (4) pass. The seam tests were RED first: the deck counted a sideless pair twice and weighed a pull-up at 0.
+- Shots, two rounds:
+  - Round 1: Slate at default + AX5 — logger, library, finish, session, train, train-done, body-tab, programs; Clay and Iris at default; watch Glance at 40/49 mm × 3 themes and the Heart detail.
+  - Confirm: logger, finish, session, train and programs at default + AX5; Clay train/finish.
+  - App Store set: `scripts/store-shots.sh` re-shot all twelve frames (6.9in 1320 × 2868, 6.3in 1206 × 2622), each checked non-blank; `docs/APP_STORE.md` §6 updated. Body replaces Pulse's `day`.
+
+### Cache purge
+Before:
+- `onyx-swift` 21,428,048 KB
+- scratch shots 35,064 KB
+- `org.swift.swiftpm` 287,760 KB
+- `~/.swiftpm/cache` 0
+- DerivedData 5,162,020 KB (not in the purge list; left)
+
+Removed `onyx-swift/*` (every lane had merged, so nothing was building), the scratch shots and the SwiftPM caches. After: all 0.
+
+**Freed 20.74 GB** (21,750,872 KB).
+
+Also:
+- The four simulators the sprint uses were left: iPhone 15, the WC pair, SE 3 40 mm.
+- The iPhone 17 Pro / Pro Max store simulators were left.
+- Left for their sessions: the two `.claude/worktrees/onyx-build-agent-setup-*` harness worktrees. Both are already merged into `main` (`git branch --merged`).

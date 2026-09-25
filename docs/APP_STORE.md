@@ -243,22 +243,24 @@ scripts/store-shots.sh
 ```
 
 Writes `native/__store__/6.9in/` (1320 × 2868, **required**) and
-`native/__store__/6.3in/` — Today, Workout, Nutrition, Pulse, Body trends,
+`native/__store__/6.3in/` — Today, Workout, Nutrition, Body, Body trends,
 History. Deterministic: the `--onyx-screen` harness seeds in-memory data, so no
 account and no network. The script creates the iPhone 17 Pro Max / 17 Pro
 simulators when they are missing and shoots one at a time — shut every other
 simulator down first (8.0.0: two first-boot phones side by side came back
 black). The output is gitignored.
 
-**The 9.0.0 set (W6, 2026-09-25)** — re-shot after the overhaul (Stone slabs,
-eight stones, bento summary), default theme Slate:
+**The 10.0.0 set (Precision W-final, 2026-09-25)** — re-shot after the
+Precision sprint (Body tab, ticket banners, écorché atlas, the stone's light
+ground), default theme Slate. Every frame checked non-blank (per-channel
+σ ≈ 30); the stale 9.0.0 `day.png` was deleted so it cannot be uploaded:
 
 | File | 6.9in (1320 × 2868, required) | 6.3in (1206 × 2622) |
 |---|---|---|
 | Today | `native/__store__/6.9in/today.png` | `native/__store__/6.3in/today.png` |
 | Workout (Train) | `native/__store__/6.9in/train.png` | `native/__store__/6.3in/train.png` |
 | Nutrition | `native/__store__/6.9in/fuel.png` | `native/__store__/6.3in/fuel.png` |
-| Pulse (day) | `native/__store__/6.9in/day.png` | `native/__store__/6.3in/day.png` |
+| Body (ring + six petals; was Pulse) | `native/__store__/6.9in/body-tab.png` | `native/__store__/6.3in/body-tab.png` |
 | Body trends | `native/__store__/6.9in/body-trends.png` | `native/__store__/6.3in/body-trends.png` |
 | History | **do not upload** — still titles every week "Week 0" (baseline defect, spun off) | **do not upload** |
 
