@@ -83,6 +83,8 @@ public struct OnyxTheme: Sendable {
     let end: [OnyxDomain: Color]
     /// The five nutrition inks under this theme — see `Nutrition`.
     let nutrition: Nutrition
+    /// The ground's two hues per domain ("" = neutral) — see `groundHex`.
+    let ground: [String: (primary: UInt32, secondary: UInt32)]
 
     /// Protein, carbs, fat and micros; calories wear carbs (Atwater sum).
     struct Nutrition: Sendable {
@@ -102,6 +104,7 @@ public struct OnyxTheme: Sendable {
         let hexes = Self.derive(spec)
         start = hexes.start.mapValues { Color(hex: $0) }
         end = hexes.end.mapValues { Color(hex: $0) }
+        ground = Self.groundTable(spec, hexes.start)
 
         let w = OnyxThemeSpec.nutritionWeight
         let origin = Self.defaultNutritionHex
@@ -158,6 +161,65 @@ public struct OnyxTheme: Sendable {
         let slate = derive(.default)
         return (slate.end[.fuel]!, slate.start[.recover]!, 0xD98BB3)
     }()
+
+    // MARK: - The ground's light (Precision B3, decision Q20 · design 7)
+
+    /// The accent radial's opacity at its centre (top-left, off screen).
+    ///
+    /// ── 14 %, NOT THE BRIEF'S 6 % (shot round 1) ────────────────────────────
+    /// Decision Q20 wrote "accent 6 % + secondary 3 %". Measured on the
+    /// simulator, 6 % composites to sRGB (7, 7, 9) at the ground's brightest
+    /// on-screen point — indistinguishable from the black it was meant to
+    /// replace, which was the whole complaint ("the background is flat
+    /// black"). The ratio (2 : 1), the centres, the radii and the chroma
+    /// clamp are the brief's; only the peaks moved, and the contrast line
+    /// the brief set (L ≤ 0.35, `textSecondary` ≥ 4.5 : 1, all eight stones)
+    /// still holds at these values (`TokenDisciplineTests`).
+    public static let groundPeak = 0.14
+    /// The secondary radial's opacity at its centre (bottom-right, off screen).
+    public static let groundSecondaryPeak = 0.07
+    /// The chroma ceiling on both ground hues: a tint of the stone, never neon.
+    static let groundMaxChroma = 0.10
+
+    /// The two hues the ground is lit with under THIS theme, as hexes: the
+    /// domain's own accent and the theme's secondary (the accent, on the fuel
+    /// tab, whose accent IS the secondary), each with its chroma clamped to
+    /// `groundMaxChroma`. Nil domain = the theme's own pair (Settings).
+    ///
+    /// Hexes, not `Color`s, so a test can composite them over black and hold
+    /// the contrast line (`TokenDisciplineTests`).
+    func groundHex(_ domain: OnyxDomain?) -> (primary: UInt32, secondary: UInt32) {
+        ground[domain?.rawValue ?? ""] ?? (spec.primary, spec.secondary)
+    }
+
+    /// `groundHex` for every domain and the neutral ground, made once per
+    /// theme in `init` — a token read is a lookup, and `OnyxGround` asks on
+    /// every body pass (review).
+    static func groundTable(_ spec: OnyxThemeSpec, _ start: [OnyxDomain: UInt32]) -> [String: (primary: UInt32, secondary: UInt32)] {
+        var out: [String: (primary: UInt32, secondary: UInt32)] = [
+            "": (clampedForGround(spec.primary), clampedForGround(spec.secondary))
+        ]
+        for domain in OnyxDomain.allCases {
+            let accent = start[domain] ?? spec.primary
+            let secondary = domain == .fuel ? spec.primary : spec.secondary
+            out[domain.rawValue] = (clampedForGround(accent), clampedForGround(secondary))
+        }
+        return out
+    }
+
+    static func clampedForGround(_ hex: UInt32) -> UInt32 {
+        let c = OKLCHConvert.oklch(fromHex: hex)
+        guard c.c > groundMaxChroma else { return hex }
+        return OKLCHConvert.hex(from: OKLCH(l: c.l, c: groundMaxChroma, h: c.h))
+    }
+
+    /// `groundHex` as the two colours the ground paints, at their peaks
+    /// (`groundPeak`, `groundSecondaryPeak`).
+    public func groundWash(_ domain: OnyxDomain?) -> (primary: Color, secondary: Color) {
+        let hex = groundHex(domain)
+        return (Color(hex: hex.primary).opacity(Self.groundPeak),
+                Color(hex: hex.secondary).opacity(Self.groundSecondaryPeak))
+    }
 
     /// The ramp a domain takes under THIS theme rather than under `current`.
     ///

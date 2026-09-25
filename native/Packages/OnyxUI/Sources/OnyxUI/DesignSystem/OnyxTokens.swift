@@ -624,6 +624,16 @@ public enum OnyxInk {
         public static var selection: Color { OnyxDomain.train.accent }
         /// The four domain accents, in `OnyxDomain` order — the mesh swatch.
         public static var mesh: [Color] { OnyxDomain.allCases.map(\.accent) }
+        /// The ground's light (Precision B3, decision Q20): the domain's accent
+        /// for the top-left radial and the theme's secondary, at half its
+        /// strength, for the bottom-right one, chroma ≤ 0.10 (the peaks and why
+        /// they are not the brief's 6 %/3 %: `OnyxTheme.groundPeak`). `OnyxGround` paints it on every
+        /// screen, the widget container at half strength, the watch (Lane D)
+        /// through the same token. Moves with the theme AND the training
+        /// block: `current.spec` is already `reacting(to:)` the phase.
+        public static func groundWash(domain: OnyxDomain?) -> (primary: Color, secondary: Color) {
+            OnyxTheme.current.groundWash(domain)
+        }
     }
 
     /// Never moves, whatever the theme or phase.

@@ -51,14 +51,6 @@ struct CardTextBudgetTests {
             so there is no hero to protect — dropping a row would drop half a \
             comparison.
             """,
-        "SessionHeaderCard":
-            """
-            The session's whole claim in one card, and the three large type \
-            roles are documented there: the tonnage hero, the career number \
-            and the split's name. `docs/COMPACTION_AUDIT.md` row 15 is the \
-            open work — one `SessionTotals.line(…)` across four surfaces — \
-            and it shrinks this card when it lands.
-            """,
     ]
 
     @Test("no card says more than a card can say")

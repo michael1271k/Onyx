@@ -7,15 +7,25 @@ import OnyxCore
 import os
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The replay, shared (overhaul W5, founder challenge F2): a 1080×1080 PNG, a
-// 1080×1920 Stories PNG, and a ten-second 1080×1920 MP4 — all the same frame
-// view (`ReplayShareFrame`) of the same `SessionReplay.Timeline`.
+// The replay, shared (overhaul W5; pre-baked since Precision B5, decision Q21):
+// a 1080×1080 PNG, a 1080×1920 Stories PNG, and a ten-second 1080×1920 MP4.
 //
-// ── RENDERED WHEN ASKED FOR, NOT WHEN THE PAGE OPENS ────────────────────────
-// Each item is a `FileRepresentation` whose file is made in its exporting
-// closure, so nothing is rendered until the share sheet asks for that item: a
-// History browse never pays for 300 frames of video. `exportingCondition` keeps
-// the PNG items from offering a movie and the movie from offering a PNG.
+// ── WHY THE SHEET USED TO FREEZE, AND WHAT CHANGED ──────────────────────────
+// Every item was rendered inside its exporting closure, on the main actor: the
+// PNGs when the sheet asked for a preview, the MP4 as 300 `ImageRenderer`
+// passes with a `Task.yield()` between them. The sheet waited on the main
+// thread it needed to draw itself, and its preview was an SF Symbol because
+// nothing had been rendered yet — "Replay share freezes and shares an empty
+// image". Now:
+//
+//   · the two PNGs are rendered ONCE when the summary's heart-rate read lands
+//     (`ReplayShareSet.prebake`, two passes on the main actor) into the temp
+//     folder, and the share button appears only once they exist — the sheet
+//     opens on files, with the square as its real thumbnail;
+//   · the MP4 is drawn by `ReplayVideoRenderer`, an actor: ONE plate (the card
+//     without its canvas) and one image per caption line are rendered on the
+//     main actor, one at a time; every frame after that is CoreGraphics
+//     (`ReplayCGRenderer`, OnyxUI) into the writer's pixel buffers, off it.
 //
 // ── WHY 360 × 640 POINTS AT SCALE 3, NOT 1080 × 1920 AT SCALE 1 ──────────────
 // The pixels are the same 1080 × 1920. The frame reuses the app's own faces —
@@ -32,52 +42,122 @@ import os
 // `.onyxGlass` has over this backdrop, without the blur (nothing to sample).
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// One thing the share sheet offers.
-struct ReplayShareItem: Transferable, Sendable {
-    enum Kind: String, Sendable, CaseIterable { case square, stories, video }
-
-    let kind: Kind
+/// What every share format is drawn from — the replay and the few facts the
+/// frame prints, all sendable.
+struct ReplaySource: Sendable {
     let timeline: SessionReplay.Timeline
+    /// Read on the main actor from the theme the page is drawn in — the
+    /// renderers must not re-read a global later.
     let accent: Color
     let dayInk: Color
     let sessionId: String
     /// The session's logical day — what the page's title says.
     let day: Date
 
-    static func all(timeline: SessionReplay.Timeline, dayInk: Color, sessionId: String, day: Date) -> [ReplayShareItem] {
-        // The accent is read HERE, on the main actor, from the theme the page
-        // is drawn in — the exporter must not re-read a global later.
-        let accent = OnyxInk.Themed.accent
-        return Kind.allCases.map {
-            ReplayShareItem(kind: $0, timeline: timeline, accent: accent, dayInk: dayInk, sessionId: sessionId, day: day)
-        }
+    @MainActor
+    init(timeline: SessionReplay.Timeline, dayInk: Color, sessionId: String, day: Date) {
+        self.timeline = timeline
+        self.accent = OnyxInk.Themed.accent
+        self.dayInk = dayInk
+        self.sessionId = sessionId
+        self.day = day
     }
+
+    /// "Onyx · Upper B · 4.4 t · onyx://session/<uuid>" — the text the share
+    /// sheet sends with the files; the link opens this summary (`SessionLink`).
+    var message: String {
+        var parts = ["Onyx", timeline.masthead.name]
+        if let tonnes = OnyxSnapshot.tonnes(timeline.masthead.tonnageKg > 0 ? timeline.masthead.tonnageKg : nil) {
+            parts.append(tonnes)
+        }
+        parts.append(SessionLink.url(sessionId: sessionId).absoluteString)
+        return parts.joined(separator: " · ")
+    }
+
+    /// "onyx-upper-b-2026-09-18" — the file name the recipient sees.
+    var slug: String {
+        let name = timeline.masthead.name.lowercased().map { $0.isLetter || $0.isNumber ? $0 : "-" }
+        return "onyx-\(String(name).split(separator: "-").joined(separator: "-"))-\(LogicalDay.iso(day))"
+    }
+}
+
+/// One thing the share sheet offers.
+struct ReplayShareItem: Transferable, Sendable {
+    enum Kind: String, Sendable, CaseIterable { case square, stories, video }
+
+    let kind: Kind
+    let source: ReplaySource
+    /// The PNG `prebake` already wrote; nil for the video.
+    let file: URL?
 
     var title: String {
         switch kind {
-        case .square: "\(timeline.masthead.name) — square"
-        case .stories: "\(timeline.masthead.name) — Stories"
-        case .video: "\(timeline.masthead.name) — replay video"
-        }
-    }
-
-    var symbol: String {
-        switch kind {
-        case .square: "square"
-        case .stories: "rectangle.portrait"
-        case .video: "play.rectangle"
+        case .square: "\(source.timeline.masthead.name) — square"
+        case .stories: "\(source.timeline.masthead.name) — Stories"
+        case .video: "\(source.timeline.masthead.name) — replay video"
         }
     }
 
     static var transferRepresentation: some TransferRepresentation {
         FileRepresentation(exportedContentType: .png) { item in
-            SentTransferredFile(try await ReplayExporter.png(item))
+            // Pre-baked: the sheet is handed a file that already exists.
+            if let file = item.file { return SentTransferredFile(file) }
+            return SentTransferredFile(try await MainActor.run { try ReplayExporter.png(item.source, kind: item.kind) })
         }
         .exportingCondition { $0.kind != .video }
         FileRepresentation(exportedContentType: .mpeg4Movie) { item in
-            SentTransferredFile(try await ReplayExporter.video(item))
+            // Awaits the actor; the main thread is free while it draws.
+            SentTransferredFile(try await ReplayVideoRenderer.shared.video(item.source))
         }
         .exportingCondition { $0.kind == .video }
+    }
+}
+
+/// The three items and the thumbnail, made once per summary (Precision B5).
+struct ReplayShareSet {
+    let items: [ReplayShareItem]
+    /// The square PNG, small — the share sheet's real preview. Nil only when
+    /// the pre-bake failed and the set fell back to rendering on request.
+    let thumbnail: UIImage?
+    let message: String
+
+    private static let log = Logger(subsystem: "app.onyx.health", category: "replay")
+
+    /// Two `ImageRenderer` passes (square, Stories) on the main actor — the
+    /// only part that needs it — then the PNG encode, the two writes and the
+    /// thumbnail off it (review: the encode and the disk were on the main
+    /// thread during the summary's arrival).
+    ///
+    /// A failure is logged and falls back to the lazy set (files rendered
+    /// when the sheet asks, as before 10.0), never to a dead button.
+    @MainActor
+    static func prebake(_ source: ReplaySource) async -> ReplayShareSet {
+        let began = Date()
+        do {
+            let squareImage = try ReplayExporter.finalFrame(source, kind: .square)
+            let storiesImage = try ReplayExporter.finalFrame(source, kind: .stories)
+            let rendered = Date()
+            let baked = try await Task.detached(priority: .userInitiated) {
+                let square = try ReplayExporter.write(squareImage, source: source, kind: .square)
+                let stories = try ReplayExporter.write(storiesImage, source: source, kind: .stories)
+                let thumb = UIImage(cgImage: squareImage).preparingThumbnail(of: CGSize(width: 240, height: 240))
+                return (square, stories, thumb)
+            }.value
+            log.notice("replay prebake: \(Int(rendered.timeIntervalSince(began) * 1000)) ms on the main actor, \(Int(Date().timeIntervalSince(began) * 1000)) ms in all")
+            return ReplayShareSet(items: items(source, square: baked.0, stories: baked.1),
+                                  thumbnail: baked.2, message: source.message)
+        } catch {
+            log.error("replay prebake failed: \(String(describing: error), privacy: .public)")
+            return ReplayShareSet(items: items(source, square: nil, stories: nil), thumbnail: nil, message: source.message)
+        }
+    }
+
+    private static func items(_ source: ReplaySource, square: URL?, stories: URL?) -> [ReplayShareItem] {
+        [
+            ReplayShareItem(kind: .square, source: source, file: square),
+            ReplayShareItem(kind: .stories, source: source, file: stories),
+            ReplayShareItem(kind: .video, source: source, file: nil),
+        ]
     }
 }
 
@@ -106,9 +186,22 @@ struct ReplayShareFrame: View {
     let accent: Color
     let dayInk: Color
     let day: Date
+    /// The video's plate (Precision B5): the card with its canvas and caption
+    /// laid out but not drawn, and the masthead settled — the parts that move
+    /// are drawn per frame by CoreGraphics into the slots `probe` reports.
+    var plate = false
+    var probe: ShareProbe? = nil
+
+    /// Where the canvas and the caption landed, in points — written during
+    /// layout by the plate pass, read by the video actor.
+    final class ShareProbe: @unchecked Sendable {
+        var canvas: CGRect = .zero
+        var caption: CGRect = .zero
+    }
 
     /// The card's own surface, flattened — the ring each dot is cut out with.
-    private static let cardInk = Color.onyx.slab.mix(with: .white, by: 0.08)
+    static let cardInk = Color.onyx.slab.mix(with: .white, by: 0.08)
+    static let lineWidth: CGFloat = 2.5
 
     var body: some View {
         let size = format.size
@@ -124,8 +217,25 @@ struct ReplayShareFrame: View {
         .padding(.bottom, format.safeBottom)
         .frame(width: size.width, height: size.height)
         .background { backdrop }
+        .coordinateSpace(.named(Self.space))
         .environment(\.colorScheme, .dark)
         .environment(\.dynamicTypeSize, .large)
+    }
+
+    private static let space = "replay.share"
+
+    /// A slot's frame, reported to the probe as layout happens.
+    private func report(_ keyPath: ReferenceWritableKeyPath<ShareProbe, CGRect>) -> some View {
+        GeometryReader { proxy in
+            let _ = Self.record(proxy.frame(in: .named(Self.space)), into: probe, at: keyPath)
+            Color.clear
+        }
+    }
+
+    private static func record(_ rect: CGRect, into probe: ShareProbe?,
+                               at keyPath: ReferenceWritableKeyPath<ShareProbe, CGRect>) -> Bool {
+        probe?[keyPath: keyPath] = rect
+        return true
     }
 
     /// A deep two-stop radial of the theme accent over near-black, lit a
@@ -167,11 +277,15 @@ struct ReplayShareFrame: View {
             // settles on the real figures at the end (the share round: a
             // masthead hidden until 9 s left the card's top empty for most of
             // a video that Stories may never let run to its end).
-            OnyxMasthead(timeline.masthead(at: frame), accent: dayInk)
+            OnyxMasthead(timeline.masthead(at: plate ? timeline.final : frame), accent: dayInk)
             ReplayCanvas(timeline: timeline, frame: frame, accent: accent,
-                         lineWidth: 2.5, ground: Self.cardInk)
+                         lineWidth: Self.lineWidth, ground: Self.cardInk)
                 .frame(height: format == .stories ? 170 : 96)
-            ReplayCaption(timeline: timeline, frame: frame)
+                .opacity(plate ? 0 : 1)
+                .background { report(\.canvas) }
+            ReplayCaption(timeline: timeline, frame: frame, reservesTwoLines: true)
+                .opacity(plate ? 0 : 1)
+                .background { report(\.caption) }
         }
         .padding(20)
         .background { frost }
@@ -211,7 +325,7 @@ struct ReplayShareFrame: View {
     }
 }
 
-/// Makes the files. Main actor because `ImageRenderer` is.
+/// The PNGs and the video's plate. Main actor because `ImageRenderer` is.
 @MainActor
 enum ReplayExporter {
     /// 360 × 640 points → 1080 × 1920 pixels.
@@ -220,27 +334,22 @@ enum ReplayExporter {
 
     enum Failure: Error { case render, writer(String) }
 
-    private static let log = Logger(subsystem: "app.onyx.health", category: "replay")
-
-    private static func url(_ item: ReplayShareItem, _ ext: String) throws -> URL {
-        let folder = FileManager.default.temporaryDirectory.appending(path: "replay", directoryHint: .isDirectory)
+    /// `tmp/replay/<session id>/<readable name>` — one folder per session, so
+    /// two sessions with one label on one day never overwrite each other's
+    /// files (review), and the name the recipient sees stays readable.
+    nonisolated static func url(_ source: ReplaySource, _ kind: ReplayShareItem.Kind, _ ext: String) throws -> URL {
+        let folder = FileManager.default.temporaryDirectory
+            .appending(path: "replay", directoryHint: .isDirectory)
+            .appending(path: source.sessionId.isEmpty ? "session" : source.sessionId, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        // A readable name: it is the file name the recipient sees.
-        let name = slug(item) + "-" + item.kind.rawValue
-        return folder.appending(path: "\(name).\(ext)")
+        return folder.appending(path: "\(source.slug)-\(kind.rawValue).\(ext)")
     }
 
-    private static func slug(_ item: ReplayShareItem) -> String {
-        let day = LogicalDay.iso(item.day)
-        let name = item.timeline.masthead.name.lowercased()
-            .map { $0.isLetter || $0.isNumber ? $0 : "-" }
-        return "onyx-\(String(name).split(separator: "-").joined(separator: "-"))-\(day)"
-    }
-
-    private static func renderer(_ item: ReplayShareItem, format: ReplayShareFrame.Format, at t: Double) -> ImageRenderer<ReplayShareFrame> {
+    static func renderer(_ source: ReplaySource, format: ReplayShareFrame.Format, frame: SessionReplay.Frame,
+                         plate: Bool = false, probe: ReplayShareFrame.ShareProbe? = nil) -> ImageRenderer<ReplayShareFrame> {
         let renderer = ImageRenderer(content: ReplayShareFrame(
-            format: format, timeline: item.timeline, frame: item.timeline.frame(at: t),
-            accent: item.accent, dayInk: item.dayInk, day: item.day
+            format: format, timeline: source.timeline, frame: frame,
+            accent: source.accent, dayInk: source.dayInk, day: source.day, plate: plate, probe: probe
         ))
         renderer.scale = scale
         renderer.proposedSize = ProposedViewSize(format.size)
@@ -248,27 +357,124 @@ enum ReplayExporter {
     }
 
     /// The final frame as a PNG — `square` at 1080², `stories` at 1080 × 1920.
-    static func png(_ item: ReplayShareItem) throws -> URL {
-        let format: ReplayShareFrame.Format = item.kind == .square ? .square : .stories
-        guard let data = renderer(item, format: format, at: item.timeline.duration).uiImage?.pngData()
+    static func png(_ source: ReplaySource, kind: ReplayShareItem.Kind) throws -> URL {
+        try write(finalFrame(source, kind: kind), source: source, kind: kind)
+    }
+
+    /// The render — the one part that needs the main actor.
+    static func finalFrame(_ source: ReplaySource, kind: ReplayShareItem.Kind) throws -> CGImage {
+        let format: ReplayShareFrame.Format = kind == .square ? .square : .stories
+        guard let image = renderer(source, format: format, frame: source.timeline.final).cgImage
         else { throw Failure.render }
-        let out = try url(item, "png")
+        return image
+    }
+
+    /// Encode and write — anywhere.
+    nonisolated static func write(_ image: CGImage, source: ReplaySource, kind: ReplayShareItem.Kind) throws -> URL {
+        guard let data = UIImage(cgImage: image).pngData() else { throw Failure.render }
+        let out = try url(source, kind, "png")
         try data.write(to: out, options: .atomic)
-        log.notice("replay \(item.kind.rawValue, privacy: .public) PNG written: \(data.count) bytes")
         return out
     }
 
-    /// Ten seconds at 30 fps, H.264, 1080 × 1920 — every frame the Stories
-    /// frame at `t = i / 30`.
-    ///
-    /// ponytail: re-rendered on every share (≈ 300 `ImageRenderer` passes,
-    /// yielding between frames so the share sheet stays live); cache by a
-    /// timeline hash if people share the same session repeatedly.
-    static func video(_ item: ReplayShareItem) async throws -> URL {
-        let out = try url(item, "mp4")
+    /// The Stories card without its moving parts, plus one image per caption
+    /// line — everything the video needs from SwiftUI, made once.
+    static func plate(_ source: ReplaySource) throws -> ReplayVideoRenderer.Plate {
+        let probe = ReplayShareFrame.ShareProbe()
+        guard let background = renderer(source, format: .stories, frame: source.timeline.final,
+                                         plate: true, probe: probe).cgImage,
+              // The slots come from a layout side effect: if it did not run,
+              // every frame would draw nothing into a zero rect (review).
+              probe.canvas.width > 0, probe.caption.width > 0
+        else { throw Failure.render }
+        return ReplayVideoRenderer.Plate(
+            background: background,
+            canvas: probe.canvas.applying(CGAffineTransform(scaleX: scale, y: scale)),
+            caption: probe.caption.applying(CGAffineTransform(scaleX: scale, y: scale)),
+            captions: [:],
+            renderer: ReplayCGRenderer(timeline: source.timeline, accent: source.accent,
+                                       lineWidth: ReplayShareFrame.lineWidth, ground: ReplayShareFrame.cardInk)
+        )
+    }
+
+    /// One caption line at the slot's width, on a clear ground.
+    static func caption(_ source: ReplaySource, _ state: ReplayCaption.State, width: CGFloat) -> CGImage? {
+        let renderer = ImageRenderer(content:
+            ReplayCaption(timeline: source.timeline, state: state, reservesTwoLines: true)
+                .frame(width: width, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .environment(\.colorScheme, .dark)
+                .environment(\.dynamicTypeSize, .large)
+        )
+        renderer.scale = scale
+        return renderer.cgImage
+    }
+}
+
+/// The MP4, drawn off the main actor (Precision B5, decision Q21).
+///
+/// ── ONE PLATE, THEN CORE GRAPHICS ───────────────────────────────────────────
+/// The card, the masthead, the date and the wordmark do not move between
+/// frames (the masthead is the settled one: the count-up the old video drew
+/// was 300 layout passes of type), so they are ONE image. The caption has a
+/// handful of possible lines, so it is a handful of images. What moves — the
+/// trace, the bars, the dots — is `ReplayCGRenderer`, drawn straight into the
+/// writer's pixel buffers. The main actor pays for `2 + movements` renders,
+/// one hop each; the 300 frames never touch it.
+actor ReplayVideoRenderer {
+    static let shared = ReplayVideoRenderer()
+
+    struct Plate: @unchecked Sendable {
+        /// 1080 × 1920, the card without its canvas and caption.
+        let background: CGImage
+        /// The two slots, in PIXELS, top-left origin.
+        let canvas: CGRect
+        let caption: CGRect
+        var captions: [ReplayCaption.State: CGImage]
+        let renderer: ReplayCGRenderer
+    }
+
+    private static let log = Logger(subsystem: "app.onyx.health", category: "replay")
+
+    /// One render per session AND content: the timeline is part of the key,
+    /// so an edited session or late watch samples make a new video (review),
+    /// and a second request while one is drawing awaits it instead of
+    /// racing it for the same file.
+    /// ponytail: in memory, per launch; a new launch re-renders once.
+    private var renders: [String: (timeline: SessionReplay.Timeline, task: Task<URL, Error>)] = [:]
+
+    func video(_ source: ReplaySource) async throws -> URL {
+        if let known = renders[source.sessionId], known.timeline == source.timeline {
+            return try await known.task.value
+        }
+        let task = Task { try await self.render(source) }
+        renders[source.sessionId] = (source.timeline, task)
+        do {
+            return try await task.value
+        } catch {
+            if renders[source.sessionId]?.timeline == source.timeline { renders[source.sessionId] = nil }
+            throw error
+        }
+    }
+
+    private func render(_ source: ReplaySource) async throws -> URL {
+        var plate = try await MainActor.run { try ReplayExporter.plate(source) }
+        // One hop per line, so the main actor is never held for all of them.
+        for state in ReplayCaption.states(source.timeline) {
+            let width = plate.caption.width / ReplayExporter.scale
+            if let image = await MainActor.run(body: { ReplayExporter.caption(source, state, width: width) }) {
+                plate.captions[state] = image
+            }
+        }
+        let out = try ReplayExporter.url(source, .video, "mp4")
+        try await write(plate, timeline: source.timeline, to: out)
+        return out
+    }
+
+    private func write(_ plate: Plate, timeline: SessionReplay.Timeline, to out: URL) async throws {
         try? FileManager.default.removeItem(at: out)
-        let size = ReplayShareFrame.Format.stories.size
-        let width = Int(size.width * scale), height = Int(size.height * scale)
+        let width = plate.background.width, height = plate.background.height
+        let fps = ReplayExporter.fps
         let began = Date()
 
         let writer = try AVAssetWriter(outputURL: out, fileType: .mp4)
@@ -290,15 +496,17 @@ enum ReplayExporter {
             kCVPixelBufferCGImageCompatibilityKey as String: true,
             kCVPixelBufferCGBitmapContextCompatibilityKey as String: true,
         ])
-        guard writer.canAdd(input) else { throw Failure.writer("cannot add the video input") }
+        guard writer.canAdd(input) else { throw ReplayExporter.Failure.writer("cannot add the video input") }
         writer.add(input)
-        guard writer.startWriting() else { throw Failure.writer(writer.error?.localizedDescription ?? "startWriting") }
+        guard writer.startWriting() else {
+            throw ReplayExporter.Failure.writer(writer.error?.localizedDescription ?? "startWriting")
+        }
         writer.startSession(atSourceTime: .zero)
 
-        let frames = Int(item.timeline.duration * Double(fps))
+        let frames = Int(timeline.duration * Double(fps))
         // Any exit that is not a finished file — a dismissed share sheet
         // (cancellation), a render or append failure — leaves no writer
-        // running and no half-written file behind (review).
+        // running and no half-written file behind.
         defer {
             if writer.status == .writing {
                 writer.cancelWriting()
@@ -308,18 +516,20 @@ enum ReplayExporter {
         for i in 0..<frames {
             try Task.checkCancellation()
             while !input.isReadyForMoreMediaData {
+                // A writer that failed (the encoder taken away when the app
+                // went to the background) never becomes ready again (review).
+                guard writer.status == .writing else {
+                    throw ReplayExporter.Failure.writer(writer.error?.localizedDescription ?? "status \(writer.status.rawValue)")
+                }
                 try await Task.sleep(for: .milliseconds(4))
             }
-            let t = item.timeline.duration * Double(i) / Double(frames - 1)
-            guard let image = renderer(item, format: .stories, at: t).cgImage,
-                  let pool = adaptor.pixelBufferPool,
-                  let buffer = pixelBuffer(from: image, pool: pool)
-            else { throw Failure.render }
+            let t = timeline.duration * Double(i) / Double(frames - 1)
+            guard let pool = adaptor.pixelBufferPool,
+                  let buffer = Self.frame(plate, timeline: timeline, at: t, pool: pool)
+            else { throw ReplayExporter.Failure.render }
             guard adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(i), timescale: fps)) else {
-                throw Failure.writer(writer.error?.localizedDescription ?? "append \(i)")
+                throw ReplayExporter.Failure.writer(writer.error?.localizedDescription ?? "append \(i)")
             }
-            // One frame per turn: the share sheet is on this actor too.
-            await Task.yield()
         }
         input.markAsFinished()
         // The last (settled) frame is held to the 10 s mark instead of being
@@ -327,25 +537,43 @@ enum ReplayExporter {
         writer.endSession(atSourceTime: CMTime(value: CMTimeValue(frames), timescale: fps))
         await writer.finishWriting()
         guard writer.status == .completed else {
-            throw Failure.writer(writer.error?.localizedDescription ?? "finishWriting")
+            throw ReplayExporter.Failure.writer(writer.error?.localizedDescription ?? "finishWriting")
         }
-        log.notice("replay MP4 written: \(frames) frames in \(Date().timeIntervalSince(began), format: .fixed(precision: 1)) s")
-        return out
+        Self.log.notice("replay MP4 written off the main actor: \(frames) frames in \(Date().timeIntervalSince(began), format: .fixed(precision: 1)) s")
     }
 
-    private static func pixelBuffer(from image: CGImage, pool: CVPixelBufferPool) -> CVPixelBuffer? {
+    /// One frame: the plate, the canvas drawn into its slot, the caption line
+    /// the frame shows.
+    private static func frame(_ plate: Plate, timeline: SessionReplay.Timeline, at t: Double,
+                              pool: CVPixelBufferPool) -> CVPixelBuffer? {
         var buffer: CVPixelBuffer?
         guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer) == kCVReturnSuccess, let buffer else { return nil }
         CVPixelBufferLockBaseAddress(buffer, [])
         defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
-        guard let context = CGContext(
+        guard let ctx = CGContext(
             data: CVPixelBufferGetBaseAddress(buffer),
             width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer),
             bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
-            space: CGColorSpaceCreateDeviceRGB(),
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
         ) else { return nil }
-        context.draw(image, in: CGRect(x: 0, y: 0, width: context.width, height: context.height))
+        let height = CGFloat(ctx.height)
+        ctx.draw(plate.background, in: CGRect(x: 0, y: 0, width: ctx.width, height: ctx.height))
+
+        let frame = timeline.frame(at: t)
+        let scale = ReplayExporter.scale
+        ctx.saveGState()
+        // The renderer draws top-left, y down, in points.
+        ctx.translateBy(x: plate.canvas.minX, y: height - plate.canvas.minY)
+        ctx.scaleBy(x: scale, y: -scale)
+        plate.renderer.draw(frame, in: ctx, size: CGSize(width: plate.canvas.width / scale, height: plate.canvas.height / scale))
+        ctx.restoreGState()
+
+        if let line = plate.captions[ReplayCaption.state(timeline, frame)] {
+            let rect = CGRect(x: plate.caption.minX, y: height - plate.caption.minY - CGFloat(line.height),
+                              width: CGFloat(line.width), height: CGFloat(line.height))
+            ctx.draw(line, in: rect)
+        }
         return buffer
     }
 }
@@ -354,9 +582,10 @@ enum ReplayExporter {
 /// The shot loop's view of the share files (`session-share`, `session-share-bars`).
 ///
 /// A screenshot of the share SHEET would review the system's UI; the claim
-/// this wave makes is about the FILES. So the harness writes all three through
-/// the same exporter the share sheet calls, draws the Stories PNG it wrote, and
-/// logs the paths (`ONYXREPLAY`) so the review can open the originals.
+/// this wave makes is about the FILES. So the harness makes them through the
+/// same prebake and actor the share button uses, draws the Stories PNG it
+/// wrote, and logs the paths and timings (`ONYXREPLAY`) so the review can open
+/// the originals.
 struct ReplayShareHarness: View {
     let sessionId: String
     @Environment(AppEnvironment.self) private var environment
@@ -383,18 +612,19 @@ struct ReplayShareHarness: View {
         let clocks = SessionReplay.Input.clocks(database: database, sessionId: id)
         let label = SessionAnalysis.dayLabel(page.report.session.dayKey, in: page.program) ?? "Session"
         let timeline = SessionReplay.timeline(.session(page, label: label, samples: samples, clocks: clocks))
-        let items = ReplayShareItem.all(timeline: timeline, dayInk: Color.onyx.day(page.report.session.dayKey), sessionId: id,
-                                        day: LogicalDay.date(fromISO: page.report.session.date) ?? timeline.masthead.startedAt)
+        let source = ReplaySource(timeline: timeline, dayInk: Color.onyx.day(page.report.session.dayKey), sessionId: id,
+                                  day: LogicalDay.date(fromISO: page.report.session.date) ?? timeline.masthead.startedAt)
         do {
-            let square = try ReplayExporter.png(items[0])
-            let stories = try ReplayExporter.png(items[1])
-            image = UIImage(contentsOfFile: stories.path)
-            status = "PNGs written; rendering video…"
+            let prebakeBegan = Date()
+            let set = await ReplayShareSet.prebake(source)
+            let prebakeMs = Int(Date().timeIntervalSince(prebakeBegan) * 1000)
+            image = set.items[1].file.flatMap { UIImage(contentsOfFile: $0.path) }
+            status = "PNGs in \(prebakeMs) ms; rendering video off the main actor…"
             let began = Date()
-            let video = try await ReplayExporter.video(items[2])
+            let video = try await ReplayVideoRenderer.shared.video(source)
             let seconds = Date().timeIntervalSince(began)
-            status = String(format: "video %.1f s", seconds)
-            print("ONYXREPLAY square=\(square.path) stories=\(stories.path) video=\(video.path) seconds=\(seconds)")
+            status = String(format: "prebake %d ms · video %.1f s", prebakeMs, seconds)
+            print("ONYXREPLAY square=\(set.items[0].file?.path ?? "") stories=\(set.items[1].file?.path ?? "") video=\(video.path) prebakeMs=\(prebakeMs) videoSeconds=\(seconds) message=\(set.message)")
         } catch {
             status = "export failed: \(error)"
             print("ONYXREPLAY failed \(error)")

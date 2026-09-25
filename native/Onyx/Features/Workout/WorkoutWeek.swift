@@ -137,6 +137,21 @@ final class WorkoutWeek {
         let id: String
         let date: String
         let top: [String: TopSet]
+        /// Train's last-session ticket and the verdict line under it
+        /// (Precision B2) — filled only for the plan card's own read, never in
+        /// the wrap's per-session loop.
+        var ticket: Ticket?
+
+        struct Ticket: Sendable, Equatable {
+            let durationSec: Int?
+            let tonnageKg: Double?
+            let prCount: Int
+            /// Measured only.
+            let avgBpm: Int?
+            let spark: [Double]
+            /// "+2.5 kg on 3 lifts · 2 PR · 4.4 t" — `SessionVerdict.line`.
+            let verdict: String
+        }
 
         func top(for name: String) -> TopSet? {
             top[ExerciseAliases.canonicalName(name).lowercased()]
@@ -659,7 +674,7 @@ final class WorkoutWeek {
         out.trainLayout = database.trainLayout(userId: database.localUserId())
 
         // ── What the card prints where the rep window used to be ────────────
-        out.previous = previousSession(database, dayKey: out.todayKey, before: today)
+        out.previous = previousSession(database, dayKey: out.todayKey, before: today, ticket: true)
 
         // ── The other two doors ─────────────────────────────────────────────
         out.liftsTracked = (try? database.read { db in
@@ -1226,15 +1241,15 @@ final class WorkoutWeek {
     /// the reps alone decide, which is the right answer for a knee raise and
     /// for a hold.
     private nonisolated static func previousSession(
-        _ database: AppDatabase, dayKey: String?, before today: String
+        _ database: AppDatabase, dayKey: String?, before today: String, ticket: Bool = false
     ) -> Previous? {
         guard let dayKey else { return nil }
         let session = ((try? database.sessionHistory(userId: database.localUserId())) ?? [])
             .first { $0.dayKey == dayKey && $0.endedAt != nil && $0.date < today }
         // `sessionHistory` is already newest-first, so `first` IS the latest.
         guard let session else { return nil }
-        let rows = ((try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? [])
-            .filter { SetTags.isWorkingSet($0.setType) }
+        let all = (try? database.historySets(sessionId: session.id, userId: database.localUserId())) ?? []
+        let rows = all.filter { SetTags.isWorkingSet($0.setType) }
         guard !rows.isEmpty else { return nil }
 
         var top: [String: TopSet] = [:]
@@ -1261,7 +1276,30 @@ final class WorkoutWeek {
                 top[canonical.lowercased()] = best
             }
         }
-        return Previous(id: session.id, date: session.date, top: top)
+        var previous = Previous(id: session.id, date: session.date, top: top)
+        if ticket {
+            let user = database.localUserId()
+            let face = (try? database.sessionMasthead(sessionId: session.id, userId: user, name: "")) ?? nil
+            // The tonnage the done card computes for today, from the rows —
+            // not the row's stored total, which a session closed on another
+            // device or before the close path wrote it may not carry.
+            let tonnage = jsRound(SessionVolume.sessionVolumeKg(all.map(SessionAnalysis.volumeSet)))
+            // The ticket above the line already states the records and the
+            // tonnage (shot round 2: "5.6 t" twice, 20 pt apart), so the line
+            // under it keeps the one thing only it can say — the progress.
+            var verdict = (try? database.sessionVerdict(sessionId: session.id, userId: user)) ?? nil
+            verdict?.tonnageKg = 0
+            verdict?.prCount = 0
+            previous.ticket = Previous.Ticket(
+                durationSec: session.durationMin.map { Int(jsRound($0 * 60)) } ?? face?.durationSec,
+                tonnageKg: tonnage,
+                prCount: session.prCount ?? 0,
+                avgBpm: session.avgBpmEstimated ? nil : face?.avgBpm,
+                spark: face?.hrSpark ?? [],
+                verdict: verdict?.line ?? ""
+            )
+        }
+        return previous
     }
 
     /// One movement's rows as PHYSICAL sets: a genuine L/R pair becomes one

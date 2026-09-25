@@ -479,10 +479,10 @@ enum PulsePreviews {
         // before training" flips to "after" at 18:30 with no session), so an
         // unpinned day screen would photograph a different card by the hour.
         case "day":
-            NavigationStack { PulseTabView(seeded: pinned(fullDay())) }
+            NavigationStack { BodyTabView(seeded: pinned(fullDay())) }
                 .environment(AppEnvironment.preview)
         case "day-rows":
-            NavigationStack { PulseTabView(seeded: pinned(fullDay()), startAtRows: true) }
+            NavigationStack { BodyTabView(seeded: pinned(fullDay()), startAtRows: true) }
                 .environment(AppEnvironment.preview)
         // ── A STORED ORDER (W9) ─────────────────────────────────────────────
         // The grid in an arrangement the reader made: the stress log dragged
@@ -491,12 +491,12 @@ enum PulsePreviews {
         // name pointing at the stress log, which was the carousel's second
         // page until W9.
         case "day-stress":
-            NavigationStack { PulseTabView(seeded: pinned(stressLogFirst()), startAtRows: true) }
+            NavigationStack { BodyTabView(seeded: pinned(stressLogFirst()), startAtRows: true) }
                 .environment(AppEnvironment.preview)
         // The squares jiggling, with the toolbar's Done up — the edit mode a
         // drag runs in, which a long press cannot start on a simulator.
         case "day-edit":
-            NavigationStack { PulseTabView(seeded: pinned(fullDay()), startAtRows: true, startEditing: true) }
+            NavigationStack { BodyTabView(seeded: pinned(fullDay()), startAtRows: true, startEditing: true) }
                 .environment(AppEnvironment.preview)
         // Where the soreness square's door leads. It was the carousel's third
         // page until W3; the page is gone and the sheet it opened is what the
@@ -509,15 +509,16 @@ enum PulsePreviews {
         // and Sleep is in HRV's place — which is the half of the swap a static
         // shot has to prove.
         case "day-hero":
-            NavigationStack { PulseTabView(seeded: alarmedDay()) }
+            NavigationStack { BodyTabView(seeded: alarmedDay()) }
                 .environment(AppEnvironment.preview)
         // A day with the session on it, parked on the bottom half — the scale
         // and stack rows, the stress index and the session card. Since the
         // reorder the whole day fits a phone with room over, so this scrolls
         // very little; it is kept because it is the only screen that draws
-        // `SessionHeaderCard` on Pulse at all.
+        // the session ticket on a day page at all (History's push — the Body
+        // tab itself shows no workouts since Precision B4).
         case "day-past":
-            NavigationStack { PulseTabView(seeded: pinned(fullDay(withSession: true)), startAtRows: true) }
+            NavigationStack { BodyTabView(seeded: pinned(fullDay(withSession: true)), startAtRows: true, showsWorkouts: true) }
                 .environment(AppEnvironment.preview)
         // The same day, at the TOP — where the muscle wash is. It is the one
         // part of this screen that exists only above the fold and only when the
@@ -526,10 +527,10 @@ enum PulsePreviews {
         // was reviewed by reading the source.
         // The seeded session ends at 10:08, so the pinned 13:00 asks "after".
         case "day-session":
-            NavigationStack { PulseTabView(seeded: pinned(fullDay(withSession: true))) }
+            NavigationStack { BodyTabView(seeded: pinned(fullDay(withSession: true)), showsWorkouts: true) }
                 .environment(AppEnvironment.preview)
         case "day-empty":
-            NavigationStack { PulseTabView(seeded: model()) }
+            NavigationStack { BodyTabView(seeded: model()) }
                 .environment(AppEnvironment.preview)
         // TWO sessions on one date — the state the W3 budget is measured
         // against, because the session cards are the only part of this screen
@@ -537,7 +538,7 @@ enum PulsePreviews {
         // wash at the top is `day-session`'s shot and the thing THIS one has to
         // prove is the square grid with two cards under it.
         case "day-two":
-            NavigationStack { PulseTabView(seeded: twoSessions(), startAtRows: true) }
+            NavigationStack { BodyTabView(seeded: twoSessions(), startAtRows: true, showsWorkouts: true) }
                 .environment(AppEnvironment.preview)
         // Named for what it is rather than for where it opens from: the shot
         // list called this `day-inbody` and the plan's gate calls it `scale`,
@@ -628,7 +629,7 @@ enum PulsePreviews {
                 .environment(AppEnvironment.preview)
         // The ring behind the dashboard mark. Over Pulse rather than over
         // Today: the sheet needs a `DayModel` with its streams running, and
-        // `PulseTabView` is what starts them.
+        // `BodyTabView` is what starts them.
         case "quick-log":
             Presenting(model: pinned(fullDay())) { QuickLogSheet(model: $0) }
                 .environment(AppEnvironment.preview)
@@ -755,7 +756,7 @@ enum PulsePreviews {
     }
 
     /// A screen the tab PUSHES, rendered on its own. It needs the model's
-    /// streams running — `PulseTabView` is what normally starts them, and a
+    /// streams running — `BodyTabView` is what normally starts them, and a
     /// pushed screen photographed without it draws the seed protocol instead of
     /// the store's own stack.
     private struct Observing<Content: View>: View {
@@ -783,7 +784,7 @@ enum PulsePreviews {
     /// The harness re-evaluates its switch on every observation tick, so a
     /// `let model` was a NEW in-memory database on every pass — and the sheet
     /// then rendered against a `DayModel` whose streams had never been started,
-    /// while `PulseTabView`'s own `@State` kept the first one. Sheets that read
+    /// while `BodyTabView`'s own `@State` kept the first one. Sheets that read
     /// the store synchronously (the InBody form's `latestBodyReading`) survived
     /// that; the two §U5 sheets read STREAMED state — `night`, and the window
     /// read behind `stressBreakdown` — and photographed "No sleep recorded" and
@@ -803,7 +804,7 @@ enum PulsePreviews {
         }
 
         var body: some View {
-            NavigationStack { PulseTabView(seeded: model) }
+            NavigationStack { BodyTabView(seeded: model) }
                 .sheet(isPresented: $shown) { sheet(model) }
                 .task { await model.observe() }
         }

@@ -1,0 +1,798 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-25T09:53:02.595368+00:00",
+  "title": "Design System: Onyx",
+  "extensions": {
+    "colorMeta": {
+      "onyx-base": {
+        "role": "neutral",
+        "displayName": "Onyx Black",
+        "canonical": "oklch(0.0% 0.000 0.0)",
+        "tonalRamp": [
+          "oklch(15% 0.000 0.0)",
+          "oklch(25% 0.000 0.0)",
+          "oklch(36% 0.000 0.0)",
+          "oklch(47% 0.000 0.0)",
+          "oklch(58% 0.000 0.0)",
+          "oklch(69% 0.000 0.0)",
+          "oklch(82% 0.000 0.0)",
+          "oklch(95% 0.000 0.0)"
+        ]
+      },
+      "stone-slab": {
+        "role": "neutral",
+        "displayName": "Stone Slab",
+        "canonical": "oklch(15.1% 0.006 285.6)",
+        "tonalRamp": [
+          "oklch(15% 0.000 285.6)",
+          "oklch(25% 0.000 285.6)",
+          "oklch(36% 0.000 285.6)",
+          "oklch(47% 0.000 285.6)",
+          "oklch(58% 0.000 285.6)",
+          "oklch(69% 0.000 285.6)",
+          "oklch(82% 0.000 285.6)",
+          "oklch(95% 0.000 285.6)"
+        ]
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Primary Ink",
+        "canonical": "rgba(255,255,255,0.92)",
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(25% 0.000 89.9)",
+          "oklch(36% 0.000 89.9)",
+          "oklch(47% 0.000 89.9)",
+          "oklch(58% 0.000 89.9)",
+          "oklch(69% 0.000 89.9)",
+          "oklch(82% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Secondary Ink",
+        "canonical": "rgba(255,255,255,0.62)",
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(25% 0.000 89.9)",
+          "oklch(36% 0.000 89.9)",
+          "oklch(47% 0.000 89.9)",
+          "oklch(58% 0.000 89.9)",
+          "oklch(69% 0.000 89.9)",
+          "oklch(82% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ]
+      },
+      "text-tertiary": {
+        "role": "neutral",
+        "displayName": "Tertiary Ink",
+        "canonical": "rgba(255,255,255,0.40)",
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(25% 0.000 89.9)",
+          "oklch(36% 0.000 89.9)",
+          "oklch(47% 0.000 89.9)",
+          "oklch(58% 0.000 89.9)",
+          "oklch(69% 0.000 89.9)",
+          "oklch(82% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "rgba(255,255,255,0.08)",
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(25% 0.000 89.9)",
+          "oklch(36% 0.000 89.9)",
+          "oklch(47% 0.000 89.9)",
+          "oklch(58% 0.000 89.9)",
+          "oklch(69% 0.000 89.9)",
+          "oklch(82% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ]
+      },
+      "slate-primary": {
+        "role": "primary",
+        "displayName": "Slate Blue",
+        "canonical": "oklch(59.9% 0.078 265.9)",
+        "tonalRamp": [
+          "oklch(15% 0.078 265.9)",
+          "oklch(25% 0.078 265.9)",
+          "oklch(36% 0.078 265.9)",
+          "oklch(47% 0.078 265.9)",
+          "oklch(58% 0.078 265.9)",
+          "oklch(69% 0.078 265.9)",
+          "oklch(82% 0.078 265.9)",
+          "oklch(95% 0.078 265.9)"
+        ],
+        "note": "Themed: the chosen preset's primary (Slate default). Presets: Lagoon #4F8FA0, Sage #6E9A80, Iris #8A73AE, Clay #B5705A, Ochre #B39250, Moss #7F8F4E, Rosewood #AC6886."
+      },
+      "slate-secondary": {
+        "role": "secondary",
+        "displayName": "Worn Brass",
+        "canonical": "oklch(70.9% 0.085 75.9)",
+        "tonalRamp": [
+          "oklch(15% 0.085 75.9)",
+          "oklch(25% 0.085 75.9)",
+          "oklch(36% 0.085 75.9)",
+          "oklch(47% 0.085 75.9)",
+          "oklch(58% 0.085 75.9)",
+          "oklch(69% 0.085 75.9)",
+          "oklch(82% 0.085 75.9)",
+          "oklch(95% 0.085 75.9)"
+        ],
+        "note": "Themed: preset secondaries Lagoon #C98A6B, Sage #C9A05C, Iris #C4986E, Clay #6E9A9A, Ochre #6A83A8, Moss #A87A8F, Rosewood #7A9A8A."
+      },
+      "good-green": {
+        "role": "tertiary",
+        "displayName": "Good Green",
+        "canonical": "oklch(68.4% 0.111 164.1)",
+        "tonalRamp": [
+          "oklch(15% 0.111 164.1)",
+          "oklch(25% 0.111 164.1)",
+          "oklch(36% 0.111 164.1)",
+          "oklch(47% 0.111 164.1)",
+          "oklch(58% 0.111 164.1)",
+          "oklch(69% 0.111 164.1)",
+          "oklch(82% 0.111 164.1)",
+          "oklch(95% 0.111 164.1)"
+        ]
+      },
+      "danger-red": {
+        "role": "tertiary",
+        "displayName": "Danger Red",
+        "canonical": "oklch(62.6% 0.193 23.0)",
+        "tonalRamp": [
+          "oklch(15% 0.170 23.0)",
+          "oklch(25% 0.170 23.0)",
+          "oklch(36% 0.170 23.0)",
+          "oklch(47% 0.170 23.0)",
+          "oklch(58% 0.170 23.0)",
+          "oklch(69% 0.170 23.0)",
+          "oklch(82% 0.170 23.0)",
+          "oklch(95% 0.170 23.0)"
+        ]
+      },
+      "heart-red": {
+        "role": "tertiary",
+        "displayName": "Heart Red",
+        "canonical": "oklch(62.6% 0.193 23.0)",
+        "tonalRamp": [
+          "oklch(15% 0.170 23.0)",
+          "oklch(25% 0.170 23.0)",
+          "oklch(36% 0.170 23.0)",
+          "oklch(47% 0.170 23.0)",
+          "oklch(58% 0.170 23.0)",
+          "oklch(69% 0.170 23.0)",
+          "oklch(82% 0.170 23.0)",
+          "oklch(95% 0.170 23.0)"
+        ]
+      },
+      "record-gold": {
+        "role": "tertiary",
+        "displayName": "Record Gold",
+        "canonical": "oklch(88.3% 0.144 88.7)",
+        "tonalRamp": [
+          "oklch(15% 0.144 88.7)",
+          "oklch(25% 0.144 88.7)",
+          "oklch(36% 0.144 88.7)",
+          "oklch(47% 0.144 88.7)",
+          "oklch(58% 0.144 88.7)",
+          "oklch(69% 0.144 88.7)",
+          "oklch(82% 0.144 88.7)",
+          "oklch(95% 0.144 88.7)"
+        ]
+      },
+      "effort-hard-amber": {
+        "role": "tertiary",
+        "displayName": "Effort Amber",
+        "canonical": "oklch(81.8% 0.135 69.9)",
+        "tonalRamp": [
+          "oklch(15% 0.135 69.9)",
+          "oklch(25% 0.135 69.9)",
+          "oklch(36% 0.135 69.9)",
+          "oklch(47% 0.135 69.9)",
+          "oklch(58% 0.135 69.9)",
+          "oklch(69% 0.135 69.9)",
+          "oklch(82% 0.135 69.9)",
+          "oklch(95% 0.135 69.9)"
+        ]
+      },
+      "effort-very-hard-clay": {
+        "role": "tertiary",
+        "displayName": "Effort Clay",
+        "canonical": "oklch(72.9% 0.149 43.8)",
+        "tonalRamp": [
+          "oklch(15% 0.149 43.8)",
+          "oklch(25% 0.149 43.8)",
+          "oklch(36% 0.149 43.8)",
+          "oklch(47% 0.149 43.8)",
+          "oklch(58% 0.149 43.8)",
+          "oklch(69% 0.149 43.8)",
+          "oklch(82% 0.149 43.8)",
+          "oklch(95% 0.149 43.8)"
+        ]
+      },
+      "water-blue": {
+        "role": "tertiary",
+        "displayName": "Water Blue",
+        "canonical": "oklch(66.4% 0.118 243.0)",
+        "tonalRamp": [
+          "oklch(15% 0.118 243.0)",
+          "oklch(25% 0.118 243.0)",
+          "oklch(36% 0.118 243.0)",
+          "oklch(47% 0.118 243.0)",
+          "oklch(58% 0.118 243.0)",
+          "oklch(69% 0.118 243.0)",
+          "oklch(82% 0.118 243.0)",
+          "oklch(95% 0.118 243.0)"
+        ]
+      },
+      "sleep-deep": {
+        "role": "tertiary",
+        "displayName": "Sleep Deep",
+        "canonical": "oklch(44.2% 0.103 282.0)",
+        "tonalRamp": [
+          "oklch(15% 0.103 282.0)",
+          "oklch(25% 0.103 282.0)",
+          "oklch(36% 0.103 282.0)",
+          "oklch(47% 0.103 282.0)",
+          "oklch(58% 0.103 282.0)",
+          "oklch(69% 0.103 282.0)",
+          "oklch(82% 0.103 282.0)",
+          "oklch(95% 0.103 282.0)"
+        ]
+      },
+      "sleep-core": {
+        "role": "tertiary",
+        "displayName": "Sleep Core",
+        "canonical": "oklch(59.8% 0.099 286.4)",
+        "tonalRamp": [
+          "oklch(15% 0.099 286.4)",
+          "oklch(25% 0.099 286.4)",
+          "oklch(36% 0.099 286.4)",
+          "oklch(47% 0.099 286.4)",
+          "oklch(58% 0.099 286.4)",
+          "oklch(69% 0.099 286.4)",
+          "oklch(82% 0.099 286.4)",
+          "oklch(95% 0.099 286.4)"
+        ]
+      },
+      "sleep-rem": {
+        "role": "tertiary",
+        "displayName": "Sleep REM",
+        "canonical": "oklch(78.6% 0.064 289.9)",
+        "tonalRamp": [
+          "oklch(15% 0.064 289.9)",
+          "oklch(25% 0.064 289.9)",
+          "oklch(36% 0.064 289.9)",
+          "oklch(47% 0.064 289.9)",
+          "oklch(58% 0.064 289.9)",
+          "oklch(69% 0.064 289.9)",
+          "oklch(82% 0.064 289.9)",
+          "oklch(95% 0.064 289.9)"
+        ]
+      },
+      "micro-orchid": {
+        "role": "tertiary",
+        "displayName": "Micro Orchid",
+        "canonical": "oklch(72.8% 0.107 348.0)",
+        "tonalRamp": [
+          "oklch(15% 0.107 348.0)",
+          "oklch(25% 0.107 348.0)",
+          "oklch(36% 0.107 348.0)",
+          "oklch(47% 0.107 348.0)",
+          "oklch(58% 0.107 348.0)",
+          "oklch(69% 0.107 348.0)",
+          "oklch(82% 0.107 348.0)",
+          "oklch(95% 0.107 348.0)"
+        ]
+      },
+      "muscle-chest": {
+        "role": "tertiary",
+        "displayName": "Chest (muscle)",
+        "canonical": "oklch(70.0% 0.170 26.2)",
+        "tonalRamp": [
+          "oklch(15% 0.170 26.2)",
+          "oklch(25% 0.170 26.2)",
+          "oklch(36% 0.170 26.2)",
+          "oklch(47% 0.170 26.2)",
+          "oklch(58% 0.170 26.2)",
+          "oklch(69% 0.170 26.2)",
+          "oklch(82% 0.170 26.2)",
+          "oklch(95% 0.170 26.2)"
+        ]
+      },
+      "muscle-lats": {
+        "role": "tertiary",
+        "displayName": "Lats (muscle)",
+        "canonical": "oklch(78.6% 0.135 191.1)",
+        "tonalRamp": [
+          "oklch(15% 0.135 191.1)",
+          "oklch(25% 0.135 191.1)",
+          "oklch(36% 0.135 191.1)",
+          "oklch(47% 0.135 191.1)",
+          "oklch(58% 0.135 191.1)",
+          "oklch(69% 0.135 191.1)",
+          "oklch(82% 0.135 191.1)",
+          "oklch(95% 0.135 191.1)"
+        ]
+      },
+      "muscle-upper-back": {
+        "role": "tertiary",
+        "displayName": "Upper Back (muscle)",
+        "canonical": "oklch(70.1% 0.121 190.6)",
+        "tonalRamp": [
+          "oklch(15% 0.121 190.6)",
+          "oklch(25% 0.121 190.6)",
+          "oklch(36% 0.121 190.6)",
+          "oklch(47% 0.121 190.6)",
+          "oklch(58% 0.121 190.6)",
+          "oklch(69% 0.121 190.6)",
+          "oklch(82% 0.121 190.6)",
+          "oklch(95% 0.121 190.6)"
+        ]
+      },
+      "muscle-lower-back": {
+        "role": "tertiary",
+        "displayName": "Lower Back (muscle)",
+        "canonical": "oklch(61.4% 0.106 191.5)",
+        "tonalRamp": [
+          "oklch(15% 0.106 191.5)",
+          "oklch(25% 0.106 191.5)",
+          "oklch(36% 0.106 191.5)",
+          "oklch(47% 0.106 191.5)",
+          "oklch(58% 0.106 191.5)",
+          "oklch(69% 0.106 191.5)",
+          "oklch(82% 0.106 191.5)",
+          "oklch(95% 0.106 191.5)"
+        ]
+      },
+      "muscle-front-delts": {
+        "role": "tertiary",
+        "displayName": "Front Delts (muscle)",
+        "canonical": "oklch(78.5% 0.153 60.0)",
+        "tonalRamp": [
+          "oklch(15% 0.153 60.0)",
+          "oklch(25% 0.153 60.0)",
+          "oklch(36% 0.153 60.0)",
+          "oklch(47% 0.153 60.0)",
+          "oklch(58% 0.153 60.0)",
+          "oklch(69% 0.153 60.0)",
+          "oklch(82% 0.153 60.0)",
+          "oklch(95% 0.153 60.0)"
+        ]
+      },
+      "muscle-side-delts": {
+        "role": "tertiary",
+        "displayName": "Side Delts (muscle)",
+        "canonical": "oklch(70.0% 0.164 60.0)",
+        "tonalRamp": [
+          "oklch(15% 0.164 60.0)",
+          "oklch(25% 0.164 60.0)",
+          "oklch(36% 0.164 60.0)",
+          "oklch(47% 0.164 60.0)",
+          "oklch(58% 0.164 60.0)",
+          "oklch(69% 0.164 60.0)",
+          "oklch(82% 0.164 60.0)",
+          "oklch(95% 0.164 60.0)"
+        ]
+      },
+      "muscle-rear-delts": {
+        "role": "tertiary",
+        "displayName": "Rear Delts (muscle)",
+        "canonical": "oklch(61.6% 0.144 60.1)",
+        "tonalRamp": [
+          "oklch(15% 0.144 60.1)",
+          "oklch(25% 0.144 60.1)",
+          "oklch(36% 0.144 60.1)",
+          "oklch(47% 0.144 60.1)",
+          "oklch(58% 0.144 60.1)",
+          "oklch(69% 0.144 60.1)",
+          "oklch(82% 0.144 60.1)",
+          "oklch(95% 0.144 60.1)"
+        ]
+      },
+      "muscle-biceps": {
+        "role": "tertiary",
+        "displayName": "Biceps (muscle)",
+        "canonical": "oklch(70.0% 0.166 286.8)",
+        "tonalRamp": [
+          "oklch(15% 0.166 286.8)",
+          "oklch(25% 0.166 286.8)",
+          "oklch(36% 0.166 286.8)",
+          "oklch(47% 0.166 286.8)",
+          "oklch(58% 0.166 286.8)",
+          "oklch(69% 0.166 286.8)",
+          "oklch(82% 0.166 286.8)",
+          "oklch(95% 0.166 286.8)"
+        ]
+      },
+      "muscle-triceps": {
+        "role": "tertiary",
+        "displayName": "Triceps (muscle)",
+        "canonical": "oklch(69.9% 0.170 244.2)",
+        "tonalRamp": [
+          "oklch(15% 0.170 244.2)",
+          "oklch(25% 0.170 244.2)",
+          "oklch(36% 0.170 244.2)",
+          "oklch(47% 0.170 244.2)",
+          "oklch(58% 0.170 244.2)",
+          "oklch(69% 0.170 244.2)",
+          "oklch(82% 0.170 244.2)",
+          "oklch(95% 0.170 244.2)"
+        ]
+      },
+      "muscle-forearms": {
+        "role": "tertiary",
+        "displayName": "Forearms (muscle)",
+        "canonical": "oklch(69.9% 0.145 99.8)",
+        "tonalRamp": [
+          "oklch(15% 0.145 99.8)",
+          "oklch(25% 0.145 99.8)",
+          "oklch(36% 0.145 99.8)",
+          "oklch(47% 0.145 99.8)",
+          "oklch(58% 0.145 99.8)",
+          "oklch(69% 0.145 99.8)",
+          "oklch(82% 0.145 99.8)",
+          "oklch(95% 0.145 99.8)"
+        ]
+      },
+      "muscle-quads": {
+        "role": "tertiary",
+        "displayName": "Quads (muscle)",
+        "canonical": "oklch(82.9% 0.170 139.0)",
+        "tonalRamp": [
+          "oklch(15% 0.170 139.0)",
+          "oklch(25% 0.170 139.0)",
+          "oklch(36% 0.170 139.0)",
+          "oklch(47% 0.170 139.0)",
+          "oklch(58% 0.170 139.0)",
+          "oklch(69% 0.170 139.0)",
+          "oklch(82% 0.170 139.0)",
+          "oklch(95% 0.170 139.0)"
+        ]
+      },
+      "muscle-hamstrings": {
+        "role": "tertiary",
+        "displayName": "Hamstrings (muscle)",
+        "canonical": "oklch(76.6% 0.170 138.9)",
+        "tonalRamp": [
+          "oklch(15% 0.170 138.9)",
+          "oklch(25% 0.170 138.9)",
+          "oklch(36% 0.170 138.9)",
+          "oklch(47% 0.170 138.9)",
+          "oklch(58% 0.170 138.9)",
+          "oklch(69% 0.170 138.9)",
+          "oklch(82% 0.170 138.9)",
+          "oklch(95% 0.170 138.9)"
+        ]
+      },
+      "muscle-glutes": {
+        "role": "tertiary",
+        "displayName": "Glutes (muscle)",
+        "canonical": "oklch(69.9% 0.169 139.0)",
+        "tonalRamp": [
+          "oklch(15% 0.169 139.0)",
+          "oklch(25% 0.169 139.0)",
+          "oklch(36% 0.169 139.0)",
+          "oklch(47% 0.169 139.0)",
+          "oklch(58% 0.169 139.0)",
+          "oklch(69% 0.169 139.0)",
+          "oklch(82% 0.169 139.0)",
+          "oklch(95% 0.169 139.0)"
+        ]
+      },
+      "muscle-adductors": {
+        "role": "tertiary",
+        "displayName": "Adductors (muscle)",
+        "canonical": "oklch(63.6% 0.170 138.9)",
+        "tonalRamp": [
+          "oklch(15% 0.170 138.9)",
+          "oklch(25% 0.170 138.9)",
+          "oklch(36% 0.170 138.9)",
+          "oklch(47% 0.170 138.9)",
+          "oklch(58% 0.170 138.9)",
+          "oklch(69% 0.170 138.9)",
+          "oklch(82% 0.170 138.9)",
+          "oklch(95% 0.170 138.9)"
+        ]
+      },
+      "muscle-calves": {
+        "role": "tertiary",
+        "displayName": "Calves (muscle)",
+        "canonical": "oklch(56.9% 0.170 138.9)",
+        "tonalRamp": [
+          "oklch(15% 0.170 138.9)",
+          "oklch(25% 0.170 138.9)",
+          "oklch(36% 0.170 138.9)",
+          "oklch(47% 0.170 138.9)",
+          "oklch(58% 0.170 138.9)",
+          "oklch(69% 0.170 138.9)",
+          "oklch(82% 0.170 138.9)",
+          "oklch(95% 0.170 138.9)"
+        ]
+      },
+      "muscle-abs-core": {
+        "role": "tertiary",
+        "displayName": "Abs Core (muscle)",
+        "canonical": "oklch(70.0% 0.171 345.2)",
+        "tonalRamp": [
+          "oklch(15% 0.170 345.2)",
+          "oklch(25% 0.170 345.2)",
+          "oklch(36% 0.170 345.2)",
+          "oklch(47% 0.170 345.2)",
+          "oklch(58% 0.170 345.2)",
+          "oklch(69% 0.170 345.2)",
+          "oklch(82% 0.170 345.2)",
+          "oklch(95% 0.170 345.2)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "clock": {
+        "displayName": "Clock",
+        "purpose": "Running logger timer only."
+      },
+      "hero": {
+        "displayName": "Hero",
+        "purpose": "The one figure a screen is about; at most one per screen."
+      },
+      "display": {
+        "displayName": "Display",
+        "purpose": "Card title, sheet heading, split name."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Prose, list rows, non-hero values."
+      },
+      "secondary": {
+        "displayName": "Secondary",
+        "purpose": "The line under a value."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Section caption, unit suffix, axis label; semibold on chips/pills."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Uppercase register label naming a figure; never a number; 11 pt floor."
+      }
+    },
+    "derivationOrigin": {
+      "note": "OnyxDomain.defaultDomainHex — the Ion/Solar origin every theme rotates from (OnyxTheme.derive); not drawn under Slate.",
+      "train": [
+        "#6B78F0",
+        "#4FB6E8"
+      ],
+      "fuel": [
+        "#E3A650",
+        "#E07A7A"
+      ],
+      "body": [
+        "#46B39D",
+        "#2E9AA6"
+      ],
+      "recover": [
+        "#A79FD6",
+        "#C9D3EE"
+      ]
+    },
+    "shadows": [
+      {
+        "name": "lit-top-edge",
+        "value": "1pt stroke, linear-gradient(to bottom, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 30%, rgba(255,255,255,0.04) 100%)",
+        "purpose": "The only edge treatment on tile, sheet and chrome slabs; Stone has no drop shadows."
+      }
+    ],
+    "materials": [
+      {
+        "name": "stone-slab",
+        "value": ".thinMaterial + #0B0B0E at 0.78; solid #0B0B0E under Reduce Transparency",
+        "purpose": "Every row, tile and sheet (OnyxGlass.swift)."
+      },
+      {
+        "name": "chrome",
+        "value": ".regularMaterial",
+        "purpose": "Navigation chrome level."
+      },
+      {
+        "name": "ground",
+        "value": "#000 + radial(domain accent @14%, center -10%/-10%, r 70% h) + radial(theme secondary @7%, center 110%/110%, r 55% h), chroma ≤ 0.10, × clamp(0.5 + battery/2); flat black under Reduce Transparency",
+        "purpose": "OnyxGround behind every screen; widget container at 0.5 strength."
+      }
+    ],
+    "motion": [
+      {
+        "name": "move",
+        "value": "spring(response 0.4, damping 1.0)",
+        "purpose": "Anything that moves because state changed."
+      },
+      {
+        "name": "flick",
+        "value": "spring(response 0.4, damping 0.8)",
+        "purpose": "Only where a finger threw it."
+      },
+      {
+        "name": "drawer",
+        "value": "spring(response 0.3, damping 0.8)",
+        "purpose": "Sheets and drawers."
+      },
+      {
+        "name": "press",
+        "value": "easeOut 0.1s, scale 0.96 on touch-down",
+        "purpose": "Press feedback."
+      },
+      {
+        "name": "fade",
+        "value": "easeInOut 0.2s",
+        "purpose": "Appear/leave with no gesture; the Reduce Motion fallback."
+      },
+      {
+        "name": "counter",
+        "value": "spring(response 0.55, damping 1.0)",
+        "purpose": "A number counting after a log; ring arcs."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "dynamic-type-xxLarge",
+        "value": "DynamicTypeSize.xxLarge",
+        "purpose": "Session ticket stacks name over figures."
+      },
+      {
+        "name": "dynamic-type-accessibility",
+        "value": "DynamicTypeSize.isAccessibilitySize",
+        "purpose": "Shoulders stack; six squares become rows."
+      },
+      {
+        "name": "body-ring-cap",
+        "value": "...accessibility1 (inner words ...xxxLarge)",
+        "purpose": "Geometry-bound instrument cap."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Stone Slab Tile",
+      "kind": "card",
+      "refersTo": "slab-tile",
+      "description": ".onyxGlass(.tile): thin material + slab at 0.78 + lit top edge, 20 pt continuous corners, 12 pt padding, no shadow.",
+      "html": "<div class=\"ds-slab\"><div class=\"ds-micro\">This week</div><div class=\"ds-display\">Upper A</div><div class=\"ds-secondary\">5 sessions · 48.2 t</div></div>",
+      "css": ".ds-slab { background: rgba(11,11,14,0.78); backdrop-filter: blur(20px); color: rgba(255,255,255,0.92); border: 1px solid transparent; border-image: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), inset 0 0 0 1px rgba(255,255,255,0.04); border-radius: 20px; padding: 12px; font-family: -apple-system, system-ui, sans-serif; width: 240px; } .ds-micro { font-size: 11px; font-weight: 600; letter-spacing: 0.10em; text-transform: uppercase; color: rgba(255,255,255,0.62); } .ds-display { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; } .ds-secondary { font-size: 15px; color: rgba(255,255,255,0.62); margin-top: 4px; }"
+    },
+    {
+      "name": "Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "OnyxChipRow capsule: ultra-thin material, 0.5 pt hairline, caption semibold, 44 pt min height, press scale 0.96.",
+      "html": "<button class=\"ds-chip\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M5 4l10 8-10 8zM19 5v14\"/></svg>Skip rest</button>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 8px 12px; border-radius: 999px; background: rgba(255,255,255,0.06); backdrop-filter: blur(12px); border: 0.5px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.62); font: 600 13px -apple-system, system-ui, sans-serif; transition: transform 0.1s ease-out; } .ds-chip:active { transform: scale(0.96); } .ds-chip:focus-visible { outline: 2px solid #6A7FAF; outline-offset: 2px; }"
+    },
+    {
+      "name": "Prominent Chip",
+      "kind": "button",
+      "refersTo": "chip-prominent",
+      "description": "The one screen-ending action, filled with its tint, label in onyx black; pinned outside the scroll.",
+      "html": "<button class=\"ds-chip-prominent\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\"><path d=\"M4 12l5 5L20 6\"/></svg>Finish</button>",
+      "css": ".ds-chip-prominent { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 8px 12px; border-radius: 999px; background: #6A7FAF; color: #000; border: none; font: 600 13px -apple-system, system-ui, sans-serif; transition: transform 0.1s ease-out; } .ds-chip-prominent:active { transform: scale(0.96); } .ds-chip-prominent:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Muscle Pill",
+      "kind": "chip",
+      "refersTo": "muscle-pill",
+      "description": "FocusPills: the muscle's fixed ink at 14 % as a capsule, name in that ink, set count in secondary numerals.",
+      "html": "<span class=\"ds-pill\">Quads <span class=\"ds-pill-n\">6.5</span></span>",
+      "css": ".ds-pill { display: inline-flex; gap: 4px; padding: 5px 10px; border-radius: 999px; background: rgba(138,225,113,0.14); color: #8AE171; font: 600 13px -apple-system, system-ui, sans-serif; } .ds-pill-n { font-weight: 400; color: rgba(255,255,255,0.62); font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Session Ticket",
+      "kind": "custom",
+      "refersTo": "session-ticket",
+      "description": "A finished session as one 64 pt slab row: day-ink bar, headline name, three tabular figures, heart spark wash behind them.",
+      "html": "<div class=\"ds-ticket\"><span class=\"ds-bar\"></span><span class=\"ds-tname\">Legs &amp; Core B</span><span class=\"ds-figs\"><span>52 min</span><span>12.4 t</span><span class=\"ds-gold\">&#9679; 2 PRs</span></span></div>",
+      "css": ".ds-ticket { background: rgba(11,11,14,0.78); backdrop-filter: blur(20px); color: rgba(255,255,255,0.92); border: 1px solid transparent; border-image: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), inset 0 0 0 1px rgba(255,255,255,0.04); display: flex; align-items: center; gap: 12px; height: 64px; padding: 0 16px 0 12px; border-radius: 20px; font-family: -apple-system, system-ui, sans-serif; width: 360px; } .ds-bar { width: 3px; height: 40px; border-radius: 1.5px; background: #46B39D; } .ds-tname { flex: 1; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; } .ds-figs { display: flex; gap: 12px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; } .ds-gold { color: #FFD35C; }"
+    },
+    {
+      "name": "Exercise Chip",
+      "kind": "card",
+      "refersTo": "exercise-chip",
+      "description": "Summary bento cell, three across: glyph + gold record dot, two-line short name, best set.",
+      "html": "<div class=\"ds-ex\"><div class=\"ds-ex-top\"><span class=\"ds-ex-g\">&#9650;</span><span class=\"ds-dot\"></span></div><div class=\"ds-ex-n\">Seated Cable Row</div><div class=\"ds-ex-b\">72.5 kg × 8</div></div>",
+      "css": ".ds-ex { background: rgba(11,11,14,0.78); backdrop-filter: blur(20px); color: rgba(255,255,255,0.92); border: 1px solid transparent; border-image: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), inset 0 0 0 1px rgba(255,255,255,0.04); width: 115px; min-height: 44px; padding: 6px 10px; border-radius: 20px; font: 13px -apple-system, system-ui, sans-serif; transition: transform 0.1s ease-out; } .ds-ex:active { transform: scale(0.96); } .ds-ex-top { display: flex; justify-content: space-between; align-items: center; height: 18px; } .ds-ex-g { color: #00B6B0; } .ds-dot { width: 6px; height: 6px; border-radius: 50%; background: #FFD35C; } .ds-ex-n { font-weight: 600; } .ds-ex-b { color: rgba(255,255,255,0.62); font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Body Ring",
+      "kind": "custom",
+      "refersTo": "body-ring",
+      "description": "200 pt readiness ring in the theme accent, inner 4 pt battery arc, hero numeral; orbited by six 44 pt petals in fixed inks.",
+      "html": "<div class=\"ds-ring\"><svg width=\"200\" height=\"200\" viewBox=\"0 0 200 200\"><circle cx=\"100\" cy=\"100\" r=\"93\" fill=\"none\" stroke=\"rgba(255,255,255,0.08)\" stroke-width=\"14\"/><circle cx=\"100\" cy=\"100\" r=\"93\" fill=\"none\" stroke=\"#6A7FAF\" stroke-width=\"14\" stroke-linecap=\"round\" stroke-dasharray=\"456 584\" transform=\"rotate(-90 100 100)\"/><circle cx=\"100\" cy=\"100\" r=\"74\" fill=\"none\" stroke=\"rgba(255,255,255,0.08)\" stroke-width=\"4\"/><circle cx=\"100\" cy=\"100\" r=\"74\" fill=\"none\" stroke=\"#4CAF87\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-dasharray=\"298 465\" transform=\"rotate(-90 100 100)\"/></svg><div class=\"ds-ring-c\"><div class=\"ds-hero\">78</div><div class=\"ds-micro2\">Readiness</div><div class=\"ds-batt\">Battery 64</div></div></div>",
+      "css": ".ds-ring { position: relative; width: 200px; height: 200px; font-family: -apple-system, system-ui, sans-serif; } .ds-ring-c { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; } .ds-hero { font: 700 28px ui-rounded, -apple-system, system-ui; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: rgba(255,255,255,0.92); } .ds-micro2 { font-size: 11px; font-weight: 600; letter-spacing: 0.10em; text-transform: uppercase; color: rgba(255,255,255,0.62); } .ds-batt { font: 600 13px ui-rounded, system-ui; color: #4CAF87; margin-top: 4px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Cut Stone",
+    "overview": "Onyx is a slab of black stone held up to a low light. The ground is true OLED black lit from two off-screen corners by the theme's own hues; every surface on it is the same near-black slab, frosted underneath and bevelled with one lit top edge, like the app icon. Hierarchy is carried by material weight, type role and a single tinted thing per screen — not by borders, greys or shadows.\n\nThe system is dense and measured, because the product is numbers read standing up in a gym. Every figure is a rounded, tabular numeral that rolls rather than cross-fades; every colour that carries meaning (heart, water, sleep, records, muscles) is fixed across all eight themes so a legend learned once holds; everything else moves with the chosen stone. The theme is two hues, not a palette: all other accents are derived from them by hue rotation under a contrast guard.\n\nRejected, in the code's own words: a screen that \"reads as a web app in a new font\" (full-saturation accents on black, Tailwind-transliterated sizes), a rainbow of per-concept colours, \"gradient header\" panels, and a stack of equal stat cards where one instrument would do.",
+    "keyCharacteristics": [
+      "True black ground (`onyx-base`), lit by two chroma-clamped radials; flat black under Reduce Transparency.",
+      "One material: the Stone slab — `.thinMaterial` + `stone-slab` at 78 % + a lit top-edge stroke, no drop shadow.",
+      "Four domain accents (Train, Fuel, Body, Recover) derived from the theme's two hues; a screen belongs to exactly one.",
+      "Fixed inks for meaning: heart red, water blue, the sleep ramp, record gold, good green, the sixteen-muscle anatomical palette.",
+      "Type roles ARE Apple system text styles; Dynamic Type through AX5 with explicit fallbacks, never truncation of a name.",
+      "Corners 12 / 20 / 28 by depth, continuous squircles, concentric insets."
+    ],
+    "rules": [
+      {
+        "name": "The One Tinted Thing Rule",
+        "body": "Four domain accents, one per domain, and a screen belongs to exactly one. The accent tints the one thing that matters on it; the furniture stays ink.",
+        "section": "colors"
+      },
+      {
+        "name": "The Fixed Ink Rule",
+        "body": "The theme drives the accent, the Train ramp, selection, the domain mesh and (weighted) the nutrition inks. It never touches heart, water, sleep, good, record, effort or the sixteen muscles. If a colour carries a meaning, it is Fixed.",
+        "section": "colors"
+      },
+      {
+        "name": "The Gold Means Record Rule",
+        "body": "Record gold is the only fifth hue; seeing it means the number under it has never been beaten. Effort, supplements and warnings never borrow it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tertiary Is Never a Fact Rule",
+        "body": "40 % ink is for what the reader loses nothing by missing. Never a value, never a control label, never the only copy of a fact — a rest day's label uses `dayLabel` (secondary), not the ring's tertiary.",
+        "section": "colors"
+      },
+      {
+        "name": "The No Raw Hex Rule",
+        "body": "Hexes live only in `OnyxTokens.swift` and `OnyxTheme.swift`; `TokenDisciplineTests` fails the build on a `0x` or `Color(red:` under `Features/`. A stored colour (a routine's accent, a supplement's name) is decoded or mapped by a token function, never drawn raw.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Hero Rule",
+        "body": "At most one `.hero` per screen — \"a second hero is two screens in a trench coat\". On the Body tab it is the readiness numeral inside the ring.",
+        "section": "typography"
+      },
+      {
+        "name": "The System Styles Rule",
+        "body": "Every role is a system text style; `Features/` may not spell a font size. Dynamic Type, optical sizing and system tracking come free because of it.",
+        "section": "typography"
+      },
+      {
+        "name": "The Rolling Numeral Rule",
+        "body": "Every number is `onyxNumeral()`: rounded, monospaced digits, `.contentTransition(.numericText())`. A running clock is the exception — monospaced, no roll.",
+        "section": "typography"
+      },
+      {
+        "name": "The Stone Rule",
+        "body": "One slab everywhere: thin material + slab at 0.78 + lit top edge, no drop shadow. Depth is the lit edge and the radius.",
+        "section": "elevation"
+      },
+      {
+        "name": "The No Stacked Slab Rule",
+        "body": "Never put `.tile` inside `.tile`. A row in a tile is `.row`; a ticket inside a host slab drops its own surface (`framed: false`) and steps its name down to semibold subheadline.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** put every surface on `.onyxGlass(_:)` at the right level — row 12, tile 20, sheet 28 — and let the slab and its lit top edge carry the depth.",
+      "**Do** stand every screen on `onyxScreen(domain)` (or `onyxScreen()` for Settings), so the ground is lit in that domain's accent and the theme's secondary.",
+      "**Do** read colours through `Color.onyx.*`, `OnyxDomain` and `OnyxInk.Themed` / `OnyxInk.Fixed`; use a Fixed ink for anything that means heart, water, sleep, a record, a good result or a muscle.",
+      "**Do** give each screen exactly one `.hero` figure, set with `onyxHero()` or `onyxType(.hero).onyxNumeral()`.",
+      "**Do** set every number with `onyxNumeral()` and every size through an `OnyxType` role; spacing through `OnyxSpace`.",
+      "**Do** design the AX5 layout explicitly: stack by type size, wrap pills in `FlowRow`, cap geometry-bound instruments, and keep every tap target at 44 pt.",
+      "**Do** honour Reduce Transparency (solid slab, flat black ground) and Reduce Motion (arcs at rest, `OnyxMotion.fade` instead of movement)."
+    ],
+    "donts": [
+      "**Don't** spell a hex, a `Color(red:)` or a font size in a feature view; `TokenDisciplineTests` fails the build.",
+      "**Don't** add drop shadows under slabs, sheets or chrome; the Stone world's depth is material and a lit edge.",
+      "**Don't** nest a tile slab inside a tile slab; use `.row`, or an unframed ticket inside a host card.",
+      "**Don't** use record gold for anything but a record or a threshold, or `text-tertiary` for a value, a control label or the only copy of a fact.",
+      "**Don't** theme the Fixed inks or the sixteen-muscle palette, and don't fold a muscle's colour onto a domain accent.",
+      "**Don't** fill a missing figure with \"—\"; omit it, or draw a hollow ring with no caption.",
+      "**Don't** truncate a session name; wrap it, then shrink the figures under it."
+    ]
+  }
+}

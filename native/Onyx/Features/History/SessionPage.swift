@@ -344,6 +344,9 @@ extension SessionAnalysis {
         let bySession = Dictionary(grouping: ledger, by: \.sessionId)
         var out: [String: SessionHeader] = [:]
         for session in sessions where wanted.contains(session.id) {
+            // Lane A's read (row + telemetry cache → six points); empty for an
+            // open row or a cache the prefetch has not filled.
+            let face = (try? database.sessionMasthead(sessionId: session.id, userId: userId, name: "")) ?? nil
             out[session.id] = SessionHeader(
                 id: session.id,
                 label: dayLabel(session.dayKey, in: ctx.program(on: session.date)) ?? "Session",
@@ -362,9 +365,9 @@ extension SessionAnalysis {
                 maintenance: Maintenance.isMaintenanceDate(session.date, today: today, ladder: ladder, phases: ctx.schedule.phases),
                 stamp: stamp(date: session.date, startedAt: session.startedAt),
                 muscles: primaryLandmarks(grouped(bySession[session.id] ?? [])),
-                // Lane A's read (row + telemetry cache → six points); empty
-                // for an open row or a cache the prefetch has not filled.
-                hrSpark: ((try? database.sessionMasthead(sessionId: session.id, userId: userId, name: "")) ?? nil)?.hrSpark ?? []
+                hrSpark: face?.hrSpark ?? [],
+                // Measured only (Precision B2): the ticket draws it in red.
+                avgBpm: session.avgBpmEstimated ? nil : face?.avgBpm
             )
         }
         return out

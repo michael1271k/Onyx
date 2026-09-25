@@ -312,7 +312,12 @@ enum PreviewHarness {
     /// and "≤ 1.1 screens" is a claim that needs a number.
     @MainActor
     static func view(_ screen: String) -> some View {
-        screenView(screen).task {
+        // LANE-B (Precision B3): `rt-<screen>` draws <screen> under a forced
+        // Reduce Transparency — the system flag cannot be set per launch.
+        let reduced = screen.hasPrefix("rt-")
+        return screenView(reduced ? String(screen.dropFirst(3)) : screen)
+            .environment(\.onyxForcesReducedTransparency, reduced)
+            .task {
             guard ProcessInfo.processInfo.arguments.contains("--onyx-measure") else { return }
             try? await Task.sleep(for: .seconds(4))
             var tallest: UIScrollView?
@@ -611,6 +616,10 @@ enum PreviewHarness {
             BodyTrendsPreviews.view(screen)
         case let s where s.hasPrefix("widgets"):
             WidgetPreviews.view(s)
+        // LANE-B (Precision B4): the Body tab root — `day`'s fixture under
+        // the tab's own name. `body` is taken by `BodyTargetsView`.
+        case "body-tab":
+            PulsePreviews.view("day")
         default:
             // Visible rather than silent: a typo in the shot script should
             // produce a photograph of the mistake, not of the last screen.

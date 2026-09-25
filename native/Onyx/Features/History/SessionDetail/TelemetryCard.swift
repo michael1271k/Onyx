@@ -575,12 +575,15 @@ struct HeartStrip: View {
     }
 
     private func strip(_ reading: SessionTelemetry.Reading) -> some View {
-        VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-            header
-            chart(reading)
-                .frame(height: 56)
-        }
-        .padding(OnyxSpace.m)
+        // 44 pt since Precision B1 (was 56), and the label rides IN the
+        // chart's headroom rather than on a line of its own above it: the
+        // strip is the shape and nothing else, and 32 pt of it was the
+        // summary's budget. The y domain keeps the top third clear for it.
+        chart(reading)
+            .frame(height: 44)
+            .overlay(alignment: .topLeading) { header.allowsHitTesting(false) }
+            .padding(.horizontal, OnyxSpace.m)
+            .padding(.vertical, OnyxSpace.s)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onyxGlass(.tile)
         .accessibilityElement(children: .ignore)
@@ -615,7 +618,10 @@ struct HeartStrip: View {
         let gaps = samples.filter { s in !reading.segments.contains { s.at >= $0.start && s.at < $0.end } }
         let values = samples.map { Double($0.bpm) }
         let floor = (values.min() ?? 60) - 6
-        let ceiling = max((values.max() ?? 180) + 4, floor + 20)
+        // Headroom for the label (see `strip`): the trace keeps the lower
+        // two thirds, the label the top third.
+        let top = max((values.max() ?? 180) + 4, floor + 20)
+        let ceiling = top + (top - floor) * 0.5
         return Chart {
             ForEach(gaps, id: \.at) { s in
                 LineMark(x: .value("Time", s.at), y: .value("bpm", Double(s.bpm)), series: .value("Series", "gaps"))

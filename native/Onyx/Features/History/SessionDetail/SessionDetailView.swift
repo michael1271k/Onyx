@@ -138,11 +138,12 @@ struct SessionDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: OnyxSpace.m) {
+            // `s` between slabs since Precision B1: five slabs at 12 pt was
+            // 48 pt of a 423 pt budget spent on gaps.
+            VStack(spacing: OnyxSpace.s) {
                 if let page {
-                    // 0 · the replay (overhaul W5) — ten seconds, once
-                    replay(page)
-                    // 1 · which session, and what it weighed
+                    // 1 · which session, what it weighed, what it trained —
+                    //     with the replay playing behind it (Precision B1)
                     masthead(page)
                     // 2 · the heart rate, inline — nothing when there is none
                     if let heart, !heart.isEmpty {
@@ -151,11 +152,7 @@ struct SessionDetailView: View {
                     if let foreign { hevy(page, foreign) }
                     // 3 · every movement, one chip each
                     exerciseGrid(page.report)
-                    // 4 · what it trained
-                    if !page.report.muscles.isEmpty {
-                        FocusPills(muscles: page.report.muscles) { showAtlas = true }
-                    }
-                    // 5 · the one door to the chart and every figure
+                    // 4 · the one door to the chart and every figure
                     ProgressionButton(caption: page.verdict) { showProgression = true }
                 }
                 // ── NO CARDIO BANNER HERE ───────────────────────────────────
@@ -573,11 +570,13 @@ struct SessionDetailView: View {
         }
     }
 
-    // MARK: - 1 · The masthead
+    // MARK: - 1 · The masthead, with the replay behind it
 
-    /// Row 1 — `SessionMasthead` through Lane B's shared `OnyxMasthead` face
-    /// (the name wraps, never truncates; the figures shrink under it), on the
-    /// split's day wash in a Stone slab.
+    /// Row 1 — `SessionMasthead` through the shared `OnyxMasthead` face (the
+    /// name wraps, never truncates; the figures shrink under it), the top three
+    /// focus pills as its second line, and the session replay drawn inside the
+    /// slab as its backdrop (Precision B1, decision Q16 — the replay had a
+    /// ~150 pt row of its own above this one until then).
     ///
     /// `page.program` — the deck that OWNED the session's date — names it, not
     /// the environment's active program: one session, one name, on every
@@ -585,44 +584,40 @@ struct SessionDetailView: View {
     private func masthead(_ page: SessionAnalysis.Page) -> some View {
         let label = SessionAnalysis.dayLabel(page.report.session.dayKey, in: page.program) ?? "Session"
         let session = page.report.session
-        return OnyxMasthead(SessionMasthead(page: page, label: label), accent: Color.onyx.day(session.dayKey))
-            .padding(OnyxSpace.l)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .sessionDayWash(session.dayKey)
-            .onyxGlass(.tile)
-    }
-
-    // MARK: - 0 · The replay
-
-    /// Row 0 — the session played back in ten seconds (overhaul W5). Absent
-    /// for a session with no movements: there is nothing to replay.
-    @ViewBuilder
-    private func replay(_ page: SessionAnalysis.Page) -> some View {
-        if !page.report.exercises.isEmpty {
-            let label = SessionAnalysis.dayLabel(page.report.session.dayKey, in: page.program) ?? "Session"
-            ReplayCard(
-                timeline: SessionReplay.timeline(.session(
-                    page, label: label, samples: heart?.samples ?? [], clocks: replayClocks ?? [:]
-                )),
-                dayInk: Color.onyx.day(page.report.session.dayKey),
-                sessionId: sessionId,
-                day: LogicalDay.date(fromISO: page.report.session.date) ?? Date(),
-                ready: heartLoaded && replayClocks != nil
-            )
+        // Absent for a session with no movements: there is nothing to replay.
+        // The SHARE carries the heart-rate trace; the slab's backdrop is
+        // always the tonnage rail — the trace is the strip right under the
+        // slab, and drawn twice it ran through "41 min" (shot round 2).
+        let replay = { (samples: [HRSample]) in
+            page.report.exercises.isEmpty ? nil : SessionReplay.timeline(.session(
+                page, label: label, samples: samples, clocks: replayClocks ?? [:]
+            ))
         }
+        return ReplayMasthead(
+            masthead: SessionMasthead(page: page, label: label),
+            dayKey: session.dayKey,
+            timeline: replay([]),
+            shareTimeline: replay(heart?.samples ?? []),
+            muscles: page.report.muscles,
+            sessionId: sessionId,
+            day: LogicalDay.date(fromISO: session.date) ?? Date(),
+            ready: heartLoaded && replayClocks != nil,
+            onFocus: { showAtlas = true }
+        )
     }
 
     // MARK: - 3 · The exercise grid
 
-    /// Two columns of chips until the type says otherwise, then one — the
-    /// metric grid's own rule (`columns`) for the same reason.
+    /// Three columns of chips (Precision B1; two until then) until the type
+    /// says otherwise, then one — the metric grid's own rule (`columns`) for
+    /// the same reason.
     ///
     /// A `Grid`, not a `LazyVGrid`: a lazy grid sizes every cell to its own
     /// content, so a two-line name beside a one-line name drew two chips of
     /// different heights on one row (shot round 1). A `GridRow` gives both
     /// cells the row's height. Six movements is not a list worth lazing.
     private func exerciseGrid(_ report: SessionAnalysis.Report) -> some View {
-        let perRow = typeSize.isAccessibilitySize ? 1 : 2
+        let perRow = typeSize.isAccessibilitySize ? 1 : 3
         let rows = stride(from: 0, to: report.exercises.count, by: perRow).map {
             Array(report.exercises[$0..<min($0 + perRow, report.exercises.count)])
         }
@@ -632,7 +627,10 @@ struct SessionDetailView: View {
                     ForEach(row) { ex in
                         ExerciseChip(exercise: ex, tint: Self.family(ex)) { ledgerFor = ex }
                     }
-                    if row.count < perRow { Color.clear.gridCellUnsizedAxes(.vertical) }
+                    // A short last row keeps the column width: one empty cell per gap.
+                    ForEach(0..<(perRow - row.count), id: \.self) { _ in
+                        Color.clear.gridCellUnsizedAxes(.vertical)
+                    }
                 }
             }
         }

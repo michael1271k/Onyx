@@ -39,14 +39,9 @@ struct WorkoutTabView: View {
     /// weekday the shot happens to run on. The app never passes one.
     var seededDay: ProgramDay?
     var seededToday: String?
-    /// Holds the done card on its stand-in, for the harness only.
-    ///
-    /// `SessionFallbackCard` is drawn for as long as `SessionAnalysis.headers`
-    /// takes, which on a warm fixture is less than a frame — so the state this
-    /// wave rebuilt is the one state of this tab a screenshot could never
-    /// catch. A seed, and not a `#if DEBUG` branch inside the card: the point
-    /// of the shot is that the REAL screen, with the real week under it, looks
-    /// right while it waits.
+    /// Holds the done ticket before its header read lands (no spark, no
+    /// measured bpm), for the harness only — the state lasts less than a frame
+    /// on a warm fixture, so a screenshot could never catch it otherwise.
     var seededHeaderPending = false
     @State private var week: WorkoutWeek?
     @State private var weekSheetOpen = false
@@ -650,10 +645,6 @@ struct WorkoutTabView: View {
             // the page it opens are the same card, and the transition is the
             // page arriving under a header that never moved.
             //
-            // The four numbers ride in as `totals`: the page drops them because
-            // its metric grid is the next thing down, and this card is the only
-            // place they are said at all.
-            let summary = doneSummary(sets: sets, volumeKg: volumeKg, minutes: minutes, prCount: prCount)
             NavigationLink {
                 SessionDetailView(sessionId: id)
                     // ── THE CARD GROWS INTO THE PAGE (§W2 H) ────────────────
@@ -671,25 +662,21 @@ struct WorkoutTabView: View {
                     // stack, outside of any containers.
                     .navigationTransition(.zoom(sourceID: Self.doneTransitionID, in: zoom))
             } label: {
-                if let header = doneHeader, header.id == id {
-                    SessionHeaderCard(header: header, totals: summary, masthead: SessionMasthead(
-                        name: header.label,
-                        durationSec: Int(jsRound((minutes ?? 0) * 60)),
-                        tonnageKg: volumeKg, avgBpm: nil, prCount: prCount,
-                        hrSpark: header.hrSpark, startedAt: Date()
-                    ))
-                } else {
-                    // The header is a career-wide read; the label, the four
-                    // numbers and the day's three muscles are all on the
-                    // snapshot already. A card that drew nothing until the read
-                    // landed would blink on every open of the tab — and one
-                    // that drew a grey box made the finished session, which is
-                    // the subject of this tab, the plainest thing on it (W5).
-                    SessionFallbackCard(
-                        dayKey: day.key, label: day.label, totals: summary,
-                        muscles: week?.snapshot.doneMuscles ?? []
-                    )
-                }
+                // ── A TICKET SINCE PRECISION B2 (decision Q17) ──────────────
+                // One 64 pt row — the day's bar, the name, three figures and
+                // the heart-rate wash. The snapshot already holds the label
+                // and the numbers, so the row draws at once; the header's
+                // career-wide read adds the spark and the measured bpm when it
+                // lands, and nothing else moves.
+                let header = doneHeader?.id == id ? doneHeader : nil
+                SessionTicket(
+                    label: day.label, dayKey: day.key,
+                    durationSec: minutes.map { Int(jsRound($0 * 60)) },
+                    tonnageKg: volumeKg, prCount: prCount,
+                    avgBpm: header?.avgBpm, spark: header?.hrSpark ?? []
+                )
+                // The set count the ticket does not draw, for VoiceOver.
+                .accessibilityValue("\(sets) sets")
             }
             .buttonStyle(.plain)
             .onyxPress(scale: 0.98)
@@ -737,37 +724,30 @@ struct WorkoutTabView: View {
                     .accessibilityHidden(true)
             }
 
-            // ── WHAT EACH ROW SAYS NOW ──────────────────────────────────────
-            // It said `3 × 10-15`: a set count and the programmed rep window.
-            // The window is the one thing on this screen the reader already
-            // knows — it has not moved in eight weeks — and it is asserted by
-            // the plan rather than earned, so it made the card a restatement of
-            // the routine rather than a briefing.
-            //
-            // It now says what was actually done the last time this split was
-            // trained: the top set, its effort, one line. That is the number
-            // you have to beat, and it is the only number a set of double
-            // progression is decided against. `WorkoutWeek.Previous` says why
-            // the source is the same `day_key` and not "the last time you
-            // trained this lift".
-            //
-            // A movement the last session did not hold prints NOTHING rather
-            // than falling back — see `Previous`. A blank row is honest; a
-            // number from a different day is not, and this card is read at a
-            // glance where there is no room to caption the exception.
+            // ── WHAT EACH ROW SAYS NOW (Precision B2, decision Q18) ─────────
+            // It said `Last: 45 kg × 9 @ 9.0` on every row — five numbers per
+            // line, six lines, the ugliest thing on the tab. The rows are the
+            // plan again (the movement and its set count), and "last time"
+            // is ONE object under them: the previous session of this split as
+            // a ticket, one verdict line that says what it did against the
+            // one before it, and the door to the whole of it.
             VStack(spacing: 2) {
                 ForEach(exercises) { exercise in
                     HStack(spacing: OnyxSpace.s) {
                         Text(exercise.name)
                             .onyxType(.secondary)
-                            .lineLimit(1)
+                            // Two lines at the accessibility sizes: one
+                            // printed "Incline DB Pre…" (the W6 open call).
+                            .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
                         Spacer(minLength: OnyxSpace.s)
-                        if let top = week?.snapshot.previous?.top(for: exercise.name) {
-                            Text(Self.lastLine(top))
-                                .onyxType(.secondary).onyxNumeral()
-                                .foregroundStyle(Color.onyx.textSecondary)
+                        // Not at the accessibility sizes: the name needs the
+                        // whole row there, and the header already says the
+                        // day's total (critique: "Incline…" beside "3 sets").
+                        if !typeSize.isAccessibilitySize {
+                            Text("\(exercise.sets(for: phase)) sets")
+                                .onyxType(.caption).onyxNumeral()
+                                .foregroundStyle(Color.onyx.textTertiary)
                                 .lineLimit(1)
-                                .minimumScaleFactor(0.75)
                         }
                     }
                     .frame(minHeight: 36)
@@ -776,7 +756,7 @@ struct WorkoutTabView: View {
             }
 
             if let previous = week?.snapshot.previous {
-                previousDoor(previous)
+                lastSession(previous, day: day)
             }
         }
         .padding(OnyxSpace.m)
@@ -786,39 +766,74 @@ struct WorkoutTabView: View {
         .contextMenu { dayMenu }
     }
 
-    /// `Last: 72.5 kg × 15 @ 8.5` — or `Last: 66s @ 9` for a hold, and
-    /// `Last: 18 reps @ 8.5` where nothing was loaded.
+    /// The last session of this split: its ticket, the verdict line and the
+    /// door (Precision B2, designs 5 + 6).
     ///
-    /// One line, one set. `SetFormat.format` is the app's own spelling of a set
-    /// and is reused rather than re-written here: a card that formats its own
-    /// numbers is how `0 kg × 18` gets printed on a knee raise.
-    static func lastLine(_ top: WorkoutWeek.TopSet) -> String {
-        var line = "Last: " + SetFormat.format(weightKg: top.weightKg, reps: top.reps, timed: top.timed)
-        if let rpe = top.rpe { line += " @ \(jsToFixed1(rpe))" }
-        return line
+    /// The ticket is drawn UNFRAMED here — it sits inside the plan card's own
+    /// slab, and a slab in a slab is a card in a card. A hairline above it
+    /// says where the plan ends and the record begins.
+    ///
+    /// Its name slot carries the DATE, not the split: the card's own title
+    /// already says "Upper A" 700 pt up, and the door under it says it again —
+    /// the one thing the ticket can add here is when (shot round 1).
+    @ViewBuilder
+    private func lastSession(_ previous: WorkoutWeek.Previous, day: ProgramDay) -> some View {
+        VStack(alignment: .leading, spacing: OnyxSpace.xs) {
+            Rectangle()
+                .fill(Color.onyx.hairline)
+                .frame(height: 1)
+                .accessibilityHidden(true)
+            if let ticket = previous.ticket {
+                Button {
+                    reviewing = Review(id: previous.id)
+                } label: {
+                    SessionTicket(
+                        label: "Last · " + Self.previousDate(previous.date), dayKey: day.key,
+                        durationSec: ticket.durationSec, tonnageKg: ticket.tonnageKg,
+                        prCount: ticket.prCount, avgBpm: ticket.avgBpm, spark: ticket.spark,
+                        framed: false
+                    )
+                    .padding(.horizontal, -OnyxSpace.m)
+                }
+                .buttonStyle(.plain)
+                .onyxPress(scale: 0.98)
+                .accessibilityHint("Opens the last \(day.label) session")
+                if !ticket.verdict.isEmpty {
+                    Text(ticket.verdict)
+                        .padding(.bottom, OnyxSpace.xs)
+                        .onyxType(.caption).onyxNumeral()
+                        .foregroundStyle(Color.onyx.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel("Last time: " + ticket.verdict)
+                }
+            }
+            previousDoor(previous, label: day.label)
+        }
     }
 
     /// The door to the whole of last time.
     ///
     /// ── WHY A DOOR AND NOT MORE ROWS ────────────────────────────────────────
     /// Every set of the previous session is between fourteen and twenty-two
-    /// numbers, and this card is read standing in a gym doorway. The top set is
-    /// the briefing; the session page is the document — and it already exists,
-    /// already has the ledger, the muscle figure, the records and the deltas.
-    /// Pushing the reader there costs one tap and duplicates nothing.
+    /// numbers, and this card is read standing in a gym doorway. The ticket
+    /// and the verdict are the briefing; the session page is the document —
+    /// and it already exists, already has the ledger, the muscle figure, the
+    /// records and the deltas. Pushing the reader there costs one tap and
+    /// duplicates nothing.
     ///
     /// A SHEET rather than a push: the plan you are about to perform stays on
     /// screen underneath, and the gesture back out is the one the reader's
     /// thumb is already on. `.large` because the session page is a page.
-    private func previousDoor(_ previous: WorkoutWeek.Previous) -> some View {
+    private func previousDoor(_ previous: WorkoutWeek.Previous, label: String) -> some View {
         Button {
             reviewing = Review(id: previous.id)
         } label: {
             HStack(spacing: OnyxSpace.xs) {
                 Image(systemName: "clock.arrow.circlepath")
                     .onyxType(.caption)
-                Text(Self.previousLabel(previous.date))
+                Text(Self.previousLabel(label))
                     .onyxType(.caption)
+                    .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .onyxType(.micro)
                     .foregroundStyle(Color.onyx.textTertiary)
@@ -826,7 +841,7 @@ struct WorkoutTabView: View {
             .foregroundStyle(accent)
             .padding(.horizontal, OnyxSpace.s)
             .padding(.vertical, OnyxSpace.xs)
-            .frame(minHeight: 32)
+            .frame(minHeight: 44)
             .background(accent.opacity(0.12), in: .capsule)
             // AFTER the capsule, so the whole pill is the target and not just
             // the glyphs inside it.
@@ -834,15 +849,20 @@ struct WorkoutTabView: View {
         }
         .buttonStyle(.plain)
         .onyxPress()
-        .accessibilityLabel("Open the previous session")
-        .accessibilityHint("Shows the full summary of \(Self.previousLabel(previous.date))")
+        .accessibilityLabel(Self.previousLabel(label))
+        .accessibilityHint("Shows the full summary of the \(label) session on \(Self.previousDate(previous.date))")
     }
 
-    /// "Open last · Thu 4 Sep". The DATE is the point — "last session" alone
-    /// leaves the reader unable to tell a four-day gap from a fortnight.
-    static func previousLabel(_ iso: String) -> String {
-        guard let date = LogicalDay.date(fromISO: iso) else { return "Open last session" }
-        return "Open last · " + date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+    /// "Open last Upper B" — the DAY's name, not the date (decision Q18): the
+    /// ticket above already says how long ago it was worth reading, and the
+    /// name says which document the door opens.
+    static func previousLabel(_ dayLabel: String) -> String {
+        dayLabel.isEmpty ? "Open last session" : "Open last " + dayLabel
+    }
+
+    /// "Thu 4 Sep", for VoiceOver's hint.
+    static func previousDate(_ iso: String) -> String {
+        LogicalDay.date(fromISO: iso)?.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) ?? iso
     }
 
     /// Long-press the card: the three things you can do to a DAY, as against
@@ -854,13 +874,6 @@ struct WorkoutTabView: View {
         Button("Change phase", systemImage: "arrow.triangle.2.circlepath") { showPhase = true }
         Button("Take a rest day…", systemImage: "moon.zzz") { swapping = true }
         Button("Swap this day…", systemImage: "arrow.triangle.swap") { swapping = true }
-    }
-
-    private func doneSummary(sets: Int, volumeKg: Double, minutes: Double?, prCount: Int) -> String {
-        var parts = ["\(OnyxFormat.volume(volumeKg)) kg", "\(sets) sets"]
-        if prCount > 0 { parts.append("\(prCount) PR") }
-        if let minutes, minutes > 0 { parts.append("\(jsIntegerString(jsRound(minutes))) min") }
-        return parts.joined(separator: " · ")
     }
 
     private var restCard: some View {

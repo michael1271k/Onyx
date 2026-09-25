@@ -96,7 +96,7 @@ struct SignedInTabs: View {
                     )
                 }
             }
-            // Onyx's five: Today · Workout · Nutrition · Pulse · Settings
+            // Onyx's five: Today · Train · Nutrition · Body · Settings
             // (§4). The names are the ones on the screens they open, which is
             // the rule that matters and the reason this tab and
             // `WorkoutTabView.navigationTitle` always move together.
@@ -113,8 +113,10 @@ struct SignedInTabs: View {
             SwiftUI.Tab("Nutrition", systemImage: "fork.knife", value: Tab.fuel) {
                 NavigationStack { NutritionTabView() }
             }
-            SwiftUI.Tab("Pulse", systemImage: "waveform.path.ecg", value: Tab.body) {
-                NavigationStack { PulseTabView() }
+            // Pulse → Body (Precision B4, decision Q19): the body's state today,
+            // led by the readiness ring and its six petals. Train owns workouts.
+            SwiftUI.Tab("Body", systemImage: "figure.stand", value: Tab.body) {
+                NavigationStack { BodyTabView() }
             }
             SwiftUI.Tab("Settings", systemImage: "gearshape", value: Tab.you) {
                 NavigationStack { SettingsTabView() }
@@ -230,7 +232,7 @@ struct SignedInTabs: View {
         case .today: return .today
         case .train: return .train
         case .fuel: return .fuel
-        // ponytail: the date is dropped — PulseTabView has no date initialiser yet; thread it through when Body grows a date route.
+        // ponytail: the date is dropped — BodyTabView has no date initialiser yet; thread it through when Body grows a date route.
         case .body: return .body
         // ponytail: Reports is a value-less NavigationLink inside SettingsTabView; landing on You is as deep as the shell can push today.
         case .you, .reports: return .you

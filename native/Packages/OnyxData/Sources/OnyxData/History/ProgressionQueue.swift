@@ -93,3 +93,143 @@ public extension AppDatabase {
         return ProgressionQueue.alerts(targets: targets, rows: rows, program: program, phase: phase)
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The verdict line under Train's last-session ticket (Precision B2, decision
+// Q18 · design 6): what the LAST session of a split did against the one
+// before it, in one line — "+2.5 kg on 3 lifts · 2 PR · 4.4 t".
+//
+// The plan named it `ProgressionVerdict`; OnyxCore already owns that name
+// (`Ceilings`' two-session ceiling verdict, the one `progressionQueue` grades
+// with), so this is `SessionVerdict` — a verdict about a session, not a lift.
+// ─────────────────────────────────────────────────────────────────────────────
+
+public struct SessionVerdict: Sendable, Equatable {
+    /// One movement's best working set: the heavier load, then more reps.
+    public struct Top: Sendable, Equatable {
+        public let weightKg: Double
+        public let reps: Double
+        public init(weightKg: Double, reps: Double) {
+            self.weightKg = weightKg
+            self.reps = reps
+        }
+    }
+
+    /// Each lift whose top load went UP, by how much (kg), ascending.
+    public var loadGains: [Double] = []
+    /// Same top load, more reps.
+    public var repLifts = 0
+    /// The same top set, exactly.
+    public var heldLifts = 0
+    /// A lower top set — said, because a verdict that only counts wins is
+    /// flattery (PRODUCT.md, principle 1).
+    public var lighterLifts = 0
+    public var prCount = 0
+    public var tonnageKg = 0.0
+
+    /// "+2.5 kg on 3 lifts · +reps on 1 lift · 1 lighter · 2 PRs · 4.4 t", each
+    /// clause present only when it has something to say; "Held 5 lifts" when
+    /// nothing moved. "PRs" plural, as the masthead and the ticket above it
+    /// spell a count (the brief's "2 PR" would sit under a ticket saying
+    /// "2 PRs"). Only lifts BOTH sessions held are compared: a movement
+    /// that was added or dropped is not progress and not a loss.
+    public var line: String {
+        var parts: [String] = []
+        if let lo = loadGains.first, let hi = loadGains.last {
+            let amount = lo == hi ? Self.kg(lo) : Self.kg(lo) + "–" + Self.kg(hi)
+            parts.append("+\(amount) kg on \(Self.lifts(loadGains.count))")
+        }
+        if repLifts > 0 { parts.append("+reps on \(Self.lifts(repLifts))") }
+        if loadGains.isEmpty, repLifts == 0, heldLifts > 0 {
+            parts.append("Held \(Self.lifts(heldLifts))")
+        }
+        if lighterLifts > 0 { parts.append("\(lighterLifts) lighter") }
+        if prCount > 0 { parts.append(prCount == 1 ? "1 PR" : "\(prCount) PRs") }
+        if tonnageKg > 0 { parts.append(String(format: "%.1f t", tonnageKg / 1000)) }
+        return parts.joined(separator: " · ")
+    }
+
+    public static func build(current: [String: Top], previous: [String: Top],
+                             prCount: Int, tonnageKg: Double) -> SessionVerdict {
+        var out = SessionVerdict(prCount: prCount, tonnageKg: tonnageKg)
+        for (name, now) in current {
+            guard let before = previous[name] else { continue }
+            if now.weightKg > before.weightKg {
+                out.loadGains.append(now.weightKg - before.weightKg)
+            } else if now.weightKg == before.weightKg, now.reps > before.reps {
+                out.repLifts += 1
+            } else if now.weightKg == before.weightKg, now.reps == before.reps {
+                out.heldLifts += 1
+            } else {
+                out.lighterLifts += 1
+            }
+        }
+        out.loadGains.sort()
+        return out
+    }
+
+    /// Working sets only, a genuine L/R pair collapsed to min(load) × min(reps)
+    /// — the weaker side, the rule `SessionVolume` scores a pair by — then the
+    /// heaviest load per movement with reps breaking the tie. Keyed by the
+    /// canonical lowercased name, the one join between a plan and a ledger.
+    static func tops(_ rows: [HistorySetRow]) -> [String: Top] {
+        var candidates: [(name: String, top: Top)] = []
+        var pairs: [String: [HistorySetRow]] = [:]
+        for row in rows where SetTags.isWorkingSet(row.setType) {
+            let name = ExerciseAliases.canonicalName(row.exerciseName).lowercased()
+            if let pair = row.pairId, row.side != nil {
+                pairs["\(name)|\(pair)", default: []].append(row)
+            } else {
+                candidates.append((name, Top(weightKg: row.weightKg, reps: Double(row.reps))))
+            }
+        }
+        for (key, sides) in pairs {
+            let name = String(key.split(separator: "|", maxSplits: 1)[0])
+            candidates.append((name, Top(weightKg: sides.map(\.weightKg).min() ?? 0,
+                                         reps: Double(sides.map(\.reps).min() ?? 0))))
+        }
+        var out: [String: Top] = [:]
+        for (name, top) in candidates where top.weightKg > 0 || top.reps > 0 {
+            guard let held = out[name] else { out[name] = top; continue }
+            if top.weightKg > held.weightKg || (top.weightKg == held.weightKg && top.reps > held.reps) {
+                out[name] = top
+            }
+        }
+        return out
+    }
+
+    private static func kg(_ value: Double) -> String {
+        value == value.rounded() ? String(Int(value)) : String(format: "%g", (value * 100).rounded() / 100)
+    }
+
+    private static func lifts(_ n: Int) -> String { n == 1 ? "1 lift" : "\(n) lifts" }
+}
+
+public extension AppDatabase {
+    /// The verdict for a finished session against the session of the SAME
+    /// split before it (`day_key`, finished, earlier date or clock). Nil when
+    /// the session is unknown or has no day key; a first session of its split
+    /// still gets its records and tonnage.
+    ///
+    /// Records are the row's own `pr_count` and tonnage its
+    /// `total_volume_kg` — the numbers the close path wrote. Train's plan card
+    /// zeroes both before printing the line, because the ticket above it
+    /// already states them (from the rows).
+    ///
+    /// ponytail: reads the session history and both sessions' sets itself
+    /// even when the caller holds them; take them as arguments if the plan
+    /// card's load ever shows in a trace.
+    func sessionVerdict(sessionId: String, userId: String) throws -> SessionVerdict? {
+        let sessions = try sessionHistory(userId: userId)
+        guard let index = sessions.firstIndex(where: { $0.id == sessionId }),
+              let dayKey = sessions[index].dayKey else { return nil }
+        let session = sessions[index]
+        // `sessionHistory` is newest first, so the first match after this
+        // session's own position IS the one before it.
+        let before = sessions[(index + 1)...].first { $0.dayKey == dayKey && $0.endedAt != nil }
+        let current = SessionVerdict.tops(try historySets(sessionId: session.id, userId: userId))
+        let previous = try before.map { SessionVerdict.tops(try historySets(sessionId: $0.id, userId: userId)) } ?? [:]
+        return .build(current: current, previous: previous,
+                      prCount: session.prCount ?? 0, tonnageKg: session.totalVolumeKg ?? 0)
+    }
+}
