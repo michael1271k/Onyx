@@ -44,6 +44,54 @@ _Nothing yet._
 
 ---
 
+## [9.1.0] — 2026-09-25 · The first screen is the answer: summary, tickets, Body, the stone's light, a share that opens
+
+Precision sprint, Lane B (Faces). Plan and wave record: `docs/Plan-Onyx-Precision.md`.
+
+### iPhone app
+- **The workout summary fits on one screen.** The replay plays inside the
+  masthead (the tonnage rail under the muscle pills) instead of on a row of
+  its own; movements sit three across; the heart-rate strip and the
+  Progression button got shorter. At default text size the summary went from
+  0.87 of the screen to 0.55. At the largest text sizes nothing is wider than
+  the screen any more.
+- **A finished session is one 64 pt "ticket"** — the day's colour, the name,
+  duration, tonnage, and the record count (or the measured average heart
+  rate, in red) — on Train and on History's day page. Tap it for the summary.
+- **Train's plan card says what last time did, once.** The per-exercise
+  "Last: 45 kg × 9 @ 9.0" lines are gone; under the plan is the previous
+  session of this day as a ticket, one line of verdict ("+2.5 kg on 3 lifts",
+  "Held 5 lifts", "1 lighter") and an "Open last Upper B" button.
+- **Pulse is now the Body tab.** It opens on a readiness ring (the score, with
+  the battery as a thin inner arc) with six petals around it — Sleep, Water,
+  Food, Heart, Steps, Stress — each filling toward its goal in its own fixed
+  colour; tap one for its detail. An empty petal is a hollow ring. The night
+  moved into the vitals grid, and workouts left this tab (Train owns them;
+  a past day opened from History still shows them).
+- **The black has light in it.** Every screen is lit from its top-left by the
+  tab's accent and from its bottom-right by the theme's second colour, and
+  follows the stone you picked; Reduce Transparency keeps it flat black.
+  Home Screen widgets carry the same light at half strength, and Appearance
+  previews it before you commit.
+- **Sharing a replay opens instantly with a real preview.** The square and
+  Stories images are made as the summary opens; the ten-second video is drawn
+  in the background and no longer freezes the app. The message carries an
+  `onyx://session/…` link that opens that summary.
+
+### Home Screen widgets
+- The container background is the new two-radial ground at half strength.
+
+### Engineering
+- `SessionTicket`, `SessionVerdict` + `AppDatabase.sessionVerdict` (5 tests),
+  `OnyxInk.Themed.groundWash(domain:)` / `OnyxGround` (contrast held for eight
+  stones × four domains in `TokenDisciplineTests`), `BodyRing`,
+  `ReplayCGRenderer` (CoreGraphics port of `ReplayCanvas`, held within 2 % of
+  its pixels) and the `ReplayVideoRenderer` actor, `SessionLink`.
+- `SessionHeaderCard`, `SessionFallbackCard`, `NowStripPulse` and
+  `SleepHeroCell` deleted. `PRODUCT.md` and `DESIGN.md` written (impeccable).
+
+---
+
 ## [9.0.0] — 2026-09-25 · The overhaul: eight stones, a watch that knows, one summary screen
 
 W6, the close-out of the UI/UX Overhaul sprint, and the sprint read surface by
