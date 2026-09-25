@@ -339,3 +339,63 @@ Branch `onyx/precision-final` on `main`, version **10.0.0**.
 2. `impeccable polish` on: logger (library open), summary, Train, Body, Programs, watch Glance + one detail — one batch + one confirm.
 3. `code-reviewer` on the whole sprint diff; `invariant-auditor` on OnyxCore; run the § Verification list; hardware checklist recorded for what the sims cannot prove (anchored HR delivery, food/water on a running watch, complications after Gate 0).
 4. CHANGELOG 10.0.0 (Why MAJOR: Hevy-basis tonnage, total-sets rule + backfill, ghost semantics, program schema, Pulse → Body); `docs/APP_STORE.md` screenshot table re-shot; memory consolidation (`anthropic-skills:consolidate-memory`); plan → `docs/Done/Plan-Onyx-Precision-Done.md`; End-of-Wave protocol with the push.
+
+---
+
+## Wave record — Lane B (Faces) · Opus 5.5 · **9.1.0**
+
+Branch `onyx/precision-b` (5 feature commits, 2 fix commits, DESIGN.md), merged `77ef0f80`, version `68a13550`, graph `e3250d58`. First lane of the batch to merge, so 9.1.0. Simulator `iPhone 15 (lane B)` (iOS 26.5, `BF41BD78…`). impeccable: `init` (PRODUCT.md, simulated user from § FOUNDER DECISIONS — the brief forbids an interview; inferred facts are marked), `shape` (Body surface brief `.impeccable/surfaces/native-onyx-features-pulse-bodyring-swift.md`, direction contract inside), build, polish rounds, `document` (DESIGN.md).
+
+### Built
+- **B1 summary (Q16).** `ReplayCard` → `ReplayMasthead`: the replay plays inside the masthead slab; `OnyxMasthead` unchanged on top, top-3 `FocusPills` as its second line, share glyph in its corner. `ExerciseChip` 3 columns (glyph · name ≤ 2 lines, parenthetical dropped · best set · 6 pt gold dot). `HeartStrip` chart 44 pt, its label in the chart's headroom. `ProgressionButton` one line (two only when the verdict will not fit). Slab spacing `s`.
+- **B2 ticket + verdict (Q17, Q18).** `SessionTicket` (64 pt: 3 pt day bar · name · duration · tonnage · PR count, else MEASURED avg bpm in heart red · HR spark as a 20 % wash behind the figures; AX = two-line tier). Train done card and History's day card are tickets; `SessionHeaderCard`/`SessionFallbackCard` deleted (no callers). Train plan card: per-row `Last:` deleted (rows show the plan's set count, hidden at AX); under the rows the previous same-day session as an UNFRAMED ticket labelled `Last · <date>`, one verdict line, and the `Open last <day>` capsule. `SessionVerdict` + `AppDatabase.sessionVerdict(sessionId:userId:)` in `OnyxData/History/ProgressionQueue.swift` (5 tests).
+- **B3 ground (Q20).** `OnyxInk.Themed.groundWash(domain:)` / `OnyxTheme.groundHex/groundWash` / public `OnyxGround`; `OnyxScreenBackground` = base + radial(accent, −10 %/−10 %, r 0.70 h) + radial(secondary, 110 %/110 %, r 0.55 h); the mesh and the bottom ellipse are gone; Reduce Transparency flat; battery dimming kept; phase mood reaches it through `current.spec`. Widget container = `OnyxGround(strength: 0.5)`. Appearance preview draws the draft's ground. `onyxForcesReducedTransparency` env key + harness `rt-<screen>`. `TokenDisciplineTests.groundHoldsContrast` (8 stones × 4 domains + neutral).
+- **B4 Body tab (Q19, Q22).** Tab "Body" · `figure.stand`; type `BodyTabView` (file kept). `BodyRing` (200 pt readiness ring, `.hero` score, inner battery arc; six 44 pt petals at −150/−90/−30/150/90/30°, captions outside; hollow = no data; filled disc without arc = a reading with no goal) in local `BodyRingLayout`; petal taps → SleepEditSheet / LogDaySheet(.water) / Nutrition tab / Body trends ×2 / stress breakdown. `NowStripPulse` and `SleepHeroCell` deleted; the night is the vitals grid's first cell (3 × 3) unless a vital is promoted. `DayScreen.showsWorkouts`: false on the tab root, true on History's past-day push. Harness `body-tab`.
+- **B5 share (Q21).** `ReplayShareSet.prebake` (square + Stories PNG once, after the HR read) — the button appears with them, `SharePreview` shows the real square. `ReplayVideoRenderer` actor: one plate + one image per caption line on the main actor (one hop each), 300 frames in CoreGraphics via `ReplayCGRenderer` (OnyxUI, port of `ReplayCanvas`). Share text `Onyx · <name> · <tonnage> · onyx://session/<uuid>`; `SessionLink` in `OnyxApp.swift` opens it as a sheet over the root.
+
+### Measured
+- Summary content height (`--onyx-measure`, default type, 393 pt): **616.7 → 386.7 pt of 705 (0.87 → 0.55 screens)**. HR fixture (`session-hr`): **454.7 pt (0.64)** — two names wrap to two lines and the rail adds its lane; recorded, not forced under by truncating names.
+- Share (sim, harness, after the review hardening): prebake **104–153 ms** in all (two `ImageRenderer` passes on the main actor, encode + write + thumbnail off it; 332–853 ms before the split); MP4 **1.4–2.3 s**, every frame off the main actor; files 1080², 1080 × 1920 PNG, MP4 10.00 s 1080 × 1920 30 fps (AVFoundation). The share sheet's own open time is hardware-only.
+- Ground: at the brief's 6 %/3 % the brightest on-screen pixel read sRGB (7, 7, 9); at 14 %/7 %: Slate (16, 16, 21), Clay (20, 15, 12), Iris (18, 15, 20); under forced Reduce Transparency (0, 0, 0).
+
+### Deviations from the brief (and why)
+1. `ProgressionVerdict` → **`SessionVerdict`**: OnyxCore already has `ProgressionVerdict` (Ceilings' ceiling verdict) — the name was ambiguous at compile.
+2. Ground peaks **14 %/7 %**, not 6 %/3 % (measured invisible; ratio, centres, radii, chroma clamp and the contrast line are the brief's). L ≤ 0.35 is asserted on the COMPOSITED ground, not on the source hue (clamping the source to L 0.35 at 6 % draws nothing).
+3. The masthead backdrop is the replay's **tonnage rail** in its own lane under the pills, never the HR trace: the trace behind the text ran through "41 min" and the pills and repeated the HR strip below. The share files keep the trace. A cardio-only session (no tonnage) draws no rail.
+4. Ticket AX tier is a type-size branch, not `ViewThatFits` (it truncates a flexible child instead of stacking — memory `w1b-week-detail`).
+5. The verdict under the ticket drops the PR count and tonnage (the ticket above states both); "PRs" plural to match the masthead.
+6. Harness screen `body` is `BodyTargetsView`; the Body tab is `body-tab` (fixture `day`); `pulse-squares` unchanged for Lane F.
+7. `onyx://session/<uuid>` opens a sheet from `OnyxApp`, not a push onto a History tab — there is no History tab.
+8. Video masthead is the settled one (no count-up): the count-up was 300 layout passes of type.
+
+9. `SessionTicket` stacks to two lines from **xxLarge**, not only at the accessibility sizes (three fixed figures left the name nothing at xxLarge — review).
+10. Body: the ring is inset by half its 14 pt stroke (the stroke drew 7 pt past its frame and the petals touched it — finish review); a no-goal reading is a solid disc with no track; petal captions carry units (bpm, kcal).
+
+### Reviews
+- `ui-ux-designer` on round 2 (15 findings): fixed the AX5 page overflow (a `.fixedSize()` title in a `ViewThatFits` fallback widened the whole page), trace-through-text, chip glyph alignment, name truncation, ring words at accessibility1, Train AX5 rows, petal units, the duplicated tonnage. Left as open calls: Today's double score, `Start workout` contrast/wrap, the Chest pill's 4.2 : 1, card padding drift on Train.
+- `code-reviewer` (18 findings): fixed the CardTextBudget ghost, the writer-failure spin, concurrent video renders, stale share files after an edit or late samples, same-name file collisions (per-session folder), the main-thread PNG encode, the silent prebake failure, the probe guard, the ticket at xxLarge, the deep link without a store, the Body muscle wash, the PulseSessionCard double VoiceOver read, per-render theme derivation, dead code. Left: the ticket PR-count source differs by screen (stored `pr_count` on Train's last session, replayed counts elsewhere — Lane C owns the PR engine); `SessionAnalysis.headers` still walks the ledger for fields no view draws now; the harness `view(_:)` change (below).
+- `impeccable-finish-reviewer` on the Body tab: disposition *fix*; applied the ring gap and the no-goal petals. Left: **Food and Stress share an ink** on Slate/Iris (`StressBand.elevated` is `OnyxDomain.fuel.start`, `calories` is the theme's carbs) — a founder call on the stress band palette; the promoted-vital hero card under the ring (a warning, W2's rule, `.display` not `.hero`); missing evidence shots (tab bar label, an unscored day, a banner, all six squares); the AX5 sleep-delta ink.
+- `impeccable document` wrote `DESIGN.md` + `.impeccable/design.json` from the shipped code; it lists three drifts it did not record as rules (the atlas figure's shadow, record/figure glows, off-scale spacing literals).
+
+### Requests for other lanes / W-final
+- **Lane D (seam 4):** adopt `OnyxInk.Themed.groundWash(domain:)` (or `OnyxGround(domain:strength: 0.5)`) for `WatchInk.ground`.
+- **W-final (seam 5):** `BodyRingLayout` (orbit = 130 pt, six petals 60° apart, none on the horizontal) vs Lane D's six-petal `WatchGlance`.
+- **W-final (seam 6):** `TrainProgramsDoor` goes in `WorkoutTabView` after the plan card.
+- **Every lane rebasing after B:** `PreviewHarness.view(_:)` now strips an `rt-` prefix and sets `onyxForcesReducedTransparency` (the one non-append edit in the shared harness) — keep it; B's screen case `body-tab` is appended under `// LANE-B`.
+- **Lane C labels:** "Sets"/"Working" sites in Lane B views: `SessionDetailView.metrics` (Sets cell), `HevyCompareCard` sets, `WorkoutTabView` done ticket's VoiceOver value (`"\(sets) sets"`), `PulseWorkout.totals`.
+
+### Open calls
+- Today shows the score twice (strip + Recovery ring) — pre-existing, outside B's brief.
+- `Start workout` wraps at AX5 and its label/chevron sit near 3 : 1 on the gradient's light end — pre-existing.
+- Chest pill (coral on its 14 % wash) ~4.2 : 1 — fixed muscle palette, not B's.
+- The Stories backdrop's centre radial bands under H.264 (a faint dark disc in the MP4) — W5's backdrop.
+- `SessionLink` is a sheet; a real History destination would need a shell route.
+
+### Gates
+- `npm run check` parts on the merged tree's source: version, types, body, atlas, mirror, doms, report ✔; `swift:ui` (OnyxUITests on the lane sim) **51/51** ✔ incl. `ReplayCGRendererTests` (six frames ≤ 2 %) and `groundHoldsContrast`; `check:watch` BUILD SUCCEEDED; `check:swift` ✔.
+- `swift:core` **766/766** ✔ · `swift:data` **808/808** ✔ (no SeamBenchmark flake this run).
+- OnyxTests on `iPhone 15 (lane B)`: 218 tests, failing names = 9, all ⊆ the 10-name baseline: `A capsule counts its week and marks the days that were missed`, `Week 0 is the week the block opened on`, `a credible previous session still gets its delta`, `a previous session's impossible clock produces no delta, not a wrong one`, `a treadmill logged on this phone is titled Treadmill, not its slug`, `finishing a session leaves the tab on .done, with the week and the ledger carrying it`, `ready to progress fires only after the ceiling is cleared twice`, `the ledger rows are this session's sets and only this session's`, `the seeded previous session reaches TopLifts.previousBests` (the Keychain blob test lives in OnyxDataTests and passed under `swift test`). `SessionLinkTests` pass.
+- Shots: round 1 (B1/B2, 3 themes + AX5), round 2 (B1–B4, 3 themes + AX5 + Reduce Transparency), round 3 confirm (Slate + AX5, Clay/Iris default, share + RT); one post-review verification of `body-tab` (ring gap). The Train AX5 two-line rows were changed after round 3 and not re-shot.
+
+### Cache purge
+`du` before: `onyx-swift` 78 G, shots 115 M, DerivedData 4.9 G, `org.swift.swiftpm` 294 M. Removed `lane-b*` and the closed Overhaul sprint's `lane-w0*`/`lane-w5*`/`lane-w6*`, the scratch shots and share files, the SwiftPM cache. After: `onyx-swift` 24 G. **Freed 54.72 GB**, plus the lane's simulator (`iPhone 15 (lane B)`, 4.5 GB) — **59.2 GB in all**. Deviation: `lane-a*`, `lane-c*` and the shared `OnyxCore`/`OnyxData`/`OnyxUI-*`/`check-watch`/`ui-test-derived` caches were NOT wiped — Lanes A and C are building in them right now, and a wiped derived-data directory mid-build installs a stale app (memory `concurrent-waves-shared-checkout`).
