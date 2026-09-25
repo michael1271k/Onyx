@@ -208,10 +208,14 @@ struct BodyRing: View {
         let accent = OnyxInk.Themed.accent
         let d = BodyRingLayout.ring
         let inner = d - BodyRingLayout.ringStroke * 2 - BodyRingLayout.batteryInset * 2
+        // Inset by half the stroke: a stroke is CENTRED on its path, so an
+        // un-inset 200 pt ring drew 7 pt past its frame and the petals, laid
+        // out 8 pt from the frame, touched or overlapped it (finish review).
+        let half = BodyRingLayout.ringStroke / 2
         return ZStack {
-            Circle()
+            Circle().inset(by: half)
                 .stroke(Color.onyx.hairline, lineWidth: BodyRingLayout.ringStroke)
-            Circle()
+            Circle().inset(by: half)
                 .trim(from: 0, to: Double(score ?? 0) / 100)
                 .stroke(accent, style: StrokeStyle(lineWidth: BodyRingLayout.ringStroke, lineCap: .round))
                 .rotationEffect(.degrees(-90))
@@ -286,9 +290,12 @@ private struct PetalDisc: View {
         let s = BodyRingLayout.petalStroke
         return ZStack {
             if hasData {
-                Circle().fill(petal.ink.opacity(petal.fraction == nil ? 0.22 : 0.12))
-                Circle().stroke(petal.ink.opacity(0.22), lineWidth: s)
+                // A reading with no goal is a SOLID disc and draws no track:
+                // an empty track read as "0 %", and a grey one as the hollow
+                // no-data ring (finish review).
+                Circle().fill(petal.ink.opacity(petal.fraction == nil ? 0.28 : 0.12))
                 if let fraction = petal.fraction {
+                    Circle().stroke(petal.ink.opacity(0.22), lineWidth: s)
                     Circle()
                         .trim(from: 0, to: fraction)
                         .stroke(petal.ink, style: StrokeStyle(lineWidth: s, lineCap: .round))
