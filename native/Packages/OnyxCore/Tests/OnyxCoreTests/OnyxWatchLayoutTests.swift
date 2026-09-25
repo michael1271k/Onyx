@@ -244,20 +244,56 @@ struct OnyxWatchLayoutTests {
     static let glanceSquare49mm: Double = 148
     static let glanceSquare40mm: Double = 130
 
-    @Test("the Glance fits both cases as measured: petals clear the ring, the centre holds its numeral")
-    func theGlanceFits() {
+    // MARK: - Six petals (Precision D1, decision Q22)
+
+    /// ── THE HEIGHT IS THE WHOLE BUDGET ──────────────────────────────────────
+    /// A petal sits on the vertical axis above the ring and another below it,
+    /// so ring + two petals + two gaps IS the square's height — the width is
+    /// never what binds (the side petals sit at ±30°, only cos 30° out). The
+    /// founder's rule (Overhaul open call 4, resolved Q22): the petals keep
+    /// ≥ 38 pt at 40 mm and the RING is what gives.
+    @Test("six petals: ≥ 38 pt at 40 mm, the ring shrinks, nothing touches")
+    func sixPetalsFit() {
+        #expect(WatchGlance.petalCount == 6)
+        #expect(WatchGlance.angles.count == WatchGlance.petalCount)
         let big = WatchGlance.layout(width: WatchCase.width49mm, height: Self.glanceSquare49mm)
         let small = WatchGlance.layout(width: WatchCase.width40mm, height: Self.glanceSquare40mm)
-        #expect(abs(big.petal - 40) < 0.5 && abs(small.petal - 35) < 0.5, "the petals axe measured: 40 / 35 pt")
+        #expect(small.petal >= 38, "40 mm petal is \(small.petal) pt")
+        #expect(big.petal >= small.petal, "the 49 mm petal is smaller than the 40 mm one")
+        // ── MEASURED (axe describe-ui, D1 round 3) ──────────────────────────
+        // 40 mm (SE 3): petals 38 × 38, ring 46.5, centre 30.5, the square
+        // y 47.5…178. 49 mm (Ultra 2): petals 42.5–43, ring 54, centre 38,
+        // the square y 64…212. The squares are the ones this suite already
+        // pinned: the page did not move, the flower inside it did.
+        #expect(abs(small.petal - 38) < 0.5 && abs(big.petal - 42.75) < 0.5, "axe: 38 / 42.5–43 pt")
+        #expect(abs(small.ring - 46.5) < 1 && abs(big.ring - 54) < 1, "axe: ring 46.5 / 54 pt")
         for layout in [big, small] {
-            #expect(layout.clearance > 4, "petals touch the ring: \(layout.clearance) pt clear")
+            // The ring clears every petal (they all sit on one orbit).
+            #expect(layout.clearance >= WatchGlance.ringGap - 0.01, "petals touch the ring: \(layout.clearance) pt")
+            // Neighbours 60° apart: the chord is the orbit itself.
+            #expect(layout.neighbourGap >= 4, "petals touch each other: \(layout.neighbourGap) pt")
+            // Top and bottom petals inside the square.
+            #expect(layout.orbit + layout.petal / 2 <= layout.square / 2 + 0.01)
+            // Every petal is a button: 38 pt is the floor the brief sets, the
+            // Crown and the centre are the other two doors.
+            for i in 0..<WatchGlance.petalCount {
+                let o = layout.offset(i)
+                #expect(abs((o.x * o.x + o.y * o.y).squareRoot() - layout.orbit) < 0.01)
+            }
         }
-        // A petal is a button; 35 pt is the floor the 40 mm case can afford
-        // with the ring at 68 %. The ring's centre is the other door to the
-        // same pages, and the Crown a third, so no page hangs on a 35 pt tap.
-        #expect(small.petal >= 34, "40 mm petal is \(small.petal) pt")
-        // The centre label box: axe measured 58 pt at 40 mm, and the "81"
-        // numeral inside it 39 pt — three digits at `figure` fit with room.
-        #expect((small.ring - WatchGlance.ringStroke * 2) * 0.8 >= 56)
+        // The flower is the Body tab's (seam 5): top-left, top, top-right,
+        // then bottom-left, bottom, bottom-right — none on the horizontal.
+        #expect(WatchGlance.angles == [-150, -90, -30, 150, 90, 30])
+        // Two digits of readiness fit inside the ring and its battery arc.
+        #expect(small.centre >= 24, "40 mm centre is \(small.centre) pt")
+        #expect(small.width <= WatchCase.content40mm, "40 mm flower is \(small.width) pt wide")
+    }
+
+    @Test("a degenerate page still answers a layout, never a negative ring")
+    func sixPetalsDegenerate() {
+        let tiny = WatchGlance.layout(width: 20, height: 20)
+        #expect(tiny.ring >= 0)
+        #expect(tiny.centre >= 0)
+        #expect(tiny.petal <= tiny.square / 3 + 0.01)
     }
 }

@@ -1,4 +1,5 @@
 import HealthKit
+import OnyxUI
 import SwiftUI
 import WatchKit
 
@@ -15,6 +16,13 @@ final class WatchAppDelegate: NSObject, WKApplicationDelegate {
 
     func handle(_ workoutConfiguration: HKWorkoutConfiguration) {
         model.handleWorkoutLaunch()
+    }
+
+    /// A background launch — HealthKit's hourly wake (Precision D2) — may
+    /// never run the root's `.task`, and the observer queries have to be
+    /// registered for the wake to be answered. `start()` is idempotent.
+    func applicationDidFinishLaunching() {
+        model.start()
     }
 }
 
@@ -59,6 +67,17 @@ struct OnyxWatchApp: App {
                 // and the deck all live on the model.
                 .id(model.themeKey)
                 .environment(model)
+                #if DEBUG
+                // `ONYX_WATCH_RT=1` (Precision D4): Reduce Transparency, forced
+                // — the system flag is read-only, so the ground and the slab
+                // OR this with it, exactly as the phone harness's `rt-` screens.
+                .environment(\.onyxForcesReducedTransparency,
+                             ProcessInfo.processInfo.environment["ONYX_WATCH_RT"] == "1")
+                // `ONYX_WATCH_AX=1`: the largest accessibility Text Size. The
+                // watch simulator refuses `simctl ui content_size`, so the
+                // shot loop sets the environment instead (Precision D4).
+                .modifier(DebugTypeSize())
+                #endif
                 // `.task` rather than `.onAppear`: opening the store, activating
                 // WatchConnectivity and asking HealthKit for authorization are
                 // all things that should be cancelled if the view goes away
@@ -195,7 +214,10 @@ struct OnyxWatchApp: App {
                             // `seedDebugContext(restDay:)`. It falls through to
                             // page one, which is where the rest-day hero is.
                             model.seedDebugContext(restDay: true)
-                        case .start, .dashboard, .train, .fuel, .glance, .pulse:
+                        case .start, .dashboard, .train, .fuel, .glance, .pulse,
+                             // Precision D3: the context (and the heart seed inside
+                             // it) is all a detail reads; `RootView` pushes it.
+                             .detailSleep, .detailWater, .detailFood, .detailHeart, .detailSteps, .detailStress:
                             // ── THE CONTEXT, WHICH AUTOSTART USUALLY SEEDS ──
                             // These three are the only screens reached with
                             // `ONYX_WATCH_AUTOSTART` OFF, and the seed above
@@ -243,3 +265,15 @@ struct OnyxWatchApp: App {
         }
     }
 }
+
+#if DEBUG
+private struct DebugTypeSize: ViewModifier {
+    func body(content: Content) -> some View {
+        if ProcessInfo.processInfo.environment["ONYX_WATCH_AX"] == "1" {
+            content.dynamicTypeSize(.accessibility5)
+        } else {
+            content
+        }
+    }
+}
+#endif

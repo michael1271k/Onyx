@@ -1,3 +1,4 @@
+import OnyxCore
 import OnyxUI
 import SwiftUI
 
@@ -15,19 +16,17 @@ import SwiftUI
 /// That is a simplification rather than a compromise: a screen with one number
 /// on it does not have a third thing to say.
 ///
-/// ── AND NO GLASS, NO MESH ───────────────────────────────────────────────────
-/// `OnyxScreenBackground` is a 3×3 `MeshGradient` under a 40 pt blur plus a
-/// blurred ellipse — a per-frame GPU composite, running during an
-/// `HKWorkoutSession`, on the battery you need for the rest of the workout. Its
-/// stated job is to tell you which section of the app you are in before you read
-/// a word, and the watch app has one screen. `onyxGlass` has the same problem
-/// from the other end: `.ultraThinMaterial` blurs what is behind it, what is
-/// behind it is `Color.onyx.base`, and the result is `white.opacity(0.1)`
-/// arrived at expensively.
-///
-/// The watch is pure black and flat fills. That is not a downgrade — pure black
-/// is the one token that is MORE right here than on the phone, because the case
-/// bezel is black and the app bleeds into it.
+/// ── NO GLASS ON THE LIVE SCREENS, AND A LIT GROUND (Precision D4) ──────────
+/// The old phone background was a 3×3 `MeshGradient` under a 40 pt blur — a
+/// per-frame GPU composite during an `HKWorkoutSession`, on the battery the
+/// rest of the workout needs — so the watch was pure black. Lane B replaced
+/// the mesh with `OnyxGround`: black lit from two corners by two static
+/// radials, no blur (decision Q20). That is cheap enough for the wrist, so
+/// `ground` is that token at HALF strength (the widget container's) — the
+/// case bezel is still black and the light still bleeds into it. Reduce
+/// Transparency draws flat black (`OnyxGround`'s own rule), and so does the
+/// always-on state: a lit ground held for an hour at 1 Hz is OLED power for
+/// nothing anybody is looking at.
 ///
 /// ── EVERY TOKEN IS COMPUTED (overhaul A2) ───────────────────────────────────
 /// They were `static let`, which Swift evaluates ONCE, on first read — so a
@@ -57,8 +56,25 @@ enum WatchInk {
     static var danger: Color { Color.onyx.danger }
     static var record: Color { Color.onyx.record }
 
-    /// The one background. See the type header.
-    static var ground: Color { Color.onyx.base }
+    /// The one background: Lane B's `OnyxGround`, neutral, at half strength.
+    /// See the type header. A view, not a colour — two radials are not one
+    /// `ShapeStyle` — so it goes in `.containerBackground(for:) { … }`.
+    static var ground: some View { WatchGround() }
+
+    /// The stress band's ink — the phone's `StressBand.tint`
+    /// (`Features/Pulse/PulseStress.swift`), which lives in the app target and
+    /// cannot be imported here. Same tokens, same order; W-final lifts one copy
+    /// into OnyxUI. Nil — no reading — is the secondary ink, never a hue.
+    static func stress(_ band: StressBand?) -> Color {
+        switch band {
+        case .calm: Color.onyx.good
+        case .baseline: Color.onyx.textPrimary
+        case .elevated: OnyxDomain.fuel.start
+        case .high: OnyxDomain.fuel.end
+        case .overreached: Color.onyx.danger
+        case nil: secondary
+        }
+    }
 
     /// The split's colour. A FUNCTION, not a `let`, for the reason the header
     /// gives about themes: a stored property freezes at first read, and the
@@ -78,6 +94,19 @@ enum WatchInk {
     static var fill: Color { Color.white.opacity(0.10) }
     /// The same, pressed or selected.
     static var fillActive: Color { Color.white.opacity(0.18) }
+}
+
+/// `WatchInk.ground`. Flat black when the wrist is down.
+private struct WatchGround: View {
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+
+    var body: some View {
+        if isLuminanceReduced {
+            Color.onyx.base
+        } else {
+            OnyxGround(domain: nil, strength: 0.5)
+        }
+    }
 }
 
 // MARK: - Always-on

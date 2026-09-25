@@ -56,6 +56,10 @@ struct WatchComplications: WidgetBundle {
         SleepComplication()
         HeartRateComplication()
         NextDoseComplication()
+        // Precision D4 — three new kinds; nine of the ten elements.
+        LiveHeartComplication()
+        ReadinessSleepComplication()
+        WaterFoodComplication()
     }
 }
 

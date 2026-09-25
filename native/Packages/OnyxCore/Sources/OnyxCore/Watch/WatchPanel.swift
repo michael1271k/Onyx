@@ -278,42 +278,81 @@ public enum WatchPanel {
     }
 }
 
-/// The Glance page's geometry (overhaul A2, decision Q4): the readiness ring
-/// in the middle of a square, four petals in its corners.
+/// The Glance page's geometry: the readiness ring and SIX petals around it
+/// (Precision D1, decision Q22 — it was four, in the square's corners).
 ///
 /// ── THE SQUARE IS WHATEVER THE PAGE HAS ─────────────────────────────────────
 /// `min(width, height)` of the page's own content area, measured by a
-/// `GeometryReader` on the device — so the 49 mm case gets its bigger ring and
-/// the 40 mm case gets one that fits, from one rule and no case switch. The
-/// test replays both cases against the content areas measured off
-/// `axe describe-ui`.
+/// `GeometryReader` on the device — so the 49 mm case gets its bigger flower
+/// and the 40 mm case one that fits, from one rule and no case switch. The
+/// test replays both cases against the squares `axe describe-ui` measured.
 ///
-/// ── CORNERS, NOT A CIRCLE OF PETALS ─────────────────────────────────────────
-/// A petal in a corner sits (S − p)/√2 from the centre; on an axis it would sit
-/// only S/2 − p/2 away and eat the ring. The corners are where a square has
-/// room the circle does not use.
+/// ── THE BODY TAB'S FLOWER, ON A WRIST ───────────────────────────────────────
+/// Six petals on one orbit, 60° apart and none on the horizontal: three over
+/// the ring, three under it, in the Body tab's order (`BodyRingLayout.angles`,
+/// seam 5) so the two instruments read the same and W-final can make them one.
+///
+/// ── THE HEIGHT IS THE WHOLE BUDGET, AND THE RING IS WHAT GIVES ──────────────
+/// A petal sits straight above the ring and another straight below it, so the
+/// square's height is ring + two petals + two gaps, exactly. The width never
+/// binds — the side petals sit only cos 30° of the orbit out. The founder's
+/// call (Overhaul open call 4, resolved by Q22): keep the petals ≥ 38 pt at
+/// 40 mm and shrink the ring. At 40 mm that is a 46 pt ring among 38 pt
+/// petals — a hexagon of seven discs, which is what six-around-one is.
 public enum WatchGlance {
 
-    /// The ring's diameter as a share of the square.
-    public static let ringShare = 0.68
-    /// Each petal's diameter as a share of the square.
-    public static let petalShare = 0.27
+    public static let petalCount = 6
+    /// Petal centres in degrees, screen space (y down), in Crown order:
+    /// top-left, top, top-right, then bottom-left, bottom, bottom-right.
+    public static let angles: [Double] = [-150, -90, -30, 150, 90, 30]
+    /// A petal's diameter as a share of the square, floored at `minPetal`.
+    public static let petalShare = 0.29
+    /// The 40 mm floor (Q22). A petal is a button.
+    public static let minPetal: Double = 38
+    /// Ring edge to petal edge.
+    public static let ringGap: Double = 4
     /// The readiness ring's stroke, points.
-    public static let ringStroke: Double = 8
+    public static let ringStroke: Double = 4
+    /// The battery arc inside it, and the air between the two.
+    public static let batteryStroke: Double = 2
+    public static let batteryInset: Double = 2
 
     public struct Layout: Equatable, Sendable {
         public let square: Double
-        public let ring: Double
         public let petal: Double
+        /// Petal centres' distance from the ring's centre.
+        public let orbit: Double
+        /// The ring's outer diameter, stroke included.
+        public let ring: Double
+
         /// Clear space between the ring's outer edge and a petal's nearest
-        /// edge. Positive, or they touch.
-        public var clearance: Double {
-            (square - petal) / 2.0.squareRoot() - petal / 2 - ring / 2
+        /// edge — every petal is on the one orbit, so one number is all six.
+        public var clearance: Double { orbit - petal / 2 - ring / 2 }
+        /// Between two neighbouring petals: 60° apart, so the chord between
+        /// their centres is the orbit itself.
+        public var neighbourGap: Double { orbit - petal }
+        /// The flower's width — the side petals are cos 30° of the orbit out.
+        public var width: Double { 2 * orbit * cos(Double.pi / 6) + petal }
+        /// The disc inside the ring's stroke and the battery arc: where the
+        /// numeral goes.
+        public var centre: Double {
+            max(0, ring - 2 * (WatchGlance.ringStroke + WatchGlance.batteryInset + WatchGlance.batteryStroke))
+        }
+
+        /// Petal `index`'s centre as an offset from the ring's centre.
+        public func offset(_ index: Int) -> (x: Double, y: Double) {
+            let a = WatchGlance.angles[index] * .pi / 180
+            return (orbit * cos(a), orbit * sin(a))
         }
     }
 
     public static func layout(width: Double, height: Double) -> Layout {
         let square = max(0, min(width, height))
-        return Layout(square: square, ring: square * ringShare, petal: square * petalShare)
+        // Never more than a third of the square: three petals stack on the
+        // vertical axis's line of sight (top, ring, bottom).
+        let petal = min(max(minPetal, square * petalShare), square / 3)
+        let orbit = (square - petal) / 2
+        let ring = max(0, 2 * (orbit - petal / 2 - ringGap))
+        return Layout(square: square, petal: petal, orbit: orbit, ring: ring)
     }
 }

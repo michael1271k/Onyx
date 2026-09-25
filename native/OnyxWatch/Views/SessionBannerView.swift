@@ -54,12 +54,9 @@ struct SessionBannerView: View {
                             .accessibilityHidden(true)
                     }
                 } else {
-                    // An older phone: no masthead, only `todayLogged`.
-                    Text(name)
-                        .font(WatchType.figure)
-                        .foregroundStyle(WatchInk.day(model.day?.key))
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.8)
+                    // An older phone: no masthead, only `todayLogged`. The
+                    // same three-tier title Start wears (Precision D4).
+                    SplitTitle(name, ink: WatchInk.day(model.day?.key))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

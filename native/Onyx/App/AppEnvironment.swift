@@ -1336,6 +1336,10 @@ public final class AppEnvironment {
     /// App Group defaults and repaints this process, and the send, which
     /// reads `OnyxTheme.current`) happen in the same order they always did.
     private func pushWatchContext(userID: UUID) {
+        // Any push carries the fuel numbers, so it answers a pending fuel
+        // flag too — else a sign-in or midnight push would leave the flag
+        // for the next SET commit to skip the throttle on (review).
+        _ = watchBridge.takeFuelCommit()
         watchPush?.cancel()
         watchPush = nil
         guard watchBuild == nil else {
@@ -1406,7 +1410,17 @@ public final class AppEnvironment {
     /// Sign-in, midnight and a theme pick still push immediately through
     /// `pushWatchContext`, which cancels a pending throttle so the two never
     /// race — the immediate one is newer by definition.
+    ///
+    /// ── A FOOD, WATER OR SUPPLEMENT COMMIT SKIPS THE THROTTLE (Precision D4) ─
+    /// Exactly as `pushLifecycle` does: the person who tapped +250 ml looks at
+    /// the wrist next, and thirty seconds is long enough to decide the watch
+    /// is broken. The 2 s debounce that got us here stays — it is what folds
+    /// a meal's six entries into one push.
     private func scheduleWatchPush(userID: UUID) {
+        if watchBridge.takeFuelCommit() {
+            pushWatchContext(userID: userID)
+            return
+        }
         guard watchPush == nil else { return }
         watchPush = Task { [weak self] in
             try? await Task.sleep(for: .seconds(30))
