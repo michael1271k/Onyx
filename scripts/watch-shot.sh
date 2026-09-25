@@ -244,7 +244,9 @@ shoot() {
   [ -n "${SHOT_THEME:-}" ] && env="$env ONYX_WATCH_THEME=$SHOT_THEME"
   # `SHOT_RT=1` (Precision D4): Reduce Transparency forced; PNG suffixed `-rt`.
   [ "${SHOT_RT:-}" = "1" ] && env="$env ONYX_WATCH_RT=1"
-  local file="$OUT/$screen${SHOT_THEME:+-$SHOT_THEME}${SHOT_RT:+-rt}.png"
+  # `SHOT_AX=1`: the largest accessibility Text Size; PNG suffixed `-ax5`.
+  [ "${SHOT_AX:-}" = "1" ] && env="$env ONYX_WATCH_AX=1"
+  local file="$OUT/$screen${SHOT_THEME:+-$SHOT_THEME}${SHOT_RT:+-rt}${SHOT_AX:+-ax5}.png"
   # `SHOT_DAY_LABEL=<name>` (Precision D4): the seeded split's name, for the
   # title tiers. Passed through `simctl`'s environment rather than the word
   # list, because a name has spaces; the PNG is suffixed `-long`.

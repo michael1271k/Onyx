@@ -73,6 +73,10 @@ struct OnyxWatchApp: App {
                 // OR this with it, exactly as the phone harness's `rt-` screens.
                 .environment(\.onyxForcesReducedTransparency,
                              ProcessInfo.processInfo.environment["ONYX_WATCH_RT"] == "1")
+                // `ONYX_WATCH_AX=1`: the largest accessibility Text Size. The
+                // watch simulator refuses `simctl ui content_size`, so the
+                // shot loop sets the environment instead (Precision D4).
+                .modifier(DebugTypeSize())
                 #endif
                 // `.task` rather than `.onAppear`: opening the store, activating
                 // WatchConnectivity and asking HealthKit for authorization are
@@ -261,3 +265,15 @@ struct OnyxWatchApp: App {
         }
     }
 }
+
+#if DEBUG
+private struct DebugTypeSize: ViewModifier {
+    func body(content: Content) -> some View {
+        if ProcessInfo.processInfo.environment["ONYX_WATCH_AX"] == "1" {
+            content.dynamicTypeSize(.accessibility5)
+        } else {
+            content
+        }
+    }
+}
+#endif

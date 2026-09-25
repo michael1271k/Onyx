@@ -98,6 +98,7 @@ private func clock(_ minutes: Int) -> String {
 
 private struct SleepDetail: View {
     let tiles: WatchTiles?
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private var stages: [(OnyxSleepStage, Int)] {
         guard let raw = tiles?.sleepStages else { return [] }
@@ -110,7 +111,16 @@ private struct SleepDetail: View {
                 WristDepthArc(segments: stages, minutes: tiles?.sleepMin, goalMin: tiles?.sleepGoalMin)
                     .frame(height: 60)
                     .frame(maxWidth: .infinity)
-                if !stages.isEmpty {
+                    // An instrument: its bowl is geometry, so its type caps
+                    // (DESIGN.md — rings may cap) or the numeral overruns
+                    // the arc at the accessibility sizes (AX5 shot).
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                if !stages.isEmpty, typeSize.isAccessibilitySize {
+                    // A stage a line — the page scrolls at these sizes.
+                    ForEach(stages.indices, id: \.self) { i in
+                        pair([stages[i]]).font(WatchType.label)
+                    }
+                } else if !stages.isEmpty {
                     // One column a stage, the name over its time. Two by two
                     // with "Deep 1:11" on one line ellipsised every cell at
                     // 40 mm (round 1): 61 pt a cell against ~70 of text.
@@ -142,7 +152,7 @@ private struct SleepDetail: View {
                 if let line = bedLine {
                     line
                         .font(WatchType.label)
-                        .lineLimit(1)
+                        .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
                         .minimumScaleFactor(0.8)
                 }
             }
@@ -371,6 +381,7 @@ private struct PitcherJug: Shape {
 
 private struct FoodDetail: View {
     let tiles: WatchTiles?
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         WatchSlab(tint: Color.onyx.calories) {
@@ -384,9 +395,17 @@ private struct FoodDetail: View {
                     EnergyBar(energy: energy, height: 6)
                     // Grams on one line at 49 mm; at 40 mm the unit goes
                     // before any figure does (round 1 ellipsised all three).
-                    ViewThatFits(in: .horizontal) {
-                        macros(units: true, spacing: OnyxSpace.s)
-                        macros(units: false, spacing: OnyxSpace.xs)
+                    if typeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 1) {
+                            macro("P", tiles?.proteinG, Color.onyx.protein, units: true)
+                            macro("C", tiles?.carbsG, Color.onyx.carbs, units: true)
+                            macro("F", tiles?.fatG, Color.onyx.fat, units: true)
+                        }
+                    } else {
+                        ViewThatFits(in: .horizontal) {
+                            macros(units: true, spacing: OnyxSpace.s)
+                            macros(units: false, spacing: OnyxSpace.xs)
+                        }
                     }
                 }
             }
@@ -429,22 +448,17 @@ private struct HeartDetail: View {
     var body: some View {
         WatchSlab(tint: OnyxInk.Fixed.heart) {
             VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    // A rate past `WatchHeart.freshFor` is the LAST one, not
-                    // now: secondary ink, and its day when it is not today's
-                    // (review) — the petal has already gone hollow for it.
-                    DetailFigure(value: vitals.heart.map { "\($0.bpm)" } ?? "—", unit: "bpm",
-                                 ink: WatchHeart.freshness(vitals.heart) == .stale ? WatchInk.secondary : WatchInk.primary)
-                    Spacer(minLength: 0)
-                    if let at = vitals.heart?.at {
-                        // "at 14:47": a bare time beside a rate reads as the
-                        // clock, not as when the rate was taken (polish).
-                        Text(Calendar.current.isDateInToday(at)
-                             ? "at " + at.formatted(date: .omitted, time: .shortened)
-                             : at.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
-                            .font(WatchType.label)
-                            .foregroundStyle(WatchInk.secondary)
-                            .lineLimit(1)
+                // Side by side where they fit; the time under the rate where
+                // they do not — at AX5 the row squeezed the rate to "…".
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        rate
+                        Spacer(minLength: 0)
+                        measured
+                    }
+                    VStack(alignment: .leading, spacing: 0) {
+                        rate
+                        measured
                     }
                 }
                 VStack(spacing: 1) {
@@ -477,6 +491,27 @@ private struct HeartDetail: View {
 }
 
 private extension HeartDetail {
+    /// A rate past `WatchHeart.freshFor` is the LAST one, not now: secondary
+    /// ink, and its day when it is not today's (review) — the petal has
+    /// already gone hollow for it.
+    var rate: some View {
+        DetailFigure(value: vitals.heart.map { "\($0.bpm)" } ?? "—", unit: "bpm",
+                     ink: WatchHeart.freshness(vitals.heart) == .stale ? WatchInk.secondary : WatchInk.primary)
+    }
+
+    /// "at 14:47": a bare time beside a rate reads as the clock, not as when
+    /// the rate was taken (polish).
+    @ViewBuilder var measured: some View {
+        if let at = vitals.heart?.at {
+            Text(Calendar.current.isDateInToday(at)
+                 ? "at " + at.formatted(date: .omitted, time: .shortened)
+                 : at.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
+                .font(WatchType.label)
+                .foregroundStyle(WatchInk.secondary)
+                .lineLimit(1)
+        }
+    }
+
     @ViewBuilder func stats(units: Bool) -> some View {
         DetailStat(label: "Resting", value: restingBpm.map { "\($0)" } ?? "—")
         DetailStat(label: "HRV", value: vitals.hrv.map { units ? "\($0.ms) ms" : "\($0.ms)" } ?? "—")
