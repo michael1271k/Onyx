@@ -3,7 +3,8 @@ import OnyxUI
 import OnyxCore
 import OnyxData
 
-/// The Pulse tab root — one date's recovery, vitals and body.
+/// The Body tab root (Pulse until Precision B4, decision Q19) — one date's
+/// readiness, vitals and body. The file keeps its old name; the type is new.
 ///
 /// ── WHAT WAVE 2.9 CHANGED ───────────────────────────────────────────────────
 /// This was a `ScrollView` of six equal boxes: Sleep, Fatigue, Soreness, Stack,
@@ -19,7 +20,7 @@ import OnyxData
 /// on it scrolls sideways. The Schedule tile is gone (swap moved to the Workout
 /// tab's session card, where the thing you are swapping actually lives) and so
 /// is Cardio (§5.2 item 5).
-struct PulseTabView: View {
+struct BodyTabView: View {
     @Environment(AppEnvironment.self) private var environment
 
     /// Supplied only by previews and the screenshot harness.
@@ -34,16 +35,24 @@ struct PulseTabView: View {
 
     init() {}
 
-    init(seeded: DayModel, startAtRows: Bool = false, startEditing: Bool = false) {
+    /// Harness only: draw the day as History's past-day push draws it —
+    /// session tickets and the retro door included (Precision B4).
+    var showsWorkouts = false
+
+    init(seeded: DayModel, startAtRows: Bool = false, startEditing: Bool = false, showsWorkouts: Bool = false) {
         self.seeded = seeded
         self.startAtRows = startAtRows
         self.startEditing = startEditing
+        self.showsWorkouts = showsWorkouts
     }
 
     var body: some View {
         Group {
             if let resolved {
-                DayScreen(model: resolved, startAtRows: startAtRows, startEditing: startEditing)
+                // The tab root shows no workouts (Q19: Train owns them). The
+                // same screen pushed from History for a past day keeps them.
+                DayScreen(model: resolved, showsWorkouts: showsWorkouts,
+                          startAtRows: startAtRows, startEditing: startEditing)
             } else {
                 ProgressView().controlSize(.large)
             }
@@ -66,7 +75,12 @@ struct DayScreen: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.scenePhase) private var scenePhase
     let model: DayModel
-    /// Harness only — see `PulseTabView.startAtRows`.
+    /// The day's session tickets and the "Log a workout here" door. False on
+    /// the Body tab (decision Q19: Train owns workouts); true when History
+    /// pushes this screen for a past day, where the retro door is the only
+    /// way to log a workout on a date that has gone.
+    var showsWorkouts = true
+    /// Harness only — see `BodyTabView.startAtRows`.
     var startAtRows = false
     var startEditing = false
 
@@ -78,6 +92,10 @@ struct DayScreen: View {
     @State private var showStack = false
     @State private var showSoreness = false
     @State private var editingSleep = false
+    /// The Water petal's sheet (Precision B4) — the day's water answer.
+    @State private var loggingWater = false
+    /// The Heart and Steps petals' door: the vitals' own trends.
+    @State private var showTrends = false
     /// The stress breakdown. Declared here rather than on the square that opens
     /// it for the reason every other sheet on this screen is: the square grid is
     /// one `List` row, and a `.sheet` on a recyclable cell is torn down with the
@@ -199,7 +217,17 @@ struct DayScreen: View {
                     .plainRow()
             }
 
-            NowStripPulse(model: model, date: title).plainRow()
+            // ── THE INSTRUMENT (Precision B4, design 9) ─────────────────────
+            // The readiness ring and its six petals replace the Now strip:
+            // the score, the battery and the fuel sentence ARE the ring, its
+            // inner arc and three of its petals now. The date the strip
+            // carried is the line over it — the only place the screen says
+            // which day this is.
+            VStack(alignment: .leading, spacing: OnyxSpace.s) {
+                Text(title).onyxMicro()
+                BodyRing(score: model.score, battery: model.battery, petals: model.bodyPetals, onPetal: openPetal)
+            }
+            .plainRow()
 
             // ── THE MEASUREMENTS: ONE LEAD AND EIGHT SIDEKICKS (W2) ─────────
             // These nine were a horizontal scroller of 104 pt chips with the
@@ -240,11 +268,13 @@ struct DayScreen: View {
             // Last on the screen, on purpose (founder decision 7): Pulse
             // answers "how am I", and what caused it is the footnote to that,
             // not its headline.
-            ForEach(model.window.sessions) { session in
-                PulseSessionCard(session: session, header: sessionHeaders[session.id]) {
-                    openSession = session
+            if showsWorkouts {
+                ForEach(model.window.sessions) { session in
+                    PulseSessionCard(session: session, header: sessionHeaders[session.id]) {
+                        openSession = session
+                    }
+                    .plainRow()
                 }
-                .plainRow()
             }
             // ── LOG A WORKOUT HERE (W2, decision 12) ────────────────────────
             // A past day only: today's workouts start from the Train tab with
@@ -252,7 +282,7 @@ struct DayScreen: View {
             // programme's days, chosen here because a rest day has none to
             // assume; the session is created closed and opens in EDIT mode —
             // no timer, no Live Activity, no watch mirror.
-            if model.date < LogicalDay.today(), let program = retroProgram, !program.days.isEmpty {
+            if showsWorkouts, model.date < LogicalDay.today(), let program = retroProgram, !program.days.isEmpty {
                 Menu {
                     ForEach(program.days, id: \.key) { day in
                         Button(day.label) { logRetro(day) }
@@ -303,7 +333,7 @@ struct DayScreen: View {
         .scrollContentBackground(.hidden)
         .onyxScreen(.body)
         .cardioIngestNotice()
-        .navigationTitle("Pulse")
+        .navigationTitle("Body")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             // ── NO TITLE IN THE BAR (W9) ────────────────────────────────────
@@ -312,7 +342,7 @@ struct DayScreen: View {
             // width: clipped to its first letter on one, hidden on another.
             // Removed on purpose instead, so the bar is the same bar
             // everywhere. `navigationTitle` stays — it is the back button on
-            // Body trends — and the tab bar and the Now strip name the screen.
+            // Body trends — and the tab bar and the date line name the screen.
             ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
             // The date walks on the LEADING side and the doors sit trailing:
             // four glyphs crowded into one group left "Pulse" with no room for
@@ -385,6 +415,8 @@ struct DayScreen: View {
         .sheet(isPresented: $showSoreness) { LogDaySheet(model: model, segment: .soreness) }
         .sheet(isPresented: $showingStress) { StressBreakdownSheet(model: model) }
         .sheet(isPresented: $editingSleep) { SleepEditSheet(model: model) }
+        .sheet(isPresented: $loggingWater) { LogDaySheet(model: model, segment: .water) }
+        .navigationDestination(isPresented: $showTrends) { BodyTrendsView() }
         .navigationDestination(item: $openSession) { SessionDetailView(sessionId: $0.id) }
         .sheet(isPresented: $entering) { InBodyEntryView(model: model) }
         // Today's banner switched to this tab and asked for the form.
@@ -416,8 +448,8 @@ struct DayScreen: View {
         // sessions costs nothing, and detached because `headers` replays every
         // set ever logged to place each session in the career — the same read,
         // made the same way, as the Train tab's done card.
-        .task(id: model.window.sessions.map(\.id)) {
-            let ids = model.window.sessions.map(\.id)
+        .task(id: showsWorkouts ? model.window.sessions.map(\.id) : []) {
+            let ids = showsWorkouts ? model.window.sessions.map(\.id) : []
             guard !ids.isEmpty else {
                 sessionHeaders = [:]
                 return
@@ -453,14 +485,26 @@ struct DayScreen: View {
         }
     }
 
+    /// A petal's door: the sheet or screen that already owns its domain.
+    private func openPetal(_ kind: BodyPetal.Kind) {
+        switch kind {
+        case .sleep: editingSleep = true
+        case .water: loggingWater = true
+        // Food lives on its own tab; the petal is a way there, not a copy.
+        case .food: environment.selectedTab = "fuel"
+        case .heart, .steps: showTrends = true
+        case .stress: showingStress = true
+        }
+    }
+
     /// The anchor the harness scrolls to: the square grid, which is where the
     /// bottom half of the screen starts. Everything under it — the session
     /// cards — is below the fold on a phone, and everything above it is what
     /// the default `day` shot already photographs.
     private static let rowsAnchor = "pulse.rows"
 
-    /// "Thu 3 Sept" — a date, formatted; never the ISO string. It rides in the
-    /// Now strip rather than the nav bar: the tab is called Pulse everywhere
+    /// "Thu 3 Sept" — a date, formatted; never the ISO string. It rides over
+    /// the ring rather than in the nav bar: the tab is called Body everywhere
     /// else on the device, and a title that changes as you step through the
     /// week is a title you cannot navigate by.
     private var title: String {
@@ -474,128 +518,6 @@ struct DayScreen: View {
         Binding(
             get: { LogicalDay.date(fromISO: model.date) ?? Date() },
             set: { model.select(LogicalDay.iso($0)) }
-        )
-    }
-}
-
-// MARK: - Now strip
-
-/// The day, the score, the battery and what has been eaten — the four facts a
-/// recovery screen opens with, in three lines.
-///
-/// ── WHY THE MACROS ARE NOT DRAWN HERE ───────────────────────────────────────
-/// §5.7 is explicit: no macro gauges on Pulse. Three gauges of protein, carbs
-/// and fat exist on the Nutrition tab and are the same three gauges — drawing
-/// them twice is how a five-tab app becomes a one-tab app with four aliases.
-/// What survives is the SENTENCE, which is the only form in which the day's
-/// intake is context for a recovery screen rather than the subject of it.
-private struct NowStripPulse: View {
-    let model: DayModel
-    /// Which day this is — the only place on the screen that says so.
-    let date: String
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var battery: Int? { model.battery }
-
-    /// 44 pt, and NO numeral inside it. A ring this size cannot hold a legible
-    /// number at any type size — at AX5 the first attempt rendered "…" inside
-    /// the ring — and the figure it would hold is the one beside it.
-    private var ring: some View {
-        ZStack {
-            Circle().stroke(Color.onyx.hairline, lineWidth: 4)
-            Circle()
-                .trim(from: 0, to: Double(battery ?? 0) / 100)
-                .stroke(Color.onyx.battery(battery), style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .animation(reduceMotion ? nil : OnyxMotion.counter, value: battery)
-        }
-        .frame(width: 44, height: 44)
-        .accessibilityHidden(true)
-    }
-
-    /// A numeral over its name.
-    ///
-    /// ── ONE `.hero` PER SCREEN, AND IT IS THE SCORE (W2) ────────────────────
-    /// This drew the score AND the battery at `.hero`, which is the one thing
-    /// `OnyxType.hero` forbids in as many words: "at most one per screen — a
-    /// second hero is two screens in a trench coat". Two 28 pt numerals plus a
-    /// ring left the fuel sentence a right-aligned tail in whatever width was
-    /// left, breaking to two lines and dropping the water figure to an ellipsis.
-    ///
-    /// The score is the figure this screen is ABOUT and keeps the hero. The
-    /// battery is a gauge with a number beside it — the ring is the reading and
-    /// the numeral is its label — so it is `.display`, and it stays legible
-    /// beside its own ring rather than competing with the score across the tile.
-    private func reading(_ value: Int?, _ label: String, tint: Color, role: OnyxType) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(value.map { "\($0)" } ?? "—")
-                .onyxType(role).onyxNumeral()
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(label).onyxMicro()
-        }
-    }
-
-    private var scoreReading: some View {
-        reading(model.score, "SCORE", tint: Color.onyx.textPrimary, role: .hero)
-    }
-
-    /// The ring and its number, as one thing. They are a single reading drawn
-    /// twice — an arc for the shape of it and a numeral for the value — and
-    /// anything between them reads as two.
-    private var batteryPair: some View {
-        HStack(spacing: OnyxSpace.s) {
-            ring
-            reading(battery, "BATTERY", tint: Color.onyx.battery(battery), role: .display)
-        }
-    }
-
-    /// ── THE FUEL LINE GETS ITS OWN LINE (W2) ────────────────────────────────
-    /// It was `Spacer()` then a right-aligned sentence in the gutter beside two
-    /// hero numerals: two lines of 13 pt type squeezed into ~120 pt, centred on
-    /// nothing, and the first thing to truncate at any size above default. It is
-    /// a SENTENCE — it reads left to right from the same margin as the date
-    /// above it — and on its own line it has the tile's whole width, which is
-    /// the width it needed all along.
-    @ViewBuilder
-    private var fuel: some View {
-        Text(model.fuelLine ?? "Nothing logged yet")
-            .onyxType(.caption).onyxNumeral()
-            .foregroundStyle(model.fuelLine == nil ? Color.onyx.textTertiary : Color.onyx.textSecondary)
-            .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    /// ── ONE LAYOUT, NOT TWO (W2) ───────────────────────────────────────────
-    /// The AX5 branch existed because the fuel sentence shared a line with two
-    /// numerals and a ring; with the sentence on its own line there is one
-    /// thing left to measure — whether the score and the battery pair fit
-    /// beside each other — and that is a measurement, not a type-size setting.
-    /// `ViewThatFits` asks the question every other card on this screen asks.
-    var body: some View {
-        VStack(alignment: .leading, spacing: OnyxSpace.xs) {
-            Text(date).onyxMicro()
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: OnyxSpace.m) {
-                    scoreReading
-                    Spacer(minLength: OnyxSpace.s)
-                    batteryPair
-                }
-                VStack(alignment: .leading, spacing: OnyxSpace.s) {
-                    scoreReading
-                    batteryPair
-                }
-            }
-            fuel
-        }
-        .padding(OnyxSpace.m)
-        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-        .onyxGlass(.tile)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            "\(date). Score \(model.score.map { "\($0)" } ?? "not scored"), battery \(battery.map { "\($0) percent" } ?? "unknown"). \(model.fuelLine ?? "nothing logged")"
         )
     }
 }

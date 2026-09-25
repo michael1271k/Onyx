@@ -771,6 +771,20 @@ final class DayModel {
     var score: Int? { window.score?.score }
     var battery: Int? { window.score?.batteryPct }
 
+    /// The day's resolved targets — kcal, steps, water, sleep — as the Body
+    /// ring's petals read them (Precision B4). The same resolve `fuelLine`
+    /// makes, so a petal and the sentence it replaced cannot disagree.
+    var dayTargets: ResolvedTargets {
+        Targets.resolve(
+            TargetSources(goals: goals, dayTarget: dailyTarget.map(DailyTarget.init), profiles: []), date: date, today: today
+        )
+    }
+
+    /// What was RECORDED today, or nil when nothing was — the Food petal.
+    var kcalEaten: Double? {
+        entries.isEmpty ? nil : entries.reduce(0) { $0 + $1.calories }
+    }
+
     /// `1,420 / 1,955 kcal · P 128 · water 2.1 L` — the whole of nutrition on
     /// this screen, because the gauges live in the Nutrition tab (§5.7).
     ///

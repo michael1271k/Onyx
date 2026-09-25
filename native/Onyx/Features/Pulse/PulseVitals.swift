@@ -52,10 +52,17 @@ struct VitalsSection: View {
         return Group {
             if let promoted {
                 VitalHeroCell(reading: promoted).plainRow()
+                VitalsGrid(readings: sidekicks(all, promoted: promoted)).plainRow()
             } else {
-                SleepHeroCell(model: model, action: onSleep).plainRow()
+                // ── THE NIGHT IS A CELL NOW (Precision B4) ─────────────────
+                // Sleep is a petal of the Body ring above, so the full-width
+                // night hero said it a second time, 200 pt tall. It joins the
+                // grid as its FIRST cell — eight readings become a 3 × 3 —
+                // and keeps its door to the edit sheet. An alarming vital
+                // still takes a hero cell of its own: that is a warning, not
+                // a repeat.
+                VitalsGrid(readings: [sleepReading] + all).plainRow()
             }
-            VitalsGrid(readings: sidekicks(all, promoted: promoted)).plainRow()
         }
     }
 
