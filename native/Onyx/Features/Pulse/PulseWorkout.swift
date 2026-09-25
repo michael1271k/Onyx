@@ -33,31 +33,28 @@ struct PulseSessionCard: View {
 
     var body: some View {
         Button(action: onOpen) {
-            Group {
-                if let header, header.id == session.id {
-                    // The shared face (Lane C request, overhaul W5.3): the
-                    // same masthead the Train tab's done card and the page draw.
-                    SessionHeaderCard(header: header, totals: totals, masthead: SessionMasthead(
-                        name: header.label,
-                        durationSec: Int(((session.durationMin ?? 0) * 60).rounded()),
-                        tonnageKg: session.tonnageKg, avgBpm: nil, prCount: header.prCount,
-                        hrSpark: header.hrSpark, startedAt: Date()
-                    ))
-                } else {
-                    placeholder
-                }
-            }
-            .contentShape(.rect)
+            // ── A TICKET SINCE PRECISION B2 (decision Q17) ──────────────────
+            // The same 64 pt row Train draws for a finished session. The day
+            // window already holds the label, the duration and the tonnage,
+            // so the row draws at once; the header's career-wide read brings
+            // the record count, the spark and the measured bpm.
+            SessionTicket(
+                label: header?.label ?? session.label ?? "Session",
+                dayKey: session.dayKey,
+                durationSec: session.durationMin.map { Int(($0 * 60).rounded()) },
+                tonnageKg: session.tonnageKg,
+                prCount: header?.id == session.id ? header?.prCount ?? 0 : 0,
+                avgBpm: header?.id == session.id ? header?.avgBpm : nil,
+                spark: header?.id == session.id ? header?.hrSpark ?? [] : []
+            )
         }
         .buttonStyle(.plain)
         .onyxPress(scale: 0.99)
         // ── THE CALLER DECIDES THE GROUPING ─────────────────────────────────
-        // `SessionHeaderCard` deliberately carries no
-        // `.accessibilityElement(children:)` of its own: inside a `List` row on
-        // the session page it is static content, and inside a button it has to
-        // be ONE element or a reader hears four labels where they expect one
-        // target. This is the button case.
+        // Inside a button the ticket has to be ONE element, or a reader hears
+        // its parts where they expect one target.
         .accessibilityElement(children: .combine)
+        .accessibilityValue(totals)
         .accessibilityHint("Opens the session.")
         .accessibilityAddTraits(.isButton)
     }
@@ -86,24 +83,5 @@ struct PulseSessionCard: View {
             parts.append("\(Int(minutes.rounded())) min")
         }
         return parts.joined(separator: " · ")
-    }
-
-    /// The header is a career-wide read. The label, the numbers and the day's
-    /// three muscles are already in the day's window, so the card states them
-    /// immediately rather than blinking an empty box in on every open of the
-    /// tab — and it is literally the same stand-in the Train tab draws for the
-    /// same read (W5), so the two screens cannot drift apart in the one state
-    /// neither of them was reviewed in.
-    ///
-    /// The day-hue DOT went with it: the wash behind the card and the title's
-    /// own ink are both the day's hue, and an 8 pt disc saying it a third time
-    /// was the only part of this card that the real masthead does not draw.
-    private var placeholder: some View {
-        SessionFallbackCard(
-            dayKey: session.dayKey,
-            label: session.label ?? "Session",
-            totals: totals,
-            muscles: session.muscles
-        )
     }
 }
