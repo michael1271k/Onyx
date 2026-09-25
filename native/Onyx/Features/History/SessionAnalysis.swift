@@ -29,8 +29,12 @@ enum SessionAnalysis {
         let date: String
         let dayKey: String?
         let durationMin: Double?
-        /// Working sets, a unilateral pair counted once.
+        /// Working sets, a unilateral pair counted once — the duration guard's
+        /// and the career filter's unit.
         let sets: Int
+        /// "Sets" as the screens print it (Q10): `SessionCounts.total`, the
+        /// rule `set_count` is written by — warm-ups and bouts in.
+        var totalSets = 0
         let tonnageKg: Double
         let prCount: Int
         /// ── THE THREE COLUMNS THIS SUMMARY ONLY NOW CARRIES (§W2 B) ─────
@@ -126,6 +130,10 @@ enum SessionAnalysis {
         /// comparison built from those is wrong in exactly the case it matters
         /// (a set was cut), so the honest list travels separately.
         let previousSets: [HistorySet]
+        /// Tonnage of `previousSets` by the rule `detail.volumeKg` uses — the
+        /// bodyweight flag and the weigh-in on THAT session's day — so the
+        /// capsule's arrow compares like with like. Nil when there was none.
+        var previousVolumeKg: Double? = nil
         let cue: ProgressionCue?
         let stats: ExerciseStats
         /// "10–12" / "55s", or nil when the program does not prescribe it.
@@ -288,10 +296,10 @@ enum SessionAnalysis {
             out.append(Summary(
                 id: session.id, date: session.date, dayKey: session.dayKey, durationMin: session.durationMin,
                 sets: SessionDetail.toRows(working.map(detailSet)).filter { $0.num != nil }.count,
-                // WORKING for the count, EVERY non-ghost row for the tonnage —
-                // see `report`'s `volumeKg`. A history row and the session page
-                // it opens disagreeing about the same workout's weight is the
-                // same divergence, one screen earlier.
+                totalSets: SessionCounts.total(rows.map(volumeSet)),
+                // A history row and the session page it opens disagreeing
+                // about the same workout's weight is the same divergence, one
+                // screen earlier — so the tonnage is the page's own rule.
                 tonnageKg: SessionVolume.sessionVolumeKg(rows.map(volumeSet), bodyWeightKg: ctx.bodyWeightKg(on: session.date)),
                 prCount: pr.prCount,
                 sessionRpe: session.sessionRpe,
@@ -418,6 +426,9 @@ enum SessionAnalysis {
                 rows: SessionDetail.toRows(sets),
                 prevDate: prevRows.first?.date,
                 previousSets: prev,
+                previousVolumeKg: prevRows.first.map { first in
+                    SessionVolume.sessionVolumeKg(prevRows.map(volumeSet), bodyWeightKg: ctx.bodyWeightKg(on: first.date))
+                },
                 cue: cue, stats: SessionDetail.exerciseStats(detail), window: window,
                 atCeiling: atCeiling,
                 trail: sessionMeanE1rm((priorByEx[g.exerciseId] ?? []) + g.sets),

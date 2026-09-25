@@ -317,13 +317,10 @@ struct FinishSheet: View {
                 // ── "SETS" IS EVERYTHING PERFORMED, "WORKING" IS SECOND (Q10) ─
                 // The headline is `physicalSets` — `SessionCounts.total`, the
                 // `set_count` this close writes: warm-ups and the bout in, a
-                // pair once. The working count, against the plan on a live
-                // deck, is the secondary figure beside it.
+                // pair once. The working count is the secondary figure beside
+                // it; what the plan still holds is the unticked line below.
                 tile("Sets", "square.stack.3d.up",
-                     "\(model.physicalSets)",
-                     model.isEditing
-                        ? "\(model.completedSets) working"
-                        : "\(model.completedSets)/\(model.plannedSets) working",
+                     "\(model.physicalSets)", "\(model.completedSets) working",
                      tint: Color.onyx.textPrimary)
                 tile("Records", "trophy", model.recordCount > 0 ? "\(model.recordCount)" : "—", nil,
                      tint: model.recordCount > 0 ? Color.onyx.record : Color.onyx.textTertiary)
@@ -664,18 +661,26 @@ struct FinishSheet: View {
         _ label: String, _ symbol: String, _ value: String, _ unit: String?, tint: Color
     ) -> some View {
         tileShell(label, symbol, tint: tint) {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .onyxType(.body).fontWeight(.semibold).onyxNumeral()
-                    .foregroundStyle(tint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                if let unit {
-                    Text(unit)
-                        .onyxType(.micro)
-                        .foregroundStyle(Color.onyx.textTertiary)
+            let figure = Text(value)
+                .onyxType(.body).fontWeight(.semibold).onyxNumeral()
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            let caption = unit.map {
+                Text($0).onyxType(.micro).foregroundStyle(Color.onyx.textTertiary).lineLimit(1)
+            }
+            // Beside the figure when it fits, under it when it does not — a
+            // unit that wraps mid-phrase made its tile taller than the row.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    figure
+                    caption
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 0) {
+                    figure
+                    caption
+                }
             }
         }
         .accessibilityElement(children: .ignore)

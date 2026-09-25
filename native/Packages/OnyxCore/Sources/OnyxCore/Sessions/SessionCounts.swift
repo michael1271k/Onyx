@@ -26,6 +26,16 @@ public enum SessionCounts {
     }
 
     /// Distinct non-empty `pairId`s once, every other row once.
+    ///
+    /// ── NO SIDE CHECK, ON PURPOSE ───────────────────────────────────────────
+    /// `SetGrouping` and `SessionVolume` fold a pair only when both rows carry
+    /// a side, because folding a half-written pair would score one arm's load
+    /// as the whole set's. A COUNT has no load to misstate, and it is a stored
+    /// figure: `set_count` is `count(DISTINCT COALESCE(NULLIF(pair_id, ''),
+    /// id))` on the server (`docs/sql/precision-c-backfill-sets.sql`) and was
+    /// the same at close before this type existed. Matching that SQL is what
+    /// lets the phone's recount and the server's backfill agree row for row;
+    /// a sideless pair is malformed data either way.
     private static func count(_ sets: [VolumeSet], _ counts: (VolumeSet) -> Bool) -> Int {
         var pairs = Set<String>()
         var solo = 0

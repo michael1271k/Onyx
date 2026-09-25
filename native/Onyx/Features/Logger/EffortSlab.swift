@@ -23,6 +23,7 @@ struct EffortSlab: View {
     @Binding var word: EffortWord?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     /// The slab's width, for the drag — measured, because the slab's HEIGHT
     /// is its content's (a `GeometryReader` would fix it instead).
     @State private var width: CGFloat = 0
@@ -47,12 +48,19 @@ struct EffortSlab: View {
     // MARK: - The slab
 
     private var slab: some View {
-        reading
+        // At the accessibility sizes the words fill the stone and the vein's
+        // diagonal ran through "CR-10" (W-final shot) — so there the vein gets
+        // its own band under the words instead of the whole slab.
+        let band: CGFloat? = typeSize.isAccessibilitySize ? 40 : nil
+        return reading
             .padding(OnyxSpace.m)
+            .padding(.bottom, band ?? 0)
             // At least the icon's proportion of a slab; taller when the type
             // is — the word must never be clipped by the stone it is cut in.
             .frame(maxWidth: .infinity, minHeight: 76, alignment: .topLeading)
-            .background { vein(Self.level(index, of: words.count)) }
+            .background(alignment: .bottom) {
+                vein(Self.level(index, of: words.count)).frame(maxHeight: band ?? .infinity)
+            }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .contentShape(.rect)
             // A tap rates where it lands; a drag rates only once it is going

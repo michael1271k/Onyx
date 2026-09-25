@@ -751,11 +751,8 @@ struct SessionDetailView: View {
                 // it — `3 warm-up · 1 drop` — is what says how many were which,
                 // and it is why the bigger number does not mislead.
                 //
-                // The TRAIL behind it is `Summary.sets`, which counts working
-                // sets — one scale below the figure it sits under. That is the
-                // right trade and not an oversight: the curve is a shape, not a
-                // reading, and the alternative is replaying every session of
-                // the split through `physicalSets` to draw eight points.
+                // The TRAIL behind it is `SplitPoint.sets` (`Summary.totalSets`) — the same rule
+                // as the figure, so the curve and the number share a scale.
                 OnyxStatCell(
                     "Sets", "\(report.physicalSets)",
                     sub: composition(report) ?? delta(page.setsDelta.map(Double.init), unit: "", higherIsBetter: true),
@@ -847,9 +844,14 @@ struct SessionDetailView: View {
     /// number the reader will otherwise mistrust, and mistrust costs more than
     /// a comparison does.
     private func composition(_ report: SessionAnalysis.Report) -> Sub? {
+        // Counted in SETS by the rule the headline uses (`SessionCounts`): a
+        // pair once, a ghost never — so "N working" and the parts after it sum
+        // to the figure above them.
         var counts: [String: Int] = [:]
+        var pairs = Set<String>()
         for exercise in report.exercises {
-            for set in exercise.detail.sets where !SetTags.isWorkingSet(set.setType) {
+            for set in exercise.detail.sets where !SetTags.isWorkingSet(set.setType) && set.setType != "ghost" {
+                if let p = set.pairId, !p.isEmpty, !pairs.insert(p).inserted { continue }
                 counts[set.setType, default: 0] += 1
             }
         }
@@ -1487,14 +1489,11 @@ struct SessionDetailView: View {
     /// said "equal" on a lift whose tonnage had fallen a quarter — and cutting
     /// a set is exactly when the reader wants the arrow.
     ///
-    /// `sessionVolumeKg`, not a sum of w × r: it collapses a unilateral pair to
-    /// its weaker side and skips a ghost, and `ex.detail.volumeKg` — the figure
-    /// this is compared AGAINST — is that same function.
+    /// `ExerciseReport.previousVolumeKg`: `sessionVolumeKg` over the same list
+    /// with the bodyweight credit `ex.detail.volumeKg` — the figure this is
+    /// compared AGAINST — also carries. Built there, where the weigh-ins are.
     private func previousVolume(_ ex: SessionAnalysis.ExerciseReport) -> Double? {
-        guard !ex.previousSets.isEmpty else { return nil }
-        return SessionVolume.sessionVolumeKg(ex.previousSets.map {
-            VolumeSet(weightKg: $0.weightKg, reps: $0.reps, side: $0.side, pairId: $0.pairId, setType: $0.setType)
-        })
+        ex.previousVolumeKg
     }
 
     /// What the atlas's share sheet calls this session.

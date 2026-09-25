@@ -730,11 +730,15 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
 
     /// The athlete's latest weigh-in on or before the session's day —
     /// `SessionEditing.bodyWeightKg`, the one `closeSession` credits a
-    /// bodyweight set with. Cached per day: the header reads it on every
-    /// redraw and a weigh-in does not change mid-set.
+    /// bodyweight set with. The day is the session's (`startedAt`'s, which is
+    /// the day `attach` opened it on), not today's, so a deck that runs past
+    /// midnight keeps the close path's answer. Cached between ticks — the
+    /// header reads it on every redraw — and dropped on each one
+    /// (`refreshLivePrs`), so a scale reading that lands mid-session is in the
+    /// next figure, as it will be in the saved one.
     @ObservationIgnored private var weighIn: (date: String, kg: Double?)?
     var bodyWeightKg: Double? {
-        let date = editing?.date ?? LogicalDay.today()
+        let date = editing?.date ?? LogicalDay.iso(startedAt)
         if let weighIn, weighIn.date == date { return weighIn.kg }
         let userId = userId
         let kg = store.flatMap { store in
@@ -1960,6 +1964,7 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
     /// answer and the ledger written by `closeSession` are the same engine over
     /// the same keys against the same bar.
     private func refreshLivePrs() {
+        weighIn = nil
         var candidates: [PrCandidateSet] = []
         var origin: [SetRow] = []
         for exercise in exercises {
@@ -2054,7 +2059,10 @@ final class LoggerModel: Identifiable, PauseControlling, LivePrProviding {
         // Newest first — the deck is walked in session order.
         livePrs = records.reversed()
         prsThisSession = result.prCount
-        markBaselines(baselineRows)
+        // Only against a bar that was actually built for this deck: with no
+        // store, or a read that threw, the engine sees no history for anything
+        // and every card would claim a first session it is not.
+        markBaselines(store != nil && baselineIds() == baselineKeys ? baselineRows : [])
     }
 
     /// A card is a Baseline when any of its done rows is (`SetMark.baseline`:

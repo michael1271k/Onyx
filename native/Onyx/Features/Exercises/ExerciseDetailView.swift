@@ -37,6 +37,10 @@ struct ExerciseDetailView: View {
     @State private var current: ExerciseCatalogEntry?
     @State private var segment = Segment.summary
     @State private var ledger: [HistorySetRow] = []
+    /// Each session's tonnage for this movement, weighed off the main actor
+    /// by the session page's rule (`SessionAnalysis.tonnageKg`: the weigh-in
+    /// on that day credits an unloaded bodyweight set).
+    @State private var volumes: [String: Double] = [:]
     @State private var loaded = false
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -84,8 +88,12 @@ struct ExerciseDetailView: View {
             if startOnHistory { segment = .history }
             #endif
             let database = environment.database, id = shown.id
-            ledger = await Task.detached(priority: .userInitiated) {
-                (try? database.historySets(exerciseIds: [id], userId: database.localUserId())) ?? []
+            (ledger, volumes) = await Task.detached(priority: .userInitiated) {
+                let rows = (try? database.historySets(exerciseIds: [id], userId: database.localUserId())) ?? []
+                let volumes = Dictionary(grouping: rows, by: \.sessionId).mapValues { own in
+                    SessionAnalysis.tonnageKg(own, database: database, on: own[0].date)
+                }
+                return (rows, volumes)
             }.value
             loaded = true
         }
@@ -427,9 +435,11 @@ struct ExerciseDetailView: View {
             let rows = by[id]!
             let date = LogicalDay.date(fromISO: rows[0].date)
                 .map { $0.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) } ?? rows[0].date
-            let work = rows.filter { SetTags.isWorkingSet($0.setType) }
-            let volume = jsRound(SessionVolume.sessionVolumeKg(work.map(SessionAnalysis.volumeSet)))
-            var meta = "\(work.count) sets"
+            // "Sets" by the one rule (Q10: warm-ups in, a split set once),
+            // tonnage by the session page's.
+            let sets = SessionCounts.total(rows.map(SessionAnalysis.volumeSet))
+            let volume = jsRound(volumes[id] ?? 0)
+            var meta = "\(sets) sets"
             if volume > 0 { meta += " · \(OnyxFormat.volume(volume)) kg" }
             return SessionBlock(id: id, title: date, meta: meta, sets: rows)
         }

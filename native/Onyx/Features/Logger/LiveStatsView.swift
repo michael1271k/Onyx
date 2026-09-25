@@ -389,9 +389,14 @@ struct LiveStatsView: View {
     /// matched by canonical name; when it lands, THIS is the property that
     /// re-points at it, and the chip starts comparing against a session that
     /// happened.
+    ///
+    /// A bodyweight movement has no `wk1Kg`; it is seeded at the athlete's
+    /// weigh-in, the same credit `totalVolumeKg` gives it (Q13), or the chip
+    /// would read high by body weight × reps on every pull-up day.
     private var seedTonnage: Double {
-        model.exercises.reduce(0) { total, exercise in
-            guard let kg = exercise.plan.wk1Kg,
+        let bodyWeightKg = model.bodyWeightKg
+        return model.exercises.reduce(0) { total, exercise in
+            guard let kg = exercise.plan.wk1Kg ?? (Bodyweight.isBodyweight(exercise.name) ? bodyWeightKg : nil),
                   let window = exercise.plan.repWindow
             else { return total }
             return total + kg * Double(window.floor) * Double(exercise.plan.sets(for: model.phase))
