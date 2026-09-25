@@ -477,6 +477,15 @@ public extension AppDatabase {
     /// A set whose movement names no kind `cardio_logs` knows is skipped — an
     /// invented kind is a row the server may refuse, and a refused push is an
     /// outbox item stuck forever.
+    ///
+    /// ── AND A WALK HEALTH ALREADY HAS IS ADOPTED, NOT COPIED ────────────────
+    /// The watch's indoor walk can be imported while the session is still
+    /// open, as a row with no `session_id`. Inserting beside it would put one
+    /// walk on the Day screen twice, and every later import matches the
+    /// Health row by its key, so nothing would ever merge the two. So an
+    /// UNFILED row of the same day and activity whose duration is within the
+    /// import's own window (`CardioImport.duplicateWindow`) is taken instead:
+    /// it gains the session and keeps Health's figures and key.
     @discardableResult
     func recordSessionCardio(sessionId: String, userId: String) throws -> Int {
         try writer.write { db in
@@ -490,9 +499,24 @@ public extension AppDatabase {
                 .filter(Column("session_id") == sessionId && Column("duration_sec") > 0 && Column("set_type") != "ghost")
                 .order(Column("fold_order"), Column("set_index"))
                 .fetchAll(db)
+            var unfiled = try CardioLogRow
+                .filter(Column("user_id") == userId && Column("date") == session.date && Column("session_id") == nil)
+                .fetchAll(db)
             var written = 0
             for set in bouts {
                 guard let seconds = set.durationSec, let kind = Self.cardioKind(named: name(set.exerciseId)) else { continue }
+                let minutes = Double(seconds) / 60
+                if let i = unfiled.indices
+                    .filter({ CardioImport.sameActivity(unfiled[$0].kind, kind) && unfiled[$0].durationMin != nil
+                        && abs(unfiled[$0].durationMin! - minutes) <= CardioImport.duplicateWindow / 60 })
+                    .min(by: { abs(unfiled[$0].durationMin! - minutes) < abs(unfiled[$1].durationMin! - minutes) }) {
+                    var adopted = unfiled.remove(at: i)
+                    adopted.sessionId = sessionId
+                    try adopted.update(db)
+                    try Self.enqueueRowUpsert(table: CardioLogRow.databaseTableName, id: adopted.id, in: db)
+                    written += 1
+                    continue
+                }
                 let row = CardioLogRow(
                     id: newOnyxID(), userId: userId, date: session.date, kind: kind,
                     distanceM: set.distanceKm.map { ($0 * 1000).rounded() },

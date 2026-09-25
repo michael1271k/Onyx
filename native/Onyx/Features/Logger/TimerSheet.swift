@@ -48,12 +48,14 @@ struct TimerSheet: View {
                         picker
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(OnyxSpace.m)
                 .frame(minHeight: 44)
                 .onyxGlass(.tile)
                 Text("Moving the start moves the clock the session is saved with.")
                     .onyxType(.caption)
                     .foregroundStyle(Color.onyx.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, OnyxSpace.l)
             .frame(maxHeight: .infinity, alignment: .top)
@@ -68,7 +70,7 @@ struct TimerSheet: View {
                 }
             }
         }
-        .presentationDetents(typeSize.isAccessibilitySize ? [.medium] : [.height(220)])
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(220)])
         .presentationDragIndicator(.visible)
     }
 

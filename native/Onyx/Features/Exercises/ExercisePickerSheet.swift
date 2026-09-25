@@ -219,7 +219,7 @@ struct ExercisePickerSheet: View {
             onPick(entry.name, entry.exercise)
             dismiss()
         } label: {
-            ShelfRow(entry: entry, last: library.lastSets[entry.name])
+            ShelfRow(entry: entry, last: library.lastSets.map { $0[entry.name] })
         }
         // A movement can sit on a pinned shelf and on its muscle's: the row id
         // carries the shelf, or `ForEach` sees one id twice.
@@ -236,8 +236,10 @@ struct ExerciseLibrary {
     var recent: [String] = []
     /// "On this day": today's plan minus what is already on the deck.
     var onThisDay: [String] = []
-    /// Every row's last working set, keyed by the catalogue NAME.
-    var lastSets: [String: LastWorkingSet] = [:]
+    /// Every row's last working set, keyed by the catalogue NAME — nil when
+    /// nobody looked (the routine builder) or the read failed, which draws no
+    /// line rather than calling a lift lifted for months "New".
+    var lastSets: [String: LastWorkingSet]? = nil
 }
 
 // MARK: - The shelves
@@ -386,7 +388,8 @@ struct ShelfEntry: Identifiable {
 /// Mini atlas · name · muscle chips · last time.
 private struct ShelfRow: View {
     let entry: ShelfEntry
-    let last: LastWorkingSet?
+    /// Outer nil: nothing was looked up. Inner nil: looked up, never lifted.
+    let last: LastWorkingSet??
 
     /// Which face of the figure shows a muscle — the back muscles have no
     /// front path, and a figure lit on the wrong side is a figure lit nowhere.
@@ -437,8 +440,8 @@ private struct ShelfRow: View {
     /// `47kg × 12 · 12 Sep`, "New" for a lift never logged, and nothing for a
     /// bout — a treadmill's history is a duration, which a set line cannot say.
     private var lastLine: String? {
-        guard !entry.isCardio else { return nil }
-        guard let last else { return "New" }
+        guard !entry.isCardio, let looked = last else { return nil }
+        guard let last = looked else { return "New" }
         let set = SetFormat.format(weightKg: last.weightKg, reps: Double(last.reps))
         guard let date = LogicalDay.date(fromISO: last.date) else { return set }
         return "\(set) · \(date.formatted(.dateTime.day().month(.abbreviated)))"
@@ -502,9 +505,12 @@ enum StarterMovements {
     /// left alone (`createExercise` answers with the existing row).
     @discardableResult
     static func ensure(in store: AppDatabase, userId: String, catalogue: [Exercise]) -> Int {
-        let held = Set(catalogue.map { $0.name.lowercased() })
+        // Canonical, so an account's own "Pull-Up" is the Pull Up and no
+        // near-duplicate row is minted beside it.
+        func key(_ name: String) -> String { ExerciseAliases.canonicalName(name).lowercased() }
+        let held = Set(catalogue.map { key($0.name) })
         var created = 0
-        for movement in all where !held.contains(movement.name.lowercased()) {
+        for movement in all where !held.contains(key(movement.name)) {
             if (try? store.createExercise(
                 userId: userId, name: movement.name, equipment: movement.equipment,
                 id: id(userId: userId, name: movement.name)

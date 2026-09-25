@@ -55,7 +55,14 @@ struct EffortSlab: View {
             .background { vein(Self.level(index, of: words.count)) }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .contentShape(.rect)
-            .gesture(DragGesture(minimumDistance: 0).onChanged { pick(x: $0.location.x, width: width) })
+            // A tap rates where it lands; a drag rates only once it is going
+            // SIDEWAYS — a sheet scroll that starts on the slab is not a
+            // training-load input (review).
+            .onTapGesture { location in pick(x: location.x, width: width) }
+            .gesture(DragGesture(minimumDistance: 8).onChanged { drag in
+                guard abs(drag.translation.width) > abs(drag.translation.height) else { return }
+                pick(x: drag.location.x, width: width)
+            })
             .onyxGlass(.tile)
         .sensoryFeedback(.selection, trigger: word?.key)
         .accessibilityElement(children: .ignore)
@@ -130,7 +137,7 @@ struct EffortSlab: View {
                     .foregroundStyle(on ? Color.onyx.effort(stop.cr10) : Color.onyx.textSecondary)
                     .lineLimit(1)
                     .fixedSize()
-                    .frame(maxWidth: .infinity, minHeight: 32)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -139,9 +146,12 @@ struct EffortSlab: View {
         }
     }
 
+    /// Equal fifths — the same five zones the words under the slab occupy,
+    /// so a finger over "Everything" rates Everything (review: rounding onto
+    /// four gaps put 85 % of the width on Brutal).
     private func pick(x: CGFloat, width: CGFloat) {
         guard width > 0 else { return }
-        let i = Int((min(max(x / width, 0), 1) * CGFloat(words.count - 1)).rounded())
+        let i = min(Int(max(x, 0) / width * CGFloat(words.count)), words.count - 1)
         word = words[i]
     }
 

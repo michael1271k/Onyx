@@ -422,7 +422,7 @@ public extension AppDatabase {
                 db,
                 sql: "SELECT DISTINCT exercise_id FROM workout_sets WHERE session_id IN (SELECT id FROM workout_sessions WHERE user_id = ?)",
                 arguments: [userId]
-            ).filter { resolve($0).lowercased() == target }
+            ).filter { Self.nameKey(resolve($0)) == target }
         }
         // `setSelect`'s reader, so the columns a pair fold needs cannot be the
         // ones this forgot.
@@ -443,14 +443,25 @@ public extension AppDatabase {
     func lastWorkingSets(
         names: [String], userId: String, excludingSession sessionId: String? = nil
     ) throws -> [String: LastWorkingSet] {
+        Self.lastSets(in: try ledger(userId: userId, excludingSession: sessionId), names: names)
+    }
+
+    /// Recent AND every row's last set, from ONE read of the ledger — what the
+    /// library opens on. Two reads measured 120 ms over 200 movements and
+    /// 3,000 sets on a loaded machine; the ledger is the whole cost.
+    func libraryHistory(
+        names: [String], userId: String, recentLimit: Int, excludingSession sessionId: String? = nil
+    ) throws -> (recent: [String], lastSets: [String: LastWorkingSet]) {
+        let ledger = try ledger(userId: userId, excludingSession: sessionId)
+        return (Self.recent(in: ledger, limit: recentLimit), Self.lastSets(in: ledger, names: names))
+    }
+
+    private static func lastSets(in ledger: [(row: HistorySetRow, name: String)], names: [String]) -> [String: LastWorkingSet] {
         var byName: [String: [HistorySetRow]] = [:]
-        for (row, resolved) in try ledger(userId: userId, excludingSession: sessionId) {
-            byName[Self.nameKey(resolved), default: []].append(row)
-        }
+        for (row, resolved) in ledger { byName[nameKey(resolved), default: []].append(row) }
         var out: [String: LastWorkingSet] = [:]
         for name in names {
-            guard let mine = byName[Self.nameKey(name)],
-                  let last = Self.lastWorking(in: mine, name: name) else { continue }
+            guard let mine = byName[nameKey(name)], let last = lastWorking(in: mine, name: name) else { continue }
             out[name] = last
         }
         return out
@@ -465,11 +476,15 @@ public extension AppDatabase {
     func recentMovements(
         userId: String, limit: Int, excludingSession sessionId: String? = nil
     ) throws -> [String] {
+        Self.recent(in: try ledger(userId: userId, excludingSession: sessionId), limit: limit)
+    }
+
+    private static func recent(in ledger: [(row: HistorySetRow, name: String)], limit: Int) -> [String] {
         var seen = Set<String>()
         var out: [String] = []
-        for (_, resolved) in try ledger(userId: userId, excludingSession: sessionId).reversed() where out.count < limit {
+        for (_, resolved) in ledger.reversed() where out.count < limit {
             let name = ExerciseAliases.canonicalName(resolved)
-            if seen.insert(Self.nameKey(name)).inserted { out.append(name) }
+            if seen.insert(nameKey(name)).inserted { out.append(name) }
         }
         return out
     }

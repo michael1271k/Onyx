@@ -189,7 +189,9 @@ enum RoutineOrder {
     /// A bout is left alone (its sets carry duration, not load — the entry is
     /// the web's shape and nothing here can write it back correctly).
     static func merge(_ stored: [[String: Any]], _ logged: [WorkoutSet]) -> [[String: Any]] {
-        guard !logged.contains(where: { $0.durationSec != nil }) else { return stored }
+        guard !logged.contains(where: {
+            WarmupCardio.isCardio(durationSec: $0.durationSec, distanceKm: $0.distanceKm, inclinePct: $0.incline)
+        }) else { return stored }
         func isWarmup(_ set: [String: Any]) -> Bool { set["setType"] as? String == "warmup" }
         func fold(_ sets: [[String: Any]], _ rows: [WorkoutSet]) -> [[String: Any]] {
             var out = sets

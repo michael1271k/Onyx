@@ -159,7 +159,7 @@ struct MuscleShelfTests {
         let library = model.library()
         #expect(library.recent == ["Face Pull", "Seated DB Wrist Curl"])
         #expect(library.onThisDay == ["Seated DB Wrist Curl"])
-        #expect(library.lastSets["Face Pull"]?.weightKg == 30)
+        #expect(library.lastSets?["Face Pull"]?.weightKg == 30)
 
         // Once the face pull is on the deck it leaves Recent.
         model.addExercise(named: "Face Pull")

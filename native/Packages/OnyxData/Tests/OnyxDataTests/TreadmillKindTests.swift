@@ -107,6 +107,26 @@ struct TreadmillTruthTests {
         #expect(try db.lastLoggedBout(named: "Rowing", userId: user) == nil)
     }
 
+    @Test("a walk Health imported BEFORE the finish is adopted, not duplicated")
+    func healthFirstIsAdopted() throws {
+        let db = try AppDatabase.inMemory(deviceId: "d")
+        try sessionWithBout(db)
+        // The watch's indoor walk of the same twenty minutes, imported while
+        // the session was still open: no session, a key, a start.
+        try db.addCardio(CardioLogRow(
+            id: "hk", userId: user, date: "2026-09-20", kind: CardioImport.treadmill,
+            distanceM: 1_640, durationMin: 20.4, fromHealthkit: true,
+            createdAt: Date(timeIntervalSince1970: 1_790_000_060), hkUuid: "HK-1"
+        ))
+        #expect(try db.recordSessionCardio(sessionId: "s1", userId: user) == 1)
+        let rows = try db.cardioRows(userId: user, date: "2026-09-20")
+        #expect(rows.count == 1, "one walk, one row")
+        #expect(rows.first?.id == "hk")
+        #expect(rows.first?.sessionId == "s1", "filed against the session it was the warm-up of")
+        #expect(rows.first?.hkUuid == "HK-1", "Health's figures and key survive")
+        #expect(try db.recordSessionCardio(sessionId: "s1", userId: user) == 0)
+    }
+
     @Test("a HealthKit re-import of the same bout lands on the filed row, never beside it")
     func healthReimportDedupes() throws {
         let db = try AppDatabase.inMemory(deviceId: "d")

@@ -48,9 +48,11 @@ struct TimerRail: View {
                 Rectangle().fill(Color.onyx.hairline).frame(height: 0.5)
             }
             HStack(spacing: OnyxSpace.s) {
+                // The rest is the reading this rail is for, so it is the one
+                // that never gives way; elapsed (also in the hero) does.
                 elapsed
                 Spacer(minLength: 0)
-                if let rest { restControl(rest) }
+                if let rest { restControl(rest).fixedSize().layoutPriority(1) }
                 Spacer(minLength: 0)
                 pauseButton
             }
@@ -153,6 +155,7 @@ struct TimerRail: View {
         Button { onAdjustRest(seconds) } label: {
             Text(seconds > 0 ? "+15" : "−15")
                 .onyxType(.caption).fontWeight(.semibold).onyxNumeral()
+                .fixedSize()
                 .foregroundStyle(Color.onyx.textSecondary)
                 .frame(minWidth: 40, minHeight: 44)
                 .contentShape(.rect)
@@ -201,6 +204,11 @@ struct TimerRail: View {
             .lineLimit(1)
             .fixedSize()
             .accessibilityLabel("Stopwatch")
+            // Spoken, as the old sheet spoke it: the label replaces the text.
+            .accessibilityValue(
+                watchStart.map { Text($0.addingTimeInterval(-watchAccumulated), style: .timer) }
+                    ?? Text(Clock.format(watchAccumulated))
+            )
             // Newest first, as capsules: a lap list is read for the LAST lap,
             // and a row of them scrolls where a column would grow the rail.
             ScrollView(.horizontal, showsIndicators: false) {

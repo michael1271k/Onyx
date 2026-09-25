@@ -933,6 +933,12 @@ struct ExerciseCardView: View {
     /// number of boxes on this card and the number in its header cannot
     /// disagree any more. The ORDINAL is the group's, which is what makes the
     /// column read 1, 2, 3 on a movement logged one arm at a time.
+    /// Every effort word this card's rows print — so each row can test the
+    /// WIDEST, and the whole column falls back to numbers together.
+    private var effortWords: [String] {
+        Array(Set(exercise.rows.map { RpeLadder.label($0.rpe) ?? "Rate" }))
+    }
+
     private var sets: some View {
         VStack(spacing: OnyxSpace.xs) {
             columnHeaders
@@ -954,7 +960,8 @@ struct ExerciseCardView: View {
                     onEffort: { targets in effortFor = SetTarget(targets, ordinal: index + 1) },
                     onRecord: { recordFor = SetTarget(group, ordinal: index + 1) },
                     provisional: group.lazy.compactMap { model.provisional(for: $0) }.first,
-                    onConfirmProvisional: { for row in group { model.commitProvisional(row, in: exercise) } }
+                    onConfirmProvisional: { for row in group { model.commitProvisional(row, in: exercise) } },
+                    effortWords: effortWords
                 )
             }
 
@@ -1411,6 +1418,8 @@ struct SetRowView: View {
     /// written (overhaul A3). Drawn in its band's ink; a tap commits it.
     var provisional: LoggerModel.ProvisionalEffort? = nil
     var onConfirmProvisional: () -> Void = {}
+    /// The card's effort words — see `ExerciseCardView.effortWords`.
+    var effortWords: [String] = []
 
     @State private var justLogged = false
     /// Which log the current flash belongs to. Two ticks inside 300 ms had the
@@ -2233,8 +2242,15 @@ struct SetRowView: View {
             // those is a card you scroll past the set you are standing in
             // front of. When the word does not fit, the NUMBER stands in for
             // it at the same size — never the word shrunk (Precision A3).
+            //
+            // And the CARD decides, not the row: the first candidate carries
+            // every word the card prints, hidden, so a column never reads
+            // "9 / 9 / Hard" — either every word fits, or every row is a number.
             ViewThatFits(in: .horizontal) {
-                effortWord(RpeLadder.label(row.rpe) ?? "Rate")
+                ZStack(alignment: .trailing) {
+                    ForEach(effortWords, id: \.self) { effortWord($0).hidden() }
+                    effortWord(RpeLadder.label(row.rpe) ?? "Rate")
+                }
                 effortWord(row.rpe.map(OnyxFormat.kg) ?? "Rate")
             }
                 .multilineTextAlignment(typeSize.isAccessibilitySize ? .leading : .trailing)

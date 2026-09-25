@@ -33,13 +33,13 @@ struct CutTheStoneTests {
         #expect(WristMetrics.shown(evidence: false, liveBpmSeen: false, measured: false, carried: true))
     }
 
-    @Test("unticked working sets are counted; warm-ups, bouts and ticked sets are not")
+    @Test("unticked sets are the Sets tile's own remainder: planned minus done")
     func untickedCount() throws {
         let model = LoggerModel(
             day: PlanTemplates.day("onyx5", "arms"), phase: .bulk,
             warmupBout: WarmupCardio.Bout(name: "Treadmill", durationSec: 300)
         )
-        let planned = model.exercises.reduce(0) { $0 + LoggerModel.physical($1.rows.filter { $0.kind != .warmup && !$0.isCardio }) }
+        let planned = model.plannedSets
         #expect(model.untickedSets == planned, "nothing ticked: every planned set")
         let first = try #require(model.exercises.first { !$0.rows.contains(where: \.isCardio) })
         let row = try #require(first.rows.first { $0.kind != .warmup })

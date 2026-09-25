@@ -336,7 +336,10 @@ struct FinishSheet: View {
     private var showsWristMetrics: Bool {
         WristMetrics.shown(
             evidence: wristEvidence, liveBpmSeen: model.wristBpmSeen,
-            measured: bpmMeasured || caloriesMeasured, carried: carriedWrist
+            measured: bpmMeasured || caloriesMeasured,
+            // A figure already on the row is shown, whoever put it there — a
+            // hidden cell holding a value is a sheet saying "empty" over data.
+            carried: carriedWrist || avgBpm != nil || calories != nil
         )
     }
 
@@ -1002,9 +1005,11 @@ struct FinishSheet: View {
             // stored by the next sync.
             guard onFinish(word?.cr10) else { return }
         } label: {
+            // Dark ink on the pastel ramp: white on its cyan end is ~2:1
+            // (Precision A5 review) — the same ink the deck's Finish pill uses.
             Text("Finish session")
                 .onyxType(.body).fontWeight(.semibold)
-                .foregroundStyle(Color.onyx.textPrimary)
+                .foregroundStyle(Color.onyx.base)
                 .frame(maxWidth: .infinity, minHeight: 50)
                 .background(
                     OnyxDomain.train.ramp,
