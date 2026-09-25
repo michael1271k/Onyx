@@ -180,17 +180,26 @@ public extension AppDatabase {
         userId: String, programId: String, startedOn: String
     ) throws {
         try writer.write { db in
-            let rows = try PlanRow.filter(Column("user_id") == userId).fetchAll(db)
-            guard rows.contains(where: { $0.programId == programId }) else { return }
-            for var row in rows {
-                let wants = row.programId == programId
-                var changed = false
-                if (row.active ?? false) != wants { row.active = wants; changed = true }
-                if wants, row.startedOn == nil { row.startedOn = startedOn; changed = true }
-                guard changed else { continue }
-                try row.save(db)
-                try Self.enqueueRowUpsert(table: PlanRow.databaseTableName, id: row.id, in: db)
-            }
+            try Self.activatePlanRow(db, userId: userId, programId: programId, startedOn: startedOn)
+        }
+    }
+
+    /// The same, inside a caller's transaction — the seed runs the program it
+    /// just wrote through this (Precision E2), so there is one rule for what
+    /// "running" writes.
+    static func activatePlanRow(
+        _ db: Database, userId: String, programId: String, startedOn: String
+    ) throws {
+        let rows = try PlanRow.filter(Column("user_id") == userId).fetchAll(db)
+        guard rows.contains(where: { $0.programId == programId }) else { return }
+        for var row in rows {
+            let wants = row.programId == programId
+            var changed = false
+            if (row.active ?? false) != wants { row.active = wants; changed = true }
+            if wants, row.startedOn == nil { row.startedOn = startedOn; changed = true }
+            guard changed else { continue }
+            try row.save(db)
+            try Self.enqueueRowUpsert(table: PlanRow.databaseTableName, id: row.id, in: db)
         }
     }
 }

@@ -21,7 +21,8 @@ public extension PlanInfo {
         guard let id = r.programId, !id.isEmpty else { return nil }
         self.init(
             id: id, label: r.name, blurb: r.blurb ?? "", isLegacy: r.isLegacy ?? false,
-            startedOn: r.startedOn, sort: r.sort ?? 0
+            startedOn: r.startedOn, sort: r.sort ?? 0,
+            goalKind: r.goalKind, goalTarget: r.goalTarget.flatMap { ProgramGoalTarget.decode($0.raw) }
         )
     }
 }
@@ -31,7 +32,8 @@ public extension RoutineDay {
         self.init(
             programId: r.programId, dayKey: r.dayKey, label: r.label, sub: r.sub,
             weekday: r.weekday, accent: r.accent, sort: r.sort,
-            payload: RoutinePayload.decode(r.payload.raw) ?? RoutinePayload(exercises: [])
+            payload: RoutinePayload.decode(r.payload.raw) ?? RoutinePayload(exercises: []),
+            notes: r.notes
         )
     }
 }

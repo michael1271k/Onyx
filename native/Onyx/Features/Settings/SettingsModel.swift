@@ -476,28 +476,11 @@ final class SettingsModel {
     /// from. All five, or the app and the charts describe different weeks.
     func activate(planId newPlanId: String, phase newPhase: ProgramPhase) {
         let startedOn = today
+        // The five writes live in OnyxData since Precision E2
+        // (`AppDatabase.activateProgram`), so the Programs screen's "Run" and
+        // this switch cannot drift apart.
         write { [database, userId] in
-            // The phase's own row, if the plan has one; an empty goal set
-            // otherwise, which writes zeros the screens already read as unset.
-            let goals = try database.phaseGoals(userId: userId, planId: newPlanId, phase: newPhase) ?? .empty(newPhase)
-            try database.editUserGoals(userId: userId) { row in
-                row.calorieGoal = Int(goals.calorieGoal)
-                row.proteinGoalG = goals.proteinGoalG.map { Int($0) }
-                row.carbsGoalG = goals.carbsGoalG.map { Int($0) }
-                row.fatGoalG = goals.fatGoalG.map { Int($0) }
-                row.stepsGoal = Int(goals.stepsGoal)
-                row.targetWeightKg = goals.targetWeightKg
-                row.targetBodyFatPct = goals.targetBodyFatPct
-                row.targetMuscleMassKg = goals.targetMuscleMassKg
-                row.activePlan = newPlanId
-                row.activeProgram = newPlanId
-                row.activePhase = newPhase.rawValue
-                row.goalPreset = newPhase.rawValue
-                row.phaseStartedOn = startedOn
-            }
-            try database.activatePlanRow(
-                userId: userId, programId: newPlanId, startedOn: startedOn
-            )
+            try database.activateProgram(userId: userId, programId: newPlanId, phase: newPhase, startedOn: startedOn)
         }
     }
 }

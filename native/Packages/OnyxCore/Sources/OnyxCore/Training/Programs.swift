@@ -32,14 +32,132 @@ public struct PlanInfo: Identifiable, Codable, Equatable, Sendable {
     public let startedOn: String?
     /// Picker order, lower first.
     public let sort: Int
+    /// `plans.goal_kind`, as stored. A STRING and not a `ProgramGoal`: this
+    /// value rides in the watch's `ScheduleContext`, and one row holding a
+    /// kind this build does not know must read as "no goal", never fail the
+    /// whole context's decode. `goal` is the typed reading.
+    public let goalKind: String?
+    /// `plans.goal_target` — where the goal is heading.
+    public let goalTarget: ProgramGoalTarget?
 
-    public init(id: String, label: String, blurb: String, isLegacy: Bool = false, startedOn: String? = nil, sort: Int = 0) {
+    public init(
+        id: String, label: String, blurb: String, isLegacy: Bool = false, startedOn: String? = nil, sort: Int = 0,
+        goalKind: String? = nil, goalTarget: ProgramGoalTarget? = nil
+    ) {
         self.id = id
         self.label = label
         self.blurb = blurb
         self.isLegacy = isLegacy
         self.startedOn = startedOn
         self.sort = sort
+        self.goalKind = goalKind
+        self.goalTarget = goalTarget
+    }
+
+    /// The program's goal, or nil — none set, or a kind this build does not know.
+    public var goal: ProgramGoal? { goalKind.flatMap(ProgramGoal.init(rawValue:)) }
+}
+
+// MARK: - A program's goal (Precision E3)
+
+/// What a program is FOR — `plans.goal_kind`. Five kinds, where onboarding's
+/// `StartingGoal` has three: the two extra are the same two directions steered
+/// by a different reading of the scale (muscle mass, body-fat percentage)
+/// rather than by weight.
+///
+/// The raw values are the WIRE FORMAT the CHECK constraint in
+/// `docs/sql/precision-e-programs.sql` names. Add, never rename.
+public enum ProgramGoal: String, CaseIterable, Codable, Sendable {
+    case bulk
+    case cut
+    case recomp
+    case muscleMass = "muscle_mass"
+    case bodyFat = "body_fat"
+
+    public var label: String {
+        switch self {
+        case .bulk:       "Bulk"
+        case .cut:        "Cut"
+        case .recomp:     "Recomp"
+        case .muscleMass: "Muscle mass"
+        case .bodyFat:    "Body fat %"
+        }
+    }
+
+    /// One line under the label: what the choice DOES, not what it is.
+    public var blurb: String {
+        switch self {
+        case .bulk:       "Eat above maintenance and gain slowly. Train for the most productive volume."
+        case .cut:        "Eat below maintenance to lose fat. Train to keep the muscle you have."
+        case .recomp:     "Eat at maintenance with high protein. Lose fat and build muscle at a steady weight."
+        case .muscleMass: "Add muscle to a figure your scale measures. A lean bulk aimed at muscle, not weight."
+        case .bodyFat:    "Reach a body-fat percentage your scale measures. A cut steered by fat, not weight."
+        }
+    }
+
+    /// The training phase it runs in — which `plan_phase_goals` and
+    /// `plan_phase_volume` rows it reads. Recomp holds the scale still, which
+    /// trains on the cut's volume: the rule `StartingGoal.maintain` states.
+    public var phase: ProgramPhase {
+        switch self {
+        case .bulk, .muscleMass: .bulk
+        case .cut, .bodyFat, .recomp: .cut
+        }
+    }
+
+    /// The bundled template this goal suits (`plan-templates.json` ids):
+    /// the five-day hybrid for building, the four-day split for cutting, the
+    /// push/pull/legs rotation for a recomp's steady middle.
+    public var recommendedTemplateId: String {
+        switch self {
+        case .bulk, .muscleMass: "onyx5"
+        case .cut, .bodyFat:     "onyx4"
+        case .recomp:            "ppl"
+        }
+    }
+}
+
+/// `plans.goal_target` — where the goal is heading and by when. Every key is
+/// optional: which target matters follows the kind (a weight for bulk, cut
+/// and recomp; a percentage for body fat; kilograms of muscle for muscle
+/// mass), and the rest stay out of the object rather than arriving as zeros.
+public struct ProgramGoalTarget: Codable, Equatable, Sendable {
+    public var targetWeightKg: Double?
+    public var targetBodyFatPct: Double?
+    public var targetMuscleMassKg: Double?
+    /// The implied rate when the goal was set, signed — the number the
+    /// sheet showed, kept so a later reader need not re-derive it.
+    public var weeklyRateKg: Double?
+    public var horizonWeeks: Int?
+    /// The weight the goal was set from — the other end of the rate.
+    public var startWeightKg: Double?
+
+    public init(
+        targetWeightKg: Double? = nil, targetBodyFatPct: Double? = nil, targetMuscleMassKg: Double? = nil,
+        weeklyRateKg: Double? = nil, horizonWeeks: Int? = nil, startWeightKg: Double? = nil
+    ) {
+        self.targetWeightKg = targetWeightKg; self.targetBodyFatPct = targetBodyFatPct
+        self.targetMuscleMassKg = targetMuscleMassKg; self.weeklyRateKg = weeklyRateKg
+        self.horizonWeeks = horizonWeeks; self.startWeightKg = startWeightKg
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case targetWeightKg = "target_weight_kg"
+        case targetBodyFatPct = "target_body_fat_pct"
+        case targetMuscleMassKg = "target_muscle_mass_kg"
+        case weeklyRateKg = "weekly_rate_kg"
+        case horizonWeeks = "horizon_weeks"
+        case startWeightKg = "start_weight_kg"
+    }
+
+    public static func decode(_ json: String) -> ProgramGoalTarget? {
+        try? JSONDecoder().decode(ProgramGoalTarget.self, from: Data(json.utf8))
+    }
+
+    public func encoded() -> String {
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.sortedKeys]
+        return String(decoding: (try? enc.encode(self)) ?? Data("{}".utf8), as: UTF8.self)
     }
 }
 

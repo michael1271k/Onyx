@@ -198,28 +198,18 @@ public extension AppDatabase {
                     secondaryMuscles: draft.secondaryMuscles, equipment: draft.equipment, id: nil
                 )
             }
-            let index = ExerciseIndex(
-                try Exercise.fetchAll(db).map { RemoteExercise(id: $0.id, name: $0.name, slug: $0.slug) }
+            // ── 2 + 3. The plan row and its deck, then run it ───────────────
+            // `PlanWriter`'s one creation path (Precision E2): the placeholder
+            // is claimed there, and the deck resolved against the catalogue
+            // step 1 just wrote. Running it is `activatePlanRow`, the same
+            // write the Programs screen's "Make active" ends in.
+            let (programId, unresolved) = try Self.createPlan(
+                db, userId: seed.userId, programId: seed.plan?.programId ?? AccountSeed.blankProgramId,
+                name: seed.plan?.label ?? AccountSeed.blankLabel, blurb: seed.plan?.blurb ?? "",
+                isLegacy: seed.plan?.isLegacy ?? false, sort: seed.plan?.sort ?? 0,
+                goal: nil, goalTarget: nil, days: seed.plan?.days ?? []
             )
-
-            // ── 2. The plan row ─────────────────────────────────────────────
-            let programId = seed.plan?.programId ?? AccountSeed.blankProgramId
-            let label = seed.plan?.label ?? AccountSeed.blankLabel
-            try Self.seedPlanRow(
-                db, userId: seed.userId, programId: programId, label: label,
-                blurb: seed.plan?.blurb ?? "", isLegacy: seed.plan?.isLegacy ?? false,
-                sort: seed.plan?.sort ?? 0, startedOn: seed.startedOn
-            )
-
-            // ── 3. The deck ─────────────────────────────────────────────────
-            var unresolved: [String] = []
-            for day in seed.plan?.days ?? [] {
-                var resolved = day
-                let (payload, missing) = day.payload.resolving(index)
-                resolved.payload = payload
-                unresolved.append(contentsOf: missing)
-                try Self.saveRoutineDay(db, userId: seed.userId, resolved)
-            }
+            try Self.activatePlanRow(db, userId: seed.userId, programId: programId, startedOn: seed.startedOn)
 
             // ── 4. Nutrition, per phase ─────────────────────────────────────
             // Both phases, not just the one being started: a person who flips to
@@ -263,32 +253,9 @@ public extension AppDatabase {
 
     // MARK: - The pieces
 
-    /// Claim the placeholder `plans` row, or make one.
-    ///
-    /// A Postgres trigger creates a row named "My Plan" with NO `program_id` at
-    /// sign-up (`PlanInfo.init?(_:)` documents it). Writing a second row beside
-    /// it would leave the account with two plans, one of which no screen can
-    /// name — so the placeholder is CLAIMED when it is there.
-    static func seedPlanRow(
-        _ db: Database, userId: String, programId: String, label: String,
-        blurb: String, isLegacy: Bool, sort: Int, startedOn: String
-    ) throws {
-        let existing = try PlanRow.filter(Column("user_id") == userId).fetchAll(db)
-        var row = existing.first { $0.programId == programId }
-            ?? existing.first { ($0.programId ?? "").isEmpty }
-            ?? PlanRow(id: newOnyxID(), userId: userId, name: label)
-
-        row.name = label
-        row.programId = programId
-        row.blurb = blurb
-        row.isLegacy = isLegacy
-        row.sort = sort
-        row.active = true
-        row.startedOn = row.startedOn ?? startedOn
-        if row.createdAt == nil { row.createdAt = Self.localWriteTimestamp }
-        try row.save(db)
-        try Self.enqueueRowUpsert(table: PlanRow.databaseTableName, id: row.id, in: db)
-    }
+    // The plan row is `PlanWriter.createPlan` (Precision E2), which claims the
+    // sign-up trigger's placeholder ("My Plan", no `program_id`) rather than
+    // writing a second row beside it.
 
     static func seedPhaseGoals(
         _ db: Database, userId: String, planId: String, phase: ProgramPhase, seed: AccountSeed

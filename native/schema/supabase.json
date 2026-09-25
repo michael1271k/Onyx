@@ -220,7 +220,7 @@
       ],
       "cursor": "updated_at",
       "since": 2,
-      "cols": "user_id:uuid,program_id:text,day_key:text,label:text,sub:text?,weekday:int2,accent:int4,sort:int2,payload:jsonb,updated_at:timestamptz"
+      "cols": "user_id:uuid,program_id:text,day_key:text,label:text,sub:text?,weekday:int2,accent:int4,sort:int2,payload:jsonb,updated_at:timestamptz,notes:text?"
     },
     "workout_sessions": {
       "group": "training",
@@ -273,7 +273,7 @@
         "id"
       ],
       "full": true,
-      "cols": "id:uuid,user_id:uuid,name:text,program_id:text?,active:bool?,started_on:date?,created_at:timestamptz?,blurb:text?,is_legacy:bool?,sort:int2?"
+      "cols": "id:uuid,user_id:uuid,name:text,program_id:text?,active:bool?,started_on:date?,created_at:timestamptz?,blurb:text?,is_legacy:bool?,sort:int2?,goal_kind:text?,goal_target:jsonb?"
     },
     "plan_phase_goals": {
       "group": "plan",

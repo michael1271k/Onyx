@@ -16,92 +16,110 @@ import OnyxUI
 /// `WorkoutWeek` already draws the week. This screen writes what it draws.
 struct RoutineBuilderView: View {
     @Bindable var model: RoutinesModel
-    @State private var pendingDelete: RoutineDay?
 
     var body: some View {
         List {
-            if let failure = model.failure {
-                Section { Text(failure).onyxType(.caption).foregroundStyle(Color.onyx.danger) }
-            }
-
-            // ── THE MOVEMENTS NOTHING ANSWERS FOR ───────────────────────────
-            // Once, at the top, rather than as a badge on every day. A movement
-            // the catalogue cannot place still logs — it falls back to the
-            // legacy slug (D3) — but its sets will not resolve to a catalogue
-            // row on upload, and that is worth saying out loud rather than
-            // discovering as a red badge on a finished session three days later.
-            if !model.unresolved.isEmpty {
-                Section {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(unresolvedTitle)
-                                .onyxType(.body).fontWeight(.semibold)
-                                .foregroundStyle(Color.onyx.textPrimary)
-                            Text(unresolvedDetail)
-                                .onyxType(.caption)
-                                .foregroundStyle(Color.onyx.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    } icon: {
-                        Image(systemName: "questionmark.circle").foregroundStyle(Color.onyx.record)
-                    }
-                }
-            }
-
-            Section {
-                ForEach(model.days, id: \.dayKey) { day in
-                    NavigationLink {
-                        RoutineDayEditor(model: model, dayKey: day.dayKey)
-                    } label: {
-                        dayRow(day)
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) { pendingDelete = day } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                        Button { model.duplicate(day) } label: {
-                            Label("Duplicate", systemImage: "plus.square.on.square")
-                        }
-                        .tint(OnyxDomain.train.accent)
-                    }
-                }
-                .onMove { model.move(from: $0, to: $1) }
-            } header: {
-                OnyxSectionHeader("Days", .train)
-            } footer: {
-                Text(model.days.isEmpty
-                     ? "No days yet. Add one and put your movements in it."
-                     : "Drag to reorder. Swipe a day to duplicate or delete it.")
-            }
-
-            Section {
-                Button {
-                    model.addDay()
-                } label: {
-                    Label("Add a day", systemImage: "plus")
-                }
-            }
+            RoutineDaySections(model: model)
         }
         .onyxFormBackground(.train)
         .navigationTitle(model.programLabel)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { EditButton() }
         .task { await model.reload() }
-        // A day carries every session ever logged against it through
-        // `workout_sessions.day_key`; deleting it does not delete those, but it
-        // does take them out of the schedule, so it asks.
-        .confirmationDialog(
-            "Delete \(pendingDelete?.label ?? "this day")?",
-            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if let day = pendingDelete { model.delete(day) }
-                pendingDelete = nil
+    }
+}
+
+/// Everything the builder lists below a program's own settings — the failure,
+/// the movements nothing answers for, the days, and "Add a day".
+///
+/// ── SHARED, SO THE PROGRAM EDITOR IS NOT A COPY (Precision E2) ─────────────
+/// `ProgramEditorView` is this list with one more section on top (name, goal,
+/// running). Sections rather than a wrapper around `RoutineBuilderView`: each
+/// screen owns its own `List` and its own ground, and the days are written
+/// once.
+struct RoutineDaySections: View {
+    @Bindable var model: RoutinesModel
+    @State private var pendingDelete: RoutineDay?
+
+    var body: some View {
+        if let failure = model.failure {
+            Section { Text(failure).onyxType(.caption).foregroundStyle(Color.onyx.danger) }
+        }
+
+        // ── THE MOVEMENTS NOTHING ANSWERS FOR ───────────────────────────────
+        // Once, at the top, rather than as a badge on every day. A movement
+        // the catalogue cannot place still logs — it falls back to the legacy
+        // slug (D3) — but its sets will not resolve to a catalogue row on
+        // upload, and that is worth saying out loud rather than discovering as
+        // a red badge on a finished session three days later.
+        if !model.unresolved.isEmpty {
+            Section {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(unresolvedTitle)
+                            .onyxType(.body).fontWeight(.semibold)
+                            .foregroundStyle(Color.onyx.textPrimary)
+                        Text(unresolvedDetail)
+                            .onyxType(.caption)
+                            .foregroundStyle(Color.onyx.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } icon: {
+                    Image(systemName: "questionmark.circle").foregroundStyle(Color.onyx.record)
+                }
             }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
-        } message: {
-            Text("Sessions you have already logged on this day are kept. The day stops appearing in your week.")
+        }
+
+        Section {
+            ForEach(model.days, id: \.dayKey) { day in
+                NavigationLink {
+                    RoutineDayEditor(model: model, dayKey: day.dayKey)
+                } label: {
+                    dayRow(day)
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) { pendingDelete = day } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    Button { model.duplicate(day) } label: {
+                        Label("Duplicate", systemImage: "plus.square.on.square")
+                    }
+                    .tint(OnyxDomain.train.accent)
+                }
+            }
+            .onMove { model.move(from: $0, to: $1) }
+
+            // The last row of the days it adds to, not a section of its own.
+            Button {
+                model.addDay()
+            } label: {
+                Label("Add a day", systemImage: "plus")
+                    .frame(minHeight: 44)
+            }
+            // A day carries every session ever logged against it through
+            // `workout_sessions.day_key`; deleting it does not delete those,
+            // but it does take them out of the schedule, so it asks. On ONE
+            // view (this button), not on a section — a presentation modifier
+            // on a `Section` is replicated onto every row in it.
+            .confirmationDialog(
+                "Delete \(pendingDelete?.label ?? "this day")?",
+                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let day = pendingDelete { model.delete(day) }
+                    pendingDelete = nil
+                }
+                Button("Cancel", role: .cancel) { pendingDelete = nil }
+            } message: {
+                Text("Sessions you have already logged on this day are kept. The day stops appearing in your week.")
+            }
+        } header: {
+            OnyxSectionHeader("Days", .train)
+        } footer: {
+            Text(model.days.isEmpty
+                 ? "No days yet. Add one and put your movements in it."
+                 : "Drag to reorder. Swipe a day to duplicate or delete it.")
         }
     }
 
@@ -149,16 +167,16 @@ struct RoutineBuilderView: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// "Sunday · Chest + Back · 7 exercises · 18 sets" — one shape for every
+    /// day, and "exercises", the word Train's plan card uses for the same day.
     private func subtitle(_ day: RoutineDay) -> String {
         let count = day.payload.exercises.count
-        let movements = count == 1 ? "1 movement" : "\(count) movements"
+        let weekday = RoutinesModel.weekdayNames[min(max(day.weekday, 0), 6)]
+        guard count > 0 else { return "\(weekday) · empty" }
         let sets = day.payload.exercises.reduce(0) { $0 + $1.sets }
-        let weekday = Self.weekdayNames[min(max(day.weekday, 0), 6)]
-        // The sub is the day's own subtitle ("Chest + Back") and beats a set
-        // count when it is there — it is what the person wrote.
-        if let sub = day.sub, !sub.isEmpty { return "\(weekday) · \(sub) · \(movements)" }
-        return count == 0 ? "\(weekday) · empty" : "\(weekday) · \(movements), \(sets) sets"
+        let sub = day.sub.flatMap { $0.isEmpty ? nil : $0 }
+        return [weekday, sub, count == 1 ? "1 exercise" : "\(count) exercises", "\(sets) sets"]
+            .compactMap { $0 }
+            .joined(separator: " · ")
     }
-
-    static let weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 }
