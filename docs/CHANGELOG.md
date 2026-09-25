@@ -44,6 +44,53 @@ _Nothing yet._
 
 ---
 
+## [9.6.0] — 2026-09-25 · The arithmetic of truth: tonnage on the Hevy basis, Sets and Working, a PR guard, cholesterol as Apple counts it
+
+Precision sprint, Lane C. Four engines change what the numbers mean; no new
+screen. Two server files under `docs/sql/` must be pasted BEFORE this build
+reaches the phone: `precision-c-counts.sql` (the new column), then
+`precision-c-backfill-sets.sql` (every user's set figures on the new rule).
+
+### Changed
+- **Tonnage is on the Hevy basis.** A warm-up weighs nothing; a bodyweight
+  movement at 0 kg (pull-ups, dips, crunches…) weighs your latest weigh-in on
+  or before that day × reps; a single-arm pair still counts once at the weaker
+  side. The session summary, the Train ticket, the week, the widgets and the
+  weekly export all agree, and the stored session total is rewritten once on
+  the first sync after install (`onyx.recount.sets.v1`). The founder's
+  2026-09-24 Upper B stays 4409 kg on both bases — the 36.2 kg gap to Hevy is
+  not a rule and is written up in the plan.
+- **Two set figures.** "Sets" is everything you performed — working sets,
+  warm-ups and cardio bouts, a pair once, never a ghost — and is what
+  `set_count` now holds everywhere; "Working" is the secondary figure
+  (`working_set_count`). Lane A/B screens will relabel; the numbers already come
+  from one rule (`SessionCounts`).
+- **A trophy needs a history.** A record now requires at least one prior
+  session-backed set OR a floor (an onboarding 1RM, a standing record from
+  another device) for that exercise; the first-ever session of a movement
+  shows a quiet Baseline mark and files nothing — even when its second set
+  out-lifts its first. The live deck and the close path read one baseline
+  basis (standing records achieved on or before the session's day), so the
+  deck can no longer light a trophy the summary refuses.
+- **One formula for the e1RM bar.** The bar is Brzycki over the row's load
+  and reps, never the stored estimate — half of which was written by Epley
+  before 15 Sep. The founder's Seated Cable Row (Wide Grip) 50 × 7 correctly
+  won Weight only: the standing 42.5 × 12 (61.2) beats 60.0. A backfill
+  sign-in rewrites the Epley-era ledger rows.
+- **Cholesterol and every dietary micro** are HealthKit's own source-merged
+  day total; the raw-sample "re-filed duplicate" halving is gone. The last 30
+  days re-ingest once on the next sync (`onyx.reingest.micros.v1`).
+
+### Data
+- `workout_sessions.working_set_count` (nullable) — local migration
+  `v41.precisionRecount`, server DDL `docs/sql/precision-c-counts.sql`.
+- Readiness: the training load follows the tonnage basis (loaded warm-ups no
+  longer count), so a day with a heavy warm-up may move by a point or two.
+- `scripts/backfill-precision.mjs` audits the server's set figures
+  (`--dry-run` by default).
+
+---
+
 ## [9.5.0] — 2026-09-25 · The body is flesh now: an écorché atlas on every figure
 
 Precision sprint, Lane F. Every muscle figure in the app and on the Home Screen
