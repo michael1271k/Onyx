@@ -66,7 +66,7 @@ public enum PrRecorder {
         let program = try programOwning(db, userId: userId, date: date)
 
         let baselines = try baselines(
-            db, userId: userId, exerciseIds: exerciseIds, excluding: sessionId,
+            db, userId: userId, exerciseIds: exerciseIds, excluding: sessionId, date: date,
             dayKey: dayKey, program: program, name: name
         )
         let candidates = Self.candidates(sets, dayKey: dayKey, date: date, program: program, name: name)
@@ -154,7 +154,7 @@ public enum PrRecorder {
         let userId = try WorkoutSession.fetchOne(db, key: sessionId)?.userId ?? ""
         let program = try programOwning(db, userId: userId, date: date)
         let baselines = try baselines(
-            db, userId: userId, exerciseIds: Set(sets.map(\.exerciseId)), excluding: sessionId,
+            db, userId: userId, exerciseIds: Set(sets.map(\.exerciseId)), excluding: sessionId, date: date,
             dayKey: dayKey, program: program, name: name
         )
         return PrEngine.detectSessionPrs(
@@ -184,17 +184,26 @@ public enum PrRecorder {
     /// records at all, on a session whose own summary page shows three. The
     /// date lives on `workout_sessions`, so the bound is a subquery; nil keeps
     /// the old behaviour exactly, which is what the live logger wants.
+    ///
+    /// ── ONE BASIS (Lane C, seam 3) ──────────────────────────────────────────
+    /// The live deck and the close path used to differ by one flag: the deck
+    /// folded the ledger's standing records in as floors, `record` did not,
+    /// so the deck could light a record the close then refused to file (or,
+    /// 2026-09-14, the reverse). Both now read `floors(upTo: date)`: every
+    /// standing record ACHIEVED ON OR BEFORE the judged session's day, never
+    /// the session's own. `date` is the session's date for `record` and
+    /// `prCount`; the live deck passes nil (today — everything stands) and
+    /// the edit deck its `before`. `recomputeAll` retracts before it replays,
+    /// so a stale row from a later session can no longer make session 1's
+    /// pass a silent no-op — `floors`' header has the history.
     static func baselines(
         _ db: Database, userId: String, exerciseIds: Set<String>, excluding sessionId: String?,
-        before: String? = nil,
-        dayKey: String?, program: Program, name: @escaping (String) -> String,
-        standingRecordFloors: Bool = false
+        before: String? = nil, date: String? = nil,
+        dayKey: String?, program: Program, name: @escaping (String) -> String
     ) throws -> PrBaselines {
         guard !exerciseIds.isEmpty else { return .empty }
-        // Off for every rebuild path; the live deck is the one caller that
-        // passes true. `floors`' header says why.
         let floors = try floors(
-            db, userId: userId, standingRecords: standingRecordFloors, excludingSession: sessionId
+            db, userId: userId, standingRecords: true, upTo: date ?? before, excludingSession: sessionId
         )
         // ── EVERY ID THAT IS THIS MOVEMENT, NOT JUST THE ONE IN HAND ────────
         //
@@ -251,6 +260,16 @@ public enum PrRecorder {
                 sql: "session_id IN (SELECT id FROM workout_sessions WHERE date < ?)",
                 arguments: [before]
             )
+        } else if let date {
+            // The set bar on the same bound as the floors (`upTo`): an edited
+            // OLD session's `pr_count` is judged against what stood on its
+            // day, not against sets logged after it. `<=`, like the floors —
+            // a same-day earlier session stands; the session's own rows are
+            // already excluded above.
+            query = query.filter(
+                sql: "session_id IN (SELECT id FROM workout_sessions WHERE date <= ?)",
+                arguments: [date]
+            )
         }
         let prior = try query.fetchAll(db)
         return PrEngine.buildBaselines(
@@ -264,7 +283,10 @@ public enum PrRecorder {
                 )
             },
             isTimed: { TimedExercise.isTimed(name($0)) },
-            floorFor: { floors[name($0)] }
+            floorFor: { floors[name($0)] },
+            // The guard (Q12): every key this session carries gets a
+            // provenance, and a floor-only key gets its bar.
+            candidateKeys: Array(exerciseIds)
         )
     }
 
@@ -295,21 +317,21 @@ public enum PrRecorder {
     /// reading it as a floor makes the deck's bar agree with the ledger by
     /// construction rather than by both happening to read the same rows.
     ///
-    /// ── WHY IT IS OFF FOR `record`, `replay` AND `recomputeAll` ─────────────
-    /// Those three REBUILD the ledger, and `recomputeAll` does it by upserting
-    /// session by session over a table that still holds the previous answer. A
-    /// floor taken from the standing record would measure session 1 against the
-    /// all-time best, award nothing, and leave the stale rows exactly where
-    /// they were — a recompute that silently does nothing. They keep the
-    /// original two tiers; the flag defaults off so they get it by saying
-    /// nothing.
+    /// ── ON FOR `record` TOO, BOUNDED BY DATE (Lane C) ───────────────────────
+    /// It used to be off for `record`, `replay` and `recomputeAll`, because
+    /// `recomputeAll` upserts session by session over a table that still holds
+    /// the previous answer: a floor taken from the standing record would have
+    /// measured session 1 against the all-time best, awarded nothing, and left
+    /// the stale rows exactly where they were. Two things closed that:
+    /// `upTo` — a standing record counts only when it was ACHIEVED on or
+    /// before the judged session's day — and `recomputeAll` retracting every
+    /// session-backed row before it replays. `replay` reads the floors after
+    /// its own retract, so it sees the asserted rows only, as before.
     ///
-    /// It can only ever RAISE the live bar, so it removes false trophies and
-    /// cannot invent one — the direction `baselines`' own header requires of
-    /// any change to detection. The deck can now light FEWER records than the
-    /// close path files, which is the trade being made on purpose: a trophy
-    /// withheld is corrected by the summary one screen later, and a false one
-    /// is a number the athlete has already believed.
+    /// It can only ever RAISE a bar, so it removes false trophies and cannot
+    /// invent one — the direction `baselines`' own header requires of any
+    /// change to detection. And it is what makes the deck and the close file
+    /// the same answer by construction (seam 3).
     ///
     /// ── AND IT MUST NOT INCLUDE THE SESSION BEING JUDGED (W2) ───────────────
     /// `excludingSession` is the same bound `baselines` already applies to
@@ -327,7 +349,8 @@ public enum PrRecorder {
     /// exclude. The tier itself is untouched — this is not the deck opting out
     /// of the floor, it is the floor being asked the question the caller meant.
     static func floors(
-        _ db: Database, userId: String, standingRecords: Bool = false, excludingSession: String? = nil
+        _ db: Database, userId: String, standingRecords: Bool = false, upTo date: String? = nil,
+        excludingSession: String? = nil
     ) throws -> [String: PrFloor] {
         var out: [String: PrFloor] = [:]
         for row in try PersonalRecordRow.filter(Column("user_id") == userId).fetchAll(db) {
@@ -343,7 +366,8 @@ public enum PrRecorder {
             }
             // `absorb` keeps whichever side is the better mark for the axis, so
             // this is a max (a min on a timed lift) and never a downgrade.
-            if standingRecords, let owner = row.sessionId, owner != excludingSession {
+            if standingRecords, let owner = row.sessionId, owner != excludingSession,
+               date == nil || row.achievedOn <= date! {
                 floor.absorb(axis: axis, value: row.value, timed: timed)
             }
             out[row.exerciseKey] = floor
@@ -381,7 +405,22 @@ public enum PrRecorder {
     /// to run whenever, and safe to run twice.
     @discardableResult
     public static func recomputeAll(_ db: Database, userId: String) throws -> Int {
+        // Clear the slate first (Lane C): every session-backed row goes — a
+        // floor it stood on is handed back — so the replay below judges each
+        // session against what stood BEFORE it and a stale row from an older
+        // formula cannot survive as a bar nothing can beat. `retract` queues
+        // the deletes; every axis won back drops its own delete on the way in.
+        // Only rows whose session this device HOLDS THE SETS FOR: a record
+        // filed by a web session that was never pulled is not this device's
+        // to retract, and a delete queued for it would reach the server.
+        let replayable = "session_id IN (SELECT DISTINCT session_id FROM workout_sets)"
+        let keys = try String.fetchAll(
+            db, sql: "SELECT DISTINCT exercise_key FROM personal_records WHERE user_id = ? AND " + replayable,
+            arguments: [userId]
+        )
+        for key in keys { try retract(db, userId: userId, exerciseKey: key, onlySessions: replayable) }
         let sessions = try WorkoutSession
+            .filter(Column("user_id") == userId && Column("ended_at") != nil)
             .order(Column("date"), Column("started_at"), Column("rowid"))
             .fetchAll(db)
         var total = 0
@@ -494,7 +533,11 @@ public enum PrRecorder {
             // this loop wanted it, and resolving a schedule context per session
             // for a value nobody reads is a query per session for nothing.
             let baselines = PrEngine.buildBaselines(
-                seen, isTimed: { _ in timed }, floorFor: { _ in floor }
+                seen, isTimed: { _ in timed }, floorFor: { _ in floor },
+                // The guard (Q12) on this door too — `invariant-auditor` found
+                // it missing: with `seen` empty the first session's second
+                // set fell back to "a bar exists" and filed itself.
+                candidateKeys: [exerciseKey]
             )
             let candidates = rows.enumerated().map { i, s in
                 PrCandidateSet(
@@ -553,12 +596,17 @@ public enum PrRecorder {
     /// written by a set and no replay can win them back, so they stay — and
     /// the replay reads them first (`floors`) as the bar every session is
     /// judged against.
+    /// - Parameter onlySessions: an SQL predicate on `session_id` narrowing
+    ///   the retract to rows this device can re-file (`recomputeAll`); nil
+    ///   retracts every session-backed row for the key (`replay`, which is
+    ///   handed a key whose sets are local by construction).
     private static func retract(
-        _ db: Database, userId: String, exerciseKey: String
+        _ db: Database, userId: String, exerciseKey: String, onlySessions: String? = nil
     ) throws {
-        let rows = try PersonalRecordRow
+        var query = PersonalRecordRow
             .filter(Column("user_id") == userId && Column("exercise_key") == exerciseKey && Column("session_id") != nil)
-            .fetchAll(db)
+        if let onlySessions { query = query.filter(sql: onlySessions) }
+        let rows = try query.fetchAll(db)
         for row in rows {
             // A record that stood on a floor hands the axis BACK to the
             // floor rather than emptying it: the bar the book asserted is
@@ -630,13 +678,12 @@ extension AppDatabase {
     ) throws -> PrBaselines {
         try writer.read { db in
             let name = try PrRecorder.nameResolver(db)
+            // The same basis as `record` (Lane C, seam 3): the standing
+            // records count, bounded by `before` for an edit deck and
+            // unbounded (today) for the live one.
             return try PrRecorder.baselines(
                 db, userId: userId, exerciseIds: Set(exerciseIds), excluding: sessionId,
-                before: before, dayKey: dayKey, program: program, name: name,
-                // The ONE place this is on — see `PrRecorder.floors`. The deck
-                // is the surface that shows a record the instant it happens,
-                // with no chance to take it back before it is read.
-                standingRecordFloors: true
+                before: before, dayKey: dayKey, program: program, name: name
             )
         }
     }

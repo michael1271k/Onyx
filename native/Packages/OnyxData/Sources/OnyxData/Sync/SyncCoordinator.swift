@@ -205,7 +205,8 @@ public actor SyncCoordinator: MirrorRefreshing {
         health: HealthSync? = nil,
         userId: String,
         calendar: Calendar = .current,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        doors: (@Sendable () -> UserDefaults)? = nil
     ) {
         self.database = database
         self.engine = engine
@@ -215,6 +216,7 @@ public actor SyncCoordinator: MirrorRefreshing {
         self.userId = userId
         self.calendar = calendar
         self.now = now
+        self.doors = doors
     }
 
     /// The production wiring, over one Supabase client. `windowDays: nil` —
@@ -227,8 +229,47 @@ public actor SyncCoordinator: MirrorRefreshing {
             puller: MirrorPuller(database: database, remote: mirror, userId: userId, windowDays: nil),
             training: TrainingPuller(database: database, remote: mirror, userId: userId, windowDays: nil),
             health: health,
-            userId: userId
+            userId: userId,
+            doors: { AppDatabase.appGroupDefaults() }
         )
+    }
+
+    // MARK: - One-time doors (Precision Lane C)
+
+    /// Where a door remembers it ran — the App Group defaults in the app, a
+    /// throwaway suite in a test, nil (no doors) for the injected harness. A
+    /// factory, because `UserDefaults` is not `Sendable` and the actor makes
+    /// it on its own side. Each key holds the USER it ran for, so a second
+    /// account on the same phone gets its own pass.
+    private let doors: (@Sendable () -> UserDefaults)?
+    /// Q11: every finished session this device holds the sets for is brought
+    /// onto the Hevy tonnage basis and the two set figures, and pushed.
+    static let recountDoor = "onyx.recount.sets.v1"
+    /// Q15: the last thirty finished days' dietary totals re-read from
+    /// HealthKit's statistic, so a day the raw-sample re-sum halved (or
+    /// left doubled) corrects itself.
+    static let reingestDoor = "onyx.reingest.micros.v1"
+    static let reingestDays = 30
+
+    /// The recount, after a COMPLETE pull (never a realtime note, never a
+    /// backfill that lost a table — the recount would run over half a store
+    /// and the door would shut on it). Once per user; a door that throws is
+    /// not marked and tries again next sync; the sync is not failed over it.
+    private func openRecountDoor() {
+        guard let doors = doors?(), doors.string(forKey: Self.recountDoor) != userId else { return }
+        if (try? database.recountSessionTotals(userId: userId)) != nil {
+            doors.set(userId, forKey: Self.recountDoor)
+        }
+    }
+
+    /// The re-ingest, AFTER the closing drain: thirty days of HealthKit reads
+    /// must not hold every push behind them. What it writes drains on the
+    /// small drain the caller adds.
+    private func openReingestDoor(now: Date) async {
+        guard let health, let doors = doors?(), doors.string(forKey: Self.reingestDoor) != userId else { return }
+        if (try? await health.reingest(days: Self.reingestDays, now: now, calendar: calendar)) != nil {
+            doors.set(userId, forKey: Self.reingestDoor)
+        }
     }
 
     // MARK: - Running
@@ -367,6 +408,9 @@ public actor SyncCoordinator: MirrorRefreshing {
         // the whole thing again. A normal sync records what it got.
         if !isBackfill || report.isClean { try record(report, reason: reason, at: now) }
         if isBackfill { try await readHealth(reason: reason, now: now) }
+        // After the first COMPLETE pull (Q11): the recount needs the sets on
+        // disk. The closing drain below pushes what it wrote.
+        if !reason.isRealtime, !isBackfill || report.isClean { openRecountDoor() }
 
         // Session metrics AFTER the pull, on purpose. `applyPulledSessions`
         // overwrites the local row with the server's, so a value written
@@ -406,6 +450,17 @@ public actor SyncCoordinator: MirrorRefreshing {
         if isBackfill { try database.recomputeAllPrs(userId: userId) }
         try scoreRecentDays(now: now, days: isBackfill ? Self.backfillScoreDays : 2)
         try await drainAll(now: now)
+
+        // After the drain (Q15): the re-ingest needs the Health permission
+        // `readHealth` asked for, and must not hold the pushes above. A
+        // second, small drain carries what it wrote; a stop in between is
+        // honoured before the door and before the drain.
+        if !reason.isRealtime, !isBackfill || report.isClean {
+            try checkStopped()
+            await openReingestDoor(now: now)
+            try checkStopped()
+            try await drainAll(now: now)
+        }
 
         if !report.failures.isEmpty { throw SyncCoordinatorError.tablesFailed(report.failures) }
         if isBackfill {

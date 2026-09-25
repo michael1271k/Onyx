@@ -14,6 +14,14 @@ import Testing
 /// moves here is a scoring rule that changed, and `invariant-auditor` reviews
 /// it before the number is edited.
 ///
+/// ── TWELVE ROWS MOVED ON 2026-09-25 (Precision Lane C, Q13) ─────────────────
+/// Tonnage is on the Hevy basis now — a warm-up weighs nothing — and the
+/// scorer's training load is derived from tonnage, so the twelve days whose
+/// seed carries a LOADED warm-up moved by 1–2 points of workout / battery
+/// (07-22, 08-03, 08-07, 08-10, 08-17, 08-19, 08-24, 09-02, 09-09, 09-14,
+/// 09-16, 09-18). Those rows were re-captured from the window path, which is
+/// the only path left; every other row is the 2026-09-19 capture untouched.
+///
 /// The seed is deliberately dense — every table the scorer reads, an exact
 /// duration tie in the night window inserted out of bedtime order, a bare day
 /// holding one 0 ml water row, a double-session day on the six-session
@@ -157,7 +165,7 @@ struct RescoreParityTests {
     /// `ONYX_PRINT_PARITY=1 npm run swift:data -- --filter RescoreParityTests`.
     static let expected: [Scored] = [
         Scored("2026-07-21", 49, 38, 88, 81, nil, 60, 46, true),
-        Scored("2026-07-22", 70, 72, 82, 68, 80, 75, 41, true),
+        Scored("2026-07-22", 70, 72, 82, 68, 79, 75, 42, true),
         Scored("2026-07-23", 76, 84, 80, 68, nil, 91, 52, true),
         Scored("2026-07-24", 48, 45, nil, 100, 100, 53, 22, true),
         Scored("2026-07-25", 71, 59, 79, 79, nil, 73, 49, true),
@@ -169,27 +177,27 @@ struct RescoreParityTests {
         Scored("2026-07-31", 81, 95, 81, 68, nil, 94, 39, true),
         Scored("2026-08-01", 78, 81, 78, 78, nil, 95, 46, true),
         Scored("2026-08-02", 50, 41, 69, 85, nil, 60, 46, true),
-        Scored("2026-08-03", 83, 97, 81, 75, 93, 96, 40, true),
+        Scored("2026-08-03", 83, 97, 81, 75, 93, 96, 39, true),
         Scored("2026-08-05", 52, 46, nil, 100, 93, 52, 32, true),
         Scored("2026-08-06", 79, 84, 82, 86, nil, 88, 53, true),
-        Scored("2026-08-07", 69, 60, 84, 74, 80, 70, 40, true),
+        Scored("2026-08-07", 69, 60, 84, 74, 80, 70, 41, true),
         Scored("2026-08-08", 80, 85, 82, nil, nil, 86, 56, true),
         Scored("2026-08-09", 77, nil, 81, 71, nil, 93, 26, true),
-        Scored("2026-08-10", 83, 85, 74, 99, 99, 98, 42, true),
+        Scored("2026-08-10", 83, 85, 74, 99, 99, 98, 41, true),
         Scored("2026-08-11", 83, 84, nil, 100, nil, 75, 46, true),
         Scored("2026-08-12", 53, 42, 74, 100, 93, 63, 29, true),
         Scored("2026-08-13", 77, 86, 78, 77, nil, 86, 52, true),
         Scored("2026-08-14", 51, 29, 83, 60, 99, 59, 32, true),
         Scored("2026-08-15", 55, 50, 84, 94, nil, 62, 43, true),
         Scored("2026-08-16", 77, 88, 95, 53, nil, 88, 53, true),
-        Scored("2026-08-17", 82, 82, nil, 80, 93, 85, 32, true),
+        Scored("2026-08-17", 82, 82, nil, 80, 93, 85, 31, true),
         Scored("2026-08-18", 63, 54, 78, 86, nil, 58, 44, true),
-        Scored("2026-08-19", 77, nil, 77, nil, 93, 100, 22, true),
+        Scored("2026-08-19", 77, nil, 77, nil, 93, 100, 21, true),
         Scored("2026-08-20", 84, 84, 74, 100, nil, 90, 46, true),
         Scored("2026-08-21", 79, 83, 70, 86, 93, 80, 36, true),
         Scored("2026-08-22", 75, 82, 80, 66, nil, 78, 51, true),
         Scored("2026-08-23", 48, 34, nil, 93, nil, 49, 42, true),
-        Scored("2026-08-24", 68, 56, 77, 100, 86, 69, 36, true),
+        Scored("2026-08-24", 68, 56, 77, 100, 86, 69, 37, true),
         Scored("2026-08-25", 58, 55, 78, 70, nil, 67, 45, true),
         Scored("2026-08-26", 63, 53, 100, 100, nil, 62, 19, true),
         Scored("2026-08-27", 73, 86, 65, 71, nil, 97, 45, true),
@@ -198,23 +206,23 @@ struct RescoreParityTests {
         Scored("2026-08-30", 78, 82, 89, nil, nil, 86, 56, true),
         Scored("2026-08-31", 74, 71, 87, 56, 93, 78, 38, true),
         Scored("2026-09-01", 86, 82, 81, 100, nil, 94, 47, true),
-        Scored("2026-09-02", 80, 75, 81, 99, 87, 74, 37, true),
+        Scored("2026-09-02", 80, 75, 81, 99, 85, 74, 39, true),
         Scored("2026-09-03", 67, 78, 65, 54, nil, 84, 52, true),
         Scored("2026-09-04", 48, 46, nil, 70, 94, 55, 30, true),
         Scored("2026-09-05", 77, 80, 84, 90, nil, 66, 47, true),
         Scored("2026-09-06", 47, 43, 81, 99, nil, 48, 43, true),
         Scored("2026-09-07", 85, 82, 81, 92, 99, 96, 33, true),
         Scored("2026-09-08", 72, nil, 71, 72, nil, 86, 26, true),
-        Scored("2026-09-09", 71, 60, 76, 74, 83, 79, 39, true),
+        Scored("2026-09-09", 71, 60, 76, 74, 81, 79, 40, true),
         Scored("2026-09-10", 46, 40, nil, nil, nil, 54, 48, true),
         Scored("2026-09-11", 72, 81, 69, 67, 91, 87, 37, true),
         Scored("2026-09-12", 51, 42, 68, 91, nil, 56, 43, true),
         Scored("2026-09-13", 80, 73, 87, 88, nil, 82, 46, true),
-        Scored("2026-09-14", 84, 75, 87, 77, 98, 89, 34, true),
+        Scored("2026-09-14", 84, 75, 87, 77, 98, 89, 35, true),
         Scored("2026-09-15", 77, 86, 74, 83, nil, 100, 53, true),
-        Scored("2026-09-16", 49, 39, nil, 47, 93, 53, 32, true),
+        Scored("2026-09-16", 49, 39, nil, 47, 93, 53, 30, true),
         Scored("2026-09-17", 76, 75, 68, 100, nil, 82, 46, true),
-        Scored("2026-09-18", 78, nil, 76, 74, 80, 100, 44, false),
+        Scored("2026-09-18", 78, nil, 76, 74, 80, 100, 45, false),
     ]
 }
 

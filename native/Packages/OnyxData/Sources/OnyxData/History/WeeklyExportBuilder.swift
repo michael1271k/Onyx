@@ -629,6 +629,9 @@ public struct WeeklyExportBuilder: Sendable {
         /// one row per movement per change — and resolving "what was in force
         /// on this session's day" needs the ladder, not a slice of it.
         var prescriptions: [Prescription]
+        /// The athlete's latest weigh-in on or before each week session's day
+        /// — the load of an unloaded bodyweight row (Q13). Absent = none ever.
+        var bodyWeightBySession: [String: Double] = [:]
     }
 
     /// `weekStart`/`weekEnd` are the SPAN's two ends — the names are kept
@@ -749,8 +752,13 @@ public struct WeeklyExportBuilder: Sendable {
                     }
                 }
             }
+            // The Hevy basis (Q13) for every session Week 0 forward: the
+            // weigh-in on or before each session's day, or no credit.
             var volumeBySession: [String: Double] = [:]
-            for (id, own) in Dictionary(grouping: allSets, by: \.sessionId) { volumeBySession[id] = Self.volume(own) }
+            for (id, own) in Dictionary(grouping: allSets, by: \.sessionId) {
+                let bw = try own.first.flatMap { try SessionEditing.bodyWeightKg(db, userId: userId, on: $0.date) }
+                volumeBySession[id] = Self.volume(own, bodyWeightKg: bw)
+            }
             let exerciseIds = Array(Set(sets.map(\.exerciseId)))
             let exercises = exerciseIds.isEmpty ? [] : try Exercise.filter(exerciseIds.contains(Column("id"))).fetchAll(db)
 
@@ -820,7 +828,10 @@ public struct WeeklyExportBuilder: Sendable {
                 prescriptions: try PrescriptionRow
                     .filter(user)
                     .order(Column("effective_from"), Column("version"))
-                    .fetchAll(db).map(Prescription.init)
+                    .fetchAll(db).map(Prescription.init),
+                bodyWeightBySession: Dictionary(uniqueKeysWithValues: try sessions.compactMap { s in
+                    try SessionEditing.bodyWeightKg(db, userId: userId, on: s.date).map { (s.id, $0) }
+                })
             )
         }
     }
@@ -1378,10 +1389,13 @@ public struct WeeklyExportBuilder: Sendable {
                 "endedAt": j((span?.end ?? s.endedAt).map(stamp)),
                 "sessionNumber": Double(d.priorSessions + sessionIndex + 1),
                 "label": label,
-                // Recomputed from the rows, as the web does (an L/R pair scores at
-                // the weaker side). Nil, not 0, when there are no rows at all.
-                "volumeKg": mine.isEmpty ? NSNull() : Self.volume(mine),
+                // Recomputed from the rows on the Hevy basis (Q13: warm-ups
+                // out, body weight on an unloaded bodyweight row, an L/R pair
+                // at the weaker side). Nil, not 0, when there are no rows.
+                "volumeKg": mine.isEmpty ? NSNull() : Self.volume(mine, bodyWeightKg: d.bodyWeightBySession[s.id]),
+                // "Sets" and "Working" (Q10).
                 "setCount": Double(Self.committedSets(mine)),
+                "workingSetCount": Double(Self.workingSets(mine)),
                 "failureSets": Double(failurePairs.count),
                 "durationMin": j(s.durationMin),
                 // ── READ, NOT NULLED ────────────────────────────────────────
@@ -1469,7 +1483,9 @@ public struct WeeklyExportBuilder: Sendable {
         var total: [LandmarkMuscle: Double] = [:]
         for key in order {
             let sets = groups[key]!
-            let volumeKg = Self.volume(sets)
+            // The same basis as the session's own figure (Q13), body weight
+            // included, or a bodyweight movement never reaches its muscles.
+            let volumeKg = Self.volume(sets, bodyWeightKg: d.bodyWeightBySession[sets[0].sessionId])
             guard volumeKg.isFinite, volumeKg > 0 else { continue }
             let m = movers(sets[0], d)
             let primary = Set(m.primary.compactMap(LandmarkMuscle.from(token:)))
@@ -1800,21 +1816,27 @@ public struct WeeklyExportBuilder: Sendable {
     /// `L` / `R` or nil — the export never carries another spelling.
     static func lr(_ side: String?) -> String? { side == "L" || side == "R" ? side : nil }
 
-    static func volume(_ sets: [HistorySetRow]) -> Double {
-        SessionVolume.sessionVolumeKg(sets.map {
-            VolumeSet(weightKg: $0.weightKg, reps: Double($0.reps), side: lr($0.lr), pairId: $0.pairId, setType: $0.setType)
-        })
+    static func volumeSets(_ sets: [HistorySetRow]) -> [VolumeSet] {
+        sets.map {
+            VolumeSet(
+                weightKg: $0.weightKg, reps: Double($0.reps), side: lr($0.lr), pairId: $0.pairId, setType: $0.setType,
+                // The stored name is what the ledger carries; the catalogue
+                // flag was derived from the same name at creation.
+                bodyweight: Bodyweight.isBodyweight($0.exerciseName))
+        }
     }
 
-    /// `countCommittedSets` — what the web wrote to `set_count`.
-    static func committedSets(_ sets: [HistorySetRow]) -> Int {
-        var pairs = Set<String>()
-        var solo = 0
-        for s in sets where s.setType != "ghost" {
-            if let p = s.pairId, !p.isEmpty { pairs.insert(p) } else { solo += 1 }
-        }
-        return solo + pairs.count
+    /// The Hevy basis (Q13). `bodyWeightKg` is the athlete's latest weigh-in
+    /// on or before the session day; nil credits nothing.
+    static func volume(_ sets: [HistorySetRow], bodyWeightKg: Double? = nil) -> Double {
+        SessionVolume.sessionVolumeKg(volumeSets(sets), bodyWeightKg: bodyWeightKg)
     }
+
+    /// "Sets" — `SessionCounts.total` (Q10): what `set_count` holds.
+    static func committedSets(_ sets: [HistorySetRow]) -> Int { SessionCounts.total(volumeSets(sets)) }
+
+    /// "Working" — `SessionCounts.working`: what `working_set_count` holds.
+    static func workingSets(_ sets: [HistorySetRow]) -> Int { SessionCounts.working(volumeSets(sets)) }
 
     /// Local wall-clock ISO with offset — the "THH:MM" the renderer reads.
     func stamp(_ date: Date) -> String {

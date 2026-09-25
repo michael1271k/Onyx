@@ -1484,7 +1484,7 @@ public final class AppDatabase: Sendable {
         // founder's `docs/sql/precision-e-programs.sql` lands. A fresh install
         // gets them from the regenerated V1/V2 creates; this is the guarded
         // alter for a store that already exists (v38's shape). Numbered 40:
-        // Lane C holds v39 — the NAME is the identity, the number only has to
+        // Lane C took v41 — the NAME is the identity, the number only has to
         // stay monotonic.
         migrator.registerMigration("v40.programGoals") { db in
             let plans = Set(try db.columns(in: "plans").map(\.name))
@@ -1494,6 +1494,23 @@ public final class AppDatabase: Sendable {
             let routines = Set(try db.columns(in: "routines").map(\.name))
             if !routines.contains("notes") {
                 try db.alter(table: "routines") { t in t.add(column: "notes", .text) }
+            }
+        }
+
+        // ── v41: the "Working" figure beside "Sets" (Precision Lane C, Q10) ─
+        // `set_count` becomes everything performed (`SessionCounts.total`) and
+        // this column carries the working rule the screens used to headline.
+        // Nullable, guarded like v38; the server column is
+        // `docs/sql/precision-c-counts.sql` and the values are rewritten by the
+        // `onyx.recount.sets.v1` door in `SyncCoordinator`, not here — a
+        // migration that recounts and pushes every session is a migration
+        // that runs before the store has pulled anything. Numbered 41: Lane E
+        // took v40 on main first (the NAME is the identity).
+        migrator.registerMigration("v41.precisionRecount") { db in
+            let existing = Set(try db.columns(in: "workout_sessions").map(\.name))
+            guard !existing.contains("working_set_count") else { return }
+            try db.alter(table: "workout_sessions") { t in
+                t.add(column: "working_set_count", .integer)
             }
         }
 
@@ -2158,9 +2175,10 @@ extension AppDatabase {
             // phone now carries the same figures a session finished on the web
             // does — and `SessionEditing` keeps them true afterwards.
             let sets = try WorkoutSet.filter(Column("session_id") == id).fetchAll(db)
-            let totals = SessionEditing.totals(sets)
+            let totals = try SessionEditing.totals(db, session: session, sets: sets)
             session.totalVolumeKg = totals.volumeKg
             session.setCount = totals.count
+            session.workingSetCount = totals.working
             session.prCount = prs.prCount
             try session.update(db)
             // ── AND THE DECK ORDER, WHICH IS THE ONE THING THE SETS CARRY

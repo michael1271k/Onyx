@@ -1,7 +1,7 @@
 {
   "module": "sessions/volume",
   "fn": "sessionVolumeKg",
-  "note": "A genuine L/R pair is ONE set at min(weight) × min(reps); a lone side, a pairId without a side, or a 3+ bucket scores each row as logged. Ghosts contribute nothing; warm-ups count. Rounded to 2 dp.",
+  "note": "A genuine L/R pair is ONE set at min(weight) × min(reps); a lone side, a pairId without a side, or a 3+ bucket scores each row as logged. Ghosts contribute nothing. Warm-ups are OUT since Precision Lane C (founder decision Q13, the Hevy basis) — the one warm-up case was hand-changed from 400 to 0 on 2026-09-25. Rounded to 2 dp.",
   "cases": [
     {
       "name": "no sets",
@@ -292,7 +292,7 @@
       "expected": 0
     },
     {
-      "name": "a warm-up still counts",
+      "name": "a warm-up is out (Hevy basis, Q13)",
       "input": {
         "sets": [
           {
@@ -302,7 +302,7 @@
           }
         ]
       },
-      "expected": 400
+      "expected": 0
     },
     {
       "name": "a drop set counts",

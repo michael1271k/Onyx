@@ -25,11 +25,13 @@ public enum PrAxis: String, Codable, Sendable, CaseIterable, Hashable {
     case weight, reps, volume, e1rm
 }
 
-/// A historical set row, pre-session. `est1rm` may be absent — it is recomputed.
+/// A historical set row, pre-session.
 public struct BaselineSetRow: Codable, Sendable {
     public var key: String
     public var weightKg: Double?
     public var reps: Double?
+    /// Decoded for fixture compatibility and IGNORED since Lane C: the e1RM
+    /// bar is always recomputed from `weightKg` × `reps` (see `buildBaselines`).
     public var est1rm: Double?
     /// Warm-ups and drop sets set no bar, exactly as they win no record.
     public var setType: String?
@@ -103,6 +105,33 @@ public struct KeyedValue: Codable, Equatable, Sendable {
     }
 }
 
+/// Where a key's bar comes from — the PR guard (founder decision Q12, design
+/// 11). A trophy needs at least one prior session-backed set OR a floor for
+/// this user + exercise; a key with neither is a first-ever exercise and its
+/// sets are BASELINES, never records.
+public enum PrProvenance: String, Codable, Sendable, Equatable {
+    /// At least one eligible logged set stands behind the bar.
+    case sessionBacked
+    /// Only a floor — an asserted record-book row, or a standing ledger record
+    /// this device holds no set for. Beatable: an onboarding 1RM IS a bar.
+    case floorOnly
+    /// Nothing at all. The first session of a movement.
+    case none
+}
+
+/// What a set earned: a quiet baseline mark on a first-ever exercise, or the
+/// axes it set a record on (possibly none).
+public enum SetMark: Equatable, Sendable {
+    case baseline
+    case axes([PrAxis])
+
+    /// The record axes, `[]` for a baseline.
+    public var axes: [PrAxis] {
+        if case .axes(let a) = self { return a }
+        return []
+    }
+}
+
 /// Per-axis bests, insertion-ordered. `bestRepsAtWeight` is keyed `${key}|${weightKg}`.
 public struct PrBaselines: Codable, Equatable, Sendable {
     public var bestWeight: [KeyedValue]
@@ -112,13 +141,34 @@ public struct PrBaselines: Codable, Equatable, Sendable {
     public var bestSeconds: [KeyedValue]
     /// Heaviest SINGLE-SET tonnage ever logged for the exercise.
     public var bestSetVolume: [KeyedValue]
+    /// Per key, where the bar came from (Q12). Absent from every golden
+    /// vector and every payload cached before Lane C: an absent key reads
+    /// "session-backed if the index holds a bar, none otherwise", which is
+    /// exactly what the engine used to do.
+    public var provenance: [String: PrProvenance]
 
     public init(
         bestWeight: [KeyedValue] = [], bestRepsAtWeight: [KeyedValue] = [], bestE1rm: [KeyedValue] = [],
-        bestSeconds: [KeyedValue] = [], bestSetVolume: [KeyedValue] = []
+        bestSeconds: [KeyedValue] = [], bestSetVolume: [KeyedValue] = [],
+        provenance: [String: PrProvenance] = [:]
     ) {
         self.bestWeight = bestWeight; self.bestRepsAtWeight = bestRepsAtWeight; self.bestE1rm = bestE1rm
         self.bestSeconds = bestSeconds; self.bestSetVolume = bestSetVolume
+        self.provenance = provenance
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case bestWeight, bestRepsAtWeight, bestE1rm, bestSeconds, bestSetVolume, provenance
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        bestWeight = try c.decode([KeyedValue].self, forKey: .bestWeight)
+        bestRepsAtWeight = try c.decode([KeyedValue].self, forKey: .bestRepsAtWeight)
+        bestE1rm = try c.decode([KeyedValue].self, forKey: .bestE1rm)
+        bestSeconds = try c.decode([KeyedValue].self, forKey: .bestSeconds)
+        bestSetVolume = try c.decode([KeyedValue].self, forKey: .bestSetVolume)
+        provenance = try c.decodeIfPresent([String: PrProvenance].self, forKey: .provenance) ?? [:]
     }
 
     public static let empty = PrBaselines()
@@ -131,7 +181,14 @@ public struct PrIndex: Sendable {
     public var bestE1rm: [String: Double] = [:]
     public var bestSeconds: [String: Double] = [:]
     public var bestSetVolume: [String: Double] = [:]
+    public var provenance: [String: PrProvenance] = [:]
     public init() {}
+
+    /// Any bar at all for the key — the legacy reading of provenance.
+    func hasBar(_ key: String) -> Bool {
+        bestWeight[key] != nil || bestE1rm[key] != nil || bestSeconds[key] != nil || bestSetVolume[key] != nil
+            || bestRepsAtWeight.keys.contains { $0.hasPrefix(key + "|") }
+    }
 }
 
 /// What a set achieved on one axis, and the standing figure it beat.
@@ -150,6 +207,8 @@ public struct DetectedSet: Equatable, Sendable {
     /// winner is folded into the index, because the ledger is upsert-on-conflict
     /// and destroys the old value.
     public var records: [PrAxis: AxisRecord]
+    /// `.baseline` on a first-ever exercise (Q12); otherwise `.axes(axes)`.
+    public var mark: SetMark = .axes([])
 }
 
 public struct KeyAxes: Equatable, Sendable {
@@ -289,16 +348,31 @@ public enum PrEngine {
     /// logged rows cannot account for, folded in last as just another contender.
     ///
     /// Symmetric with `absorbSet`: a row that cannot WIN an axis must not raise
-    /// the bar for it. A stored `est1rm` is read with `||`, not `??` — rows
-    /// written before Epley returned nil for unloaded work hold exactly 0, which
-    /// is not an estimate.
+    /// the bar for it.
+    ///
+    /// ── THE e1RM BAR IS THE FORMULA, NEVER THE STORED NUMBER (Lane C) ───────
+    /// `BaselineSetRow.est1rm` used to be read with `||` and win over a
+    /// recomputation. `est_1rm_kg` holds whichever formula the client had on
+    /// the day it wrote the row — Epley to 2026-09-15, Brzycki since — so the
+    /// bar was built from two formulas at once and the candidate from one:
+    /// too LOW above ten reps (a repeat of 42.5 × 12 "beat" its own stored
+    /// 59.5 with 61.2) and too HIGH below (a stored 63.3 for 50 × 8 hid a
+    /// 62.07). The founder's Wide Grip diagnosis is the case. The stored
+    /// column is a display cache now; the bar is Brzycki over (load, reps).
+    ///
+    /// - Parameter candidateKeys: the keys the session about to be judged
+    ///   carries. Floors are folded in for these too — a floor-only key HAS
+    ///   a bar (Q12) — and each gets a `PrProvenance`.
     public static func buildBaselines(
         _ rows: [BaselineSetRow],
         isTimed: (String) -> Bool,
-        floorFor: ((String) -> PrFloor?)? = nil
+        floorFor: ((String) -> PrFloor?)? = nil,
+        candidateKeys: [String] = []
     ) -> PrBaselines {
         var bestWeight = OrderedBests(), bestRepsAtWeight = OrderedBests(), bestE1rm = OrderedBests()
         var bestSeconds = OrderedBests(), bestSetVolume = OrderedBests()
+        /// Keys with at least one ELIGIBLE logged row behind them.
+        var backed = Set<String>()
 
         // The volume bar is built under the SAME unilateral rule detection
         // scores candidates by, or a pair is judged against a per-side history.
@@ -308,11 +382,12 @@ public enum PrEngine {
             if isPrIneligible(r.setType) { continue }
             if isTimed(r.key) {
                 // A hold's only record is duration.
-                if let reps = r.reps { bestSeconds.bump(r.key, reps) }
+                if let reps = r.reps { bestSeconds.bump(r.key, reps); backed.insert(r.key) }
                 continue
             }
             guard let w = r.weightKg else { continue }
             bestWeight.bump(r.key, w)
+            backed.insert(r.key)
             guard let reps = r.reps else { continue }
             bestRepsAtWeight.bump(loadKey(r.key, w), reps)
             if let vol = credits[i] { bestSetVolume.bump(r.key, vol) }
@@ -320,23 +395,23 @@ public enum PrEngine {
             // `detectSetPrs` below — a row that CAN win an axis must be able to
             // raise its bar, or the first set after the rule changed would win
             // a record against a history that was never allowed to compete.
-            let stored = r.est1rm ?? 0
-            let e = stored != 0 ? stored : OneRepMax.estimate(weight: w, reps: reps)
-            if let e { bestE1rm.bump(r.key, e) }
+            if let e = OneRepMax.estimate(weight: w, reps: reps) { bestE1rm.bump(r.key, e) }
         }
 
         // The asserted floor, folded in last: `bump` is a max, so a key ends at
-        // max(logged, asserted). Only keys already present are visited — a
-        // first-ever set is never a PR, so by the time a key could win anything
-        // it is in `rows`. The visiting order is the TypeScript's set union.
-        if let floorFor {
-            var seen = Set<String>()
-            var keys: [String] = []
-            for k in bestWeight.keys + bestSeconds.keys + bestSetVolume.keys + bestE1rm.keys where seen.insert(k).inserted {
-                keys.append(k)
-            }
-            for key in keys {
-                guard let t = floorFor(key) else { continue }
+        // max(logged, asserted). The keys already present are visited in the
+        // TypeScript's set-union order (the golden pins it), then the
+        // candidate keys that are not — a floor-only key gets its bar here.
+        var seen = Set<String>()
+        var keys: [String] = []
+        for k in bestWeight.keys + bestSeconds.keys + bestSetVolume.keys + bestE1rm.keys + candidateKeys
+        where seen.insert(k).inserted {
+            keys.append(k)
+        }
+        var provenance: [String: PrProvenance] = [:]
+        for key in keys {
+            let floor = floorFor?(key)
+            if let t = floor {
                 if let v = t.weight { bestWeight.bump(key, v) }
                 if let v = t.e1rm { bestE1rm.bump(key, v) }
                 if let v = t.volume { bestSetVolume.bump(key, v) }
@@ -344,11 +419,15 @@ public enum PrEngine {
                 // Unloaded rep records are per-LOAD, and the only load they have is zero.
                 if let v = t.reps { bestRepsAtWeight.bump("\(key)|0", v) }
             }
+            provenance[key] = backed.contains(key) ? .sessionBacked
+                : (floor.map { !$0.isEmpty } ?? false) ? .floorOnly
+                : PrProvenance.none
         }
 
         return PrBaselines(
             bestWeight: bestWeight.entries, bestRepsAtWeight: bestRepsAtWeight.entries,
-            bestE1rm: bestE1rm.entries, bestSeconds: bestSeconds.entries, bestSetVolume: bestSetVolume.entries
+            bestE1rm: bestE1rm.entries, bestSeconds: bestSeconds.entries, bestSetVolume: bestSetVolume.entries,
+            provenance: provenance
         )
     }
 
@@ -366,26 +445,36 @@ public enum PrEngine {
         idx.bestE1rm = m(b.bestE1rm)
         idx.bestSeconds = m(b.bestSeconds)
         idx.bestSetVolume = m(b.bestSetVolume)
+        idx.provenance = b.provenance
         return idx
+    }
+
+    /// The key's provenance, with the legacy reading for an index built
+    /// without one (a cached payload, a golden vector).
+    static func provenance(_ idx: PrIndex, _ key: String) -> PrProvenance {
+        idx.provenance[key] ?? (idx.hasBar(key) ? .sessionBacked : PrProvenance.none)
     }
 
     // MARK: - Detection
 
-    /// Which axes this set just set a record on. A record requires beating an
-    /// EXISTING baseline — a first-ever log is a data point, not a PR.
+    /// What this set earned. A record requires beating an EXISTING baseline —
+    /// and the baseline must have PROVENANCE (Q12): a prior session-backed set
+    /// or a floor. A first-ever exercise's sets are `.baseline`, a quiet mark
+    /// and never a trophy, even when the second set out-lifts the first.
     ///
     /// `volumeKg` is this row's credit from `volumeCredits`: `nil` on the earlier
     /// side of a unilateral pair, so one physical set cannot carry two volume
     /// trophies. (The TypeScript also accepts `undefined` for "plain
     /// weight × reps"; every caller here passes the credit, which already IS
     /// weight × reps for a bilateral row.)
-    public static func detectSetPrs(_ set: PrCandidateSet, _ idx: PrIndex, volumeKg: Double?) -> [PrAxis] {
-        if isPrIneligible(set.setType) { return [] }
+    public static func detectSetPrs(_ set: PrCandidateSet, _ idx: PrIndex, volumeKg: Double?) -> SetMark {
+        if isPrIneligible(set.setType) { return .axes([]) }
+        if provenance(idx, set.key) == PrProvenance.none { return .baseline }
         var axes: [PrAxis] = []
 
         if set.timed {
             if let best = idx.bestSeconds[set.key], set.reps > best { axes.append(.reps) }
-            return axes
+            return .axes(axes)
         }
 
         if let bw = idx.bestWeight[set.key], set.weightKg > bw { axes.append(.weight) }
@@ -400,7 +489,7 @@ public enum PrEngine {
            let be = idx.bestE1rm[set.key], e1rm > be {
             axes.append(.e1rm)
         }
-        return axes
+        return .axes(axes)
     }
 
     /// Fold a set's result back into the index, so three identical top sets do
@@ -495,13 +584,14 @@ public enum PrEngine {
         var perSet: [DetectedSet] = []
         perSet.reserveCapacity(sets.count)
         for (i, s) in sets.enumerated() {
-            let axes = detectSetPrs(s, idx, volumeKg: credits[i])
+            let mark = detectSetPrs(s, idx, volumeKg: credits[i])
+            let axes = mark.axes
             // No load, no one-rep max to estimate — nil, never 0.
             let est1rm = s.timed ? nil : OneRepMax.estimate(weight: s.weightKg, reps: s.reps)
             // READ THE BEATEN BASELINE BEFORE ABSORBING.
             let records = beatenBaselines(s, idx, axes, volumeKg: credits[i], est1rm: est1rm)
             absorbSet(s, &idx, volumeKg: credits[i])
-            perSet.append(DetectedSet(axes: axes, est1rm: est1rm, records: records))
+            perSet.append(DetectedSet(axes: axes, est1rm: est1rm, records: records, mark: mark))
         }
 
         supersedeWithinSession(sets, &perSet, credits: credits)

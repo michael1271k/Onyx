@@ -1,10 +1,10 @@
 {
   "module": "sessions/draft",
   "fn": "draftTotals + draftVolumeSeries",
-  "note": "Committed strength sets only (warm-ups included, cardio excluded); volume through sessionVolumeKg; the sparkline is the rounded cumulative volume over each prefix, sampled to `cap` points with both endpoints kept, empty below two sets.",
+  "note": "Committed strength sets only (cardio excluded; warm-ups are counted as SETS but weigh nothing since Precision Lane C, founder decision Q13 — the one warm-up case was hand-changed 1000/[200,600,1000] → 800/[0,400,800] on 2026-09-25); volume through sessionVolumeKg; the sparkline is the rounded cumulative volume over each prefix, sampled to `cap` points with both endpoints kept, empty below two sets.",
   "cases": [
     {
-      "name": "warm-ups count",
+      "name": "warm-ups are sets but weigh nothing (Hevy basis, Q13)",
       "input": {
         "draft": {
           "splitDay": "upper",
@@ -37,12 +37,12 @@
         "cap": 12
       },
       "expected": {
-        "volumeKg": 1000,
+        "volumeKg": 800,
         "sets": 3,
         "series": [
-          200,
-          600,
-          1000
+          0,
+          400,
+          800
         ]
       }
     },
