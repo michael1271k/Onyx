@@ -18,6 +18,8 @@ struct OnyxApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var environment: AppEnvironment?
     @State private var startupError: String?
+    /// A session a shared `onyx://session/<uuid>` link asked for.
+    @State private var linkedSession: SessionLink?
     /// The persisted theme, in the App Group suite the widgets read too.
     ///
     /// `@AppStorage` is what makes a Settings write repaint this process: it
@@ -87,6 +89,27 @@ struct OnyxApp: App {
             }
             .id(themeJSON + "·" + themePhase)
             .preferredColorScheme(.dark)
+            // ── onyx://session/<uuid> (Precision B5, seam 7) ────────────────
+            // The link a replay share carries. It opens that session's
+            // summary over whatever is on screen; the shell's own handler
+            // (`RootView`, `onyx://open?path=`) ignores this shape.
+            .onOpenURL { url in
+                if let id = SessionLink.sessionId(from: url) { linkedSession = SessionLink(id: id) }
+            }
+            .sheet(item: $linkedSession) { link in
+                if let environment {
+                    NavigationStack {
+                        SessionDetailView(sessionId: link.id)
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Close") { linkedSession = nil }
+                                }
+                            }
+                    }
+                    .environment(environment)
+                    .preferredColorScheme(.dark)
+                }
+            }
             .task {
                 guard environment == nil, startupError == nil else { return }
                 do {
@@ -140,3 +163,26 @@ private struct StartupErrorView: View {
         .textSelection(.enabled)
     }
 }
+
+/// `onyx://session/<uuid>` — the link a replay share carries (Precision B5,
+/// decision Q21 · seam 7).
+///
+/// A custom scheme is callable by anything on the device, so the id is
+/// UNTRUSTED input: it must parse as a UUID, and it is lowercased because the
+/// store keys sessions lower-case (memory `next-gen-w1-health-truth`: an
+/// uppercase id stops matching itself after one round trip).
+struct SessionLink: Identifiable, Equatable {
+    let id: String
+
+    static func sessionId(from url: URL) -> String? {
+        guard url.scheme?.lowercased() == "onyx", url.host()?.lowercased() == "session" else { return nil }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count == 1, let uuid = UUID(uuidString: parts[0]) else { return nil }
+        return uuid.uuidString.lowercased()
+    }
+
+    static func url(sessionId: String) -> URL {
+        URL(string: "onyx://session/\(sessionId.lowercased())")!
+    }
+}
+
