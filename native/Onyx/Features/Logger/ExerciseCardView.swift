@@ -1964,7 +1964,12 @@ struct SetRowView: View {
                     set: { next in write(targets) { $0.durationSec = next.map { Int(($0 * 60).rounded()) } } }
                 ),
                 unit: "minutes", decimals: true,
-                minWidth: loadFloor, fills: !typeSize.isAccessibilitySize,
+                // The load's floor is "188.75"; a bout's figure is "12.5" or
+                // "0.37". At the accessibility sizes that floor alone pushed
+                // the stacked stepper, and the card, past the screen (W-final
+                // AX5 shot) — so the stacked row takes the reps floor.
+                minWidth: typeSize.isAccessibilitySize ? SetColumn.repsFloor(typeSize) : loadFloor,
+                fills: !typeSize.isAccessibilitySize,
                 tint: nil, onCommit: { commit(targets) }
             )
         }
@@ -1996,7 +2001,12 @@ struct SetRowView: View {
                     set: { next in write(targets) { $0.distanceKm = next } }
                 ),
                 unit: "kilometres", decimals: true,
-                minWidth: loadFloor, fills: !typeSize.isAccessibilitySize,
+                // The load's floor is "188.75"; a bout's figure is "12.5" or
+                // "0.37". At the accessibility sizes that floor alone pushed
+                // the stacked stepper, and the card, past the screen (W-final
+                // AX5 shot) — so the stacked row takes the reps floor.
+                minWidth: typeSize.isAccessibilitySize ? SetColumn.repsFloor(typeSize) : loadFloor,
+                fills: !typeSize.isAccessibilitySize,
                 tint: nil, onCommit: { commit(targets) }
             )
         }
