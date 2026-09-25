@@ -6,12 +6,13 @@ import WatchKit
 // MARK: - The wrist's dashboard (overhaul A2, decisions Q4 + concept 4)
 //
 // ── A GLANCE, THEN THE PHONE'S TABS ─────────────────────────────────────────
-// Page one is `GlanceView` — the readiness ring and its four petals, no text on
+// Page one is `GlanceView` — the readiness ring and its six petals (Precision
+// D1; each pushes its own detail since D3), no text on
 // the first paint but the one number. Then the phone's own tabs, in its order:
 // Today, Pulse, Train, Fuel. Train is the old front door (`StartView`: the
 // split and Start, Join, or today's banner — A1), because Train is where the
 // phone starts a workout too; the Glance's centre opens Pulse and every petal
-// opens its own domain.
+// pushes its own detail screen.
 //
 // ── IT DRAWS THE COMPLICATION FACES, AND THAT IS STILL THE DESIGN ───────────
 // Today and Pulse are `OnyxTile.accessory` faces — the same unfenced view the
@@ -106,8 +107,10 @@ struct DashboardView: View {
                 Group {
                     switch page {
                     case .glance:
-                        GlanceView { wanted in
-                            if pages.contains(wanted) { withAnimation { self.page = wanted } }
+                        // Petals PUSH their detail (D3); only the centre,
+                        // with nothing highlighted, turns to a page.
+                        GlanceView {
+                            if pages.contains(.pulse) { withAnimation { self.page = .pulse } }
                         }
                     case .train:
                         StartView()
@@ -119,7 +122,7 @@ struct DashboardView: View {
             }
         }
         .tabViewStyle(.verticalPage)
-        .containerBackground(WatchInk.ground, for: .navigation)
+        .containerBackground(for: .navigation) { WatchInk.ground }
         .navigationTitle(page.title)
         .navigationBarTitleDisplayMode(.inline)
         #if DEBUG
@@ -187,7 +190,12 @@ private struct DashboardPageView: View {
 struct FoodSlab: View {
     let tiles: WatchTiles?
 
-    private var energy: [(kcal: Double, ink: Color, name: String)]? {
+    private var energy: [(kcal: Double, ink: Color, name: String)]? { Self.energy(tiles) }
+
+    /// Each macro's energy, protein · carbs · fat — shared with the Food
+    /// detail (D3) so the page and the detail cannot split the day
+    /// differently. Nil unless all three rode the wire.
+    static func energy(_ tiles: WatchTiles?) -> [(kcal: Double, ink: Color, name: String)]? {
         guard let p = tiles?.proteinG, let c = tiles?.carbsG, let f = tiles?.fatG, p + c + f > 0 else { return nil }
         return [(Double(p) * 4, Color.onyx.protein, "protein"),
                 (Double(c) * 4, Color.onyx.carbs, "carbs"),
@@ -211,25 +219,33 @@ struct FoodSlab: View {
                             .lineLimit(1)
                     }
                 }
-                if let energy {
-                    let total = energy.reduce(0) { $0 + $1.kcal }
-                    GeometryReader { geo in
-                        HStack(spacing: 2) {
-                            ForEach(energy.indices, id: \.self) { i in
-                                Capsule()
-                                    .fill(energy[i].ink)
-                                    .frame(width: max(3, (geo.size.width - 4) * energy[i].kcal / total))
-                            }
-                        }
-                    }
-                    .frame(height: 5)
-                    .accessibilityElement()
-                    .accessibilityLabel("Macros")
-                    .accessibilityValue(energy.map { "\($0.name) \(Int(($0.kcal / total * 100).rounded())) percent" }
-                        .joined(separator: ", "))
+                if let energy { EnergyBar(energy: energy, height: 5) }
+            }
+        }
+    }
+}
+
+/// The day's calories split protein · carbs · fat, as shares of ENERGY.
+struct EnergyBar: View {
+    let energy: [(kcal: Double, ink: Color, name: String)]
+    let height: CGFloat
+
+    var body: some View {
+        let total = energy.reduce(0) { $0 + $1.kcal }
+        GeometryReader { geo in
+            HStack(spacing: 2) {
+                ForEach(energy.indices, id: \.self) { i in
+                    Capsule()
+                        .fill(energy[i].ink)
+                        .frame(width: max(3, (geo.size.width - 4) * energy[i].kcal / total))
                 }
             }
         }
+        .frame(height: height)
+        .accessibilityElement()
+        .accessibilityLabel("Macros")
+        .accessibilityValue(energy.map { "\($0.name) \(Int(($0.kcal / total * 100).rounded())) percent" }
+            .joined(separator: ", "))
     }
 }
 
@@ -287,7 +303,7 @@ struct LiveWidgetPreview: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .containerBackground(WatchInk.ground, for: .navigation)
+        .containerBackground(for: .navigation) { WatchInk.ground }
         .navigationTitle("Live widget")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -315,7 +331,7 @@ struct LiveWidgetPreview: View {
 /// ellipsise "1750 ml" to "1750…" — which is the failure the whole
 /// `WatchPanel` file exists about. A row of its own costs one line and
 /// nothing else.
-private struct WaterGlassButton: View {
+struct WaterGlassButton: View {
 
     @Environment(WatchModel.self) private var model
 
