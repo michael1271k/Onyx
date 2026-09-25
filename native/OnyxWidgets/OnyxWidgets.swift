@@ -114,7 +114,10 @@ private struct TileFace: View {
             // rule that already failed. This is the only widget root that draws
             // a tile; the Lock Screen accessory and the Live Activity have their
             // own roots and their own (deliberately `.clear`) backgrounds.
-            .containerBackground(Color.onyx.base, for: .widget)
+            // The screen's ground at half strength (Precision B3, decision
+            // Q20): a tile is glass over the wallpaper's edge, and the light
+            // that lifts a whole phone screen reads as a stain on a 2 × 2.
+            .containerBackground(for: .widget) { OnyxGround(domain: nil, strength: 0.5) }
     }
 }
 

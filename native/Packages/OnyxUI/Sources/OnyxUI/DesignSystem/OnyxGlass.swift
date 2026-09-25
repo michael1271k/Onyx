@@ -62,10 +62,28 @@ public enum GlassLevel: Sendable {
     }
 }
 
+/// Reduce Transparency, forced (Precision B3) — the shot harness's `rt-`
+/// screens. `accessibilityReduceTransparency` is read-only in
+/// `EnvironmentValues` (the same wall `onyxForcesReducedMotion` works around),
+/// so the slab and the ground OR this with the system value. False outside
+/// the harness.
+private struct OnyxForcesReducedTransparencyKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+public extension EnvironmentValues {
+    var onyxForcesReducedTransparency: Bool {
+        get { self[OnyxForcesReducedTransparencyKey.self] }
+        set { self[OnyxForcesReducedTransparencyKey.self] = newValue }
+    }
+}
+
 private struct OnyxGlassModifier: ViewModifier {
     let level: GlassLevel
 
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
+    @Environment(\.onyxForcesReducedTransparency) private var forcedReduceTransparency
+    private var reduceTransparency: Bool { systemReduceTransparency || forcedReduceTransparency }
 
     // ── STONE (overhaul B3, concept 1 + challenge C1) ───────────────────────
     // Every level is one slab: `.thinMaterial` so what scrolls behind frosts,
@@ -118,10 +136,10 @@ public extension View {
 
 // MARK: - The screen ground
 
-/// How lit the mesh is allowed to be, 0…1 — the device's battery.
+/// How lit the ground is allowed to be, 0…1 — the device's battery.
 ///
 /// ── WHY A BACKGROUND WATCHES THE BATTERY ────────────────────────────────────
-/// The bleed is the one thing on this app that is pure decoration: it says
+/// The ground's light is the one thing on this app that is pure decoration: it says
 /// which domain you are in, and nothing else. On an OLED panel it is also the
 /// only thing that is not black, which means it is the only thing costing
 /// power on a screen that is otherwise free to draw. So it is the first thing
@@ -142,105 +160,94 @@ public extension EnvironmentValues {
     }
 }
 
-/// True black, with one mesh bleed of the screen's domain behind the top of it.
+/// Black, lit from two corners by the stone (Precision B3, decision Q20 ·
+/// design 7 "Stone light gradient").
 ///
-/// ── ONE BLEED, TEN PERCENT, TOP ONLY ────────────────────────────────────────
-/// The accent's job is to say which domain you are in before you read a word.
-/// It does that from the corner of your eye; at 30 % it becomes a background you
-/// have to read text against, and every material above it turns muddy because
-/// glass tints towards whatever is behind it. The bleed is behind the TOP
-/// because that is where the title is and where the eye lands.
+/// ── WHY THE MESH WENT ───────────────────────────────────────────────────────
+/// The 3 × 3 mesh bled the domain's two stops across the top 280 pt at 10 %,
+/// then went black: a band behind the title and dead black under it, which is
+/// what the founder called "flat black". The ground is now two radials that
+/// reach the whole screen (peaks: `OnyxTheme.groundPeak`): the domain's accent from just
+/// off the top-left corner (radius 70 % of the height) and the theme's
+/// secondary from just off the bottom-right (55 %). Light falls across the
+/// stone rather than sitting on its head. REPLACED, not stacked — a mesh under
+/// two radials is three light sources and a muddy middle.
 ///
-/// v2 took it from 12 % over 340 pt to 8 % over 240 (§3.1). Phase 2.5 §W5.2
-/// gives it back two points and forty: the desaturated v2 accents were quiet
-/// enough that 8 % over 240 read as a smudge above the title rather than as a
-/// domain, and 10 % over 280 is still under the 12 % that made every screenshot
-/// look like a landing page. The ceiling is 10 %, and the battery is what keeps
-/// the average below it.
+/// ── WHAT IS HELD ────────────────────────────────────────────────────────────
+/// Both hues are clamped to chroma 0.10 (`OnyxTheme.groundHex`); the brightest
+/// point of the ground stays under OKLab L 0.35 and `textSecondary` over it
+/// stays ≥ 4.5 : 1 for all eight stones × four domains
+/// (`TokenDisciplineTests`). The theme's phase mood (`reacting(to:)`) reaches
+/// the ground on its own — `current.spec` is the reacted spec.
 ///
-/// ── AND ONE STOP AT THE BOTTOM ──────────────────────────────────────────────
-/// A screen taller than its bleed ends in dead black, which on a long scroll
-/// reads as the app having run out rather than the list having. One faint
-/// ellipse in the bottom-leading corner — half the top's alpha, no structure —
-/// closes the frame without becoming a second gradient.
-private struct OnyxScreenBackground: ViewModifier {
-    /// `nil` is the neutral ground: Settings belongs to no domain, and giving
-    /// it one would say the tab is about that domain.
+/// Reduce Transparency draws flat black: a lit ground under glass is the thing
+/// that setting exists to switch off. The battery still dims it (below).
+public struct OnyxGround: View {
     let domain: OnyxDomain?
+    /// Nil = `OnyxTheme.current`; Appearance draws an uncommitted draft.
+    let theme: OnyxTheme?
+    /// 1 on a screen, 0.5 in the widget container (a tile's glass is
+    /// thinner and the Home Screen wallpaper is not black).
+    let strength: Double
 
-    /// Frostier and opaque when the system asks for it. A mesh under glass is
-    /// the exact thing this setting exists to switch off, so it goes entirely —
-    /// dimming it would leave a tinted haze that is neither the design nor flat.
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
+    @Environment(\.onyxForcesReducedTransparency) private var forcedReduceTransparency
     @Environment(\.onyxBatteryLevel) private var battery
 
-    /// §W5.2: the peak the bleed may reach, at a full battery.
-    private static let peak: Double = 0.10
-    /// Tall enough to bleed under a large navigation title and no further.
-    private static let bleedHeight: CGFloat = 280
+    private var reduceTransparency: Bool { systemReduceTransparency || forcedReduceTransparency }
 
-    /// `peak × clamp(0.5 + battery/2)` — full at 100 %, 70 % at 40 %, and never
-    /// under half, because a bleed that has faded out entirely stops saying
-    /// which tab you are on.
+    public init(domain: OnyxDomain?, theme: OnyxTheme? = nil, strength: Double = 1) {
+        self.domain = domain
+        self.theme = theme
+        self.strength = strength
+    }
+
+    /// `clamp(0.5 + battery/2)` — full at 100 %, 70 % at 40 %, never under
+    /// half (a ground that has gone black stops saying which tab you are on).
     private var intensity: Double {
-        Self.peak * min(max(0.5 + battery / 2, 0.5), 1)
+        strength * min(max(0.5 + battery / 2, 0.5), 1)
     }
 
-    /// The two stops the mesh is lit with. Neutral borrows the text ink, which
-    /// on this ground is a grey lift and not a hue.
-    private var stops: (Color, Color) {
-        guard let domain else { return (Color.onyx.textPrimary, Color.onyx.textSecondary) }
-        return (domain.start, domain.end)
+    public var body: some View {
+        if reduceTransparency {
+            Color.onyx.base
+        } else {
+            let wash = (theme ?? OnyxTheme.current).groundWash(domain)
+            GeometryReader { geo in
+                let h = max(geo.size.height, 1)
+                ZStack {
+                    Color.onyx.base
+                    RadialGradient(
+                        colors: [wash.primary, wash.primary.opacity(0)],
+                        center: UnitPoint(x: -0.10, y: -0.10),
+                        startRadius: 0, endRadius: h * 0.70
+                    )
+                    .opacity(intensity)
+                    RadialGradient(
+                        colors: [wash.secondary, wash.secondary.opacity(0)],
+                        center: UnitPoint(x: 1.10, y: 1.10),
+                        startRadius: 0, endRadius: h * 0.55
+                    )
+                    .opacity(intensity)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
+}
+
+/// The screen modifier: `OnyxGround` under the whole screen, safe areas and
+/// all.
+private struct OnyxScreenBackground: ViewModifier {
+    /// `nil` is the neutral ground: Settings belongs to no domain, and is lit
+    /// by the theme's own pair.
+    let domain: OnyxDomain?
 
     func body(content: Content) -> some View {
         content.background {
-            if reduceTransparency {
-                Color.onyx.base.ignoresSafeArea()
-            } else {
-                ZStack(alignment: .top) {
-                    Color.onyx.base
-                    mesh
-                        .opacity(domain == nil ? intensity / 2 : intensity)
-                        .frame(height: Self.bleedHeight)
-                        .blur(radius: 40)
-                        .ignoresSafeArea()
-                }
-                .overlay(alignment: .bottomLeading) { corner }
-                .ignoresSafeArea()
-            }
+            OnyxGround(domain: domain).ignoresSafeArea()
         }
-    }
-
-    private var mesh: some View {
-        let (a, b) = stops
-        return MeshGradient(
-            width: 3,
-            height: 3,
-            points: [
-                .init(0, 0),   .init(0.5, 0),   .init(1, 0),
-                .init(0, 0.5), .init(0.5, 0.5), .init(1, 0.5),
-                .init(0, 1),   .init(0.5, 1),   .init(1, 1),
-            ],
-            colors: [
-                a,     a,      b,
-                b,     .black, .black,
-                .black, .black, .black,
-            ]
-        )
-    }
-
-    /// The bottom-leading stop. An ellipse rather than a second mesh: it has no
-    /// structure to show and a mesh would cost a second render pass to say the
-    /// same thing.
-    private var corner: some View {
-        Ellipse()
-            .fill(stops.1)
-            .frame(width: 240, height: 160)
-            .blur(radius: 60)
-            .opacity(intensity / 2)
-            .offset(x: -60, y: 40)
-            .allowsHitTesting(false)
     }
 }
 

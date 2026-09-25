@@ -35,6 +35,13 @@ struct AppearanceView: View {
         Form {
             Section {
                 AppearancePreview(theme: OnyxTheme(spec: draft))
+                    // The draft's own ground behind the slab (Precision B3):
+                    // the light a screen will fall in, before the commit.
+                    .padding(OnyxSpace.m)
+                    .background {
+                        OnyxGround(domain: nil, theme: OnyxTheme(spec: draft))
+                            .clipShape(RoundedRectangle(cornerRadius: OnyxCorner.tile, style: .continuous))
+                    }
                     // The preview IS a slab; the Form row must not draw a
                     // second card around it (B3 shot).
                     .listRowBackground(Color.clear)
