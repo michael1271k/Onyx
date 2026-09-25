@@ -4,17 +4,18 @@ import OnyxCore
 
 /// The body, tinted by where the session landed.
 ///
-/// `OnyxAtlas.swift` beside this file is GENERATED from the web app's `lib/body/atlas.ts`
-/// and holds only geometry; `atlas-parity.test.ts` re-runs the generator and
-/// fails when either Swift copy differs, so the web app, the widget and this
-/// screen can never disagree about where a muscle is.
+/// `OnyxAtlas.swift` (OnyxUI) is GENERATED from `scripts/src/atlas.ts` and
+/// holds only geometry; `npm run check:atlas` re-runs the generator and fails
+/// when the Swift differs, so the widget and this screen can never disagree
+/// about where a muscle is.
 ///
-/// How a body is TINTED is a design decision rather than a translation, so the
-/// drawing is hand-written — and it is written differently here than in the
-/// widget. A 40 pt figure on a Home Screen has to fill in one hue at several
-/// alphas to stay readable; a 160 pt figure in a sheet can afford the full
-/// three-channel language (family hue · ramp step · alpha) and is a worse
-/// figure without it.
+/// WHAT to light is this figure's decision — a colour per muscle and side,
+/// resolved below — and HOW is `AtlasPainter`'s (OnyxUI, Precision F1), the
+/// one painter the widget's `OnyxAtlasFigure` draws with too. The material is
+/// the écorché — flesh along the fibres, ivory tendon and bone, the lit
+/// muscles in their own ink with a glow — except for a monochrome thumbnail
+/// and under Reduce Transparency, which keep the flat figure that shipped
+/// before (`AtlasMaterial.figure`).
 struct AtlasFigure: View {
 
     enum Side { case front, back, both }
@@ -30,8 +31,10 @@ struct AtlasFigure: View {
     /// silently deleted the §6.7 shadow from a 170 pt figure. They are separate
     /// questions now — `isThumbnail` asks the second one.
     var monochromeTint: Color?
-    /// A 44 pt figure in a tile: no drop shadow, because a 10 pt blur is
-    /// invisible at that size and costs an offscreen pass per tile.
+    /// A 44 pt figure in a tile: LITE — no drop shadow (flat) and no glow or
+    /// sheen (écorché), because a 10 pt blur is invisible at that size and
+    /// costs an offscreen pass per tile. With `monochromeTint` it also picks
+    /// the flat material (`AtlasMaterial.figure`).
     var isThumbnail = false
     /// An explicit colour per muscle AND SIDE, overriding both the family hue
     /// and the monochrome tint. The DOMS body needs this: soreness is a
@@ -77,6 +80,23 @@ struct AtlasFigure: View {
     /// DOMS tile is.
     var onPick: ((MuscleSide) -> Void)?
 
+    @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
+    @Environment(\.onyxForcesReducedTransparency) private var forcedReduceTransparency
+
+    /// Flat for a monochrome THUMBNAIL and under Reduce Transparency; a
+    /// thumbnail is also LITE (no glow, no sheen, no shadow — offscreen passes
+    /// nobody can see at 28–44 pt).
+    private var painter: AtlasPainter {
+        AtlasPainter(
+            material: .figure(
+                monochrome: monochromeTint != nil,
+                thumbnail: isThumbnail,
+                reduceTransparency: systemReduceTransparency || forcedReduceTransparency
+            ),
+            isLite: isThumbnail
+        )
+    }
+
     var body: some View {
         switch side {
         case .both:
@@ -118,84 +138,23 @@ struct AtlasFigure: View {
 
     private func figure(_ view: OnyxAtlasView) -> some View {
         let resolved = tints(view)
+        let painter = painter
         return Canvas { context, size in
-            let rect = CGRect(origin: .zero, size: size)
-            let light = Self.light(across: rect)
-            func shade(_ top: Color, _ bottom: Color) -> GraphicsContext.Shading {
-                .linearGradient(Gradient(colors: [top, bottom]), startPoint: light.start, endPoint: light.end)
-            }
-
-            // The silhouette first, and never tinted: it carries no data, and a
-            // glowing head would read as a muscle nobody can train. It sits in
-            // its own layer so the drop shadow falls under the BODY and not
-            // under every muscle on it (§6.7).
-            // The 44 pt monochrome thumbnails skip the layer: a 10 pt blur
-            // under a thumbnail is invisible and an offscreen pass per tile.
-            context.drawLayer { layer in
-                if !isThumbnail {
-                    layer.addFilter(.shadow(color: .black.opacity(0.45), radius: 10, y: 6))
+            painter.paint(
+                &context,
+                in: CGRect(origin: .zero, size: size),
+                view: view,
+                mark: { entry in
+                    LandmarkMuscle(rawValue: entry.muscle)
+                        .flatMap { resolved[MuscleSide($0, entry.side)] }
+                        .map { AtlasPainter.Mark(ink: $0.0, share: $0.1) }
+                },
+                ring: { entry in
+                    LandmarkMuscle(rawValue: entry.muscle).flatMap {
+                        outlined[MuscleSide($0, entry.side)] ?? outlined[MuscleSide($0, .both)]
+                    }
                 }
-                for build in OnyxAtlas.base {
-                    var path = Path()
-                    build(rect, &path)
-                    layer.fill(path, with: shade(.white.opacity(0.11), .white.opacity(0.03)))
-                    layer.stroke(path, with: .color(.white.opacity(0.10)), lineWidth: Self.hairline)
-                }
-            }
-
-            for entry in OnyxAtlas.muscles where entry.view == view {
-                var path = Path()
-                entry.build(rect, &path)
-                let key = LandmarkMuscle(rawValue: entry.muscle).map { MuscleSide($0, entry.side) }
-                if let key, let (tint, intensity) = resolved[key], intensity > 0 {
-                    // Alpha carries the amount. A hue RAMP would read as a
-                    // verdict — green good, red bad — and this figure passes no
-                    // verdicts; it reports where work landed.
-                    let strength = min(max(intensity, 0), 1)
-                    context.fill(path, with: shade(
-                        tint.opacity(0.30 + strength * 0.60),
-                        tint.opacity(0.14 + strength * 0.42)
-                    ))
-                    context.stroke(path, with: .color(tint.opacity(0.95)), lineWidth: Self.hairline)
-                } else {
-                    // The belly of an untrained muscle: a shade darker than the
-                    // flesh around it, lit from the same corner.
-                    context.fill(path, with: shade(.white.opacity(0.07), .white.opacity(0.035)))
-                    context.stroke(path, with: .color(.white.opacity(0.10)), lineWidth: Self.hairline)
-                }
-            }
-
-            // ── THE REPORTED RING, over the fill and under the definition ──
-            // Drawn in its own pass rather than inside the loop above, so a
-            // ring is never painted over by the NEXT muscle's fill: several
-            // landmarks share an edge (the three delts, the two heads either
-            // side of the linea alba) and in one pass the later path's fill
-            // clips the earlier path's ring along exactly the boundary the ring
-            // exists to mark.
-            //
-            // Two strokes, not one: a soft wide halo under a crisp hairline.
-            // A single 2 pt stroke at this scale reads as a thicker muscle
-            // rather than as a mark ON one, which is the difference between a
-            // second channel and a rendering artefact.
-            for entry in OnyxAtlas.muscles where entry.view == view {
-                guard let muscle = LandmarkMuscle(rawValue: entry.muscle),
-                      let ring = outlined[MuscleSide(muscle, entry.side)]
-                              ?? outlined[MuscleSide(muscle, .both)] else { continue }
-                var path = Path()
-                entry.build(rect, &path)
-                context.stroke(path, with: .color(ring.opacity(0.35)), lineWidth: Self.hairline * 5)
-                context.stroke(path, with: .color(ring), lineWidth: Self.hairline * 1.6)
-            }
-
-            // Definition last, over everything, and STROKED ONLY — several of
-            // these are OPEN paths (a brow, the linea alba), and SwiftUI closes
-            // an open path when it fills one, so a filled brow becomes a wedge
-            // across the forehead.
-            for entry in OnyxAtlas.detail where entry.view == view {
-                var path = Path()
-                entry.build(rect, &path)
-                context.stroke(path, with: .color(.white.opacity(0.18)), lineWidth: 0.35)
-            }
+            )
         }
         .aspectRatio(OnyxAtlas.viewBox.width / OnyxAtlas.viewBox.height, contentMode: .fit)
         // The hit test is the DRAWING — `OnyxAtlas.muscle(at:in:side:)` asks
@@ -243,24 +202,6 @@ struct AtlasFigure: View {
             }
         }
     }
-
-    /// The gradient's line: 145° in CSS terms — 0° straight up, clockwise —
-    /// so the light falls from the upper left across the whole figure and
-    /// every fill, flesh or muscle, is lit from the same corner.
-    private static func light(across rect: CGRect) -> (start: CGPoint, end: CGPoint) {
-        let theta = 145.0 * .pi / 180
-        let dir = CGPoint(x: sin(theta), y: -cos(theta))
-        // CSS's gradient line, so the corners land at exactly 0 and 1 as on
-        // the web — the diagonal would leave them at ~0.1 / 0.9.
-        let reach = (rect.width * abs(sin(theta)) + rect.height * abs(cos(theta))) / 2
-        return (
-            CGPoint(x: rect.midX - dir.x * reach, y: rect.midY - dir.y * reach),
-            CGPoint(x: rect.midX + dir.x * reach, y: rect.midY + dir.y * reach)
-        )
-    }
-
-    /// §6.7's hairline, on every outline.
-    private static let hairline: CGFloat = 0.5
 
     /// Each landmark-and-side the view draws, with the union of that side's
     /// paths' bounds in `rect` — the accessibility frame. Zero-size before

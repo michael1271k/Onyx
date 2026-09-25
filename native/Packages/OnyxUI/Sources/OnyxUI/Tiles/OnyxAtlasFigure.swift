@@ -5,19 +5,25 @@
 #if os(iOS)
 
 import SwiftUI
+import WidgetKit
 import OnyxCore
 
 // MARK: - The atlas, drawn
 //
-// `OnyxAtlas.swift` is GENERATED from the web app's `lib/body/atlas.ts` and holds only
-// geometry. This is the view that draws it, and it is hand-written because how
-// a body is TINTED is a design decision, not a translation of an SVG.
+// `OnyxAtlas.swift` is GENERATED from `scripts/src/atlas.ts` and holds only
+// geometry. This view decides WHAT a tile lights — one accent at the worked
+// share — and hands the HOW to `AtlasPainter`, the painter the app's
+// `AtlasFigure` uses too (Precision F1), so the Home Screen and the phone draw
+// one anatomy in one material.
 //
-// ── ONE FIGURE, TWO PRODUCTS ─────────────────────────────────────────────────
-// The app draws the same paths in SVG. Keeping the geometry generated and the
-// styling separate is what lets the widget make its own choices — a 40pt figure
-// on a Home Screen cannot use the app's 1.1pt strokes and survive — without the
-// two anatomies ever diverging.
+// ── THE WIDGET'S CUT OF THE ÉCORCHÉ ──────────────────────────────────────────
+// Always LITE: no specular band and no glow — each is a gradient or an
+// offscreen pass per muscle, and the extension's memory ceiling is the one
+// budget a widget cannot overrun. Flat (the old alpha figure) when the tile
+// cannot show colour — `monochrome`, an accented or vibrant rendering mode —
+// in a rectangular Lock Screen accessory, and under Reduce Transparency
+// (`AtlasMaterial.widget`); that flat is the widget's own pre-F1 figure,
+// not the app's (`AtlasPainter.Host.widget`).
 
 struct OnyxAtlasFigure: View {
   /// Which side of the body. `both` draws them side by side, sharing a scale.
@@ -28,6 +34,11 @@ struct OnyxAtlasFigure: View {
   var worked: [String: Double] = [:]
   var color: Color = OnyxDomain.body.accent
   var monochrome = false
+
+  @Environment(\.widgetFamily) private var family
+  @Environment(\.widgetRenderingMode) private var renderingMode
+  @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
+  @Environment(\.onyxForcesReducedTransparency) private var forcedReduceTransparency
 
   var body: some View {
     switch side {
@@ -42,52 +53,23 @@ struct OnyxAtlasFigure: View {
   }
 
   private func figure(_ view: OnyxAtlasView) -> some View {
-    Canvas { context, size in
-      let rect = CGRect(origin: .zero, size: size)
-
-      // The silhouette first, and never tinted: it carries no data, and a
-      // glowing head would read as a muscle nobody can train.
-      //
-      // A vertical gradient stands in for the app's 145-degree one. `Canvas`
-      // shading is per-fill, and a linear gradient across a 40pt widget cell
-      // costs a gradient evaluation per pixel per body — at this size the top-to-
-      // bottom falloff carries the same "this has mass" reading for a fraction
-      // of the work, which is the trade the widget has to make everywhere.
-      for build in OnyxAtlas.base {
-        var path = Path()
-        build(rect, &path)
-        context.fill(path, with: .linearGradient(
-          Gradient(colors: [Color.onyx.ink(0.13), Color.onyx.ink(0.05)]),
-          startPoint: CGPoint(x: rect.minX, y: rect.minY),
-          endPoint: CGPoint(x: rect.maxX, y: rect.maxY)))
-        context.stroke(path, with: .color(Color.onyx.ink(0.12)), lineWidth: 0.5)
-      }
-
-      for entry in OnyxAtlas.muscles where entry.view == view {
-        var path = Path()
-        entry.build(rect, &path)
-        let intensity = min(max(worked[entry.muscle] ?? 0, 0), 1)
-        if intensity > 0 {
-          // Alpha, not a colour ramp. One hue at several strengths says "more
-          // of the same"; a green-to-red ramp would read as a verdict, and this
-          // figure passes no verdicts.
-          let tint = monochrome ? Color.white : color
-          context.fill(path, with: .color(tint.opacity(0.18 + intensity * 0.55)))
-          context.stroke(path, with: .color(tint.opacity(0.9)), lineWidth: 0.6)
-        } else {
-          context.fill(path, with: .color(Color.onyx.ink(0.09)))
-          context.stroke(path, with: .color(Color.onyx.ink(0.13)), lineWidth: 0.4)
-        }
-      }
-
-      // Definition last, over everything, and STROKED ONLY — several of these
-      // are open paths, and SwiftUI closes an open path when it fills one, so a
-      // filled brow would be a wedge across the forehead.
-      for entry in OnyxAtlas.detail where entry.view == view {
-        var path = Path()
-        entry.build(rect, &path)
-        context.stroke(path, with: .color(Color.onyx.ink(0.20)), lineWidth: 0.35)
-      }
+    let painter = AtlasPainter(
+      material: .widget(
+        monochrome: monochrome,
+        fullColor: renderingMode == .fullColor,
+        rectangularAccessory: family == .accessoryRectangular,
+        reduceTransparency: systemReduceTransparency || forcedReduceTransparency),
+      isLite: true,
+      host: .widget)
+    // Alpha (flat) or the flesh taken toward it (écorché) — one hue at several
+    // strengths either way. A green-to-red ramp would read as a verdict, and
+    // this figure passes no verdicts.
+    let tint = monochrome ? Color.white : color
+    return Canvas { context, size in
+      painter.paint(&context, in: CGRect(origin: .zero, size: size), view: view, mark: { entry in
+        let share = min(max(worked[entry.muscle] ?? 0, 0), 1)
+        return share > 0 ? AtlasPainter.Mark(ink: tint, share: share) : nil
+      })
     }
     .accessibilityHidden(true)
   }

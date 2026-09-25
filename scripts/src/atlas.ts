@@ -57,6 +57,14 @@ export type LandmarkMuscle = (typeof LANDMARK_MUSCLES)[number]
  * muscle you can train, and putting it in `MUSCLE_PATHS` would mean inventing a
  * landmark to key it on.
  *
+ * ── AND TWO MORE FOR THE ÉCORCHÉ (Precision F1) ──────────────────────────────
+ * The flesh material (`OnyxUI/Atlas/AtlasMaterial.swift`) draws a flayed
+ * figure: muscle over a dark silhouette, with the cords and the bone that
+ * show through. `TENDON_SHAPES` and `BONE_SHAPES` are those — FILLED, closed,
+ * never tinted, never a hit target, and drawn only by that material (the flat
+ * one ignores them). Each muscle path also carries its `fibre` axis, which the
+ * material shades along. Still geometry only; the colours are tokens.
+ *
  * ── AND IT IS PLAIN DATA ─────────────────────────────────────────────────────
  * No React, no colour, no severity, no shading. `MuscleAtlas.tsx` decides how a
  * body is LIT — that is a rendering decision, and it differs between a 24px
@@ -99,6 +107,21 @@ export interface AtlasPath {
   /** Path data on the 120 × 260 viewBox. `M`, `L`, `C` and `Z` only — the
    *  Swift generator implements exactly those four commands. */
   d: string
+  /**
+   * The fibre direction, in viewBox units (x right, y down; length is
+   * irrelevant, and so is the sign — it is an AXIS).
+   *
+   * ── WHY THE ANATOMY CARRIES A DIRECTION (Precision F1) ──────────────────
+   * The écorché material lights each belly with a gradient ALONG its fibres
+   * and a specular band beside them, the way a flayed muscle catches light:
+   * a biceps shades down its length, a pec across the chest toward the arm, a
+   * glute on the diagonal from sacrum to femur. That axis is anatomy, not
+   * styling — it is the same for every renderer and every size — so it lives
+   * here beside the shape, and `gen-atlas-swift.mjs` refuses a path without
+   * one. Which END of the axis is lit is the renderer's call (the light is
+   * upper-left on every figure), which is why the sign carries nothing.
+   */
+  fibre: readonly [number, number]
 }
 
 /** A definition line or feature. Same command vocabulary, but stroked, not filled. */
@@ -184,24 +207,24 @@ export const MUSCLE_PATHS: readonly AtlasPath[] = [
   // NOTE for anyone editing these: the two ORIGINAL cap strings are reused
   // verbatim as the back view's `Rear delts`. A find-and-replace on the old
   // path data hits four entries, not two.
-  { muscle: 'Front delts', view: 'front', d: 'M43,50 C41,52 40,53 39,55 C34,60 31,67 30,75 L38,76 C38,69 40,60 44,54 Z' },
-  { muscle: 'Front delts', view: 'front', d: 'M77,50 C79,52 80,53 81,55 C86,60 89,67 90,75 L82,76 C82,69 80,60 76,54 Z' },
-  { muscle: 'Side delts', view: 'front', d: 'M43,50 C35,53 29,61 27,71 C26,74 26,77 27,79 L30,75 C31,67 34,60 39,55 C40,53 41,52 43,50 Z' },
-  { muscle: 'Side delts', view: 'front', d: 'M77,50 C85,53 91,61 93,71 C94,74 94,77 93,79 L90,75 C89,67 86,60 81,55 C80,53 79,52 77,50 Z' },
-  { muscle: 'Chest', view: 'front', d: 'M58,59 L45,60 C41,63 39,69 40,76 C41,84 47,89 54,90 C57,90 58,87 58,84 C58,76 58,67 58,59 Z' },
-  { muscle: 'Chest', view: 'front', d: 'M62,59 L75,60 C79,63 81,69 80,76 C79,84 73,89 66,90 C63,90 62,87 62,84 C62,76 62,67 62,59 Z' },
-  { muscle: 'Abs/core', view: 'front', d: 'M50,93 C47,93 46,95 46,99 C46,110 48,123 51,133 L69,133 C72,123 74,110 74,99 C74,95 73,93 70,93 Z' },
+  { muscle: 'Front delts', view: 'front', d: 'M43,50 C41,52 40,53 39,55 C34,60 31,67 30,75 L38,76 C38,69 40,60 44,54 Z', fibre: [-0.3, 1] },
+  { muscle: 'Front delts', view: 'front', d: 'M77,50 C79,52 80,53 81,55 C86,60 89,67 90,75 L82,76 C82,69 80,60 76,54 Z', fibre: [0.3, 1] },
+  { muscle: 'Side delts', view: 'front', d: 'M43,50 C35,53 29,61 27,71 C26,74 26,77 27,79 L30,75 C31,67 34,60 39,55 C40,53 41,52 43,50 Z', fibre: [-0.45, 1] },
+  { muscle: 'Side delts', view: 'front', d: 'M77,50 C85,53 91,61 93,71 C94,74 94,77 93,79 L90,75 C89,67 86,60 81,55 C80,53 79,52 77,50 Z', fibre: [0.45, 1] },
+  { muscle: 'Chest', view: 'front', d: 'M58,59 L45,60 C41,63 39,69 40,76 C41,84 47,89 54,90 C57,90 58,87 58,84 C58,76 58,67 58,59 Z', fibre: [-1, -0.35] },
+  { muscle: 'Chest', view: 'front', d: 'M62,59 L75,60 C79,63 81,69 80,76 C79,84 73,89 66,90 C63,90 62,87 62,84 C62,76 62,67 62,59 Z', fibre: [1, -0.35] },
+  { muscle: 'Abs/core', view: 'front', d: 'M50,93 C47,93 46,95 46,99 C46,110 48,123 51,133 L69,133 C72,123 74,110 74,99 C74,95 73,93 70,93 Z', fibre: [0, 1] },
   // The oblique flanks. Same landmark as the rectus — the program prescribes a
   // core, not a serratus — but drawn apart, because the taper from ribcage to
   // waist is most of what makes a midsection read as a midsection.
-  { muscle: 'Abs/core', view: 'front', d: 'M45,99 C42,101 41,107 42,114 C43,121 45,127 48,132 L49,132 C47,122 45,110 45,99 Z' },
-  { muscle: 'Abs/core', view: 'front', d: 'M75,99 C78,101 79,107 78,114 C77,121 75,127 72,132 L71,132 C73,122 75,110 75,99 Z' },
-  { muscle: 'Biceps', view: 'front', d: 'M39,62 C34,66 31,73 30,82 C29,91 29,100 30,108 L37,106 C36,98 36,90 38,81 C39,73 40,67 41,62 Z' },
-  { muscle: 'Biceps', view: 'front', d: 'M81,62 C86,66 89,73 90,82 C91,91 91,100 90,108 L83,106 C84,98 84,90 82,81 C81,73 80,67 79,62 Z' },
-  { muscle: 'Forearms', view: 'front', d: 'M30,112 C30,121 31,131 33,140 C34,144 35,146 36,148 L42,146 C40,139 39,131 38,123 C38,118 38,115 38,111 Z' },
-  { muscle: 'Forearms', view: 'front', d: 'M90,112 C90,121 89,131 87,140 C86,144 85,146 84,148 L78,146 C80,139 81,131 82,123 C82,118 82,115 82,111 Z' },
-  { muscle: 'Quads', view: 'front', d: 'M41,153 C37,164 36,178 39,192 L50,192 C51,178 52,164 52,153 Z' },
-  { muscle: 'Quads', view: 'front', d: 'M79,153 C83,164 84,178 81,192 L70,192 C69,178 68,164 68,153 Z' },
+  { muscle: 'Abs/core', view: 'front', d: 'M45,99 C42,101 41,107 42,114 C43,121 45,127 48,132 L49,132 C47,122 45,110 45,99 Z', fibre: [0.35, 1] },
+  { muscle: 'Abs/core', view: 'front', d: 'M75,99 C78,101 79,107 78,114 C77,121 75,127 72,132 L71,132 C73,122 75,110 75,99 Z', fibre: [-0.35, 1] },
+  { muscle: 'Biceps', view: 'front', d: 'M39,62 C34,66 31,73 30,82 C29,91 29,100 30,108 L37,106 C36,98 36,90 38,81 C39,73 40,67 41,62 Z', fibre: [-0.12, 1] },
+  { muscle: 'Biceps', view: 'front', d: 'M81,62 C86,66 89,73 90,82 C91,91 91,100 90,108 L83,106 C84,98 84,90 82,81 C81,73 80,67 79,62 Z', fibre: [0.12, 1] },
+  { muscle: 'Forearms', view: 'front', d: 'M30,112 C30,121 31,131 33,140 C34,144 35,146 36,148 L42,146 C40,139 39,131 38,123 C38,118 38,115 38,111 Z', fibre: [0.15, 1] },
+  { muscle: 'Forearms', view: 'front', d: 'M90,112 C90,121 89,131 87,140 C86,144 85,146 84,148 L78,146 C80,139 81,131 82,123 C82,118 82,115 82,111 Z', fibre: [-0.15, 1] },
+  { muscle: 'Quads', view: 'front', d: 'M41,153 C37,164 36,178 39,192 L50,192 C51,178 52,164 52,153 Z', fibre: [0.05, 1] },
+  { muscle: 'Quads', view: 'front', d: 'M79,153 C83,164 84,178 81,192 L70,192 C69,178 68,164 68,153 Z', fibre: [-0.05, 1] },
   // ── THE ADDUCTORS TOOK THE MEDIAL THIRD BACK (2026-09-08) ─────────────────
   // They used to be a two-unit sliver, drawn small "on purpose" and sitting
   // OUTSIDE the leg silhouette by about a unit at the hip. At a 24 px thumbnail
@@ -210,33 +233,33 @@ export const MUSCLE_PATHS: readonly AtlasPath[] = [
   // would have had nothing to light. The quad's inner edge is pulled in by four
   // units at the hip and two at the knee, and the adductor takes the strip it
   // vacates, which is where the adductor group actually lies.
-  { muscle: 'Adductors', view: 'front', d: 'M52,153 C52,164 51,178 50,192 L54,192 C55,178 56,164 58,153 Z' },
-  { muscle: 'Adductors', view: 'front', d: 'M68,153 C68,164 69,178 70,192 L66,192 C65,178 64,164 62,153 Z' },
-  { muscle: 'Calves', view: 'front', d: 'M37,200 C36,210 36,222 38,232 C39,236 40,238 42,239 L51,239 C52,228 52,214 51,200 Z' },
-  { muscle: 'Calves', view: 'front', d: 'M83,200 C84,210 84,222 82,232 C81,236 80,238 78,239 L69,239 C68,228 68,214 69,200 Z' },
+  { muscle: 'Adductors', view: 'front', d: 'M52,153 C52,164 51,178 50,192 L54,192 C55,178 56,164 58,153 Z', fibre: [-0.2, 1] },
+  { muscle: 'Adductors', view: 'front', d: 'M68,153 C68,164 69,178 70,192 L66,192 C65,178 64,164 62,153 Z', fibre: [0.2, 1] },
+  { muscle: 'Calves', view: 'front', d: 'M37,200 C36,210 36,222 38,232 C39,236 40,238 42,239 L51,239 C52,228 52,214 51,200 Z', fibre: [0.05, 1] },
+  { muscle: 'Calves', view: 'front', d: 'M83,200 C84,210 84,222 82,232 C81,236 80,238 78,239 L69,239 C68,228 68,214 69,200 Z', fibre: [-0.05, 1] },
 
   // ── BACK ──
-  { muscle: 'Rear delts', view: 'back', d: 'M43,50 C35,53 29,61 27,71 C26,74 26,77 27,79 L38,76 C38,69 40,60 44,54 Z' },
-  { muscle: 'Rear delts', view: 'back', d: 'M77,50 C85,53 91,61 93,71 C94,74 94,77 93,79 L82,76 C82,69 80,60 76,54 Z' },
+  { muscle: 'Rear delts', view: 'back', d: 'M43,50 C35,53 29,61 27,71 C26,74 26,77 27,79 L38,76 C38,69 40,60 44,54 Z', fibre: [-0.6, 1] },
+  { muscle: 'Rear delts', view: 'back', d: 'M77,50 C85,53 91,61 93,71 C94,74 94,77 93,79 L82,76 C82,69 80,60 76,54 Z', fibre: [0.6, 1] },
   // Trapezius — the diamond from the neck out to both shoulders.
-  { muscle: 'Upper back', view: 'back', d: 'M60,45 C66,45 72,47 77,52 C75,60 70,66 63,70 L60,71 L57,70 C50,66 45,60 43,52 C48,47 54,45 60,45 Z' },
+  { muscle: 'Upper back', view: 'back', d: 'M60,45 C66,45 72,47 77,52 C75,60 70,66 63,70 L60,71 L57,70 C50,66 45,60 43,52 C48,47 54,45 60,45 Z', fibre: [0, 1] },
   // Lats: wide at the armpit, sweeping IN to the waist. Drawn as their own
   // shapes with the spine between them rather than as one slab across the back,
   // because the V is the whole silhouette of a trained back.
-  { muscle: 'Lats', view: 'back', d: 'M42,62 C39,70 38,80 39,90 C41,100 45,108 51,113 L57,113 C57,100 56,86 55,70 C50,69 45,66 42,62 Z' },
-  { muscle: 'Lats', view: 'back', d: 'M78,62 C81,70 82,80 81,90 C79,100 75,108 69,113 L63,113 C63,100 64,86 65,70 C70,69 75,66 78,62 Z' },
+  { muscle: 'Lats', view: 'back', d: 'M42,62 C39,70 38,80 39,90 C41,100 45,108 51,113 L57,113 C57,100 56,86 55,70 C50,69 45,66 42,62 Z', fibre: [-0.35, -1] },
+  { muscle: 'Lats', view: 'back', d: 'M78,62 C81,70 82,80 81,90 C79,100 75,108 69,113 L63,113 C63,100 64,86 65,70 C70,69 75,66 78,62 Z', fibre: [0.35, -1] },
   // The erector column between the lats and the pelvis.
-  { muscle: 'Lower back', view: 'back', d: 'M56,115 C58,116 62,116 64,115 C64,124 65,131 66,137 L54,137 C55,131 56,124 56,115 Z' },
-  { muscle: 'Triceps', view: 'back', d: 'M39,62 C34,66 31,73 30,82 C29,91 29,100 30,108 L37,106 C36,98 36,90 38,81 C39,73 40,67 41,62 Z' },
-  { muscle: 'Triceps', view: 'back', d: 'M81,62 C86,66 89,73 90,82 C91,91 91,100 90,108 L83,106 C84,98 84,90 82,81 C81,73 80,67 79,62 Z' },
-  { muscle: 'Forearms', view: 'back', d: 'M30,112 C30,121 31,131 33,140 C34,144 35,146 36,148 L42,146 C40,139 39,131 38,123 C38,118 38,115 38,111 Z' },
-  { muscle: 'Forearms', view: 'back', d: 'M90,112 C90,121 89,131 87,140 C86,144 85,146 84,148 L78,146 C80,139 81,131 82,123 C82,118 82,115 82,111 Z' },
-  { muscle: 'Glutes', view: 'back', d: 'M43,132 C40,137 39,145 41,152 C44,156 49,157 54,154 C57,152 59,148 59,143 L59,132 Z' },
-  { muscle: 'Glutes', view: 'back', d: 'M77,132 C80,137 81,145 79,152 C76,156 71,157 66,154 C63,152 61,148 61,143 L61,132 Z' },
-  { muscle: 'Hamstrings', view: 'back', d: 'M40,157 C37,168 36,180 39,192 L52,192 C53,180 54,168 56,157 Z' },
-  { muscle: 'Hamstrings', view: 'back', d: 'M80,157 C83,168 84,180 81,192 L68,192 C67,180 66,168 64,157 Z' },
-  { muscle: 'Calves', view: 'back', d: 'M37,199 C36,208 36,220 38,230 C39,234 40,236 42,237 L51,237 C52,226 52,212 51,199 Z' },
-  { muscle: 'Calves', view: 'back', d: 'M83,199 C84,208 84,220 82,230 C81,234 80,236 78,237 L69,237 C68,226 68,212 69,199 Z' },
+  { muscle: 'Lower back', view: 'back', d: 'M56,115 C58,116 62,116 64,115 C64,124 65,131 66,137 L54,137 C55,131 56,124 56,115 Z', fibre: [0, 1] },
+  { muscle: 'Triceps', view: 'back', d: 'M39,62 C34,66 31,73 30,82 C29,91 29,100 30,108 L37,106 C36,98 36,90 38,81 C39,73 40,67 41,62 Z', fibre: [-0.12, 1] },
+  { muscle: 'Triceps', view: 'back', d: 'M81,62 C86,66 89,73 90,82 C91,91 91,100 90,108 L83,106 C84,98 84,90 82,81 C81,73 80,67 79,62 Z', fibre: [0.12, 1] },
+  { muscle: 'Forearms', view: 'back', d: 'M30,112 C30,121 31,131 33,140 C34,144 35,146 36,148 L42,146 C40,139 39,131 38,123 C38,118 38,115 38,111 Z', fibre: [0.15, 1] },
+  { muscle: 'Forearms', view: 'back', d: 'M90,112 C90,121 89,131 87,140 C86,144 85,146 84,148 L78,146 C80,139 81,131 82,123 C82,118 82,115 82,111 Z', fibre: [-0.15, 1] },
+  { muscle: 'Glutes', view: 'back', d: 'M43,132 C40,137 39,145 41,152 C44,156 49,157 54,154 C57,152 59,148 59,143 L59,132 Z', fibre: [-1, 0.9] },
+  { muscle: 'Glutes', view: 'back', d: 'M77,132 C80,137 81,145 79,152 C76,156 71,157 66,154 C63,152 61,148 61,143 L61,132 Z', fibre: [1, 0.9] },
+  { muscle: 'Hamstrings', view: 'back', d: 'M40,157 C37,168 36,180 39,192 L52,192 C53,180 54,168 56,157 Z', fibre: [0.05, 1] },
+  { muscle: 'Hamstrings', view: 'back', d: 'M80,157 C83,168 84,180 81,192 L68,192 C67,180 66,168 64,157 Z', fibre: [-0.05, 1] },
+  { muscle: 'Calves', view: 'back', d: 'M37,199 C36,208 36,220 38,230 C39,234 40,236 42,237 L51,237 C52,226 52,212 51,199 Z', fibre: [0.05, 1] },
+  { muscle: 'Calves', view: 'back', d: 'M83,199 C84,208 84,220 82,230 C81,234 80,236 78,237 L69,237 C68,226 68,212 69,199 Z', fibre: [-0.05, 1] },
 ]
 
 /**
@@ -333,6 +356,90 @@ export const DETAIL_SHAPES: readonly AtlasDetail[] = [
   // ── BACK: the fists ──
   { view: 'back', d: 'M30,156 L44,155' },
   { view: 'back', d: 'M90,156 L76,155' },
+]
+
+/**
+ * Tendon — the ivory where a muscle becomes a cord (Precision F1, écorché).
+ *
+ * ── A FIFTH LAYER, AND WHY IT IS NOT DETAIL ──────────────────────────────────
+ * `DETAIL_SHAPES` is stroked hairline and never filled; these are FILLED, so
+ * every one is a CLOSED shape (`gen-atlas-swift.mjs` refuses an open one — a
+ * filled open path closes itself into a wedge). They are drawn over the muscle
+ * layer and are never a hit target and never tinted: an Achilles is not a
+ * muscle you can train, exactly the argument that kept the kneecap out of
+ * `MUSCLE_PATHS`.
+ *
+ * Each sits where the anatomy puts the cord and where the figure already drew
+ * a hint of it: the patellar and quadriceps tendons either side of the
+ * kneecap, the Achilles under the calf, the distal biceps into the elbow
+ * crease, the triceps aponeurosis over the back of the elbow, the
+ * deltopectoral seam, the teres/lat seam under the armpit, the wrist tendons, the hamstring tendons behind the knee,
+ * and the linea alba with its three tendinous intersections — the six-pack is
+ * tendon, not muscle, which is why it reads ivory here.
+ *
+ * Bilateral entries are mirrored about x = 60 (x′ = 120 − x) and listed left
+ * first, like the muscles.
+ */
+export const TENDON_SHAPES: readonly AtlasDetail[] = [
+  // ── FRONT ──
+  { view: 'front', d: 'M44.8,202.8 L47.2,202.8 L46.8,210 L45.2,210 Z' },                                           // left patellar tendon
+  { view: 'front', d: 'M75.2,202.8 L72.8,202.8 L73.2,210 L74.8,210 Z' },                                           // right patellar tendon
+  { view: 'front', d: 'M43,188 C45,187 47,187 49,188 L48.5,192.5 L43.5,192.5 Z' },                        // left quadriceps tendon
+  { view: 'front', d: 'M77,188 C75,187 73,187 71,188 L71.5,192.5 L76.5,192.5 Z' },                        // right quadriceps tendon
+  { view: 'front', d: 'M32.5,103.5 L35,103 C35.3,105.5 35.6,108 35.8,111 L33.8,111.2 C33.5,108.5 33,106 32.5,103.5 Z' }, // left distal biceps
+  { view: 'front', d: 'M87.5,103.5 L85,103 C84.7,105.5 84.4,108 84.2,111 L86.2,111.2 C86.5,108.5 87,106 87.5,103.5 Z' }, // right distal biceps
+  { view: 'front', d: 'M44,56 L45.5,57 C43,61 41,66 40,71 L38.5,71 C39,66 41,60 44,56 Z' },               // left deltopectoral seam
+  { view: 'front', d: 'M76,56 L74.5,57 C77,61 79,66 80,71 L81.5,71 C81,66 79,60 76,56 Z' },               // right deltopectoral seam
+  { view: 'front', d: 'M36.6,140.6 L38.2,140.2 L40,146.2 L38.4,146.6 Z' },                                               // left wrist flexor tendons
+  { view: 'front', d: 'M83.4,140.6 L81.8,140.2 L80,146.2 L81.6,146.6 Z' },                                               // right wrist flexor tendons
+  { view: 'front', d: 'M59.4,94 L60.6,94 L60.6,132 L59.4,132 Z' },                                         // linea alba
+  { view: 'front', d: 'M49,102.5 L71,102.5 L71,103.5 L49,103.5 Z' },                                       // tendinous intersection 1
+  { view: 'front', d: 'M48,112.5 L72,112.5 L72,113.5 L48,113.5 Z' },                                       // tendinous intersection 2
+  { view: 'front', d: 'M49,122.5 L71,122.5 L71,123.5 L49,123.5 Z' },                                       // tendinous intersection 3
+  // ── BACK ──
+  { view: 'back', d: 'M45,226 L48,226 L47.6,239 L45.6,239 Z' },                                            // left Achilles
+  { view: 'back', d: 'M75,226 L72,226 L72.4,239 L74.4,239 Z' },                                            // right Achilles
+  { view: 'back', d: 'M31.5,99 C33,98.5 34.5,98.5 35.8,99 L35.8,106 C34,106.5 32.5,107 30.5,107.5 Z' },          // left triceps aponeurosis
+  { view: 'back', d: 'M88.5,99 C87,98.5 85.5,98.5 84.2,99 L84.2,106 C86,106.5 87.5,107 89.5,107.5 Z' },          // right triceps aponeurosis
+  { view: 'back', d: 'M38.5,62 C41,63 44,64.5 47.5,66 L47,67.5 C43.5,66 40.5,65 38,64 Z' },               // left teres/lat seam
+  { view: 'back', d: 'M81.5,62 C79,63 76,64.5 72.5,66 L73,67.5 C76.5,66 79.5,65 82,64 Z' },               // right teres/lat seam
+  { view: 'back', d: 'M35.6,140.8 L37.2,140.5 L39,146.3 L37.4,146.7 Z' },                                              // left wrist extensor tendons
+  { view: 'back', d: 'M84.4,140.8 L82.8,140.5 L81,146.3 L82.6,146.7 Z' },                                              // right wrist extensor tendons
+  { view: 'back', d: 'M40,185 L42.5,185 L42,193.5 L40.5,193.5 Z' },                                        // left biceps femoris tendon
+  { view: 'back', d: 'M80,185 L77.5,185 L78,193.5 L79.5,193.5 Z' },                                        // right biceps femoris tendon
+  { view: 'back', d: 'M48.5,185 L51,185 L50.5,193.5 L49,193.5 Z' },                                        // left semitendinosus tendon
+  { view: 'back', d: 'M71.5,185 L69,185 L69.5,193.5 L71,193.5 Z' },                                        // right semitendinosus tendon
+]
+
+/**
+ * Bone — the landmarks that sit under skin and no muscle (Precision F1).
+ *
+ * The clavicles, the sternum between the pecs, the kneecaps, the tibial crests
+ * down the shins and the iliac crests at the hip on the front; the ulnae, the
+ * scapular spines and the posterior iliac crests on the back. Every one is a
+ * place a lifter can actually feel bone through skin, which is what earns it a
+ * fill on a figure that is otherwise all muscle. Closed, filled, drawn over
+ * the muscles, never a hit target, never tinted — the same contract as
+ * `TENDON_SHAPES`.
+ */
+export const BONE_SHAPES: readonly AtlasDetail[] = [
+  // ── FRONT ──
+  { view: 'front', d: 'M43,53.5 C48,51.5 54,49.8 59,49.6 L59,51.2 C54,51.4 48.5,53 43.5,55 Z' },          // left clavicle
+  { view: 'front', d: 'M77,53.5 C72,51.5 66,49.8 61,49.6 L61,51.2 C66,51.4 71.5,53 76.5,55 Z' },          // right clavicle
+  { view: 'front', d: 'M59.5,57 L60.5,57 L60.4,88 L60,90 L59.6,88 Z' },                                        // sternum
+  { view: 'front', d: 'M46,193.5 C48.4,193.5 49.6,195.6 49.6,198 C49.6,200.8 48,202.6 46,202.6 C44,202.6 42.4,200.8 42.4,198 C42.4,195.6 43.6,193.5 46,193.5 Z' },  // left patella
+  { view: 'front', d: 'M74,193.5 C71.6,193.5 70.4,195.6 70.4,198 C70.4,200.8 72,202.6 74,202.6 C76,202.6 77.6,200.8 77.6,198 C77.6,195.6 76.4,193.5 74,193.5 Z' },  // right patella
+  { view: 'front', d: 'M44.2,211 C43.4,219 44,226 45.6,233 L46.6,232.6 C45.2,226 44.8,219 45.4,211 Z' },   // left tibial crest
+  { view: 'front', d: 'M75.8,211 C76.6,219 76,226 74.4,233 L73.4,232.6 C74.8,226 75.2,219 74.6,211 Z' },   // right tibial crest
+  { view: 'front', d: 'M43,129 C44.5,131.5 46.5,133.5 49,134.5 L48.6,135.6 C46,134.6 43.8,132.4 42.2,129.8 Z' }, // left iliac crest (ASIS)
+  { view: 'front', d: 'M77,129 C75.5,131.5 73.5,133.5 71,134.5 L71.4,135.6 C74,134.6 76.2,132.4 77.8,129.8 Z' }, // right iliac crest (ASIS)
+  // ── BACK ──
+  { view: 'back', d: 'M34,111 C34.5,122 35.8,134 37.8,145 L38.8,144.6 C36.9,134 35.7,122 35.3,111 Z' },    // left ulna
+  { view: 'back', d: 'M86,111 C85.5,122 84.2,134 82.2,145 L81.2,144.6 C83.1,134 84.3,122 84.7,111 Z' },    // right ulna
+  { view: 'back', d: 'M52.5,60.5 C49.5,58.3 45.5,55.8 41.5,53.5 L42,52.2 C46,54.4 50,56.9 53,59.2 Z' },           // left scapular spine
+  { view: 'back', d: 'M67.5,60.5 C70.5,58.3 74.5,55.8 78.5,53.5 L78,52.2 C74,54.4 70,56.9 67,59.2 Z' },           // right scapular spine
+  { view: 'back', d: 'M42,131 C46,127 51,126 55.5,127 L55.5,128 C51,127.1 46.5,128 42.8,131.6 Z' },        // left posterior iliac crest
+  { view: 'back', d: 'M78,131 C74,127 69,126 64.5,127 L64.5,128 C69,127.1 73.5,128 77.2,131.6 Z' },        // right posterior iliac crest
 ]
 
 /** Every landmark muscle drawn on a view, in the canonical display order. */

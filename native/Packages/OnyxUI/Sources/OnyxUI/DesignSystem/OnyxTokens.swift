@@ -667,6 +667,20 @@ public enum OnyxInk {
         public static func muscle(_ muscle: LandmarkMuscle) -> Color {
             Color(hex: Color.onyx.defaultMuscleHex[muscle]!)
         }
+        // ── LANE-F (Precision F1): the écorché atlas ─────────────────────────
+        /// The flayed figure's muscle, deep and lit — the two ends of the
+        /// gradient every belly is shaded with along its fibres
+        /// (`AtlasMaterial.ecorche`). FIXED: flesh is not a theme.
+        public static let fleshDeep = Color(hex: 0x7A2E2E)
+        public static let fleshLit = Color(hex: 0xB34A3A)
+        /// The ivory of a tendon — the Achilles, the patellar tendon, the
+        /// linea alba (`OnyxAtlas.tendons`).
+        public static let tendon = Color(hex: 0xE8DCC8)
+        /// Bone under skin — clavicles, kneecaps, shins (`OnyxAtlas.bones`).
+        public static let bone = Color(hex: 0xF2EEE6)
+        /// The body the muscles sit on: warm near-black, one step off the
+        /// onyx ground so the figure has an edge without a drop shadow.
+        public static let silhouette = Color(hex: 0x141010)
     }
 }
 

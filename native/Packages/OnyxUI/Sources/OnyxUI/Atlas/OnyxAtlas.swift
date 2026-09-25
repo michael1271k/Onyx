@@ -9,8 +9,9 @@
 // whatever rect the shape is given, preserving aspect ratio and centring.
 //
 // Public: this lives in OnyxUI and is drawn by the app's `AtlasFigure` and
-// the tiles' `OnyxAtlasFigure` alike. Geometry only — how a body is TINTED
-// is each figure's own decision.
+// the tiles' `OnyxAtlasFigure` alike, both through `AtlasPainter`
+// (AtlasMaterial.swift). Geometry only — how a body is LIT is the painter's
+// decision, and WHAT is lit is each figure's.
 import SwiftUI
 import OnyxCore
 
@@ -18,7 +19,11 @@ public enum OnyxAtlasView: String, Sendable {
   case front, back
 }
 
-/// A definition line — stroked, never filled, never tinted, never a hit target.
+/// A shape outside the muscle layer — never tinted, never a hit target.
+///
+/// Three lists carry it: `detail` (definition lines, STROKED only) and, for
+/// the écorché material (Precision F1), `tendons` and `bones` (closed,
+/// FILLED — the generator refuses an open one).
 ///
 /// Sendable, and so are the closures. These are pure geometry: they capture
 /// nothing and mutate nothing outside the Path handed to them. The native app
@@ -29,7 +34,7 @@ public enum OnyxAtlasView: String, Sendable {
 ///
 /// Several of these are OPEN paths (a brow, the linea alba). SwiftUI closes an
 /// open path implicitly when it fills one, so filling this layer would turn
-/// every line into a wedge. `OnyxAtlasFigure` strokes it and only strokes it.
+/// every line into a wedge. The painters stroke `detail` and only stroke it.
 public struct OnyxAtlasDetail: Sendable {
   public let view: OnyxAtlasView
   public let build: @Sendable (CGRect, inout Path) -> Void
@@ -53,14 +58,20 @@ public struct OnyxAtlasPath: Identifiable, Sendable {
   /// of a muscle a view does not draw as a mirrored pair, so a muscle is never
   /// half lateralised.
   public let side: BodySide
+  /// The fibre AXIS in viewBox units (x right, y down) — `fibre` in
+  /// atlas.ts. The écorché material shades along it; the sign carries
+  /// nothing, the painter lights whichever end faces its light. Defaulted so
+  /// a path built by hand (a test's) needs none.
+  public let fibre: CGVector
   public let build: @Sendable (CGRect, inout Path) -> Void
 
   public var id: String { "\(muscle)-\(view.rawValue)-\(String(describing: build))" }
 
-  public init(muscle: String, view: OnyxAtlasView, side: BodySide = .both, _ build: @escaping @Sendable (CGRect, inout Path) -> Void) {
+  public init(muscle: String, view: OnyxAtlasView, side: BodySide = .both, fibre: CGVector = CGVector(dx: 0, dy: 1), _ build: @escaping @Sendable (CGRect, inout Path) -> Void) {
     self.muscle = muscle
     self.view = view
     self.side = side
+    self.fibre = fibre
     self.build = build
   }
 }
@@ -191,7 +202,7 @@ public enum OnyxAtlas {
   ]
 
   public static let muscles: [OnyxAtlasPath] = [
-  OnyxAtlasPath(muscle: "Front delts", view: .front, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Front delts", view: .front, side: .left, fibre: CGVector(dx: -0.3, dy: 1)) { rect, p in
     p.move(to: pt(43, 50, in: rect))
     p.addCurve(to: pt(39, 55, in: rect), control1: pt(41, 52, in: rect), control2: pt(40, 53, in: rect))
     p.addCurve(to: pt(30, 75, in: rect), control1: pt(34, 60, in: rect), control2: pt(31, 67, in: rect))
@@ -199,7 +210,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(44, 54, in: rect), control1: pt(38, 69, in: rect), control2: pt(40, 60, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Front delts", view: .front, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Front delts", view: .front, side: .right, fibre: CGVector(dx: 0.3, dy: 1)) { rect, p in
     p.move(to: pt(77, 50, in: rect))
     p.addCurve(to: pt(81, 55, in: rect), control1: pt(79, 52, in: rect), control2: pt(80, 53, in: rect))
     p.addCurve(to: pt(90, 75, in: rect), control1: pt(86, 60, in: rect), control2: pt(89, 67, in: rect))
@@ -207,7 +218,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(76, 54, in: rect), control1: pt(82, 69, in: rect), control2: pt(80, 60, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Side delts", view: .front, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Side delts", view: .front, side: .left, fibre: CGVector(dx: -0.45, dy: 1)) { rect, p in
     p.move(to: pt(43, 50, in: rect))
     p.addCurve(to: pt(27, 71, in: rect), control1: pt(35, 53, in: rect), control2: pt(29, 61, in: rect))
     p.addCurve(to: pt(27, 79, in: rect), control1: pt(26, 74, in: rect), control2: pt(26, 77, in: rect))
@@ -216,7 +227,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(43, 50, in: rect), control1: pt(40, 53, in: rect), control2: pt(41, 52, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Side delts", view: .front, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Side delts", view: .front, side: .right, fibre: CGVector(dx: 0.45, dy: 1)) { rect, p in
     p.move(to: pt(77, 50, in: rect))
     p.addCurve(to: pt(93, 71, in: rect), control1: pt(85, 53, in: rect), control2: pt(91, 61, in: rect))
     p.addCurve(to: pt(93, 79, in: rect), control1: pt(94, 74, in: rect), control2: pt(94, 77, in: rect))
@@ -225,7 +236,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(77, 50, in: rect), control1: pt(80, 53, in: rect), control2: pt(79, 52, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Chest", view: .front, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Chest", view: .front, side: .left, fibre: CGVector(dx: -1, dy: -0.35)) { rect, p in
     p.move(to: pt(58, 59, in: rect))
     p.addLine(to: pt(45, 60, in: rect))
     p.addCurve(to: pt(40, 76, in: rect), control1: pt(41, 63, in: rect), control2: pt(39, 69, in: rect))
@@ -234,7 +245,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(58, 59, in: rect), control1: pt(58, 76, in: rect), control2: pt(58, 67, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Chest", view: .front, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Chest", view: .front, side: .right, fibre: CGVector(dx: 1, dy: -0.35)) { rect, p in
     p.move(to: pt(62, 59, in: rect))
     p.addLine(to: pt(75, 60, in: rect))
     p.addCurve(to: pt(80, 76, in: rect), control1: pt(79, 63, in: rect), control2: pt(81, 69, in: rect))
@@ -243,7 +254,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(62, 59, in: rect), control1: pt(62, 76, in: rect), control2: pt(62, 67, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Abs/core", view: .front, side: .both) { rect, p in
+  OnyxAtlasPath(muscle: "Abs/core", view: .front, side: .both, fibre: CGVector(dx: 0, dy: 1)) { rect, p in
     p.move(to: pt(50, 93, in: rect))
     p.addCurve(to: pt(46, 99, in: rect), control1: pt(47, 93, in: rect), control2: pt(46, 95, in: rect))
     p.addCurve(to: pt(51, 133, in: rect), control1: pt(46, 110, in: rect), control2: pt(48, 123, in: rect))
@@ -252,7 +263,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(70, 93, in: rect), control1: pt(74, 95, in: rect), control2: pt(73, 93, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Abs/core", view: .front, side: .both) { rect, p in
+  OnyxAtlasPath(muscle: "Abs/core", view: .front, side: .both, fibre: CGVector(dx: 0.35, dy: 1)) { rect, p in
     p.move(to: pt(45, 99, in: rect))
     p.addCurve(to: pt(42, 114, in: rect), control1: pt(42, 101, in: rect), control2: pt(41, 107, in: rect))
     p.addCurve(to: pt(48, 132, in: rect), control1: pt(43, 121, in: rect), control2: pt(45, 127, in: rect))
@@ -260,7 +271,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(45, 99, in: rect), control1: pt(47, 122, in: rect), control2: pt(45, 110, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Abs/core", view: .front, side: .both) { rect, p in
+  OnyxAtlasPath(muscle: "Abs/core", view: .front, side: .both, fibre: CGVector(dx: -0.35, dy: 1)) { rect, p in
     p.move(to: pt(75, 99, in: rect))
     p.addCurve(to: pt(78, 114, in: rect), control1: pt(78, 101, in: rect), control2: pt(79, 107, in: rect))
     p.addCurve(to: pt(72, 132, in: rect), control1: pt(77, 121, in: rect), control2: pt(75, 127, in: rect))
@@ -268,7 +279,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(75, 99, in: rect), control1: pt(73, 122, in: rect), control2: pt(75, 110, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Biceps", view: .front, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Biceps", view: .front, side: .left, fibre: CGVector(dx: -0.12, dy: 1)) { rect, p in
     p.move(to: pt(39, 62, in: rect))
     p.addCurve(to: pt(30, 82, in: rect), control1: pt(34, 66, in: rect), control2: pt(31, 73, in: rect))
     p.addCurve(to: pt(30, 108, in: rect), control1: pt(29, 91, in: rect), control2: pt(29, 100, in: rect))
@@ -277,7 +288,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(41, 62, in: rect), control1: pt(39, 73, in: rect), control2: pt(40, 67, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Biceps", view: .front, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Biceps", view: .front, side: .right, fibre: CGVector(dx: 0.12, dy: 1)) { rect, p in
     p.move(to: pt(81, 62, in: rect))
     p.addCurve(to: pt(90, 82, in: rect), control1: pt(86, 66, in: rect), control2: pt(89, 73, in: rect))
     p.addCurve(to: pt(90, 108, in: rect), control1: pt(91, 91, in: rect), control2: pt(91, 100, in: rect))
@@ -286,7 +297,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(79, 62, in: rect), control1: pt(81, 73, in: rect), control2: pt(80, 67, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Forearms", view: .front, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Forearms", view: .front, side: .left, fibre: CGVector(dx: 0.15, dy: 1)) { rect, p in
     p.move(to: pt(30, 112, in: rect))
     p.addCurve(to: pt(33, 140, in: rect), control1: pt(30, 121, in: rect), control2: pt(31, 131, in: rect))
     p.addCurve(to: pt(36, 148, in: rect), control1: pt(34, 144, in: rect), control2: pt(35, 146, in: rect))
@@ -295,7 +306,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(38, 111, in: rect), control1: pt(38, 118, in: rect), control2: pt(38, 115, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Forearms", view: .front, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Forearms", view: .front, side: .right, fibre: CGVector(dx: -0.15, dy: 1)) { rect, p in
     p.move(to: pt(90, 112, in: rect))
     p.addCurve(to: pt(87, 140, in: rect), control1: pt(90, 121, in: rect), control2: pt(89, 131, in: rect))
     p.addCurve(to: pt(84, 148, in: rect), control1: pt(86, 144, in: rect), control2: pt(85, 146, in: rect))
@@ -304,35 +315,35 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(82, 111, in: rect), control1: pt(82, 118, in: rect), control2: pt(82, 115, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Quads", view: .front, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Quads", view: .front, side: .left, fibre: CGVector(dx: 0.05, dy: 1)) { rect, p in
     p.move(to: pt(41, 153, in: rect))
     p.addCurve(to: pt(39, 192, in: rect), control1: pt(37, 164, in: rect), control2: pt(36, 178, in: rect))
     p.addLine(to: pt(50, 192, in: rect))
     p.addCurve(to: pt(52, 153, in: rect), control1: pt(51, 178, in: rect), control2: pt(52, 164, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Quads", view: .front, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Quads", view: .front, side: .right, fibre: CGVector(dx: -0.05, dy: 1)) { rect, p in
     p.move(to: pt(79, 153, in: rect))
     p.addCurve(to: pt(81, 192, in: rect), control1: pt(83, 164, in: rect), control2: pt(84, 178, in: rect))
     p.addLine(to: pt(70, 192, in: rect))
     p.addCurve(to: pt(68, 153, in: rect), control1: pt(69, 178, in: rect), control2: pt(68, 164, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Adductors", view: .front, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Adductors", view: .front, side: .left, fibre: CGVector(dx: -0.2, dy: 1)) { rect, p in
     p.move(to: pt(52, 153, in: rect))
     p.addCurve(to: pt(50, 192, in: rect), control1: pt(52, 164, in: rect), control2: pt(51, 178, in: rect))
     p.addLine(to: pt(54, 192, in: rect))
     p.addCurve(to: pt(58, 153, in: rect), control1: pt(55, 178, in: rect), control2: pt(56, 164, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Adductors", view: .front, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Adductors", view: .front, side: .right, fibre: CGVector(dx: 0.2, dy: 1)) { rect, p in
     p.move(to: pt(68, 153, in: rect))
     p.addCurve(to: pt(70, 192, in: rect), control1: pt(68, 164, in: rect), control2: pt(69, 178, in: rect))
     p.addLine(to: pt(66, 192, in: rect))
     p.addCurve(to: pt(62, 153, in: rect), control1: pt(65, 178, in: rect), control2: pt(64, 164, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Calves", view: .front, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Calves", view: .front, side: .left, fibre: CGVector(dx: 0.05, dy: 1)) { rect, p in
     p.move(to: pt(37, 200, in: rect))
     p.addCurve(to: pt(38, 232, in: rect), control1: pt(36, 210, in: rect), control2: pt(36, 222, in: rect))
     p.addCurve(to: pt(42, 239, in: rect), control1: pt(39, 236, in: rect), control2: pt(40, 238, in: rect))
@@ -340,7 +351,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(51, 200, in: rect), control1: pt(52, 228, in: rect), control2: pt(52, 214, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Calves", view: .front, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Calves", view: .front, side: .right, fibre: CGVector(dx: -0.05, dy: 1)) { rect, p in
     p.move(to: pt(83, 200, in: rect))
     p.addCurve(to: pt(82, 232, in: rect), control1: pt(84, 210, in: rect), control2: pt(84, 222, in: rect))
     p.addCurve(to: pt(78, 239, in: rect), control1: pt(81, 236, in: rect), control2: pt(80, 238, in: rect))
@@ -348,7 +359,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(69, 200, in: rect), control1: pt(68, 228, in: rect), control2: pt(68, 214, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Rear delts", view: .back, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Rear delts", view: .back, side: .left, fibre: CGVector(dx: -0.6, dy: 1)) { rect, p in
     p.move(to: pt(43, 50, in: rect))
     p.addCurve(to: pt(27, 71, in: rect), control1: pt(35, 53, in: rect), control2: pt(29, 61, in: rect))
     p.addCurve(to: pt(27, 79, in: rect), control1: pt(26, 74, in: rect), control2: pt(26, 77, in: rect))
@@ -356,7 +367,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(44, 54, in: rect), control1: pt(38, 69, in: rect), control2: pt(40, 60, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Rear delts", view: .back, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Rear delts", view: .back, side: .right, fibre: CGVector(dx: 0.6, dy: 1)) { rect, p in
     p.move(to: pt(77, 50, in: rect))
     p.addCurve(to: pt(93, 71, in: rect), control1: pt(85, 53, in: rect), control2: pt(91, 61, in: rect))
     p.addCurve(to: pt(93, 79, in: rect), control1: pt(94, 74, in: rect), control2: pt(94, 77, in: rect))
@@ -364,7 +375,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(76, 54, in: rect), control1: pt(82, 69, in: rect), control2: pt(80, 60, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Upper back", view: .back, side: .both) { rect, p in
+  OnyxAtlasPath(muscle: "Upper back", view: .back, side: .both, fibre: CGVector(dx: 0, dy: 1)) { rect, p in
     p.move(to: pt(60, 45, in: rect))
     p.addCurve(to: pt(77, 52, in: rect), control1: pt(66, 45, in: rect), control2: pt(72, 47, in: rect))
     p.addCurve(to: pt(63, 70, in: rect), control1: pt(75, 60, in: rect), control2: pt(70, 66, in: rect))
@@ -374,7 +385,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(60, 45, in: rect), control1: pt(48, 47, in: rect), control2: pt(54, 45, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Lats", view: .back, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Lats", view: .back, side: .left, fibre: CGVector(dx: -0.35, dy: -1)) { rect, p in
     p.move(to: pt(42, 62, in: rect))
     p.addCurve(to: pt(39, 90, in: rect), control1: pt(39, 70, in: rect), control2: pt(38, 80, in: rect))
     p.addCurve(to: pt(51, 113, in: rect), control1: pt(41, 100, in: rect), control2: pt(45, 108, in: rect))
@@ -383,7 +394,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(42, 62, in: rect), control1: pt(50, 69, in: rect), control2: pt(45, 66, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Lats", view: .back, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Lats", view: .back, side: .right, fibre: CGVector(dx: 0.35, dy: -1)) { rect, p in
     p.move(to: pt(78, 62, in: rect))
     p.addCurve(to: pt(81, 90, in: rect), control1: pt(81, 70, in: rect), control2: pt(82, 80, in: rect))
     p.addCurve(to: pt(69, 113, in: rect), control1: pt(79, 100, in: rect), control2: pt(75, 108, in: rect))
@@ -392,7 +403,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(78, 62, in: rect), control1: pt(70, 69, in: rect), control2: pt(75, 66, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Lower back", view: .back, side: .both) { rect, p in
+  OnyxAtlasPath(muscle: "Lower back", view: .back, side: .both, fibre: CGVector(dx: 0, dy: 1)) { rect, p in
     p.move(to: pt(56, 115, in: rect))
     p.addCurve(to: pt(64, 115, in: rect), control1: pt(58, 116, in: rect), control2: pt(62, 116, in: rect))
     p.addCurve(to: pt(66, 137, in: rect), control1: pt(64, 124, in: rect), control2: pt(65, 131, in: rect))
@@ -400,7 +411,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(56, 115, in: rect), control1: pt(55, 131, in: rect), control2: pt(56, 124, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Triceps", view: .back, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Triceps", view: .back, side: .left, fibre: CGVector(dx: -0.12, dy: 1)) { rect, p in
     p.move(to: pt(39, 62, in: rect))
     p.addCurve(to: pt(30, 82, in: rect), control1: pt(34, 66, in: rect), control2: pt(31, 73, in: rect))
     p.addCurve(to: pt(30, 108, in: rect), control1: pt(29, 91, in: rect), control2: pt(29, 100, in: rect))
@@ -409,7 +420,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(41, 62, in: rect), control1: pt(39, 73, in: rect), control2: pt(40, 67, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Triceps", view: .back, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Triceps", view: .back, side: .right, fibre: CGVector(dx: 0.12, dy: 1)) { rect, p in
     p.move(to: pt(81, 62, in: rect))
     p.addCurve(to: pt(90, 82, in: rect), control1: pt(86, 66, in: rect), control2: pt(89, 73, in: rect))
     p.addCurve(to: pt(90, 108, in: rect), control1: pt(91, 91, in: rect), control2: pt(91, 100, in: rect))
@@ -418,7 +429,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(79, 62, in: rect), control1: pt(81, 73, in: rect), control2: pt(80, 67, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Forearms", view: .back, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Forearms", view: .back, side: .left, fibre: CGVector(dx: 0.15, dy: 1)) { rect, p in
     p.move(to: pt(30, 112, in: rect))
     p.addCurve(to: pt(33, 140, in: rect), control1: pt(30, 121, in: rect), control2: pt(31, 131, in: rect))
     p.addCurve(to: pt(36, 148, in: rect), control1: pt(34, 144, in: rect), control2: pt(35, 146, in: rect))
@@ -427,7 +438,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(38, 111, in: rect), control1: pt(38, 118, in: rect), control2: pt(38, 115, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Forearms", view: .back, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Forearms", view: .back, side: .right, fibre: CGVector(dx: -0.15, dy: 1)) { rect, p in
     p.move(to: pt(90, 112, in: rect))
     p.addCurve(to: pt(87, 140, in: rect), control1: pt(90, 121, in: rect), control2: pt(89, 131, in: rect))
     p.addCurve(to: pt(84, 148, in: rect), control1: pt(86, 144, in: rect), control2: pt(85, 146, in: rect))
@@ -436,7 +447,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(82, 111, in: rect), control1: pt(82, 118, in: rect), control2: pt(82, 115, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Glutes", view: .back, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Glutes", view: .back, side: .left, fibre: CGVector(dx: -1, dy: 0.9)) { rect, p in
     p.move(to: pt(43, 132, in: rect))
     p.addCurve(to: pt(41, 152, in: rect), control1: pt(40, 137, in: rect), control2: pt(39, 145, in: rect))
     p.addCurve(to: pt(54, 154, in: rect), control1: pt(44, 156, in: rect), control2: pt(49, 157, in: rect))
@@ -444,7 +455,7 @@ public enum OnyxAtlas {
     p.addLine(to: pt(59, 132, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Glutes", view: .back, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Glutes", view: .back, side: .right, fibre: CGVector(dx: 1, dy: 0.9)) { rect, p in
     p.move(to: pt(77, 132, in: rect))
     p.addCurve(to: pt(79, 152, in: rect), control1: pt(80, 137, in: rect), control2: pt(81, 145, in: rect))
     p.addCurve(to: pt(66, 154, in: rect), control1: pt(76, 156, in: rect), control2: pt(71, 157, in: rect))
@@ -452,21 +463,21 @@ public enum OnyxAtlas {
     p.addLine(to: pt(61, 132, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Hamstrings", view: .back, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Hamstrings", view: .back, side: .left, fibre: CGVector(dx: 0.05, dy: 1)) { rect, p in
     p.move(to: pt(40, 157, in: rect))
     p.addCurve(to: pt(39, 192, in: rect), control1: pt(37, 168, in: rect), control2: pt(36, 180, in: rect))
     p.addLine(to: pt(52, 192, in: rect))
     p.addCurve(to: pt(56, 157, in: rect), control1: pt(53, 180, in: rect), control2: pt(54, 168, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Hamstrings", view: .back, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Hamstrings", view: .back, side: .right, fibre: CGVector(dx: -0.05, dy: 1)) { rect, p in
     p.move(to: pt(80, 157, in: rect))
     p.addCurve(to: pt(81, 192, in: rect), control1: pt(83, 168, in: rect), control2: pt(84, 180, in: rect))
     p.addLine(to: pt(68, 192, in: rect))
     p.addCurve(to: pt(64, 157, in: rect), control1: pt(67, 180, in: rect), control2: pt(66, 168, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Calves", view: .back, side: .left) { rect, p in
+  OnyxAtlasPath(muscle: "Calves", view: .back, side: .left, fibre: CGVector(dx: 0.05, dy: 1)) { rect, p in
     p.move(to: pt(37, 199, in: rect))
     p.addCurve(to: pt(38, 230, in: rect), control1: pt(36, 208, in: rect), control2: pt(36, 220, in: rect))
     p.addCurve(to: pt(42, 237, in: rect), control1: pt(39, 234, in: rect), control2: pt(40, 236, in: rect))
@@ -474,7 +485,7 @@ public enum OnyxAtlas {
     p.addCurve(to: pt(51, 199, in: rect), control1: pt(52, 226, in: rect), control2: pt(52, 212, in: rect))
     p.closeSubpath()
   },
-  OnyxAtlasPath(muscle: "Calves", view: .back, side: .right) { rect, p in
+  OnyxAtlasPath(muscle: "Calves", view: .back, side: .right, fibre: CGVector(dx: -0.05, dy: 1)) { rect, p in
     p.move(to: pt(83, 199, in: rect))
     p.addCurve(to: pt(82, 230, in: rect), control1: pt(84, 208, in: rect), control2: pt(84, 220, in: rect))
     p.addCurve(to: pt(78, 237, in: rect), control1: pt(81, 234, in: rect), control2: pt(80, 236, in: rect))
@@ -774,6 +785,308 @@ public enum OnyxAtlas {
   OnyxAtlasDetail(view: .back) { rect, p in
     p.move(to: pt(90, 156, in: rect))
     p.addLine(to: pt(76, 155, in: rect))
+  },
+  ]
+
+  /// Tendon — the ivory cords of the écorché (Precision F1). Closed, filled.
+  public static let tendons: [OnyxAtlasDetail] = [
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(44.8, 202.8, in: rect))
+    p.addLine(to: pt(47.2, 202.8, in: rect))
+    p.addLine(to: pt(46.8, 210, in: rect))
+    p.addLine(to: pt(45.2, 210, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(75.2, 202.8, in: rect))
+    p.addLine(to: pt(72.8, 202.8, in: rect))
+    p.addLine(to: pt(73.2, 210, in: rect))
+    p.addLine(to: pt(74.8, 210, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(43, 188, in: rect))
+    p.addCurve(to: pt(49, 188, in: rect), control1: pt(45, 187, in: rect), control2: pt(47, 187, in: rect))
+    p.addLine(to: pt(48.5, 192.5, in: rect))
+    p.addLine(to: pt(43.5, 192.5, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(77, 188, in: rect))
+    p.addCurve(to: pt(71, 188, in: rect), control1: pt(75, 187, in: rect), control2: pt(73, 187, in: rect))
+    p.addLine(to: pt(71.5, 192.5, in: rect))
+    p.addLine(to: pt(76.5, 192.5, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(32.5, 103.5, in: rect))
+    p.addLine(to: pt(35, 103, in: rect))
+    p.addCurve(to: pt(35.8, 111, in: rect), control1: pt(35.3, 105.5, in: rect), control2: pt(35.6, 108, in: rect))
+    p.addLine(to: pt(33.8, 111.2, in: rect))
+    p.addCurve(to: pt(32.5, 103.5, in: rect), control1: pt(33.5, 108.5, in: rect), control2: pt(33, 106, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(87.5, 103.5, in: rect))
+    p.addLine(to: pt(85, 103, in: rect))
+    p.addCurve(to: pt(84.2, 111, in: rect), control1: pt(84.7, 105.5, in: rect), control2: pt(84.4, 108, in: rect))
+    p.addLine(to: pt(86.2, 111.2, in: rect))
+    p.addCurve(to: pt(87.5, 103.5, in: rect), control1: pt(86.5, 108.5, in: rect), control2: pt(87, 106, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(44, 56, in: rect))
+    p.addLine(to: pt(45.5, 57, in: rect))
+    p.addCurve(to: pt(40, 71, in: rect), control1: pt(43, 61, in: rect), control2: pt(41, 66, in: rect))
+    p.addLine(to: pt(38.5, 71, in: rect))
+    p.addCurve(to: pt(44, 56, in: rect), control1: pt(39, 66, in: rect), control2: pt(41, 60, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(76, 56, in: rect))
+    p.addLine(to: pt(74.5, 57, in: rect))
+    p.addCurve(to: pt(80, 71, in: rect), control1: pt(77, 61, in: rect), control2: pt(79, 66, in: rect))
+    p.addLine(to: pt(81.5, 71, in: rect))
+    p.addCurve(to: pt(76, 56, in: rect), control1: pt(81, 66, in: rect), control2: pt(79, 60, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(36.6, 140.6, in: rect))
+    p.addLine(to: pt(38.2, 140.2, in: rect))
+    p.addLine(to: pt(40, 146.2, in: rect))
+    p.addLine(to: pt(38.4, 146.6, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(83.4, 140.6, in: rect))
+    p.addLine(to: pt(81.8, 140.2, in: rect))
+    p.addLine(to: pt(80, 146.2, in: rect))
+    p.addLine(to: pt(81.6, 146.6, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(59.4, 94, in: rect))
+    p.addLine(to: pt(60.6, 94, in: rect))
+    p.addLine(to: pt(60.6, 132, in: rect))
+    p.addLine(to: pt(59.4, 132, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(49, 102.5, in: rect))
+    p.addLine(to: pt(71, 102.5, in: rect))
+    p.addLine(to: pt(71, 103.5, in: rect))
+    p.addLine(to: pt(49, 103.5, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(48, 112.5, in: rect))
+    p.addLine(to: pt(72, 112.5, in: rect))
+    p.addLine(to: pt(72, 113.5, in: rect))
+    p.addLine(to: pt(48, 113.5, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(49, 122.5, in: rect))
+    p.addLine(to: pt(71, 122.5, in: rect))
+    p.addLine(to: pt(71, 123.5, in: rect))
+    p.addLine(to: pt(49, 123.5, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(45, 226, in: rect))
+    p.addLine(to: pt(48, 226, in: rect))
+    p.addLine(to: pt(47.6, 239, in: rect))
+    p.addLine(to: pt(45.6, 239, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(75, 226, in: rect))
+    p.addLine(to: pt(72, 226, in: rect))
+    p.addLine(to: pt(72.4, 239, in: rect))
+    p.addLine(to: pt(74.4, 239, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(31.5, 99, in: rect))
+    p.addCurve(to: pt(35.8, 99, in: rect), control1: pt(33, 98.5, in: rect), control2: pt(34.5, 98.5, in: rect))
+    p.addLine(to: pt(35.8, 106, in: rect))
+    p.addCurve(to: pt(30.5, 107.5, in: rect), control1: pt(34, 106.5, in: rect), control2: pt(32.5, 107, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(88.5, 99, in: rect))
+    p.addCurve(to: pt(84.2, 99, in: rect), control1: pt(87, 98.5, in: rect), control2: pt(85.5, 98.5, in: rect))
+    p.addLine(to: pt(84.2, 106, in: rect))
+    p.addCurve(to: pt(89.5, 107.5, in: rect), control1: pt(86, 106.5, in: rect), control2: pt(87.5, 107, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(38.5, 62, in: rect))
+    p.addCurve(to: pt(47.5, 66, in: rect), control1: pt(41, 63, in: rect), control2: pt(44, 64.5, in: rect))
+    p.addLine(to: pt(47, 67.5, in: rect))
+    p.addCurve(to: pt(38, 64, in: rect), control1: pt(43.5, 66, in: rect), control2: pt(40.5, 65, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(81.5, 62, in: rect))
+    p.addCurve(to: pt(72.5, 66, in: rect), control1: pt(79, 63, in: rect), control2: pt(76, 64.5, in: rect))
+    p.addLine(to: pt(73, 67.5, in: rect))
+    p.addCurve(to: pt(82, 64, in: rect), control1: pt(76.5, 66, in: rect), control2: pt(79.5, 65, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(35.6, 140.8, in: rect))
+    p.addLine(to: pt(37.2, 140.5, in: rect))
+    p.addLine(to: pt(39, 146.3, in: rect))
+    p.addLine(to: pt(37.4, 146.7, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(84.4, 140.8, in: rect))
+    p.addLine(to: pt(82.8, 140.5, in: rect))
+    p.addLine(to: pt(81, 146.3, in: rect))
+    p.addLine(to: pt(82.6, 146.7, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(40, 185, in: rect))
+    p.addLine(to: pt(42.5, 185, in: rect))
+    p.addLine(to: pt(42, 193.5, in: rect))
+    p.addLine(to: pt(40.5, 193.5, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(80, 185, in: rect))
+    p.addLine(to: pt(77.5, 185, in: rect))
+    p.addLine(to: pt(78, 193.5, in: rect))
+    p.addLine(to: pt(79.5, 193.5, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(48.5, 185, in: rect))
+    p.addLine(to: pt(51, 185, in: rect))
+    p.addLine(to: pt(50.5, 193.5, in: rect))
+    p.addLine(to: pt(49, 193.5, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(71.5, 185, in: rect))
+    p.addLine(to: pt(69, 185, in: rect))
+    p.addLine(to: pt(69.5, 193.5, in: rect))
+    p.addLine(to: pt(71, 193.5, in: rect))
+    p.closeSubpath()
+  },
+  ]
+
+  /// Bone — the subcutaneous landmarks of the écorché (Precision F1). Closed, filled.
+  public static let bones: [OnyxAtlasDetail] = [
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(43, 53.5, in: rect))
+    p.addCurve(to: pt(59, 49.6, in: rect), control1: pt(48, 51.5, in: rect), control2: pt(54, 49.8, in: rect))
+    p.addLine(to: pt(59, 51.2, in: rect))
+    p.addCurve(to: pt(43.5, 55, in: rect), control1: pt(54, 51.4, in: rect), control2: pt(48.5, 53, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(77, 53.5, in: rect))
+    p.addCurve(to: pt(61, 49.6, in: rect), control1: pt(72, 51.5, in: rect), control2: pt(66, 49.8, in: rect))
+    p.addLine(to: pt(61, 51.2, in: rect))
+    p.addCurve(to: pt(76.5, 55, in: rect), control1: pt(66, 51.4, in: rect), control2: pt(71.5, 53, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(59.5, 57, in: rect))
+    p.addLine(to: pt(60.5, 57, in: rect))
+    p.addLine(to: pt(60.4, 88, in: rect))
+    p.addLine(to: pt(60, 90, in: rect))
+    p.addLine(to: pt(59.6, 88, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(46, 193.5, in: rect))
+    p.addCurve(to: pt(49.6, 198, in: rect), control1: pt(48.4, 193.5, in: rect), control2: pt(49.6, 195.6, in: rect))
+    p.addCurve(to: pt(46, 202.6, in: rect), control1: pt(49.6, 200.8, in: rect), control2: pt(48, 202.6, in: rect))
+    p.addCurve(to: pt(42.4, 198, in: rect), control1: pt(44, 202.6, in: rect), control2: pt(42.4, 200.8, in: rect))
+    p.addCurve(to: pt(46, 193.5, in: rect), control1: pt(42.4, 195.6, in: rect), control2: pt(43.6, 193.5, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(74, 193.5, in: rect))
+    p.addCurve(to: pt(70.4, 198, in: rect), control1: pt(71.6, 193.5, in: rect), control2: pt(70.4, 195.6, in: rect))
+    p.addCurve(to: pt(74, 202.6, in: rect), control1: pt(70.4, 200.8, in: rect), control2: pt(72, 202.6, in: rect))
+    p.addCurve(to: pt(77.6, 198, in: rect), control1: pt(76, 202.6, in: rect), control2: pt(77.6, 200.8, in: rect))
+    p.addCurve(to: pt(74, 193.5, in: rect), control1: pt(77.6, 195.6, in: rect), control2: pt(76.4, 193.5, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(44.2, 211, in: rect))
+    p.addCurve(to: pt(45.6, 233, in: rect), control1: pt(43.4, 219, in: rect), control2: pt(44, 226, in: rect))
+    p.addLine(to: pt(46.6, 232.6, in: rect))
+    p.addCurve(to: pt(45.4, 211, in: rect), control1: pt(45.2, 226, in: rect), control2: pt(44.8, 219, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(75.8, 211, in: rect))
+    p.addCurve(to: pt(74.4, 233, in: rect), control1: pt(76.6, 219, in: rect), control2: pt(76, 226, in: rect))
+    p.addLine(to: pt(73.4, 232.6, in: rect))
+    p.addCurve(to: pt(74.6, 211, in: rect), control1: pt(74.8, 226, in: rect), control2: pt(75.2, 219, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(43, 129, in: rect))
+    p.addCurve(to: pt(49, 134.5, in: rect), control1: pt(44.5, 131.5, in: rect), control2: pt(46.5, 133.5, in: rect))
+    p.addLine(to: pt(48.6, 135.6, in: rect))
+    p.addCurve(to: pt(42.2, 129.8, in: rect), control1: pt(46, 134.6, in: rect), control2: pt(43.8, 132.4, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .front) { rect, p in
+    p.move(to: pt(77, 129, in: rect))
+    p.addCurve(to: pt(71, 134.5, in: rect), control1: pt(75.5, 131.5, in: rect), control2: pt(73.5, 133.5, in: rect))
+    p.addLine(to: pt(71.4, 135.6, in: rect))
+    p.addCurve(to: pt(77.8, 129.8, in: rect), control1: pt(74, 134.6, in: rect), control2: pt(76.2, 132.4, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(34, 111, in: rect))
+    p.addCurve(to: pt(37.8, 145, in: rect), control1: pt(34.5, 122, in: rect), control2: pt(35.8, 134, in: rect))
+    p.addLine(to: pt(38.8, 144.6, in: rect))
+    p.addCurve(to: pt(35.3, 111, in: rect), control1: pt(36.9, 134, in: rect), control2: pt(35.7, 122, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(86, 111, in: rect))
+    p.addCurve(to: pt(82.2, 145, in: rect), control1: pt(85.5, 122, in: rect), control2: pt(84.2, 134, in: rect))
+    p.addLine(to: pt(81.2, 144.6, in: rect))
+    p.addCurve(to: pt(84.7, 111, in: rect), control1: pt(83.1, 134, in: rect), control2: pt(84.3, 122, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(52.5, 60.5, in: rect))
+    p.addCurve(to: pt(41.5, 53.5, in: rect), control1: pt(49.5, 58.3, in: rect), control2: pt(45.5, 55.8, in: rect))
+    p.addLine(to: pt(42, 52.2, in: rect))
+    p.addCurve(to: pt(53, 59.2, in: rect), control1: pt(46, 54.4, in: rect), control2: pt(50, 56.9, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(67.5, 60.5, in: rect))
+    p.addCurve(to: pt(78.5, 53.5, in: rect), control1: pt(70.5, 58.3, in: rect), control2: pt(74.5, 55.8, in: rect))
+    p.addLine(to: pt(78, 52.2, in: rect))
+    p.addCurve(to: pt(67, 59.2, in: rect), control1: pt(74, 54.4, in: rect), control2: pt(70, 56.9, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(42, 131, in: rect))
+    p.addCurve(to: pt(55.5, 127, in: rect), control1: pt(46, 127, in: rect), control2: pt(51, 126, in: rect))
+    p.addLine(to: pt(55.5, 128, in: rect))
+    p.addCurve(to: pt(42.8, 131.6, in: rect), control1: pt(51, 127.1, in: rect), control2: pt(46.5, 128, in: rect))
+    p.closeSubpath()
+  },
+  OnyxAtlasDetail(view: .back) { rect, p in
+    p.move(to: pt(78, 131, in: rect))
+    p.addCurve(to: pt(64.5, 127, in: rect), control1: pt(74, 127, in: rect), control2: pt(69, 126, in: rect))
+    p.addLine(to: pt(64.5, 128, in: rect))
+    p.addCurve(to: pt(77.2, 131.6, in: rect), control1: pt(69, 127.1, in: rect), control2: pt(73.5, 128, in: rect))
+    p.closeSubpath()
   },
   ]
 
