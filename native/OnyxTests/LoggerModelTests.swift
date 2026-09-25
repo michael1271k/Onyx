@@ -638,4 +638,29 @@ struct LoggerModelTests {
         #expect(try database.setEvents(sessionId: session.id).contains { $0.kind == .append })
         #expect(try database.session(id: session.id, userId: userId)?.date == "2026-09-10", "the set did not open a session dated today")
     }
+
+    // MARK: - Precision A2: the opener is the last treadmill
+
+    @Test("an in-deck bout is the next session's opener, and a newer walk is not")
+    func inDeckBoutPrefillsTheNextSession() throws {
+        let userId = "00000000-0000-0000-0000-0000000000a2"
+        let database = try AppDatabase.inMemory(deviceId: "a2")
+        try database.seedRows { db in
+            try Exercise(id: "ex-tread", name: "Treadmill").insert(db)
+            try WorkoutSession(id: "s-prev", userId: userId, dayKey: "cb_b", date: "2026-09-20", startedAt: Date()).insert(db)
+            try WorkoutSet(id: "t1", sessionId: "s-prev", exerciseId: "ex-tread", setIndex: 1, weightKg: 0, reps: 0,
+                           setType: "warmup", durationSec: 1_440, incline: 3, distanceKm: 1.9).insert(db)
+            // The outdoor walk that used to become "1 km / 10 min".
+            try CardioLogRow(id: "walk", userId: userId, date: "2026-09-24", kind: "walk", distanceM: 2_689,
+                             durationMin: 24, fromHealthkit: true).insert(db)
+        }
+        let model = LoggerModel(day: PlanTemplates.day("onyx5", "arms"), phase: .bulk, store: database, userId: userId)
+        let opener = try #require(model.exercises.first)
+        #expect(opener.name == "Treadmill")
+        let row = try #require(opener.rows.first)
+        #expect(row.durationSec == 1_440, "the actual bout, not ten minutes")
+        #expect(row.distanceKm == 1.9)
+        #expect(row.incline == 3)
+    }
+
 }

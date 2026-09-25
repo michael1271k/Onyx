@@ -3530,10 +3530,30 @@
         "name": "smith squat"
       },
       "expected": {
-        "movers": null,
-        "groups": null,
-        "primaryLandmarks": [],
-        "secondaryLandmarks": []
+        "movers": {
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings",
+            "lower back"
+          ]
+        },
+        "groups": [
+          "quadriceps",
+          "glutes",
+          "hamstrings",
+          "lower back"
+        ],
+        "primaryLandmarks": [
+          "Quads"
+        ],
+        "secondaryLandmarks": [
+          "Glutes",
+          "Hamstrings",
+          "Lower back"
+        ]
       }
     },
     {
@@ -6010,10 +6030,30 @@
         "name": "Zercher Squat"
       },
       "expected": {
-        "movers": null,
-        "groups": null,
-        "primaryLandmarks": [],
-        "secondaryLandmarks": []
+        "movers": {
+          "primary": [
+            "quadriceps"
+          ],
+          "secondary": [
+            "glutes",
+            "hamstrings",
+            "lower back"
+          ]
+        },
+        "groups": [
+          "quadriceps",
+          "glutes",
+          "hamstrings",
+          "lower back"
+        ],
+        "primaryLandmarks": [
+          "Quads"
+        ],
+        "secondaryLandmarks": [
+          "Glutes",
+          "Hamstrings",
+          "Lower back"
+        ]
       }
     },
     {

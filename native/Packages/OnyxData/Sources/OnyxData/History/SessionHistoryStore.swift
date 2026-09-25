@@ -238,6 +238,26 @@ public struct LastWorkingSet: Sendable, Equatable {
     public var label: String { SessionSeedBuilder.previousLabel(weightKg: weightKg, reps: reps) }
 }
 
+/// One cardio bout as a deck logged it — see
+/// `AppDatabase.lastLoggedBout(named:userId:)`.
+public struct LoggedBout: Sendable, Equatable {
+    /// The session's logical day, ISO.
+    public var date: String
+    /// The session's start — the nearest thing to the bout's own.
+    public var start: Date?
+    public var durationSec: Int
+    public var distanceKm: Double?
+    public var inclinePct: Double?
+
+    public init(date: String, start: Date?, durationSec: Int, distanceKm: Double?, inclinePct: Double?) {
+        self.date = date
+        self.start = start
+        self.durationSec = durationSec
+        self.distanceKm = distanceKm
+        self.inclinePct = inclinePct
+    }
+}
+
 public struct SeedHistory: Sendable, Equatable {
     public var sessions: [SeedSession]
     public var sets: [SeedSet]
@@ -405,8 +425,114 @@ public extension AppDatabase {
             ).filter { resolve($0).lowercased() == target }
         }
         // `setSelect`'s reader, so the columns a pair fold needs cannot be the
-        // ones this forgot. Ledger order is oldest first; walk it backwards.
+        // ones this forgot.
         let rows = try historySets(exerciseIds: ids, userId: userId).filter { $0.sessionId != sessionId }
+        return Self.lastWorking(in: rows, name: name)
+    }
+
+    /// `lastWorkingSet(named:)` for many movements at once — the library's
+    /// last-time line on every row (Precision A1).
+    ///
+    /// ONE read of the ledger rather than one per row: the picker lists every
+    /// movement the catalogue holds, and two hundred single lookups would each
+    /// re-scan `workout_sets` for the ids a name answers to. The rule is the
+    /// single lookup's exactly — `lastWorking(in:name:)` is shared — so a row
+    /// and the card it opens cannot disagree about what "last time" was.
+    ///
+    /// Keyed by the names as handed in; a name never lifted is absent.
+    func lastWorkingSets(
+        names: [String], userId: String, excludingSession sessionId: String? = nil
+    ) throws -> [String: LastWorkingSet] {
+        var byName: [String: [HistorySetRow]] = [:]
+        for (row, resolved) in try ledger(userId: userId, excludingSession: sessionId) {
+            byName[Self.nameKey(resolved), default: []].append(row)
+        }
+        var out: [String: LastWorkingSet] = [:]
+        for name in names {
+            guard let mine = byName[Self.nameKey(name)],
+                  let last = Self.lastWorking(in: mine, name: name) else { continue }
+            out[name] = last
+        }
+        return out
+    }
+
+    /// The last `limit` distinct movements this account performed, newest
+    /// first — the library's "Recent" shelf (Precision A1).
+    ///
+    /// Newest SESSION first, and inside a session the movement performed last
+    /// first: that is the order "what did I just do" is asked in. Names come
+    /// back as the catalogue resolves them, canonical.
+    func recentMovements(
+        userId: String, limit: Int, excludingSession sessionId: String? = nil
+    ) throws -> [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        for (_, resolved) in try ledger(userId: userId, excludingSession: sessionId).reversed() where out.count < limit {
+            let name = ExerciseAliases.canonicalName(resolved)
+            if seen.insert(Self.nameKey(name)).inserted { out.append(name) }
+        }
+        return out
+    }
+
+    /// The newest bout of one movement logged INSIDE a session — a deck's
+    /// cardio row — newest session first (Precision A2).
+    ///
+    /// The opener's second source beside `cardio_logs`: every in-deck
+    /// treadmill bout before `recordSessionCardio` existed lives only here,
+    /// and without it the founder — whose `cardio_logs` held walks and not one
+    /// treadmill — would open every session with no warm-up card at all.
+    func lastLoggedBout(named movement: String, userId: String) throws -> LoggedBout? {
+        let target = Self.nameKey(movement)
+        return try read { db in
+            let resolve = try PrRecorder.nameResolver(db)
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT s.exercise_id, s.duration_sec, s.distance_km, s.incline, sess.date, sess.started_at
+                FROM workout_sets s
+                JOIN workout_sessions sess ON sess.id = s.session_id
+                WHERE sess.user_id = ? AND s.duration_sec > 0 AND s.set_type <> 'ghost'
+                ORDER BY sess.date DESC, sess.started_at DESC, s.fold_order DESC, s.set_index DESC
+                """, arguments: [userId])
+            for row in rows where Self.nameKey(resolve(row["exercise_id"])) == target {
+                return LoggedBout(
+                    date: row["date"], start: row["started_at"], durationSec: row["duration_sec"],
+                    distanceKm: row["distance_km"], inclinePct: row["incline"]
+                )
+            }
+            return nil
+        }
+    }
+
+    /// The catalogue as the library lists it: archived movements gone
+    /// (Precision A1). A row whose `archived_at` never reached this device
+    /// reads as live, which is what it was the last time anything said.
+    func libraryExercises() throws -> [Exercise] {
+        try read { db in
+            try Exercise.fetchAll(db, sql: "SELECT * FROM exercises WHERE archived_at IS NULL ORDER BY name")
+        }
+    }
+
+    /// The whole ledger in performed order, each row with the name
+    /// `PrRecorder.nameResolver` files it under — one read.
+    private func ledger(
+        userId: String, excludingSession sessionId: String?
+    ) throws -> [(row: HistorySetRow, name: String)] {
+        try read { db in
+            let resolve = try PrRecorder.nameResolver(db)
+            return try HistorySetRow
+                .fetchAll(db, sql: Self.setSelect + Self.setOrder, arguments: [userId])
+                .filter { $0.sessionId != sessionId }
+                .map { ($0, resolve($0.exerciseId)) }
+        }
+    }
+
+    /// The one key two spellings of a movement share.
+    private static func nameKey(_ name: String) -> String {
+        ExerciseAliases.canonicalName(name).lowercased()
+    }
+
+    /// The last-time rule over ONE movement's rows, oldest first: the newest
+    /// session with a working set answers.
+    private static func lastWorking(in rows: [HistorySetRow], name: String) -> LastWorkingSet? {
         var order: [String] = []
         var bySession: [String: [HistorySetRow]] = [:]
         for row in rows {

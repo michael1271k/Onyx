@@ -67,6 +67,65 @@
     },
     {
      "tokens": [
+      "front",
+      "squat"
+     ],
+     "muscles": {
+      "primary": [
+       "quadriceps"
+      ],
+      "secondary": [
+       "glutes",
+       "abdominals"
+      ]
+     }
+    },
+    {
+     "tokens": [
+      "split",
+      "squat"
+     ],
+     "muscles": {
+      "primary": [
+       "quadriceps"
+      ],
+      "secondary": [
+       "glutes",
+       "hamstrings"
+      ]
+     }
+    },
+    {
+     "tokens": [
+      "squat"
+     ],
+     "muscles": {
+      "primary": [
+       "quadriceps"
+      ],
+      "secondary": [
+       "glutes",
+       "hamstrings",
+       "lower back"
+      ]
+     }
+    },
+    {
+     "tokens": [
+      "lunge"
+     ],
+     "muscles": {
+      "primary": [
+       "quadriceps",
+       "glutes"
+      ],
+      "secondary": [
+       "hamstrings"
+      ]
+     }
+    },
+    {
+     "tokens": [
       "seated",
       "leg",
       "curl"
@@ -125,6 +184,23 @@
        "lower back",
        "upper back",
        "lats",
+       "forearms"
+      ]
+     }
+    },
+    {
+     "tokens": [
+      "deadlift"
+     ],
+     "muscles": {
+      "primary": [
+       "hamstrings",
+       "glutes"
+      ],
+      "secondary": [
+       "lower back",
+       "upper back",
+       "traps",
        "forearms"
       ]
      }
@@ -359,6 +435,49 @@
     },
     {
      "tokens": [
+      "push",
+      "up"
+     ],
+     "muscles": {
+      "primary": [
+       "chest"
+      ],
+      "secondary": [
+       "triceps",
+       "front_delts"
+      ]
+     }
+    },
+    {
+     "tokens": [
+      "dips"
+     ],
+     "muscles": {
+      "primary": [
+       "chest",
+       "triceps"
+      ],
+      "secondary": [
+       "front_delts"
+      ]
+     }
+    },
+    {
+     "tokens": [
+      "reverse",
+      "fly"
+     ],
+     "muscles": {
+      "primary": [
+       "rear_delts"
+      ],
+      "secondary": [
+       "upper back"
+      ]
+     }
+    },
+    {
+     "tokens": [
       "pec",
       "deck"
      ],
@@ -525,6 +644,83 @@
     },
     {
      "tokens": [
+      "pull",
+      "up"
+     ],
+     "muscles": {
+      "primary": [
+       "lats"
+      ],
+      "secondary": [
+       "upper back",
+       "biceps",
+       "forearms"
+      ]
+     }
+    },
+    {
+     "tokens": [
+      "chin",
+      "up"
+     ],
+     "muscles": {
+      "primary": [
+       "lats",
+       "biceps"
+      ],
+      "secondary": [
+       "upper back",
+       "forearms"
+      ]
+     }
+    },
+    {
+     "tokens": [
+      "bent",
+      "over",
+      "row"
+     ],
+     "muscles": {
+      "primary": [
+       "upper back"
+      ],
+      "secondary": [
+       "lats",
+       "biceps",
+       "lower back",
+       "forearms"
+      ]
+     }
+    },
+    {
+     "tokens": [
+      "dumbbell",
+      "row"
+     ],
+     "muscles": {
+      "primary": [
+       "upper back"
+      ],
+      "secondary": [
+       "lats",
+       "biceps",
+       "forearms"
+      ]
+     }
+    },
+    {
+     "tokens": [
+      "shrug"
+     ],
+     "muscles": {
+      "primary": [
+       "traps"
+      ],
+      "secondary": []
+     }
+    },
+    {
+     "tokens": [
       "face",
       "pull"
      ],
@@ -534,6 +730,21 @@
       ],
       "secondary": [
        "biceps"
+      ]
+     }
+    },
+    {
+     "tokens": [
+      "arnold",
+      "press"
+     ],
+     "muscles": {
+      "primary": [
+       "front_delts",
+       "side_delts"
+      ],
+      "secondary": [
+       "triceps"
       ]
      }
     },
@@ -615,6 +826,18 @@
      "tokens": [
       "cable",
       "extension"
+     ],
+     "muscles": {
+      "primary": [
+       "triceps"
+      ],
+      "secondary": []
+     }
+    },
+    {
+     "tokens": [
+      "skull",
+      "crusher"
      ],
      "muscles": {
       "primary": [

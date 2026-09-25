@@ -620,6 +620,9 @@ enum PreviewHarness {
         // the tab's own name. `body` is taken by `BodyTargetsView`.
         case "body-tab":
             PulsePreviews.view("day")
+        // LANE-A
+        case "logger-library", "logger-library-search":
+            LoggerPreviews.view(screen)
         default:
             // Visible rather than silent: a typo in the shot script should
             // produce a photograph of the mistake, not of the last screen.

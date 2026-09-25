@@ -84,6 +84,60 @@ struct MuscleMapGoldenTests {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Precision A1 — the fifteen movements the library shipped without.
+//
+// Hand-written expectations, never read back off `MuscleMap.dict`: the table
+// is the code under test, and a spec derived from it would agree with any
+// mistake typed into it. Each line is the founder's own answer (plan, A1).
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Suite("Muscle map — the fifteen Precision A movements")
+struct PrecisionMoversTests {
+
+    static let fifteen: [(name: String, primary: [String], secondary: [String])] = [
+        ("Squat (Barbell)", ["quadriceps"], ["glutes", "hamstrings", "lower back"]),
+        ("Deadlift (Barbell)", ["hamstrings", "glutes"], ["lower back", "upper back", "traps", "forearms"]),
+        ("Pull Up", ["lats"], ["upper back", "biceps", "forearms"]),
+        ("Chin Up", ["lats", "biceps"], ["upper back", "forearms"]),
+        ("Bent Over Row (Barbell)", ["upper back"], ["lats", "biceps", "lower back", "forearms"]),
+        ("Dumbbell Row", ["upper back"], ["lats", "biceps", "forearms"]),
+        ("Dips", ["chest", "triceps"], ["front_delts"]),
+        ("Bulgarian Split Squat", ["quadriceps"], ["glutes", "hamstrings"]),
+        ("Walking Lunge", ["quadriceps", "glutes"], ["hamstrings"]),
+        ("Reverse Fly", ["rear_delts"], ["upper back"]),
+        ("Push Up", ["chest"], ["triceps", "front_delts"]),
+        ("Shrug (Dumbbell)", ["traps"], []),
+        ("Front Squat", ["quadriceps"], ["glutes", "abdominals"]),
+        ("Skull Crusher", ["triceps"], []),
+        ("Arnold Press", ["front_delts", "side_delts"], ["triceps"]),
+    ]
+
+    @Test("each resolves to its hand-written movers")
+    func fifteenResolve() {
+        for m in Self.fifteen {
+            #expect(MuscleMap.movers(m.name) == MoverTokens(primary: m.primary, secondary: m.secondary), "\(m.name)")
+        }
+    }
+
+    @Test("the new tokens steal no movement the map already answered")
+    func noSteals() {
+        // Each of these shares a token with a new entry and must keep its old
+        // answer — the specificity rule, or the first-written tie, has to hold.
+        #expect(MuscleMap.movers("Hack Squat")?.secondary == ["glutes", "hamstrings"])
+        #expect(MuscleMap.movers("Romanian Deadlift")?.primary == ["hamstrings"])
+        #expect(MuscleMap.movers("Romanian Deadlift")?.secondary.contains("lats") == true)
+        #expect(MuscleMap.movers("Seated Cable Row")?.secondary.contains("traps") == true)
+        #expect(MuscleMap.movers("Seated Cable Row (V-Grip)")?.secondary == ["lats", "biceps", "forearms"])
+        #expect(MuscleMap.movers("Single-Arm Cable Fly")?.primary == ["chest"])
+        #expect(MuscleMap.movers("Shoulder Press")?.primary == ["front_delts"])
+        #expect(MuscleMap.movers("Face Pull")?.primary == ["rear_delts"])
+        // And the other way round: the longer new phrase beats the shorter one.
+        #expect(MuscleMap.movers("Reverse Cable Fly")?.primary == ["rear_delts"])
+        #expect(MuscleMap.movers("Arnold Shoulder Press")?.primary == ["front_delts", "side_delts"])
+    }
+}
+
 @Suite("Bodyweight and unilateral — the two name predicates the logger renders from")
 struct ExercisePredicateGoldenTests {
 

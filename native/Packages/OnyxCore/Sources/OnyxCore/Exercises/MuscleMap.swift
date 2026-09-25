@@ -66,6 +66,15 @@ public enum MuscleMap {
         Entry(["leg", "press"], primary: ["quadriceps"], secondary: ["glutes", "hamstrings"]),
         Entry(["hack", "squat"], primary: ["quadriceps"], secondary: ["glutes", "hamstrings"]),
         Entry(["leg", "extension"], primary: ["quadriceps"]),
+        // ── THE FREE-WEIGHT LEGS (Precision A1) ──────────────────────────────
+        // The founder's deck is machines, so a barbell squat resolved to
+        // nothing until a library had to file it. Longer phrases first only
+        // for the reader: the match is specificity, so `hack+squat`,
+        // `front+squat` and `split+squat` all outrank the bare `squat`.
+        Entry(["front", "squat"], primary: ["quadriceps"], secondary: ["glutes", "abdominals"]),
+        Entry(["split", "squat"], primary: ["quadriceps"], secondary: ["glutes", "hamstrings"]),
+        Entry(["squat"], primary: ["quadriceps"], secondary: ["glutes", "hamstrings", "lower back"]),
+        Entry(["lunge"], primary: ["quadriceps", "glutes"], secondary: ["hamstrings"]),
 
         // ── Posterior chain ─────────────────────────────────────────────────
         // The calf is a secondary on a leg curl through the gastrocnemius,
@@ -85,6 +94,9 @@ public enum MuscleMap {
         // the arithmetic is not.
         Entry(["romanian", "deadlift"], primary: ["hamstrings"], secondary: ["glutes", "lower back", "upper back", "lats", "forearms"]),
         Entry(["rdl"], primary: ["hamstrings"], secondary: ["glutes", "lower back", "upper back", "lats", "forearms"]),
+        // The conventional pull (Precision A1). `romanian+deadlift` still wins
+        // the RDL on specificity; this is the bare word.
+        Entry(["deadlift"], primary: ["hamstrings", "glutes"], secondary: ["lower back", "upper back", "traps", "forearms"]),
         // The adductor credit belongs HERE: 0.5 × 3 sets is Hevy's 1.5 to the
         // decimal. The adductor magnus is a primary hip extensor, doing the
         // same job as the glute in a thrust — exactly what a secondary is for.
@@ -127,6 +139,14 @@ public enum MuscleMap {
         // no row in the live catalogue is named this, which is exactly why it
         // was missing.
         Entry(["bench", "press"], primary: ["chest"], secondary: ["triceps", "front_delts"]),
+        // Bodyweight pressing (Precision A1).
+        Entry(["push", "up"], primary: ["chest"], secondary: ["triceps", "front_delts"]),
+        Entry(["dips"], primary: ["chest", "triceps"], secondary: ["front_delts"]),
+        // ── A REVERSE FLY IS THE REAR DELT'S, AND IT MUST SIT ABOVE THE FLIES ──
+        // "Reverse Cable Fly" matches `cable+fly` too, at the same two tokens,
+        // and a tie goes to the entry written FIRST — so this line lives above
+        // the chest's flies or every cable reverse fly pays the pec.
+        Entry(["reverse", "fly"], primary: ["rear_delts"], secondary: ["upper back"]),
         // ── A FLY IS NOT A TRICEPS MOVEMENT ─────────────────────────────────
         // The elbow angle is fixed, so the triceps never shorten under load.
         // Tagging pec deck and crossovers `triceps` — as this file and the DB
@@ -184,6 +204,13 @@ public enum MuscleMap {
         // than retract. This was the real source of the weekly Upper back
         // over-count the RDL was wrongly blamed for.
         Entry(["straight", "arm", "pulldown"], primary: ["lats"], secondary: ["triceps"]),
+        // The free-weight and bodyweight pulls (Precision A1). None of them
+        // shares two tokens with a cable row, so the grip split above is safe.
+        Entry(["pull", "up"], primary: ["lats"], secondary: ["upper back", "biceps", "forearms"]),
+        Entry(["chin", "up"], primary: ["lats", "biceps"], secondary: ["upper back", "forearms"]),
+        Entry(["bent", "over", "row"], primary: ["upper back"], secondary: ["lats", "biceps", "lower back", "forearms"]),
+        Entry(["dumbbell", "row"], primary: ["upper back"], secondary: ["lats", "biceps", "forearms"]),
+        Entry(["shrug"], primary: ["traps"]),
 
         // ── Delts ───────────────────────────────────────────────────────────
         // Deltoid work is NOT interchangeable for volume accounting. A bare
@@ -200,6 +227,10 @@ public enum MuscleMap {
         // as much as horizontal abduction — the hands finish beside the ears,
         // which they cannot do without the elbow closing.
         Entry(["face", "pull"], primary: ["rear_delts"], secondary: ["biceps"]),
+        // Above `shoulder+press` on purpose: "Arnold Shoulder Press" ties the
+        // two at two tokens, and the rotation is what makes it an Arnold
+        // (Precision A1).
+        Entry(["arnold", "press"], primary: ["front_delts", "side_delts"], secondary: ["triceps"]),
         // One bare `["shoulder", "press"]` catches every spelling, including
         // `Shoulder Press (DB)` — which used to resolve to NOTHING, because
         // parentheses were stripped with their contents and the fallback was a
@@ -224,6 +255,7 @@ public enum MuscleMap {
         Entry(["overhead", "extension"], primary: ["triceps"]),
         Entry(["overhead", "triceps"], primary: ["triceps"]),
         Entry(["cable", "extension"], primary: ["triceps"]),
+        Entry(["skull", "crusher"], primary: ["triceps"]),
 
         // ── Biceps / forearms ───────────────────────────────────────────────
         Entry(["hammer", "curl"], primary: ["biceps"], secondary: ["forearms"]),

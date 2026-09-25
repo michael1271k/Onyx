@@ -55,9 +55,9 @@ struct LiveLoggerView: View {
     @State private var showPhase = false
     @State private var showFinish = false
     @State private var showTimer = false
-    /// The catalogue the "Add a movement" picker lists, read when it opens —
-    /// nil while it is closed (W3).
-    @State private var adding: [Exercise]?
+    /// What the "Add a movement" shelf lists, read when it opens — nil while
+    /// it is closed (W3, Precision A1).
+    @State private var adding: ExerciseLibrary?
     /// Bumped to scroll the deck to `focus` — see the picker's handler.
     @State private var scrollTick = 0
     /// The SET stopwatch, owned here and lent to `TimerSheet`.
@@ -227,7 +227,7 @@ struct LiveLoggerView: View {
         }
         .sheet(isPresented: Binding(get: { adding != nil }, set: { if !$0 { adding = nil } })) {
             ExercisePickerSheet(
-                catalogue: adding ?? [],
+                library: adding ?? ExerciseLibrary(catalogue: []),
                 createNote: "Adds it to this session."
             ) { name, picked in
                 // To the card — the new one, or the one already on the deck.
@@ -759,7 +759,7 @@ struct LiveLoggerView: View {
 
     /// The last thing on the deck, where the next movement would go (W3).
     private var addMovement: some View {
-        Button { adding = model.catalogue() } label: {
+        Button { adding = model.library() } label: {
             Label("Add a movement", systemImage: "plus")
                 .onyxType(.body).fontWeight(.semibold)
                 .foregroundStyle(accent)

@@ -434,6 +434,19 @@ enum LoggerPreviews {
             }
             .environment(LoggerPreviews.environment(over: adding.store))
             .preferredColorScheme(.dark)
+        // ── PRECISION A1: the Muscle Shelf, open on the add fixture ─────────
+        // The sheet itself rather than the deck behind it: the shot reviews
+        // the shelves, the bar and the rows, and a sheet the script cannot tap
+        // open would photograph the deck. `-search` types a muscle word, which
+        // is the half of search that is new.
+        case "logger-library", "logger-library-search":
+            let adding = LoggerModel.previewAddExercise()
+            ExercisePickerSheet(
+                library: adding.model.library(),
+                createNote: "Adds it to this session.",
+                query: screen == "logger-library-search" ? "back" : ""
+            ) { _, _ in }
+            .environment(LoggerPreviews.environment(over: adding.store))
         case "hevy-card":
             let compared = LoggerModel.previewUpperBWithHistory()
             NavigationStack {
