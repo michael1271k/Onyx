@@ -137,14 +137,20 @@ struct ReplayMasthead: View {
             played = true
             play()
         }
-        // The share files, once, as soon as the replay they draw is final —
-        // after the heart-rate read, so the PNGs carry the trace.
-        .task(id: ready) {
-            guard ready, shareSet == nil, let shareTimeline else { return }
+        // The share files, once the replay they draw is final — after the
+        // heart-rate read, so the PNGs carry the trace — and again whenever it
+        // changes: an edit's rescore or the watch's late samples change the
+        // timeline, and a set baked before them would share stale figures
+        // (review).
+        .task(id: ready ? shareTimeline : nil) {
+            shareSet = nil
+            guard ready, let shareTimeline else { return }
             // Let the arrival frame draw first: the two passes are ~100 ms.
             await Task.yield()
             let source = ReplaySource(timeline: shareTimeline, dayInk: dayInk, sessionId: sessionId, day: day)
-            shareSet = try? ReplayShareSet.prebake(source)
+            let baked = await ReplayShareSet.prebake(source)
+            guard !Task.isCancelled else { return }
+            shareSet = baked
         }
         // Back to rest once the ten seconds are up, so the TimelineView stops
         // asking for frames.
@@ -205,7 +211,9 @@ struct ReplayMasthead: View {
             ) { item in
                 // The square itself, small — the preview used to be an SF
                 // Symbol because nothing had been rendered yet.
-                SharePreview(item.title, image: Image(uiImage: shareSet.thumbnail))
+                // One preview type for both cases: the closure must return one.
+                SharePreview(item.title, image: Image(uiImage: shareSet.thumbnail
+                    ?? UIImage(systemName: "play.rectangle") ?? UIImage()))
             } label: {
                 shareGlyph
             }

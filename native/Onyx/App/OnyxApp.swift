@@ -94,7 +94,10 @@ struct OnyxApp: App {
             // summary over whatever is on screen; the shell's own handler
             // (`RootView`, `onyx://open?path=`) ignores this shape.
             .onOpenURL { url in
-                if let id = SessionLink.sessionId(from: url) { linkedSession = SessionLink(id: id) }
+                // Only once the store is open: a sheet with no environment
+                // would be an empty sheet with no way out (review).
+                guard environment != nil, let id = SessionLink.sessionId(from: url) else { return }
+                linkedSession = SessionLink(id: id)
             }
             .sheet(item: $linkedSession) { link in
                 if let environment {

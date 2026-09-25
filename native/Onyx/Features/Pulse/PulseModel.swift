@@ -772,8 +772,9 @@ final class DayModel {
     var battery: Int? { window.score?.batteryPct }
 
     /// The day's resolved targets — kcal, steps, water, sleep — as the Body
-    /// ring's petals read them (Precision B4). The same resolve `fuelLine`
-    /// makes, so a petal and the sentence it replaced cannot disagree.
+    /// ring's petals read them (Precision B4). The kcal figure the Food petal
+    /// states is what was RECORDED, never the Atwater sum of the macros:
+    /// Apple Health owns the day's energy (`MacroEditSheet`'s long note).
     var dayTargets: ResolvedTargets {
         Targets.resolve(
             TargetSources(goals: goals, dayTarget: dailyTarget.map(DailyTarget.init), profiles: []), date: date, today: today
@@ -783,32 +784,6 @@ final class DayModel {
     /// What was RECORDED today, or nil when nothing was — the Food petal.
     var kcalEaten: Double? {
         entries.isEmpty ? nil : entries.reduce(0) { $0 + $1.calories }
-    }
-
-    /// `1,420 / 1,955 kcal · P 128 · water 2.1 L` — the whole of nutrition on
-    /// this screen, because the gauges live in the Nutrition tab (§5.7).
-    ///
-    /// The kcal figure is what was RECORDED, never the Atwater sum of the
-    /// macros beside it: Apple Health owns the day's energy (memory
-    /// `no-tape-measurements`' sibling rule, and `MacroEditSheet`'s long note).
-    var fuelLine: String? {
-        guard !entries.isEmpty || log?.waterMl != nil else { return nil }
-        let target = Targets.resolve(
-            TargetSources(goals: goals, dayTarget: dailyTarget.map(DailyTarget.init), profiles: []), date: date, today: today
-        ).goals
-        var parts: [String] = []
-        if !entries.isEmpty {
-            let kcal = entries.reduce(0) { $0 + $1.calories }
-            parts.append(target.calorie > 0
-                ? "\(NutritionFormat.whole(kcal)) / \(NutritionFormat.whole(target.calorie)) kcal"
-                : "\(NutritionFormat.whole(kcal)) kcal")
-            let protein = entries.reduce(0) { $0 + $1.proteinG }
-            parts.append("P \(NutritionFormat.whole(protein))")
-        }
-        if let ml = log?.waterMl, ml > 0 {
-            parts.append("water \(DayFormat.number(ml / 1000)) L")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     // MARK: - The stack

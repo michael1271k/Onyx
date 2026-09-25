@@ -319,7 +319,9 @@ struct DayScreen: View {
         // `onScrollGeometryChange` rather than a `GeometryReader` in a row: the
         // reader would re-measure on every row recycle, and this needs ONE
         // number per frame from the scroll view that already has it.
-        .background(alignment: .top) { muscleWash }
+        // Only where the day's workouts are drawn (History's push): on the
+        // Body tab the ground is the stone's own light (review).
+        .background(alignment: .top) { if showsWorkouts { muscleWash } }
         .onScrollGeometryChange(for: CGFloat.self) { geometry in
             geometry.contentOffset.y + geometry.contentInsets.top
         } action: { _, offset in

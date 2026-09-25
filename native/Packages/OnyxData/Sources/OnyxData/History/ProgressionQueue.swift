@@ -212,8 +212,13 @@ public extension AppDatabase {
     /// still gets its records and tonnage.
     ///
     /// Records are the row's own `pr_count` and tonnage its
-    /// `total_volume_kg` — the numbers the close path wrote, which is what the
-    /// ticket above the line prints.
+    /// `total_volume_kg` — the numbers the close path wrote. Train's plan card
+    /// zeroes both before printing the line, because the ticket above it
+    /// already states them (from the rows).
+    ///
+    /// ponytail: reads the session history and both sessions' sets itself
+    /// even when the caller holds them; take them as arguments if the plan
+    /// card's load ever shows in a trace.
     func sessionVerdict(sessionId: String, userId: String) throws -> SessionVerdict? {
         let sessions = try sessionHistory(userId: userId)
         guard let index = sessions.firstIndex(where: { $0.id == sessionId }),

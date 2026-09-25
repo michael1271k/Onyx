@@ -39,14 +39,9 @@ struct WorkoutTabView: View {
     /// weekday the shot happens to run on. The app never passes one.
     var seededDay: ProgramDay?
     var seededToday: String?
-    /// Holds the done card on its stand-in, for the harness only.
-    ///
-    /// `SessionFallbackCard` is drawn for as long as `SessionAnalysis.headers`
-    /// takes, which on a warm fixture is less than a frame — so the state this
-    /// wave rebuilt is the one state of this tab a screenshot could never
-    /// catch. A seed, and not a `#if DEBUG` branch inside the card: the point
-    /// of the shot is that the REAL screen, with the real week under it, looks
-    /// right while it waits.
+    /// Holds the done ticket before its header read lands (no spark, no
+    /// measured bpm), for the harness only — the state lasts less than a frame
+    /// on a warm fixture, so a screenshot could never catch it otherwise.
     var seededHeaderPending = false
     @State private var week: WorkoutWeek?
     @State private var weekSheetOpen = false
@@ -741,7 +736,9 @@ struct WorkoutTabView: View {
                     HStack(spacing: OnyxSpace.s) {
                         Text(exercise.name)
                             .onyxType(.secondary)
-                            .lineLimit(1)
+                            // Two lines at the accessibility sizes: one
+                            // printed "Incline DB Pre…" (the W6 open call).
+                            .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
                         Spacer(minLength: OnyxSpace.s)
                         // Not at the accessibility sizes: the name needs the
                         // whole row there, and the header already says the
@@ -877,13 +874,6 @@ struct WorkoutTabView: View {
         Button("Change phase", systemImage: "arrow.triangle.2.circlepath") { showPhase = true }
         Button("Take a rest day…", systemImage: "moon.zzz") { swapping = true }
         Button("Swap this day…", systemImage: "arrow.triangle.swap") { swapping = true }
-    }
-
-    private func doneSummary(sets: Int, volumeKg: Double, minutes: Double?, prCount: Int) -> String {
-        var parts = ["\(OnyxFormat.volume(volumeKg)) kg", "\(sets) sets"]
-        if prCount > 0 { parts.append("\(prCount) PR") }
-        if let minutes, minutes > 0 { parts.append("\(jsIntegerString(jsRound(minutes))) min") }
-        return parts.joined(separator: " · ")
     }
 
     private var restCard: some View {

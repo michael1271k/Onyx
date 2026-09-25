@@ -39,27 +39,6 @@ struct SessionHeader: Identifiable, Sendable, Equatable {
     var avgBpm: Int? = nil
 }
 
-extension SessionHeader {
-    /// The session page already holds every one of these; this is a field copy,
-    /// not a second derivation.
-    init(page: SessionAnalysis.Page, label: String) {
-        let session = page.report.session
-        self.init(
-            id: session.id,
-            label: label,
-            dayKey: session.dayKey,
-            careerIndex: page.careerIndex,
-            prCount: page.report.prCount,
-            planLabel: page.planLabel,
-            week: page.week,
-            lever: page.lever,
-            maintenance: page.maintenance,
-            stamp: SessionAnalysis.stamp(date: session.date, startedAt: session.startedAt),
-            muscles: page.report.primaryOrder
-        )
-    }
-}
-
 // MARK: - The ticket (Precision B2, decision Q17 · design 5)
 
 /// A finished session as ONE 64 pt row — the banner Train and the day page
@@ -101,8 +80,13 @@ struct SessionTicket: View {
 
     @Environment(\.dynamicTypeSize) private var typeSize
 
-    /// The row's height below the accessibility sizes (the brief's 64 pt).
+    /// The row's height on one line (the brief's 64 pt).
     static let height: CGFloat = 64
+
+    /// Two lines from xxLarge: three fixed figures at xxLarge are ~300 pt and
+    /// left the name nothing (review) — the brief's "only at AX" was one step
+    /// too late.
+    private var stacked: Bool { typeSize >= .xxLarge }
 
     var body: some View {
         HStack(spacing: OnyxSpace.m) {
@@ -111,7 +95,7 @@ struct SessionTicket: View {
                 .frame(width: 3)
                 .padding(.vertical, OnyxSpace.m)
                 .accessibilityHidden(true)
-            if typeSize.isAccessibilitySize {
+            if stacked {
                 VStack(alignment: .leading, spacing: OnyxSpace.xs) {
                     name.lineLimit(2)
                     ViewThatFits(in: .horizontal) {
@@ -138,7 +122,7 @@ struct SessionTicket: View {
         .padding(.leading, OnyxSpace.m)
         .padding(.trailing, OnyxSpace.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: typeSize.isAccessibilitySize ? nil : Self.height)
+        .frame(height: stacked ? nil : Self.height)
         .frame(minHeight: Self.height)
         .modifier(TicketSurface(framed: framed))
         .accessibilityElement(children: .ignore)

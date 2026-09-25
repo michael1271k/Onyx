@@ -83,7 +83,6 @@ struct TokenDisciplineTests {
             [Double((hex >> 16) & 0xFF), Double((hex >> 8) & 0xFF), Double(hex & 0xFF)].map { $0 / 255 }
         }
         func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
-        func encode(_ c: Double) -> Double { c <= 0.0031308 ? c * 12.92 : 1.055 * pow(c, 1 / 2.4) - 0.055 }
         func luminance(_ rgb: [Double]) -> Double {
             let l = rgb.map(linear)
             return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2]
@@ -98,14 +97,14 @@ struct TokenDisciplineTests {
             let theme = OnyxTheme(spec: preset.spec)
             for domain in [nil] + OnyxDomain.allCases.map(Optional.some) {
                 let pair = theme.groundHex(domain)
-                // Composited over black, the BRIGHTER of a gamma-space and a
-                // linear-space blend: the renderer's choice must not decide
-                // whether this passes.
+                // Composited over black the way the render server does it —
+                // opacity in the ENCODED (gamma) space. Measured, not assumed:
+                // Slate at 14 % reads sRGB (16, 16, 21) at the ground's
+                // brightest on-screen point, which is the gamma blend; a
+                // linear-light blend would read ~(60, 60, 70).
                 let ground: [Double] = (0..<3).map { i in
                     let a = channels(pair.primary)[i], b = channels(pair.secondary)[i]
-                    let gamma = a * OnyxTheme.groundPeak + b * OnyxTheme.groundSecondaryPeak
-                    let lin = encode(linear(a) * OnyxTheme.groundPeak + linear(b) * OnyxTheme.groundSecondaryPeak)
-                    return max(gamma, lin)
+                    return a * OnyxTheme.groundPeak + b * OnyxTheme.groundSecondaryPeak
                 }
                 let l = OKLCHConvert.oklch(fromHex: hex(ground)).l
                 #expect(l <= 0.35, "\(preset.name) \(String(describing: domain)): ground L \(l)")

@@ -54,7 +54,9 @@ struct PulseSessionCard: View {
         // Inside a button the ticket has to be ONE element, or a reader hears
         // its parts where they expect one target.
         .accessibilityElement(children: .combine)
-        .accessibilityValue(totals)
+        // The one figure the ticket does not draw (review: `totals` read the
+        // tonnage, duration and PRs a second time).
+        .accessibilityValue("\(session.sets) sets")
         .accessibilityHint("Opens the session.")
         .accessibilityAddTraits(.isButton)
     }

@@ -116,31 +116,48 @@ struct ReplayShareItem: Transferable, Sendable {
 /// The three items and the thumbnail, made once per summary (Precision B5).
 struct ReplayShareSet {
     let items: [ReplayShareItem]
-    /// The square PNG, small — the share sheet's real preview.
-    let thumbnail: UIImage
+    /// The square PNG, small — the share sheet's real preview. Nil only when
+    /// the pre-bake failed and the set fell back to rendering on request.
+    let thumbnail: UIImage?
     let message: String
 
     private static let log = Logger(subsystem: "app.onyx.health", category: "replay")
 
-    /// Two `ImageRenderer` passes (square, Stories) on the main actor, written
-    /// to the temp folder, and a thumbnail off the square.
+    /// Two `ImageRenderer` passes (square, Stories) on the main actor — the
+    /// only part that needs it — then the PNG encode, the two writes and the
+    /// thumbnail off it (review: the encode and the disk were on the main
+    /// thread during the summary's arrival).
+    ///
+    /// A failure is logged and falls back to the lazy set (files rendered
+    /// when the sheet asks, as before 10.0), never to a dead button.
     @MainActor
-    static func prebake(_ source: ReplaySource) throws -> ReplayShareSet {
+    static func prebake(_ source: ReplaySource) async -> ReplayShareSet {
         let began = Date()
-        let square = try ReplayExporter.png(source, kind: .square)
-        let stories = try ReplayExporter.png(source, kind: .stories)
-        let full = UIImage(contentsOfFile: square.path) ?? UIImage()
-        let thumbnail = full.preparingThumbnail(of: CGSize(width: 240, height: 240)) ?? full
-        log.notice("replay prebake: \(Int(Date().timeIntervalSince(began) * 1000)) ms")
-        return ReplayShareSet(
-            items: [
-                ReplayShareItem(kind: .square, source: source, file: square),
-                ReplayShareItem(kind: .stories, source: source, file: stories),
-                ReplayShareItem(kind: .video, source: source, file: nil),
-            ],
-            thumbnail: thumbnail,
-            message: source.message
-        )
+        do {
+            let squareImage = try ReplayExporter.finalFrame(source, kind: .square)
+            let storiesImage = try ReplayExporter.finalFrame(source, kind: .stories)
+            let rendered = Date()
+            let baked = try await Task.detached(priority: .userInitiated) {
+                let square = try ReplayExporter.write(squareImage, source: source, kind: .square)
+                let stories = try ReplayExporter.write(storiesImage, source: source, kind: .stories)
+                let thumb = UIImage(cgImage: squareImage).preparingThumbnail(of: CGSize(width: 240, height: 240))
+                return (square, stories, thumb)
+            }.value
+            log.notice("replay prebake: \(Int(rendered.timeIntervalSince(began) * 1000)) ms on the main actor, \(Int(Date().timeIntervalSince(began) * 1000)) ms in all")
+            return ReplayShareSet(items: items(source, square: baked.0, stories: baked.1),
+                                  thumbnail: baked.2, message: source.message)
+        } catch {
+            log.error("replay prebake failed: \(String(describing: error), privacy: .public)")
+            return ReplayShareSet(items: items(source, square: nil, stories: nil), thumbnail: nil, message: source.message)
+        }
+    }
+
+    private static func items(_ source: ReplaySource, square: URL?, stories: URL?) -> [ReplayShareItem] {
+        [
+            ReplayShareItem(kind: .square, source: source, file: square),
+            ReplayShareItem(kind: .stories, source: source, file: stories),
+            ReplayShareItem(kind: .video, source: source, file: nil),
+        ]
     }
 }
 
@@ -317,8 +334,13 @@ enum ReplayExporter {
 
     enum Failure: Error { case render, writer(String) }
 
+    /// `tmp/replay/<session id>/<readable name>` — one folder per session, so
+    /// two sessions with one label on one day never overwrite each other's
+    /// files (review), and the name the recipient sees stays readable.
     nonisolated static func url(_ source: ReplaySource, _ kind: ReplayShareItem.Kind, _ ext: String) throws -> URL {
-        let folder = FileManager.default.temporaryDirectory.appending(path: "replay", directoryHint: .isDirectory)
+        let folder = FileManager.default.temporaryDirectory
+            .appending(path: "replay", directoryHint: .isDirectory)
+            .appending(path: source.sessionId.isEmpty ? "session" : source.sessionId, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder.appending(path: "\(source.slug)-\(kind.rawValue).\(ext)")
     }
@@ -336,9 +358,20 @@ enum ReplayExporter {
 
     /// The final frame as a PNG — `square` at 1080², `stories` at 1080 × 1920.
     static func png(_ source: ReplaySource, kind: ReplayShareItem.Kind) throws -> URL {
+        try write(finalFrame(source, kind: kind), source: source, kind: kind)
+    }
+
+    /// The render — the one part that needs the main actor.
+    static func finalFrame(_ source: ReplaySource, kind: ReplayShareItem.Kind) throws -> CGImage {
         let format: ReplayShareFrame.Format = kind == .square ? .square : .stories
-        guard let data = renderer(source, format: format, frame: source.timeline.final).uiImage?.pngData()
+        guard let image = renderer(source, format: format, frame: source.timeline.final).cgImage
         else { throw Failure.render }
+        return image
+    }
+
+    /// Encode and write — anywhere.
+    nonisolated static func write(_ image: CGImage, source: ReplaySource, kind: ReplayShareItem.Kind) throws -> URL {
+        guard let data = UIImage(cgImage: image).pngData() else { throw Failure.render }
         let out = try url(source, kind, "png")
         try data.write(to: out, options: .atomic)
         return out
@@ -349,7 +382,10 @@ enum ReplayExporter {
     static func plate(_ source: ReplaySource) throws -> ReplayVideoRenderer.Plate {
         let probe = ReplayShareFrame.ShareProbe()
         guard let background = renderer(source, format: .stories, frame: source.timeline.final,
-                                         plate: true, probe: probe).cgImage
+                                         plate: true, probe: probe).cgImage,
+              // The slots come from a layout side effect: if it did not run,
+              // every frame would draw nothing into a zero rect (review).
+              probe.canvas.width > 0, probe.caption.width > 0
         else { throw Failure.render }
         return ReplayVideoRenderer.Plate(
             background: background,
@@ -400,11 +436,28 @@ actor ReplayVideoRenderer {
 
     private static let log = Logger(subsystem: "app.onyx.health", category: "replay")
 
-    /// ponytail: made once per session per launch; a new launch re-renders.
-    private var made: [String: URL] = [:]
+    /// One render per session AND content: the timeline is part of the key,
+    /// so an edited session or late watch samples make a new video (review),
+    /// and a second request while one is drawing awaits it instead of
+    /// racing it for the same file.
+    /// ponytail: in memory, per launch; a new launch re-renders once.
+    private var renders: [String: (timeline: SessionReplay.Timeline, task: Task<URL, Error>)] = [:]
 
     func video(_ source: ReplaySource) async throws -> URL {
-        if let done = made[source.sessionId], FileManager.default.fileExists(atPath: done.path) { return done }
+        if let known = renders[source.sessionId], known.timeline == source.timeline {
+            return try await known.task.value
+        }
+        let task = Task { try await self.render(source) }
+        renders[source.sessionId] = (source.timeline, task)
+        do {
+            return try await task.value
+        } catch {
+            if renders[source.sessionId]?.timeline == source.timeline { renders[source.sessionId] = nil }
+            throw error
+        }
+    }
+
+    private func render(_ source: ReplaySource) async throws -> URL {
         var plate = try await MainActor.run { try ReplayExporter.plate(source) }
         // One hop per line, so the main actor is never held for all of them.
         for state in ReplayCaption.states(source.timeline) {
@@ -415,7 +468,6 @@ actor ReplayVideoRenderer {
         }
         let out = try ReplayExporter.url(source, .video, "mp4")
         try await write(plate, timeline: source.timeline, to: out)
-        made[source.sessionId] = out
         return out
     }
 
@@ -464,6 +516,11 @@ actor ReplayVideoRenderer {
         for i in 0..<frames {
             try Task.checkCancellation()
             while !input.isReadyForMoreMediaData {
+                // A writer that failed (the encoder taken away when the app
+                // went to the background) never becomes ready again (review).
+                guard writer.status == .writing else {
+                    throw ReplayExporter.Failure.writer(writer.error?.localizedDescription ?? "status \(writer.status.rawValue)")
+                }
                 try await Task.sleep(for: .milliseconds(4))
             }
             let t = timeline.duration * Double(i) / Double(frames - 1)
@@ -559,7 +616,7 @@ struct ReplayShareHarness: View {
                                   day: LogicalDay.date(fromISO: page.report.session.date) ?? timeline.masthead.startedAt)
         do {
             let prebakeBegan = Date()
-            let set = try ReplayShareSet.prebake(source)
+            let set = await ReplayShareSet.prebake(source)
             let prebakeMs = Int(Date().timeIntervalSince(prebakeBegan) * 1000)
             image = set.items[1].file.flatMap { UIImage(contentsOfFile: $0.path) }
             status = "PNGs in \(prebakeMs) ms; rendering video off the main actor…"

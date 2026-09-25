@@ -192,7 +192,7 @@ struct BodyRing: View {
             readiness
             ForEach(Array(petals.enumerated()), id: \.element.id) { index, petal in
                 let offset = BodyRingLayout.offset(index)
-                PetalView(petal: petal, captionAbove: offset.height < 0) { onPetal(petal.kind) }
+                PetalDisc(petal: petal, captionAbove: offset.height < 0) { onPetal(petal.kind) }
                     .offset(offset)
             }
         }
@@ -257,7 +257,7 @@ struct BodyRing: View {
 }
 
 /// One petal: a disc, its arc, its glyph, and its value on the outer side.
-private struct PetalView: View {
+private struct PetalDisc: View {
     let petal: BodyPetal
     /// Top-arc petals caption above, bottom-arc below — always AWAY from the
     /// ring, never across it.

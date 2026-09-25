@@ -83,6 +83,8 @@ public struct OnyxTheme: Sendable {
     let end: [OnyxDomain: Color]
     /// The five nutrition inks under this theme — see `Nutrition`.
     let nutrition: Nutrition
+    /// The ground's two hues per domain ("" = neutral) — see `groundHex`.
+    let ground: [String: (primary: UInt32, secondary: UInt32)]
 
     /// Protein, carbs, fat and micros; calories wear carbs (Atwater sum).
     struct Nutrition: Sendable {
@@ -102,6 +104,7 @@ public struct OnyxTheme: Sendable {
         let hexes = Self.derive(spec)
         start = hexes.start.mapValues { Color(hex: $0) }
         end = hexes.end.mapValues { Color(hex: $0) }
+        ground = Self.groundTable(spec, hexes.start)
 
         let w = OnyxThemeSpec.nutritionWeight
         let origin = Self.defaultNutritionHex
@@ -186,10 +189,22 @@ public struct OnyxTheme: Sendable {
     /// Hexes, not `Color`s, so a test can composite them over black and hold
     /// the contrast line (`TokenDisciplineTests`).
     func groundHex(_ domain: OnyxDomain?) -> (primary: UInt32, secondary: UInt32) {
-        let hexes = Self.derive(spec)
-        let accent = domain.flatMap { hexes.start[$0] } ?? spec.primary
-        let secondary = domain == .fuel ? spec.primary : spec.secondary
-        return (Self.clampedForGround(accent), Self.clampedForGround(secondary))
+        ground[domain?.rawValue ?? ""] ?? (spec.primary, spec.secondary)
+    }
+
+    /// `groundHex` for every domain and the neutral ground, made once per
+    /// theme in `init` — a token read is a lookup, and `OnyxGround` asks on
+    /// every body pass (review).
+    static func groundTable(_ spec: OnyxThemeSpec, _ start: [OnyxDomain: UInt32]) -> [String: (primary: UInt32, secondary: UInt32)] {
+        var out: [String: (primary: UInt32, secondary: UInt32)] = [
+            "": (clampedForGround(spec.primary), clampedForGround(spec.secondary))
+        ]
+        for domain in OnyxDomain.allCases {
+            let accent = start[domain] ?? spec.primary
+            let secondary = domain == .fuel ? spec.primary : spec.secondary
+            out[domain.rawValue] = (clampedForGround(accent), clampedForGround(secondary))
+        }
+        return out
     }
 
     static func clampedForGround(_ hex: UInt32) -> UInt32 {
